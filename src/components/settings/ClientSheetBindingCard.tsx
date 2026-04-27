@@ -3,13 +3,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ExternalLink, FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 
 const MASTER_TEMPLATE_URL =
   'https://docs.google.com/spreadsheets/d/1tm-qpPRzv38JtIL9-KvZVThqTk4OJcWv3duw8H2KHhY/edit';
+
+// KPI categories the user can map to a specific tab in the client's sheet.
+// Keys are stored under client_settings.metrics_sheet_mapping.tabs
+const KPI_TABS: { key: string; label: string; hint: string }[] = [
+  { key: 'kpi_scorecard', label: 'KPI Scorecard (totals)', hint: 'e.g. SCORECARD-26' },
+  { key: 'leads', label: 'Leads', hint: 'e.g. Leads' },
+  { key: 'discovery_calls', label: 'Discovery Calls', hint: 'e.g. Discovery Call' },
+  { key: 'reconnect_calls', label: 'Reconnect Calls', hint: 'e.g. Reconnect Call' },
+  { key: 'commitments', label: 'Commitments', hint: 'e.g. Committed Investors' },
+  { key: 'funded_investors', label: 'Funded Investors', hint: 'e.g. Funded Investors' },
+  { key: 'ad_spend', label: 'Ad Spend / Daily', hint: 'e.g. Ads or Daily Spend' },
+];
 
 interface Props {
   clientId: string;
@@ -32,12 +45,15 @@ export function ClientSheetBindingCard({ clientId }: Props) {
   const [saving, setSaving] = useState(false);
   const [bound, setBound] = useState<{ id: string | null; gid: string | null }>({ id: null, gid: null });
   const [error, setError] = useState<string | null>(null);
+  const [allTabs, setAllTabs] = useState<{ gid: string; title: string }[]>([]);
+  const [loadingTabs, setLoadingTabs] = useState(false);
+  const [tabMap, setTabMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase
         .from('client_settings')
-        .select('metrics_sheet_id, metrics_sheet_gid, metrics_source_default')
+        .select('metrics_sheet_id, metrics_sheet_gid, metrics_source_default, metrics_sheet_mapping')
         .eq('client_id', clientId)
         .maybeSingle();
       if (data?.metrics_sheet_id) {
@@ -48,8 +64,36 @@ export function ClientSheetBindingCard({ clientId }: Props) {
       if (data?.metrics_source_default === 'database' || data?.metrics_source_default === 'sheet') {
         setDefaultSource(data.metrics_source_default);
       }
+      const mapping: any = (data as any)?.metrics_sheet_mapping || {};
+      if (mapping?.tabs && typeof mapping.tabs === 'object') {
+        setTabMap(mapping.tabs as Record<string, string>);
+      }
     })();
   }, [clientId]);
+
+  async function loadTabs(sheetIdArg?: string) {
+    const id = sheetIdArg || bound.id || extractSheetId(url).sheetId;
+    if (!id) return;
+    setLoadingTabs(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-sheet-metrics', {
+        body: { sheet_id: id, action: 'list_tabs' },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setAllTabs(((data as any)?.tabs || []) as { gid: string; title: string }[]);
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Could not load tabs', description: e?.message ?? 'Unknown error' });
+    } finally {
+      setLoadingTabs(false);
+    }
+  }
+
+  // Auto-load tabs once a sheet is bound
+  useEffect(() => {
+    if (bound.id && allTabs.length === 0) loadTabs(bound.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bound.id]);
 
   async function handleTest() {
     setError(null);
@@ -68,6 +112,7 @@ export function ClientSheetBindingCard({ clientId }: Props) {
       if ((data as any)?.error) throw new Error((data as any).error);
       setTabs([(data as any)?.sheetTitle].filter(Boolean));
       toast({ title: 'Connected', description: `Sheet "${(data as any)?.sheetTitle ?? 'unknown'}" reachable.` });
+      loadTabs(sheetId);
     } catch (e: any) {
       setError(e?.message || 'Failed to read sheet');
     } finally {
@@ -84,12 +129,15 @@ export function ClientSheetBindingCard({ clientId }: Props) {
     setSaving(true);
     try {
       const { data: existing } = await supabase
-        .from('client_settings').select('id').eq('client_id', clientId).maybeSingle();
+        .from('client_settings').select('id, metrics_sheet_mapping').eq('client_id', clientId).maybeSingle();
+      const prevMapping: any = (existing as any)?.metrics_sheet_mapping || {};
+      const nextMapping = { ...prevMapping, tabs: tabMap };
       const payload: any = {
         client_id: clientId,
         metrics_sheet_id: sheetId,
         metrics_sheet_gid: gid,
         metrics_source_default: defaultSource,
+        metrics_sheet_mapping: nextMapping,
       };
       const { error } = existing
         ? await supabase.from('client_settings').update(payload).eq('client_id', clientId)
@@ -190,6 +238,63 @@ export function ClientSheetBindingCard({ clientId }: Props) {
           </div>
         </RadioGroup>
       </div>
+
+      {bound.id && (
+        <div className="space-y-3 pt-3 border-t border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm">Tab mapping</Label>
+              <p className="text-xs text-muted-foreground">
+                Choose which tab in this client's sheet feeds each KPI. Leave blank to use defaults.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => loadTabs()} disabled={loadingTabs}>
+              {loadingTabs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              <span className="ml-1">Reload tabs</span>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {KPI_TABS.map((kpi) => (
+              <div key={kpi.key} className="space-y-1">
+                <Label htmlFor={`tab-${kpi.key}`} className="text-xs font-medium">{kpi.label}</Label>
+                <Select
+                  value={tabMap[kpi.key] ?? '__none__'}
+                  onValueChange={(v) =>
+                    setTabMap((prev) => {
+                      const next = { ...prev };
+                      if (v === '__none__') delete next[kpi.key];
+                      else next[kpi.key] = v;
+                      return next;
+                    })
+                  }
+                >
+                  <SelectTrigger id={`tab-${kpi.key}`} className="h-8 text-xs">
+                    <SelectValue placeholder={kpi.hint} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Auto / default —</SelectItem>
+                    {allTabs.map((t) => (
+                      <SelectItem key={t.gid} value={t.title}>{t.title}</SelectItem>
+                    ))}
+                    {/* Allow keeping a previously-saved value even if the tab is missing */}
+                    {tabMap[kpi.key] && !allTabs.some((t) => t.title === tabMap[kpi.key]) && (
+                      <SelectItem value={tabMap[kpi.key]}>
+                        {tabMap[kpi.key]} (not found)
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </div>
+          {allTabs.length === 0 && !loadingTabs && (
+            <p className="text-xs text-muted-foreground">
+              No tabs loaded yet. Click "Reload tabs" to fetch this sheet's tab list.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex justify-between items-center pt-2 border-t border-border">
         <p className="text-xs text-muted-foreground">
