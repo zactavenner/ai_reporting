@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
     if (!GOOGLE_SHEETS_API_KEY) throw new Error('GOOGLE_SHEETS_API_KEY not configured');
 
     const body = await req.json().catch(() => ({}));
-    const { sheet_id, gid, range, mapping, start_date, end_date } = body || {};
+    const { sheet_id, gid, range, mapping, start_date, end_date, action } = body || {};
 
     if (!sheet_id || typeof sheet_id !== 'string') {
       return new Response(JSON.stringify({ error: 'sheet_id required' }), {
@@ -213,6 +213,23 @@ Deno.serve(async (req) => {
       'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       'X-Connection-Api-Key': GOOGLE_SHEETS_API_KEY,
     };
+
+    // List-tabs mode: return all tab titles for mapping UI.
+    if (action === 'list_tabs') {
+      const metaRes = await fetch(
+        `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title,index))`,
+        { headers }
+      );
+      const metaText = await metaRes.text();
+      if (!metaRes.ok) throw new Error(`Sheet metadata fetch failed [${metaRes.status}]: ${metaText}`);
+      const meta = JSON.parse(metaText);
+      const tabs = (meta?.sheets || [])
+        .map((s: any) => ({ gid: String(s?.properties?.sheetId ?? ''), title: s?.properties?.title ?? '', index: s?.properties?.index ?? 0 }))
+        .sort((a: any, b: any) => a.index - b.index);
+      return new Response(JSON.stringify({ tabs }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // 1. Resolve gid -> sheet title
     let sheetTitle: string;
