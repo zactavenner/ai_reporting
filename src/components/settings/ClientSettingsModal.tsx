@@ -443,7 +443,7 @@ export function ClientSettingsModal({ client, open, onOpenChange }: ClientSettin
           </TabsList>
 
           <TabsContent value="data" className="space-y-4 mt-4">
-            {client && <ClientSheetBindingCard clientId={client.id} />}
+            {client && <ClientSheetBindingCard clientId={client.id} clientName={client.name} />}
           </TabsContent>
 
           <TabsContent value="teams" className="space-y-4 mt-4">
