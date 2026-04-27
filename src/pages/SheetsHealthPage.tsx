@@ -20,6 +20,8 @@ type Row = {
   testing?: boolean;
   draftUrl?: string;
   saving?: boolean;
+  refreshing?: boolean;
+  lastRefreshAt?: Date;
 };
 
 function extractSheetId(url: string): { sheetId: string | null; gid: string | null } {
@@ -184,6 +186,34 @@ export default function SheetsHealthPage() {
   async function testAll() {
     const bound = rows.filter((r) => r.sheet_id);
     for (const r of bound) await testRow(r);
+  }
+
+  /**
+   * Force-refresh a single client: invalidate that client's cached
+   * sheet-metrics queries so any open dashboard re-pulls from Google Sheets,
+   * then re-run the connectivity test so the row reflects fresh counts.
+   */
+  async function refreshRow(r: Row) {
+    if (!r.sheet_id) return;
+    patch(r.client_id, { refreshing: true });
+    try {
+      // Invalidate any cached sheet-metrics query that references this client
+      // or this sheet id, regardless of date-range key suffix.
+      await queryClient.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey as unknown[];
+          if (!Array.isArray(k) || k[0] !== 'sheet-metrics') return false;
+          return k.some((part) => part === r.client_id || part === r.sheet_id);
+        },
+      });
+      await testRow(r);
+      patch(r.client_id, { lastRefreshAt: new Date() });
+      toast({ title: 'Refreshed', description: `${r.name} re-pulled from Google Sheets.` });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Refresh failed', description: e?.message ?? 'unknown error' });
+    } finally {
+      patch(r.client_id, { refreshing: false });
+    }
   }
 
   /**
@@ -405,6 +435,25 @@ export default function SheetsHealthPage() {
                 <td className="px-3 py-2 text-right space-x-2">
                   <Button size="sm" variant="ghost" onClick={() => testRow(r)} disabled={!r.sheet_id || r.testing}>
                     Test
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => refreshRow(r)}
+                    disabled={!r.sheet_id || r.refreshing || r.testing}
+                    title={
+                      r.lastRefreshAt
+                        ? `Last refreshed ${r.lastRefreshAt.toLocaleTimeString()}`
+                        : 'Force re-pull this client from Google Sheets'
+                    }
+                  >
+                    {r.refreshing ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+                      </>
+                    )}
                   </Button>
                   <Button size="sm" onClick={() => saveRow(r)} disabled={r.saving || !r.draftUrl}>
                     {r.saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
