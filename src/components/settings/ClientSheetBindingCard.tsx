@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ExternalLink, FileSpreadsheet, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, Loader2, AlertTriangle, RefreshCw, Plus } from 'lucide-react';
 
 const MASTER_TEMPLATE_URL =
   'https://docs.google.com/spreadsheets/d/1tm-qpPRzv38JtIL9-KvZVThqTk4OJcWv3duw8H2KHhY/edit';
@@ -26,6 +26,7 @@ const KPI_TABS: { key: string; label: string; hint: string }[] = [
 
 interface Props {
   clientId: string;
+  clientName?: string;
 }
 
 function extractSheetId(url: string): { sheetId: string | null; gid: string | null } {
@@ -35,7 +36,7 @@ function extractSheetId(url: string): { sheetId: string | null; gid: string | nu
   return { sheetId, gid: gidMatch ? gidMatch[1] : null };
 }
 
-export function ClientSheetBindingCard({ clientId }: Props) {
+export function ClientSheetBindingCard({ clientId, clientName }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [url, setUrl] = useState('');
@@ -43,6 +44,7 @@ export function ClientSheetBindingCard({ clientId }: Props) {
   const [tabs, setTabs] = useState<string[] | null>(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [bound, setBound] = useState<{ id: string | null; gid: string | null }>({ id: null, gid: null });
   const [error, setError] = useState<string | null>(null);
   const [allTabs, setAllTabs] = useState<{ gid: string; title: string }[]>([]);
@@ -174,6 +176,34 @@ export function ClientSheetBindingCard({ clientId }: Props) {
     }
   }
 
+  async function handleCreate() {
+    setCreating(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-client-sheet', {
+        body: { client_name: clientName || 'Client' },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const newUrl = (data as any)?.url as string;
+      const newId = (data as any)?.sheet_id as string;
+      if (!newUrl || !newId) throw new Error('No sheet returned');
+      setUrl(newUrl);
+      toast({
+        title: 'Sheet created',
+        description: 'A copy of the master template was created. Click Save to bind it to this client.',
+      });
+      // Pre-fill bound state in UI; Save will persist it.
+      window.open(newUrl, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      const msg = e?.message ?? 'Could not create sheet';
+      setError(msg);
+      toast({ variant: 'destructive', title: 'Create failed', description: msg });
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="border-2 border-border p-4 space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -187,12 +217,28 @@ export function ClientSheetBindingCard({ clientId }: Props) {
             instead of the database.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <a href={MASTER_TEMPLATE_URL} target="_blank" rel="noreferrer">
-            <ExternalLink className="h-3 w-3 mr-1" /> Master template
-          </a>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <a href={MASTER_TEMPLATE_URL} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3 w-3 mr-1" /> Master template
+            </a>
+          </Button>
+          {!bound.id && (
+            <Button variant="default" size="sm" onClick={handleCreate} disabled={creating}>
+              {creating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+              Create new sheet
+            </Button>
+          )}
+        </div>
       </div>
+
+      {!bound.id && (
+        <div className="rounded-md bg-muted/40 border border-border p-3 text-xs text-muted-foreground">
+          No sheet yet? Click <span className="font-medium">Create new sheet</span> — we'll copy the master KPI
+          template into Google Drive, name it for this client, and open it in a new tab. Then click
+          <span className="font-medium"> Save</span> below to bind it.
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="sheet-url">Client sheet URL</Label>
