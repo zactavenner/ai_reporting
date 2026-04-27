@@ -1,34 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback } from 'react';
 
 export type MetricsSource = 'sheet' | 'database';
 
-const KEY = (clientId: string) => `metrics-source:${clientId}`;
-
+// App is now Sheets-only. Always return 'sheet' regardless of binding state.
+// setSource is a no-op kept for backwards compatibility with existing callers.
 export function useMetricsSourcePreference(
-  clientId: string | undefined,
-  defaultSource: MetricsSource = 'database',
-  hasSheet: boolean = false,
+  _clientId: string | undefined,
+  _defaultSource: MetricsSource = 'sheet',
+  _hasSheet: boolean = false,
 ) {
-  const [source, setSourceState] = useState<MetricsSource>(defaultSource);
-
-  useEffect(() => {
-    if (!clientId) return;
-    try {
-      const stored = localStorage.getItem(KEY(clientId));
-      if (stored === 'sheet' || stored === 'database') {
-        setSourceState(hasSheet || stored === 'database' ? stored : 'database');
-        return;
-      }
-    } catch {}
-    setSourceState(hasSheet ? defaultSource : 'database');
-  }, [clientId, defaultSource, hasSheet]);
-
-  const setSource = useCallback((next: MetricsSource) => {
-    setSourceState(next);
-    if (clientId) {
-      try { localStorage.setItem(KEY(clientId), next); } catch {}
-    }
-  }, [clientId]);
-
-  return { source, setSource };
+  const setSource = useCallback((_next: MetricsSource) => {}, []);
+  return { source: 'sheet' as MetricsSource, setSource };
 }

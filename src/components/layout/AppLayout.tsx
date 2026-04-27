@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Users, Sparkles, User, Film, Settings, Wand2, Video, Radar, Scissors, LayoutGrid, BarChart3, History, Download, Menu, X, ChevronRight, Instagram, Image as ImageIcon, Inbox, Clapperboard } from 'lucide-react';
+import { Users, Sparkles, Settings, BarChart3, Menu, X, ChevronRight, FileSpreadsheet, FolderKanban } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -13,38 +13,16 @@ interface AppLayoutProps {
 
 const navSections = [
   {
-    label: 'Creative Tools',
+    label: 'Reporting',
     items: [
-      { path: '/dashboard', label: 'Dashboard', icon: BarChart3 },
       { path: '/', label: 'Clients', icon: Users },
-      { path: '/avatars', label: 'Avatars', icon: User },
+      { path: '/sheets-health', label: 'Sheets Health', icon: FileSpreadsheet },
     ],
   },
   {
-    label: 'Generate',
+    label: 'Work',
     items: [
-      { path: '/static-ads', label: 'Static Creatives', icon: ImageIcon },
-      { path: '/broll', label: 'B-Roll Library', icon: Film },
-      { path: '/batch-video', label: 'Batch Video', icon: Video },
-      { path: '/avatar-ad-generator', label: 'Avatar Ad Gen', icon: Clapperboard },
-      { path: '/ad-variations', label: 'Ad Variations', icon: Wand2 },
-    ],
-  },
-  {
-    label: 'Intelligence',
-    items: [
-      { path: '/ad-scraping', label: 'Ad Scraping Engine', icon: Radar },
-      { path: '/instagram-intel', label: 'Instagram Intel', icon: Instagram },
-      { path: '/briefs', label: 'AI Briefs', icon: Inbox },
-    ],
-  },
-  {
-    label: 'Tools',
-    items: [
-      { path: '/video-editor', label: 'Video Editor', icon: Scissors },
-      { path: '/history', label: 'History', icon: History },
-      { path: '/export', label: 'Export Hub', icon: Download },
-      { path: '/settings', label: 'Settings', icon: Settings },
+      { path: '/projects', label: 'Projects & Tasks', icon: FolderKanban },
     ],
   },
 ];
