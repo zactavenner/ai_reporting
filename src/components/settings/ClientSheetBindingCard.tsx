@@ -1,0 +1,211 @@
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
+
+const MASTER_TEMPLATE_URL =
+  'https://docs.google.com/spreadsheets/d/1tm-qpPRzv38JtIL9-KvZVThqTk4OJcWv3duw8H2KHhY/edit';
+
+interface Props {
+  clientId: string;
+}
+
+function extractSheetId(url: string): { sheetId: string | null; gid: string | null } {
+  const m = url.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  const sheetId = m ? m[1] : null;
+  const gidMatch = url.match(/[?#&]gid=(\d+)/);
+  return { sheetId, gid: gidMatch ? gidMatch[1] : null };
+}
+
+export function ClientSheetBindingCard({ clientId }: Props) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [url, setUrl] = useState('');
+  const [defaultSource, setDefaultSource] = useState<'sheet' | 'database'>('sheet');
+  const [tabs, setTabs] = useState<string[] | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [bound, setBound] = useState<{ id: string | null; gid: string | null }>({ id: null, gid: null });
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('client_settings')
+        .select('metrics_sheet_id, metrics_sheet_gid, metrics_source_default')
+        .eq('client_id', clientId)
+        .maybeSingle();
+      if (data?.metrics_sheet_id) {
+        const built = `https://docs.google.com/spreadsheets/d/${data.metrics_sheet_id}/edit${data.metrics_sheet_gid ? `#gid=${data.metrics_sheet_gid}` : ''}`;
+        setUrl(built);
+        setBound({ id: data.metrics_sheet_id, gid: data.metrics_sheet_gid ?? null });
+      }
+      if (data?.metrics_source_default === 'database' || data?.metrics_source_default === 'sheet') {
+        setDefaultSource(data.metrics_source_default);
+      }
+    })();
+  }, [clientId]);
+
+  async function handleTest() {
+    setError(null);
+    setTabs(null);
+    const { sheetId, gid } = extractSheetId(url);
+    if (!sheetId) {
+      setError('Could not detect a Google Sheet ID in that URL.');
+      return;
+    }
+    setTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-sheet-metrics', {
+        body: { sheet_id: sheetId, gid: gid || undefined },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setTabs([(data as any)?.sheetTitle].filter(Boolean));
+      toast({ title: 'Connected', description: `Sheet "${(data as any)?.sheetTitle ?? 'unknown'}" reachable.` });
+    } catch (e: any) {
+      setError(e?.message || 'Failed to read sheet');
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function handleSave() {
+    const { sheetId, gid } = extractSheetId(url);
+    if (!sheetId) {
+      toast({ variant: 'destructive', title: 'Invalid URL', description: 'Paste a Google Sheets link first.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data: existing } = await supabase
+        .from('client_settings').select('id').eq('client_id', clientId).maybeSingle();
+      const payload: any = {
+        client_id: clientId,
+        metrics_sheet_id: sheetId,
+        metrics_sheet_gid: gid,
+        metrics_source_default: defaultSource,
+      };
+      const { error } = existing
+        ? await supabase.from('client_settings').update(payload).eq('client_id', clientId)
+        : await supabase.from('client_settings').insert(payload);
+      if (error) throw error;
+      setBound({ id: sheetId, gid });
+      qc.invalidateQueries({ queryKey: ['client-settings', clientId] });
+      qc.invalidateQueries({ queryKey: ['sheet-metrics'] });
+      toast({ title: 'Saved', description: 'Sheet bound to this client.' });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Save failed', description: e?.message ?? 'Unknown error' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleClear() {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('client_settings')
+        .update({ metrics_sheet_id: null, metrics_sheet_gid: null, metrics_source_default: 'database' } as any)
+        .eq('client_id', clientId);
+      if (error) throw error;
+      setUrl('');
+      setBound({ id: null, gid: null });
+      setTabs(null);
+      qc.invalidateQueries({ queryKey: ['client-settings', clientId] });
+      toast({ title: 'Cleared', description: 'Sheet unbound from this client.' });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Failed', description: e?.message ?? 'Unknown error' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border-2 border-border p-4 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h4 className="font-medium mb-1 flex items-center gap-2">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            Data Source — Google Sheet
+          </h4>
+          <p className="text-sm text-muted-foreground">
+            Bind this client to their copy of the master KPI sheet. The dashboard will read live from the sheet
+            instead of the database.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <a href={MASTER_TEMPLATE_URL} target="_blank" rel="noreferrer">
+            <ExternalLink className="h-3 w-3 mr-1" /> Master template
+          </a>
+        </Button>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="sheet-url">Client sheet URL</Label>
+        <div className="flex gap-2">
+          <Input
+            id="sheet-url"
+            placeholder="https://docs.google.com/spreadsheets/d/..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+          <Button variant="outline" onClick={handleTest} disabled={!url || testing}>
+            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test'}
+          </Button>
+        </div>
+        {bound.id && (
+          <div className="flex items-center gap-2 text-xs text-emerald-700">
+            <CheckCircle2 className="h-3 w-3" />
+            Bound — sheet ID <code className="text-[10px]">{bound.id.slice(0, 12)}…</code>
+          </div>
+        )}
+        {tabs && tabs.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Detected tab: <span className="font-medium">{tabs[0]}</span>
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center gap-2 text-xs text-destructive">
+            <AlertTriangle className="h-3 w-3" /> {error}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Default source for this client</Label>
+        <RadioGroup value={defaultSource} onValueChange={(v) => setDefaultSource(v as any)} className="flex gap-6">
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="sheet" id="src-sheet" />
+            <Label htmlFor="src-sheet" className="font-normal">Sheet (recommended)</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="database" id="src-db" />
+            <Label htmlFor="src-db" className="font-normal">Database</Label>
+          </div>
+        </RadioGroup>
+      </div>
+
+      <div className="flex justify-between items-center pt-2 border-t border-border">
+        <p className="text-xs text-muted-foreground">
+          Share each sheet with the connector account so it has read access.
+        </p>
+        <div className="flex gap-2">
+          {bound.id && (
+            <Button variant="ghost" size="sm" onClick={handleClear} disabled={saving}>
+              Unbind
+            </Button>
+          )}
+          <Button size="sm" onClick={handleSave} disabled={saving || !url}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

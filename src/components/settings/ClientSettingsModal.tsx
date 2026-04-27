@@ -27,6 +27,7 @@ import { FathomIntegrationSection } from './FathomIntegrationSection';
 import { SyncHealthIndicator, getSyncStatus } from './SyncHealthIndicator';
 import { useSyncQueue } from '@/hooks/useSyncQueue';
 import { DollarSign, Target, Plug, Loader2, RefreshCw, CheckCircle, XCircle, Users, Lock, Eye, EyeOff, AlertTriangle, ListOrdered, MessageSquare as MessageSquareIcon } from 'lucide-react';
+import { ClientSheetBindingCard } from './ClientSheetBindingCard';
 interface ClientSettingsModalProps {
   client: Client | null;
   open: boolean;
@@ -429,7 +430,8 @@ export function ClientSettingsModal({ client, open, onOpenChange }: ClientSettin
         </DialogHeader>
 
         <Tabs defaultValue="kpis" className="mt-4">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-9">
+            <TabsTrigger value="data">Data</TabsTrigger>
             <TabsTrigger value="kpis">KPIs</TabsTrigger>
             <TabsTrigger value="teams">Teams</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
@@ -439,6 +441,10 @@ export function ClientSettingsModal({ client, open, onOpenChange }: ClientSettin
             <TabsTrigger value="thresholds">Thresholds</TabsTrigger>
             <TabsTrigger value="alerts">Alerts</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="data" className="space-y-4 mt-4">
+            {client && <ClientSheetBindingCard clientId={client.id} />}
+          </TabsContent>
 
           <TabsContent value="teams" className="space-y-4 mt-4">
             <div className="border-2 border-border p-4 space-y-4">
