@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,10 +71,13 @@ function parseBulk(text: string): { name: string; sheetId: string }[] {
 
 export default function SheetsHealthPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [bulkText, setBulkText] = useState(SEED_BULK);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
 
   async function load() {
     setLoading(true);
@@ -182,6 +186,42 @@ export default function SheetsHealthPage() {
     for (const r of bound) await testRow(r);
   }
 
+  /**
+   * Force-refresh: invalidate every cached sheet-metrics query (so any open
+   * dashboard re-pulls from Google Sheets on its next render) and re-run
+   * connectivity tests on all bound rows so we surface the new row counts here.
+   */
+  async function refreshAll() {
+    setRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['sheet-metrics'] });
+      const bound = rows.filter((r) => r.sheet_id);
+      let ok = 0, fail = 0;
+      for (const r of bound) {
+        await testRow(r);
+        // testRow updates state; we read it back from the latest snapshot below.
+      }
+      // Tally from the freshest state after the loop completes.
+      setRows((current) => {
+        for (const r of current) {
+          if (!r.sheet_id) continue;
+          if (r.test?.ok) ok++;
+          else if (r.test?.ok === false) fail++;
+        }
+        return current;
+      });
+      setLastRefreshAt(new Date());
+      toast({
+        title: 'Sheets refreshed',
+        description: `${bound.length} sheet${bound.length === 1 ? '' : 's'} re-pulled. Dashboards will use fresh data.`,
+      });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Refresh failed', description: e?.message ?? 'unknown error' });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function saveRow(r: Row) {
     const { sheetId, gid } = extractSheetId(r.draftUrl ?? '');
     if (!sheetId) {
@@ -226,10 +266,30 @@ export default function SheetsHealthPage() {
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline">{stats.bound}/{stats.total} bound</Badge>
+          {lastRefreshAt && (
+            <span className="text-xs text-muted-foreground">
+              Last refresh {lastRefreshAt.toLocaleTimeString()}
+            </span>
+          )}
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} /> Reload
           </Button>
-          <Button size="sm" onClick={testAll} disabled={loading}>Test all bound</Button>
+          <Button variant="outline" size="sm" onClick={testAll} disabled={loading || refreshing}>
+            Test all bound
+          </Button>
+          <Button
+            size="sm"
+            onClick={refreshAll}
+            disabled={loading || refreshing || stats.bound === 0}
+            title="Force re-pull all bound sheets and invalidate dashboard caches"
+          >
+            {refreshing ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1" />
+            )}
+            Refresh now
+          </Button>
         </div>
       </div>
 
