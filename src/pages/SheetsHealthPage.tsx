@@ -4,8 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, RefreshCw, Wand2, XCircle } from 'lucide-react';
 
 type Row = {
   client_id: string;
@@ -27,10 +28,52 @@ function extractSheetId(url: string): { sheetId: string | null; gid: string | nu
   return { sheetId, gid: gidMatch ? gidMatch[1] : null };
 }
 
+const SEED_BULK = `LSCRE\t16LG4qTxtyv1Fk2Rco-mjpz5W7z23P01rADQxgBFmcuE
+Paradyme\t1Sj12SttVu_to21-VO7aYU72ulThppyvY-InPDqkCKOs
+Blue Capital\t10ETeNuyi0dxHjCMyymrros1jDKyH6HKMwP4QVSBpZU0
+Healing Reality Trust\t1I_EtRbx4R9vXjMEzNqA3HM8VHFtvJ8hZQSk4HXqedJQ
+Quad J Capital\t1pnSkJyJ_9ccx9ZKNrEPgGjYq8Lr-jeIRSbPllP1qjsc
+Injury Pro Capital\t1OrwBnPKD2wfUl1_swyqitNzOyhxI3EUJqXpN9mBnNd8
+Granite Towers\t1mOOzTcMtCnJWoERSyy84QPIEiH9YV-SYZQ0jpdsvGwU
+Blue Metric Group\t10xV7saNrOB-4kFQaM8eLjGnx1Y6epES8u6IK2eDcy38
+Nationwide Paving\t1tm-qpPRzv38JtIL9-KvZVThqTk4OJcWv3duw8H2KHhY
+Evia Partners\t1hKy_pkcw4horLr8VTzV9siSZXBidcwI_y-7j3C608mk
+Texas State Oil\t1bhUZ_9r6c1yjwoEajev9wcjkxxDAZ0xT8cJ1Dzws8i4
+Titan\t17AZjJE-b7KPTlZNQH4F_38QTELIuukMaWlH9kjUTwLU
+Kroh Exploration\t1Ad3Ehm_vp1nZNecGwMLMqZdGpegUxFdgoul-Y9Lfq-A
+Lansing Capital\t1Y_VAK-6FB_dOdIcISiLxwREh5Xfp-pPXUmM5Om8HRN8
+Alamo\t1bnT2VM9acak-E3v894MAamQUlH5eEavki4JqpFQf9dU
+Freaky Fast Investment\t13y43f0wZxf0Z8QyptDxB5_9_hB_afLzlAzxRaoxdlus
+Legacy Capital\t19XfiMod_n-CuxoM0OEgmeddhTJZCkuhdVPWJJm6-1iE
+Land Value Alpha\t1RLSkiRh_kphvEZ23uRXQFYsWp5nk_reBhii9rUsBZzM`;
+
+function normalizeName(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function parseBulk(text: string): { name: string; sheetId: string }[] {
+  const out: { name: string; sheetId: string }[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const parts = line.split(/\t|,| \| |\s{2,}/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) continue;
+    const name = parts[0];
+    const tail = parts.slice(1).join(' ');
+    const fromUrl = extractSheetId(tail).sheetId;
+    const idMatch = tail.match(/[a-zA-Z0-9_-]{30,}/);
+    const sheetId = fromUrl || (idMatch ? idMatch[0] : '');
+    if (sheetId) out.push({ name, sheetId });
+  }
+  return out;
+}
+
 export default function SheetsHealthPage() {
   const { toast } = useToast();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bulkText, setBulkText] = useState(SEED_BULK);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -72,6 +115,47 @@ export default function SheetsHealthPage() {
 
   function patch(id: string, p: Partial<Row>) {
     setRows((rs) => rs.map((r) => (r.client_id === id ? { ...r, ...p } : r)));
+  }
+
+  const bulkMatches = useMemo(() => {
+    const parsed = parseBulk(bulkText);
+    return parsed.map((p) => {
+      const target = normalizeName(p.name);
+      const exact = rows.find((r) => normalizeName(r.name) === target);
+      const partial =
+        exact ||
+        rows.find((r) => {
+          const n = normalizeName(r.name);
+          return n.includes(target) || target.includes(n);
+        });
+      return { ...p, client: partial ?? null };
+    });
+  }, [bulkText, rows]);
+
+  const matchedCount = bulkMatches.filter((m) => m.client).length;
+
+  async function applyBulk() {
+    setBulkBusy(true);
+    let saved = 0, failed = 0;
+    for (const m of bulkMatches) {
+      if (!m.client) continue;
+      const { data: existing } = await supabase
+        .from('client_settings').select('id').eq('client_id', m.client.client_id).maybeSingle();
+      const payload: any = {
+        client_id: m.client.client_id,
+        metrics_sheet_id: m.sheetId,
+        metrics_sheet_gid: null,
+        metrics_source_default: 'sheet',
+      };
+      const { error } = existing
+        ? await supabase.from('client_settings').update(payload).eq('client_id', m.client.client_id)
+        : await supabase.from('client_settings').insert(payload);
+      if (error) failed++;
+      else saved++;
+    }
+    setBulkBusy(false);
+    toast({ title: 'Bulk save complete', description: `${saved} saved, ${failed} failed` });
+    await load();
   }
 
   async function testRow(r: Row) {
@@ -147,6 +231,50 @@ export default function SheetsHealthPage() {
           </Button>
           <Button size="sm" onClick={testAll} disabled={loading}>Test all bound</Button>
         </div>
+      </div>
+
+      <div className="border rounded-lg p-4 space-y-3 bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-4 w-4" />
+            <h2 className="font-semibold">Bulk paste — match clients to sheets</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{matchedCount}/{bulkMatches.length} matched</Badge>
+            <Button size="sm" onClick={applyBulk} disabled={bulkBusy || matchedCount === 0}>
+              {bulkBusy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Save {matchedCount} matched
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          One client per line. Format: <code>Client Name &lt;TAB or comma&gt; Sheet ID or URL</code>.
+          Pre-filled from your master roster.
+        </p>
+        <Textarea
+          value={bulkText}
+          onChange={(e) => setBulkText(e.target.value)}
+          rows={8}
+          className="font-mono text-xs"
+        />
+        {bulkMatches.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
+            {bulkMatches.map((m, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 px-2 py-1 rounded border bg-background">
+                <span className="truncate">{m.name}</span>
+                {m.client ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-700">
+                    <CheckCircle2 className="h-3 w-3" /> {m.client.name}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-destructive">
+                    <XCircle className="h-3 w-3" /> no client match
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border rounded-lg overflow-hidden">
