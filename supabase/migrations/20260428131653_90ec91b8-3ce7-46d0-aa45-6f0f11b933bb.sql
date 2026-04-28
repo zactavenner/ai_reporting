@@ -1,0 +1,1 @@
+ALTER TABLE public.client_settings ALTER COLUMN metrics_source_default SET DEFAULT 'sheet';

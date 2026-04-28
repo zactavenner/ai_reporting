@@ -40,7 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart } from 'lucide-react';
+import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -56,6 +56,7 @@ interface DraggableClientTableProps {
   thresholds: Record<string, KPIThresholds>;
   fullSettings?: Record<string, ClientSettings>;
   onOpenSettings: (client: Client) => void;
+  onOpenSheetSettings?: (client: Client) => void;
   onDeleteClient?: (client: Client) => void;
   onReorder?: (orderedClientIds: string[]) => void;
   isAdmin?: boolean;
@@ -163,6 +164,7 @@ export function DraggableClientTable({
   thresholds,
   fullSettings = {},
   onOpenSettings,
+  onOpenSheetSettings,
   onDeleteClient,
   onReorder,
   isAdmin = false,
@@ -798,6 +800,45 @@ export function DraggableClientTable({
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-[10px]">Enrich Contacts</TooltipContent>
                         </Tooltip>
+                        {(() => {
+                          const s: any = fullSettings[client.id];
+                          const hasSheet = !!s?.metrics_sheet_id;
+                          const isPrimary = hasSheet && s?.metrics_source_default === 'sheet';
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5"
+                                  onClick={() =>
+                                    onOpenSheetSettings
+                                      ? onOpenSheetSettings(client)
+                                      : onOpenSettings(client)
+                                  }
+                                >
+                                  <FileSpreadsheet
+                                    className={cn(
+                                      'h-2.5 w-2.5',
+                                      isPrimary
+                                        ? 'text-emerald-600'
+                                        : hasSheet
+                                          ? 'text-amber-600'
+                                          : 'text-muted-foreground'
+                                    )}
+                                  />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-[10px]">
+                                {isPrimary
+                                  ? 'Google Sheet — primary source'
+                                  : hasSheet
+                                    ? 'Sheet bound — not primary'
+                                    : 'Configure Google Sheet'}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
                         <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onOpenSettings(client)}>
                           <Settings className="h-2.5 w-2.5" />
                         </Button>

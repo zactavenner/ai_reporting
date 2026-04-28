@@ -80,6 +80,7 @@ const Index = () => {
   const { currentMember, logout } = useTeamMember();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
   const [agencySettingsOpen, setAgencySettingsOpen] = useState(false);
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
@@ -216,6 +217,13 @@ const Index = () => {
 
   const handleOpenSettings = (client: Client) => {
     setSelectedClient(client);
+    setSettingsInitialTab(undefined);
+    setSettingsOpen(true);
+  };
+
+  const handleOpenSheetSettings = (client: Client) => {
+    setSelectedClient(client);
+    setSettingsInitialTab('data');
     setSettingsOpen(true);
   };
 
@@ -372,6 +380,7 @@ const Index = () => {
                           thresholds={clientThresholds}
                           fullSettings={clientFullSettings}
                           onOpenSettings={handleOpenSettings}
+                          onOpenSheetSettings={handleOpenSheetSettings}
                           onDeleteClient={(c) => setDeleteClient(c)}
                           onReorder={handleReorder}
                           isAdmin={currentMember?.role === 'admin'}
@@ -621,7 +630,7 @@ const Index = () => {
       </div>
 
       {/* Modals */}
-      <ClientSettingsModal client={selectedClient} open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ClientSettingsModal client={selectedClient} open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsInitialTab} />
       <AgencySettingsModal open={agencySettingsOpen} onOpenChange={setAgencySettingsOpen} />
       <AddClientModal open={addClientOpen} onOpenChange={setAddClientOpen} />
       <DeleteClientDialog client={deleteClient} open={!!deleteClient} onOpenChange={(open) => !open && setDeleteClient(null)} />
