@@ -380,6 +380,7 @@ const Index = () => {
                           thresholds={clientThresholds}
                           fullSettings={clientFullSettings}
                           onOpenSettings={handleOpenSettings}
+                          onOpenSheetSettings={handleOpenSheetSettings}
                           onDeleteClient={(c) => setDeleteClient(c)}
                           onReorder={handleReorder}
                           isAdmin={currentMember?.role === 'admin'}
