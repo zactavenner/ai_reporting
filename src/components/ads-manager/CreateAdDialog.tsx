@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { UploadCloud, Loader2, Image as ImageIcon, Video } from 'lucide-react';
 import { uploadWithProgress } from '@/lib/uploadWithProgress';
 import { toast } from 'sonner';
+import { useMetaAccountAssets } from './shared/useMetaAccountAssets';
 
 interface Props {
   open: boolean;
@@ -26,6 +27,7 @@ const CTA_OPTIONS = [
 
 export function CreateAdDialog({ open, onOpenChange, clientId, adSetId, adSetName }: Props) {
   const qc = useQueryClient();
+  const { allPages } = useMetaAccountAssets(clientId);
   const [name, setName] = useState('');
   const [pageId, setPageId] = useState('');
   const [headline, setHeadline] = useState('');
@@ -36,6 +38,9 @@ export function CreateAdDialog({ open, onOpenChange, clientId, adSetId, adSetNam
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [stage, setStage] = useState<'idle' | 'uploading' | 'meta-upload' | 'creating'>('idle');
+
+  // Auto-pick page if exactly one is cached
+  if (!pageId && allPages.length === 1) setTimeout(() => setPageId(allPages[0].id), 0);
 
   const reset = () => {
     setName(''); setHeadline(''); setMessage(''); setDescription(''); setLinkUrl('');
@@ -104,7 +109,16 @@ export function CreateAdDialog({ open, onOpenChange, clientId, adSetId, adSetNam
             </div>
             <div>
               <Label>Facebook Page ID *</Label>
-              <Input value={pageId} onChange={e => setPageId(e.target.value)} placeholder="1234567890" />
+              {allPages.length > 0 ? (
+                <Select value={pageId} onValueChange={setPageId}>
+                  <SelectTrigger><SelectValue placeholder="Select page" /></SelectTrigger>
+                  <SelectContent>
+                    {allPages.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={pageId} onChange={e => setPageId(e.target.value)} placeholder="1234567890" />
+              )}
             </div>
           </div>
 

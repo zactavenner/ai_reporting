@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMetaAccountAssets } from './shared/useMetaAccountAssets';
 
 interface Props {
   open: boolean;
@@ -44,6 +45,7 @@ const CUSTOM_EVENTS = [
 
 export function CreateCampaignDialog({ open, onOpenChange, clientId, clientName }: Props) {
   const qc = useQueryClient();
+  const { allPages, allPixels, refresh, assets } = useMetaAccountAssets(clientId);
   // Campaign fields
   const [campaignName, setCampaignName] = useState('');
   const [objective, setObjective] = useState('OUTCOME_LEADS');
@@ -58,6 +60,12 @@ export function CreateCampaignDialog({ open, onOpenChange, clientId, clientName 
   const [pageId, setPageId] = useState('');
   const [pixelId, setPixelId] = useState('');
   const [customEventType, setCustomEventType] = useState('LEAD');
+
+  // Auto-pick first available when assets load
+  if (!pageId && allPages.length === 1) setTimeout(() => setPageId(allPages[0].id), 0);
+  if (!pixelId && allPixels.length === 1) setTimeout(() => setPixelId(allPixels[0].id), 0);
+
+  const hasNoAssets = assets.length > 0 && allPages.length === 0 && allPixels.length === 0;
   // Targeting
   const [countries, setCountries] = useState('US');
   const [ageMin, setAgeMin] = useState('25');
@@ -196,11 +204,29 @@ export function CreateCampaignDialog({ open, onOpenChange, clientId, clientName 
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label>FB Page ID</Label>
-                <Input value={pageId} onChange={e => setPageId(e.target.value)} placeholder="optional" />
+                {allPages.length > 0 ? (
+                  <Select value={pageId} onValueChange={setPageId}>
+                    <SelectTrigger><SelectValue placeholder="Select page" /></SelectTrigger>
+                    <SelectContent>
+                      {allPages.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={pageId} onChange={e => setPageId(e.target.value)} placeholder="paste ID or refresh →" />
+                )}
               </div>
               <div>
                 <Label>Pixel ID</Label>
-                <Input value={pixelId} onChange={e => setPixelId(e.target.value)} placeholder="for conversions" />
+                {allPixels.length > 0 ? (
+                  <Select value={pixelId} onValueChange={setPixelId}>
+                    <SelectTrigger><SelectValue placeholder="Select pixel" /></SelectTrigger>
+                    <SelectContent>
+                      {allPixels.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={pixelId} onChange={e => setPixelId(e.target.value)} placeholder="for conversions" />
+                )}
               </div>
               <div>
                 <Label>Custom Event</Label>
@@ -209,6 +235,25 @@ export function CreateCampaignDialog({ open, onOpenChange, clientId, clientName 
                   <SelectContent>{CUSTOM_EVENTS.map(c => <SelectItem key={c || 'none'} value={c}>{c || 'None'}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>
+                {assets.length === 0
+                  ? 'No cached pages/pixels — click refresh to fetch from Meta'
+                  : `${allPages.length} page(s), ${allPixels.length} pixel(s) cached`}
+                {hasNoAssets && ' · account has no eligible assets'}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => refresh.mutate()}
+                disabled={refresh.isPending}
+              >
+                {refresh.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                Refresh from Meta
+              </Button>
             </div>
           </TabsContent>
 

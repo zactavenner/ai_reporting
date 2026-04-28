@@ -24,6 +24,11 @@ import { CreateAdDialog } from './CreateAdDialog';
 import { CreateCampaignDialog } from './CreateCampaignDialog';
 import { AdHDPreviewDialog } from './AdHDPreviewDialog';
 import { Switch } from '@/components/ui/switch';
+import { HealthChip } from './shared/HealthChip';
+import { HealthFilterBar, type HealthFilter } from './shared/HealthFilterBar';
+import { EditableBudgetCell } from './shared/EditableBudgetCell';
+import { RowActionsMenu } from './shared/RowActionsMenu';
+import { getAdHealth } from './shared/healthSignals';
 
 const fmt$ = (v: number | null | undefined) =>
   !v ? '$0' : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -50,6 +55,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
   const [createAdContext, setCreateAdContext] = useState<{ adSetId: string; name: string } | null>(null);
   const [previewAd, setPreviewAd] = useState<any | null>(null);
+  const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
 
   const applyPreset = (preset: string) => {
     setDatePreset(preset);
@@ -240,8 +246,23 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
       : null;
     return ads.filter((a: any) => {
       if (acctClient && a.client_id !== acctClient) return false;
+      if (healthFilter !== 'all' && getAdHealth(a) !== healthFilter) return false;
       return !term || a.name?.toLowerCase().includes(term) || a.headline?.toLowerCase().includes(term);
     });
+  }, [ads, search, adAccountFilter, allAdAccounts, healthFilter]);
+
+  const healthCounts = useMemo(() => {
+    const term = search.toLowerCase();
+    const acctClient = adAccountFilter !== 'all'
+      ? allAdAccounts.find(a => a.accountId === adAccountFilter)?.clientId
+      : null;
+    const base = ads.filter((a: any) => {
+      if (acctClient && a.client_id !== acctClient) return false;
+      return !term || a.name?.toLowerCase().includes(term) || a.headline?.toLowerCase().includes(term);
+    });
+    const c: Record<HealthFilter, number> = { all: base.length, winner: 0, underperforming: 0, learning: 0, neutral: 0 } as any;
+    base.forEach((a: any) => { c[getAdHealth(a)] = (c[getAdHealth(a)] || 0) + 1; });
+    return c;
   }, [ads, search, adAccountFilter, allAdAccounts]);
 
   // KPIs
@@ -656,6 +677,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
 
           {/* ADS */}
           <TabsContent value="ads" className="space-y-3">
+            <HealthFilterBar value={healthFilter} onChange={setHealthFilter} counts={healthCounts} />
             {filteredAds.length === 0 ? (
               <EmptyState message={selectedAdSetId ? "No ads for this ad set in cache." : "No ads in cache. Sync a client first."} />
             ) : (

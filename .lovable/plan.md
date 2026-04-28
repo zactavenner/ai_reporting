@@ -1,121 +1,87 @@
-# Plan: Google Sheets as primary data source for ALL clients
+## Goal
 
-The current DB-driven metrics are unreliable. We make the Google Sheet the system of record. Each client's dashboard, public report, and Lovable AI all read directly from that client's sheet. The DB stays in place as a backup/comparison only.
+Two ads-manager surfaces exist today:
+- **`AdminAdsManagerTab`** (agency-wide, `Index.tsx` → `/ads-manager`) — feature-rich: KPI bar, on/off toggles, ad cards, create campaign/ad, drilldown.
+- **`AdsManagerTab`** (per-client in `ClientDetail`) — older table view, auto-syncs on date change, has "create variation task" + brief generator, but lacks on/off toggles, no create-campaign, no Meta vs CRM split, no ad-card grid.
 
-The master template is the sheet you shared:
-`https://docs.google.com/spreadsheets/d/1tm-qpPRzv38JtIL9-KvZVThqTk4OJcWv3duw8H2KHhY/edit`
-with tabs: `SCORECARD-26`, `Media Buying Updates`, `FB Spend`, `Leads`, `Bad Leads`, `Discovery Call`, `Discovery Call Outcomes`, `Reconnect Call`, `Committed Investors`, `Funded Investors`, `Reconnect Call Show`, plus any others.
+Result: managing campaigns and reviewing performance feels inconsistent depending on where you enter. The plan fixes the gaps that matter most for "works out of box."
 
-## What you'll see
+## What's broken / missing today
 
-### 1. Per-client sheet binding (Settings)
-On every client's Settings tab, a new "Data Source – Google Sheet" section:
-```text
-Master template: [Open template]
-Client sheet URL: [ paste sheet link               ] [ Test ]
-                  ✓ Connected · 11 tabs detected · synced 12s ago
-Default source:  ( ● Sheet   ○ Database )
-```
-- One field: paste the client's sheet URL (we extract `sheet_id`).
-- "Test" button verifies access and lists detected tabs.
-- "Default source" defaults to **Sheet** for every client going forward.
+1. **Create Campaign requires manually pasting Page ID + Pixel ID + Page IDs for every ad** — friction kills the "out of box" promise. We already sync ad accounts, so we can fetch the Pages/Pixels owned by the account.
+2. **No inline budget edit** — to change a $50/day ad set you must leave the app. We have a `toggle-meta-status` function but no `update-meta-budget` equivalent.
+3. **No duplicate / quick-relaunch** — common workflow when iterating winners.
+4. **Per-client `AdsManagerTab` is a parallel codebase** — missing on/off toggles, missing create-campaign button, missing Meta-vs-CRM lead split. Users on a client page can't manage Meta from there.
+5. **Performance review is hard:** no winner/loser highlighting beyond a single trophy icon, no "underperformers needing pause" signal, no quick filter for "spent > X with 0 funded".
+6. **Auto-sync on every date change** in `AdsManagerTab` (line 228-238) re-hits Meta API constantly when scrubbing dates — should debounce or only sync stale data.
+7. **CreateAdDialog** asks for Page ID again per ad — redundant if we cached it from the account.
 
-### 2. Dashboard (ClientDetail + PublicReport)
-The existing `MetricsSourceToggle` already exists; we make **Sheet the default** when a sheet is bound, and surface it on every tab — not just KPIs.
+## Plan
 
-Every tab in the client view becomes sheet-driven when source = Sheet:
+### 1. Auto-discover Page & Pixel per ad account (eliminates manual IDs)
+- New edge function `fetch-meta-account-assets` — given a clientId, calls Meta Graph for `/{adAccount}/promote_pages`, `/{adAccount}/adspixels`, `/{adAccount}/instagram_accounts`. Caches into a new `meta_ad_accounts` columns: `pages jsonb`, `pixels jsonb`, `instagram_actors jsonb`.
+- `CreateCampaignDialog` and `CreateAdDialog`: replace text Inputs for Page/Pixel/IG with `Select` populated from cached assets. Auto-pick first if only one. Fall back to manual entry if the account has none cached yet (shows "Refresh assets" button calling the fetch fn).
 
-| Dashboard tab        | Source tab(s) in the sheet                                  |
-|----------------------|-------------------------------------------------------------|
-| Performance / KPIs   | `SCORECARD-26` (monthly + daily totals, all KPI rows)       |
-| Attribution & Records → Leads | `Leads` + `Bad Leads`                              |
-| Attribution & Records → Calls | `Discovery Call` + `Discovery Call Outcomes` + `Reconnect Call` + `Reconnect Call Show` |
-| Attribution & Records → Funded | `Committed Investors` + `Funded Investors`        |
-| Ads Manager (spend)  | `FB Spend`                                                  |
-| Weekly Sync notes    | `Media Buying Updates`                                      |
+### 2. Inline budget editing
+- New edge function `update-meta-budget` — body `{ clientId, level: 'campaign'|'adset', rowId, dailyBudgetCents?, lifetimeBudgetCents? }`. Calls Meta `POST /{id}` with the budget field; updates local row.
+- Add an editable budget cell in the campaign/ad-set tables of `AdminAdsManagerTab` (click-to-edit input → save on blur/Enter, optimistic update with toast).
 
-Each table view shows a small badge "Source: Google Sheet · {tab name} · 245 rows · synced 2m ago" with a Refresh button.
+### 3. One-click duplicate
+- New edge function `duplicate-meta-object` — body `{ clientId, level, rowId, newName }`. Uses Meta's `/{adset_id}/copies` and `/{ad_id}/copies` endpoints, then re-syncs that single object.
+- Row-action menu (3-dot) in campaign/ad-set/ad rows with: Duplicate, Pause, Edit budget, Open in Meta Ads Manager (deep link).
 
-### 3. New "Sheets Health" page (agency-wide)
-A small admin page at `/sheets-health` listing every client × sheet status:
-```
-Client                 Sheet bound  Last sync   Tabs OK   Errors
-Blue Capital           ✓            45s         11/11     —
-Granite Towers         ✓            2m          10/11     "Funded Investors" empty
-Nationwide Paving USA  ✗ not bound  —           —         needs URL
-```
-Lets you spot which clients still need a sheet and which sheets have schema drift.
+### 4. Unify per-client view with admin view
+- Replace `AdsManagerTab` body with the same table/grid + KPI bar from `AdminAdsManagerTab`, but pre-scoped to the single `clientId` (hide client column, hide client filter, keep New Campaign + Sync visible).
+- Extract shared pieces into `src/components/ads-manager/shared/`:
+  - `MetricsKpiBar.tsx`, `CampaignsTable.tsx`, `AdSetsTable.tsx`, `AdsGrid.tsx`, `useAdsManagerData.ts` (hook taking `{ clientId? }`).
+- Both `AdminAdsManagerTab` and `AdsManagerTab` become thin wrappers that pass scope.
+- Keep `AdsManagerTab`-only features (Generate Brief, Variation Task) as additional toolbar buttons in the per-client wrapper.
 
-### 4. Lovable AI sees the sheet
-The AI-context edge function (`ai-agent-full-context`) is updated so when source = Sheet, it pulls the same normalized sheet data and feeds it into the AI prompts. Analysis and chat answers reflect what's in the sheet, not the DB.
+### 5. Performance review signals
+- Add a "Health" column / chip per row computed client-side:
+  - 🏆 **Winner** — ROAS > 3 OR (spend > $1k AND CTR > 1%) with funded > 0
+  - ⚠️ **Underperforming** — spend > $500 AND attributed_funded = 0 AND age > 7 days
+  - 🆕 **Learning** — spend < $50 OR age < 3 days
+- Quick-filter chips above the table: All / Winners / Underperforming / Learning.
+- Sortable by `roas` (computed) and `cost_per_funded`.
 
-## How it works
+### 6. Smarter sync
+- Debounce auto-sync in `AdsManagerTab` to only fire when user *settles* on a range for >3s, AND skip if `meta_ads_last_sync` is < 15 min old for that range.
+- Add a small "Stale (synced 2h ago) — refresh?" pill instead of silent re-sync.
 
-1. **One master template, copied per client.** You (or we, on request) "Make a copy" of the master sheet for each client and share it with the connector's Google account so it has read access. Paste the URL into Settings.
-2. **`fetch-sheet-metrics` (existing)** is extended to handle the full SCORECARD layout (monthly columns + per-month daily breakdown) so KPI cards, trend charts, and the funnel render from the sheet.
-3. **`fetch-sheet-records` (new)** reads the record-style tabs (`Leads`, `Bad Leads`, `Discovery Call`, etc.), normalizes them into our standard `Lead` / `Call` / `Funded` shapes, and returns paginated results with a date filter.
-4. **`useActiveLeads`, `useActiveCalls`, `useActiveFunded`** wrappers pick Sheet vs DB so existing tables/components don't change.
-5. **Caching:** 2-min React Query stale time + an explicit Refresh button on every tab. A 30-min background poll keeps "synced X ago" warm without hammering the API.
-6. **Default flip:** every existing client's `metrics_source_default` is set to `'sheet'` once a `metrics_sheet_id` is saved. Database mode is still selectable from the toggle for side-by-side debugging.
+### 7. Polish
+- `CreateAdDialog`: drop the Page ID input (auto from account), add multi-file upload (queue 2–10 ads at once, all into the same ad set).
+- `AdHDPreviewDialog`: add `Open in Meta Ads Manager` link, `Duplicate this ad`, `Pause this ad` buttons in footer.
+- Empty state on per-client view: "No Meta ad account connected — open Settings" with a deep link.
 
-## Tab → field mapping (defaults, overridable per client)
+## Files
 
-The existing column/row alias detector covers most of the master template. We add aliases for the new record tabs:
+**New**
+- `supabase/functions/fetch-meta-account-assets/index.ts`
+- `supabase/functions/update-meta-budget/index.ts`
+- `supabase/functions/duplicate-meta-object/index.ts`
+- `src/components/ads-manager/shared/useAdsManagerData.ts`
+- `src/components/ads-manager/shared/MetricsKpiBar.tsx`
+- `src/components/ads-manager/shared/CampaignsTable.tsx`
+- `src/components/ads-manager/shared/AdSetsTable.tsx`
+- `src/components/ads-manager/shared/AdsGrid.tsx`
+- `src/components/ads-manager/shared/RowActionsMenu.tsx`
+- `src/components/ads-manager/shared/HealthChip.tsx`
+- `src/components/ads-manager/shared/EditableBudgetCell.tsx`
 
-```text
-Leads / Bad Leads tab:
-  date     ← "Date" / "Created" / "Lead Date"
-  name     ← "Name" / "Full Name"
-  email    ← "Email"
-  phone    ← "Phone" / "Phone Number"
-  source   ← "Source" / "UTM Source" / "Campaign"
-  spam?    ← presence in `Bad Leads` tab OR a "Spam" Y/N column
+**Edited**
+- `src/components/ads-manager/AdminAdsManagerTab.tsx` (becomes wrapper, ~250 lines)
+- `src/components/ads-manager/AdsManagerTab.tsx` (becomes wrapper, ~150 lines)
+- `src/components/ads-manager/CreateCampaignDialog.tsx` (Select-based Page/Pixel)
+- `src/components/ads-manager/CreateAdDialog.tsx` (auto Page, multi-file)
+- `src/components/ads-manager/AdHDPreviewDialog.tsx` (action buttons)
 
-Discovery Call / Reconnect Call tabs:
-  date     ← "Booked" / "Call Date"
-  contact  ← "Name" / "Email"
-  showed?  ← "Showed" Y/N or presence in `Discovery Call Outcomes` "Showed" column
-  outcome  ← "Outcome" / "Disposition"
+**Migrations**
+- `meta_ad_accounts`: add `pages jsonb`, `pixels jsonb`, `instagram_actors jsonb`, `assets_synced_at timestamptz`.
 
-Committed / Funded Investors tabs:
-  date     ← "Committed Date" / "Funded Date"
-  name     ← "Investor"
-  amount   ← "Amount" / "Committed $" / "Funded $"
-```
+## Out of scope (this pass)
+- Audience builder (interests/lookalikes/saved audiences) — keep linking to Meta for now
+- A/B test framework
+- Google Ads parity (admin tab is `platform="all"` but only Meta wired)
 
-If a client's sheet diverges, the existing "Edit mapping" modal extends to cover record tabs too (saved per-client in `client_settings.metrics_sheet_mapping`).
-
-## Technical details
-
-- **DB migration**: no new columns needed (the four `metrics_sheet_*` columns already exist on `client_settings`). We just need to flip `metrics_source_default = 'sheet'` once a sheet is bound, via a trigger.
-- **`fetch-sheet-metrics`**: extend column-major parser to also emit per-day daily rows from the daily breakdowns inside `SCORECARD-26` (currently it handles the monthly totals well; daily expansion is partial). Also return the per-tab health (`{ tab, rows, lastNonEmptyDate, missingFields[] }`) used by the new Sheets Health page.
-- **`fetch-sheet-records` (new edge function)**: same auth pattern (`LOVABLE_API_KEY` + `GOOGLE_SHEETS_API_KEY`), takes `{ sheet_id, tab, kind: 'lead'|'call'|'funded', start_date, end_date, mapping? }`, returns `{ rows, count, fetchedAt }`. Uses batchGet to pull multiple tabs in one round-trip when kind is composite (e.g. calls = Discovery + Reconnect).
-- **New hooks**:
-  - `useActiveMetrics(clientId, dateRange)` — existing sheet hook + DB fallback under one roof.
-  - `useActiveLeads`, `useActiveCalls`, `useActiveFunded` — same pattern for record tables.
-  - `useSheetsHealth()` — agency-wide list, queries each bound sheet's metadata via batchGet.
-- **Settings UI**: new `<ClientSheetBindingCard />` in `ClientSettings.tsx` (paste URL, Test, default-source radio).
-- **Toggle defaulting**: `useMetricsSourcePreference` gets `defaultSource = 'sheet'` whenever `client_settings.metrics_sheet_id` is set; user can still override in localStorage.
-- **Public report (`/public/:token`)**: same toggle, but defaults locked to Sheet (no toggle shown unless `?debug=1`).
-- **AI context**: `ai-agent-full-context` accepts `source: 'sheet' | 'database'` and, when sheet, fetches the sheet aggregates instead of querying `daily_metrics`.
-- **New page**: `src/pages/SheetsHealthPage.tsx` at `/sheets-health`, linked from the Settings cog menu (agency role only). Uses `useSheetsHealth()`.
-- **Connector**: relies on the existing `google_sheets` Lovable connector (already linked; `GOOGLE_SHEETS_API_KEY` is in env). Each client sheet must be shared with the connector account — we add a one-time "How to share your sheet" inline help text in the binding card.
-- **Rate limits**: Google Sheets API allows 300 read req/min/project; we batch by tab and cache aggressively (2 min stale, 30 min background refresh, manual refresh on demand). Plenty of headroom for ~30 clients.
-- **Backfill DB option (out of scope for now, flagged)**: optional nightly job to mirror sheet → `daily_metrics` so historical DB queries still work for non-sheet features. Not built in this pass.
-
-## Rollout
-
-1. Bind the master template URL on **Blue Capital** first (smoke test) — KPIs, records, Ads tabs, Public report, AI chat all reading from sheet.
-2. Once green, send you a checklist of the other 30 clients with a one-click "Copy master template & bind" helper button per client (creates a Drive copy via `google_drive` connector and saves the URL).
-3. Flip `metrics_source_default = 'sheet'` for any client with a bound sheet.
-4. Monitor `/sheets-health` for 48h before deprecating any DB-driven views.
-
-## Out of scope (flag for later)
-
-- Writing back from the dashboard into the sheet (read-only for now).
-- Sheet → DB mirroring job.
-- Per-row record drilldowns that need fields not present in the sheet (e.g. enrichment data, call recordings) — those still come from DB until you decide whether to add them to the sheet schema.
-
----
-
-Approve and I'll implement, starting with the binding UI + extended `fetch-sheet-metrics` + `fetch-sheet-records`, then wire the dashboard tabs and the Sheets Health page.
+Approve and I'll build it in default mode.

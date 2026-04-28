@@ -5556,19 +5556,31 @@ export type Database = {
         Row: {
           account_name: string | null
           ad_account_id: string
+          assets_synced_at: string | null
+          instagram_actors: Json | null
           last_seen_at: string
+          pages: Json | null
+          pixels: Json | null
           timezone_name: string
         }
         Insert: {
           account_name?: string | null
           ad_account_id: string
+          assets_synced_at?: string | null
+          instagram_actors?: Json | null
           last_seen_at?: string
+          pages?: Json | null
+          pixels?: Json | null
           timezone_name?: string
         }
         Update: {
           account_name?: string | null
           ad_account_id?: string
+          assets_synced_at?: string | null
+          instagram_actors?: Json | null
           last_seen_at?: string
+          pages?: Json | null
+          pixels?: Json | null
           timezone_name?: string
         }
         Relationships: []
