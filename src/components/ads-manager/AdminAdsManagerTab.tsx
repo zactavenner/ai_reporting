@@ -30,6 +30,7 @@ import { EditableBudgetCell } from './shared/EditableBudgetCell';
 import { RowActionsMenu } from './shared/RowActionsMenu';
 import { getAdHealth } from './shared/healthSignals';
 import { InsightsPanel } from './shared/InsightsPanel';
+import { AdsConnectionHealthPanel } from './shared/AdsConnectionHealthPanel';
 
 const fmt$ = (v: number | null | undefined) =>
   !v ? '$0' : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -499,6 +500,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
         )}
 
         {/* Tabs */}
+        <AdsConnectionHealthPanel clientId={clientFilter !== 'all' ? clientFilter : undefined} />
         <InsightsPanel
           ads={filteredAds}
           campaigns={filteredCampaigns}
