@@ -15,7 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import {
   RefreshCw, Search, Image as ImageIcon, Video, Play,
   TrendingUp, MousePointerClick, Eye, DollarSign, Target, ExternalLink,
-  Layers, Megaphone, FileImage, ChevronRight, Calendar as CalIcon, Plus, Upload, Download
+  Layers, Megaphone, FileImage, ChevronRight, Calendar as CalIcon, Plus, Upload, Download, Rocket
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
