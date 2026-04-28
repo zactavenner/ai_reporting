@@ -733,6 +733,14 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
             clientName={clientMap[clientFilter]?.name || ''}
           />
         )}
+        {clientFilter !== 'all' && (
+          <LaunchCampaignWizard
+            open={launchWizardOpen}
+            onOpenChange={setLaunchWizardOpen}
+            clientId={clientFilter}
+            clientName={clientMap[clientFilter]?.name || ''}
+          />
+        )}
         {createAdContext && clientFilter !== 'all' && (
           <CreateAdDialog
             open={!!createAdContext}
