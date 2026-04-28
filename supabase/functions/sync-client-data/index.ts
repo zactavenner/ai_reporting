@@ -119,7 +119,7 @@ serve(async (req) => {
     let clientsQuery = supabase
       .from('clients')
       .select('*')
-      .eq('status', 'active');
+      .in('status', ['active', 'onboarding', 'paused']);
     
     if (targetClientId) {
       clientsQuery = clientsQuery.eq('id', targetClientId);
@@ -184,9 +184,18 @@ serve(async (req) => {
             syncResult.calls_added = ghlResult.calls;
             syncResult.funded_added = ghlResult.funded;
             console.log(`GHL sync complete for ${client.name}: ${ghlResult.leads} leads, ${ghlResult.calls} calls, ${ghlResult.funded} funded`);
+            await supabase
+              .from('clients')
+              .update({ ghl_sync_status: 'healthy', last_ghl_sync_at: new Date().toISOString(), ghl_sync_error: null })
+              .eq('id', client.id);
           } catch (ghlError: unknown) {
             console.error(`GHL sync error for ${client.name}:`, ghlError);
-            syncResult.errors.push(`GHL: ${ghlError instanceof Error ? ghlError.message : 'Unknown error'}`);
+            const errMsg = ghlError instanceof Error ? ghlError.message : 'Unknown error';
+            syncResult.errors.push(`GHL: ${errMsg}`);
+            await supabase
+              .from('clients')
+              .update({ ghl_sync_status: 'error', ghl_sync_error: errMsg })
+              .eq('id', client.id);
           }
         } else {
           console.log(`Skipping GHL sync for ${client.name} - missing credentials`);
@@ -363,21 +372,21 @@ async function syncGHLData(supabase: any, client: any): Promise<{ leads: number;
           .eq('external_id', apt.contactId)
           .single();
 
-        // Properly determine showed status based on GHL appointment status
-        // confirmed = booked (not showed yet)
-        // showed = showed
-        // no_show/noshow = no show
-        // rescheduled = rescheduled
         const status = (apt.status || apt.appointmentStatus || '').toLowerCase();
-        const showed = status === 'showed';
-        
-        // Determine outcome based on status - don't mark as no_show unless GHL explicitly says so
+        const showed = status === 'showed' || status === 'completed';
+
         let outcome = status;
-        if (status === 'noshow' || status === 'no-show') {
+        if (status === 'noshow' || status === 'no-show' || status === 'no_show') {
           outcome = 'no_show';
-        } else if (status === 'confirmed' || status === 'booked') {
-          outcome = 'confirmed';
+        } else if (status === 'confirmed' || status === 'booked' || status === 'new' || status === 'pending') {
+          outcome = 'booked';
+        } else if (status === 'showed' || status === 'completed') {
+          outcome = 'showed';
+        } else if (status === 'cancelled' || status === 'canceled') {
+          outcome = 'cancelled';
         }
+
+        const ghlCreatedAt = apt.dateAdded || apt.createdAt || new Date().toISOString();
 
         const { error: callError } = await supabase
           .from('calls')
@@ -385,9 +394,13 @@ async function syncGHLData(supabase: any, client: any): Promise<{ leads: number;
             client_id: client.id,
             lead_id: lead?.id || null,
             external_id: apt.id,
+            ghl_appointment_id: apt.id,
             scheduled_at: apt.startTime,
+            booked_at: ghlCreatedAt,
             showed: showed,
+            showed_at: showed ? (apt.startTime || null) : null,
             outcome: outcome,
+            appointment_status: status,
           }, {
             onConflict: 'client_id,external_id',
             ignoreDuplicates: false,
@@ -546,26 +559,26 @@ async function syncGHLData(supabase: any, client: any): Promise<{ leads: number;
 async function updateDailyMetricsFromGHL(supabase: any, clientId: string): Promise<void> {
   const today = new Date().toISOString().split('T')[0];
   const todayStart = `${today}T00:00:00.000Z`;
-  const todayEnd = `${today}T23:59:59.999Z`;
-  
-  // Count leads created today (using is_spam for filtering)
+  const tomorrow = new Date();
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const tomorrowStart = `${tomorrow.toISOString().split('T')[0]}T00:00:00.000Z`;
+
   const { count: leadsCount } = await supabase
     .from('leads')
     .select('*', { count: 'exact', head: true })
     .eq('client_id', clientId)
     .eq('is_spam', false)
     .gte('created_at', todayStart)
-    .lte('created_at', todayEnd);
-  
-  // Also count leads where is_spam is null (treat as valid)
+    .lt('created_at', tomorrowStart);
+
   const { count: nullSpamCount } = await supabase
     .from('leads')
     .select('*', { count: 'exact', head: true })
     .eq('client_id', clientId)
     .is('is_spam', null)
     .gte('created_at', todayStart)
-    .lte('created_at', todayEnd);
-  
+    .lt('created_at', tomorrowStart);
+
   const totalValidLeads = (leadsCount || 0) + (nullSpamCount || 0);
 
   const { count: spamCount } = await supabase
@@ -574,18 +587,16 @@ async function updateDailyMetricsFromGHL(supabase: any, clientId: string): Promi
     .eq('client_id', clientId)
     .eq('is_spam', true)
     .gte('created_at', todayStart)
-    .lte('created_at', todayEnd);
+    .lt('created_at', tomorrowStart);
 
-  // Use booked_at for calls (when appointment was created in GHL)
   const { count: callsCount } = await supabase
     .from('calls')
     .select('*', { count: 'exact', head: true })
     .eq('client_id', clientId)
     .neq('is_reconnect', true)
     .gte('booked_at', todayStart)
-    .lte('booked_at', todayEnd);
+    .lt('booked_at', tomorrowStart);
 
-  // Use scheduled_at for showed calls (the actual appointment date when they showed up)
   const { count: showedCount } = await supabase
     .from('calls')
     .select('*', { count: 'exact', head: true })
@@ -593,18 +604,16 @@ async function updateDailyMetricsFromGHL(supabase: any, clientId: string): Promi
     .eq('showed', true)
     .neq('is_reconnect', true)
     .gte('scheduled_at', todayStart)
-    .lte('scheduled_at', todayEnd);
-  
-  // Count reconnect calls by booked_at
+    .lt('scheduled_at', tomorrowStart);
+
   const { count: reconnectCount } = await supabase
     .from('calls')
     .select('*', { count: 'exact', head: true })
     .eq('client_id', clientId)
     .eq('is_reconnect', true)
     .gte('booked_at', todayStart)
-    .lte('booked_at', todayEnd);
-  
-  // Count reconnect showed by scheduled_at (actual appointment date)
+    .lt('booked_at', tomorrowStart);
+
   const { count: reconnectShowedCount } = await supabase
     .from('calls')
     .select('*', { count: 'exact', head: true })
@@ -612,15 +621,14 @@ async function updateDailyMetricsFromGHL(supabase: any, clientId: string): Promi
     .eq('is_reconnect', true)
     .eq('showed', true)
     .gte('scheduled_at', todayStart)
-    .lte('scheduled_at', todayEnd);
+    .lt('scheduled_at', tomorrowStart);
 
-  // Use funded_at for funded investors (when they reached funded stage)
   const { data: fundedData } = await supabase
     .from('funded_investors')
     .select('funded_amount, commitment_amount')
     .eq('client_id', clientId)
     .gte('funded_at', todayStart)
-    .lte('funded_at', todayEnd);
+    .lt('funded_at', tomorrowStart);
 
   const fundedCount = fundedData?.length || 0;
   const fundedDollars = fundedData?.reduce((sum: number, f: any) => {

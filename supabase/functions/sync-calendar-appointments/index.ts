@@ -426,13 +426,17 @@ serve(async (req) => {
     const reconnectCalendarIds = settings?.reconnect_calendar_ids || [];
 
     if (trackedCalendarIds.length === 0 && reconnectCalendarIds.length === 0) {
+      console.log(`[sync-calendar] ${client.name}: No calendars configured — skipping`);
       return new Response(
-        JSON.stringify({ 
-          error: 'No calendars configured for tracking',
-          tracked: trackedCalendarIds.length,
-          reconnect: reconnectCalendarIds.length
+        JSON.stringify({
+          success: true,
+          skipped: true,
+          client: client.name,
+          message: 'No calendars configured for tracking — add tracked_calendar_ids in client settings to sync booked/show calls',
+          created: 0,
+          updated: 0,
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

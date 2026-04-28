@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
       try {
         const contactsBody: Record<string, unknown> = { client_id: client.id, syncType: "contacts" };
         if (sinceDateDays) contactsBody.sinceDateDays = sinceDateDays;
-        
+
         const res = await fetch(`${supabaseUrl}/functions/v1/sync-ghl-contacts`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
@@ -69,6 +69,14 @@ Deno.serve(async (req) => {
         else console.log(`[sync-ghl-all-clients] ✓ ${client.name} contacts synced`);
       } catch (err) {
         clientResult.errors.push(`contacts: ${err instanceof Error ? err.message : "Unknown"}`);
+      }
+
+      // Update GHL sync status on client after contacts sync
+      if (clientResult.contacts) {
+        await supabase
+          .from("clients")
+          .update({ ghl_sync_status: "healthy", last_ghl_sync_at: new Date().toISOString(), ghl_sync_error: null })
+          .eq("id", client.id);
       }
 
       await new Promise(resolve => setTimeout(resolve, 10000));
@@ -106,6 +114,15 @@ Deno.serve(async (req) => {
         else console.log(`[sync-ghl-all-clients] ✓ ${client.name} pipelines synced`);
       } catch (err) {
         clientResult.errors.push(`pipelines: ${err instanceof Error ? err.message : "Unknown"}`);
+      }
+
+      // Update sync status to error if contacts sync failed
+      if (!clientResult.contacts && clientResult.errors.length > 0) {
+        const contactError = clientResult.errors.find(e => e.startsWith("contacts:"));
+        await supabase
+          .from("clients")
+          .update({ ghl_sync_status: "error", ghl_sync_error: contactError || clientResult.errors[0] })
+          .eq("id", client.id);
       }
 
       results.push(clientResult);

@@ -620,10 +620,24 @@ export function DraggableClientTable({
                               <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs max-w-[250px]">
-                              {!client.ghl_api_key || !client.ghl_location_id
-                                ? `${formatCurrency(m.totalAdSpend)} ad spend but no GHL credentials configured — add GHL API key & location ID in settings`
-                                : `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — GHL integration problem, run master sync or check API key`
-                              }
+                              {(() => {
+                                const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
+                                const hasHubSpot = !!(client.hubspot_portal_id && client.hubspot_access_token);
+                                if (!hasGHL && !hasHubSpot) {
+                                  return `${formatCurrency(m.totalAdSpend)} ad spend but no CRM configured — add GHL or HubSpot credentials in settings`;
+                                }
+                                if (hasHubSpot) {
+                                  const hsStatus = client.hubspot_sync_status;
+                                  if (hsStatus === 'error') return `${formatCurrency(m.totalAdSpend)} ad spend but HubSpot sync error — ${client.hubspot_sync_error || 'check access token'}`;
+                                  return `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — HubSpot integration problem, run master sync or check access token`;
+                                }
+                                if (hasGHL) {
+                                  const ghlStatus = client.ghl_sync_status;
+                                  if (ghlStatus === 'error') return `${formatCurrency(m.totalAdSpend)} ad spend but GHL sync error — ${client.ghl_sync_error || 'check API key'}`;
+                                  return `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — GHL integration problem, run master sync or check API key`;
+                                }
+                                return `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — check CRM integration`;
+                              })()}
                             </TooltipContent>
                           </Tooltip>
                         )}
@@ -654,16 +668,35 @@ export function DraggableClientTable({
                     )}>
                       <span className="flex items-center justify-end gap-0.5">
                         {m.totalCalls || 0}
-                        {(m.totalCalls || 0) === 0 && (m.totalAdSpend || 0) > 0 && !!(client.ghl_api_key && client.ghl_location_id) && (fullSettings[client.id]?.tracked_calendar_ids || []).length === 0 && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs max-w-[220px]">
-                              No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
+                        {(() => {
+                          const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
+                          const hasHubSpot = !!(client.hubspot_portal_id && client.hubspot_access_token);
+                          const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
+                          const hasHubSpotMeetings = (fullSettings[client.id]?.hubspot_booked_meeting_types || []).length > 0;
+                          const noCalls = (m.totalCalls || 0) === 0;
+                          const hasActivity = (m.totalAdSpend || 0) > 0 || (m.crmLeads || 0) > 0;
+                          if (noCalls && hasActivity && hasGHL && !hasCalendars) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (noCalls && hasActivity && hasHubSpot && !hasHubSpotMeetings) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                No HubSpot meeting types configured — add meeting type IDs in client settings to sync booked/show calls
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          return null;
+                        })()}
                       </span>
                     </TableCell>
 
