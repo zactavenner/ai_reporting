@@ -42,6 +42,11 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
   const { queueClientSync } = useSyncQueue();
   
   const [saving, setSaving] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<string>(initialTab || 'kpis');
+  useEffect(() => {
+    if (open && initialTab) setActiveTab(initialTab);
+  }, [open, initialTab]);
   
   // Alert settings
   const [cplAlert, setCplAlert] = useState(false);
@@ -430,9 +435,9 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="kpis" className="mt-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
           <TabsList className="grid w-full grid-cols-9">
-            <TabsTrigger value="data">Data</TabsTrigger>
+            <TabsTrigger value="data">Sheet</TabsTrigger>
             <TabsTrigger value="kpis">KPIs</TabsTrigger>
             <TabsTrigger value="teams">Teams</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
