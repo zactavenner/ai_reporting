@@ -18,6 +18,7 @@ import { useDateFilter } from '@/contexts/DateFilterContext';
 import { formatDistanceToNow, addBusinessDays } from 'date-fns';
 import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
+import { AdsConnectionHealthPanel } from './shared/AdsConnectionHealthPanel';
 
 interface AdsManagerTabProps {
   clientId: string;
@@ -331,7 +332,8 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           <TabsTrigger value="ads">Ads {filterAdSetName ? `(${ads.length})` : ''}</TabsTrigger>
         </TabsList>
 
-        <div className="mt-3">
+        <div className="mt-3 space-y-3">
+          <AdsConnectionHealthPanel clientId={clientId} />
           <InsightsPanel ads={ads} campaigns={activeCampaigns} />
         </div>
 
