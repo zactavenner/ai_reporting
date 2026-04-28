@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/slack/api';
-const TARGET_CHANNEL = 'hpa-bluecapital-tasks';
+const FALLBACK_CHANNEL = 'hpa-bluecapital-tasks';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -54,32 +54,61 @@ serve(async (req) => {
       .eq('id', creative.client_id)
       .single();
 
+    // Resolve target channel: prefer per-client mapped channel, fall back to default.
+    const { data: mappings } = await supabase
+      .from('slack_channel_mappings')
+      .select('channel_id, channel_name, channel_type')
+      .eq('client_id', creative.client_id);
+
+    let targetChannelId: string | null = null;
+    let targetChannelName: string | null = null;
+    if (mappings && mappings.length > 0) {
+      // Priority: creatives > approvals > tasks > general > first available
+      const priority = ['creatives', 'approvals', 'tasks', 'general'];
+      let chosen = null;
+      for (const t of priority) {
+        chosen = mappings.find((m: any) => (m.channel_type || '').toLowerCase() === t);
+        if (chosen) break;
+      }
+      chosen = chosen || mappings[0];
+      targetChannelId = chosen.channel_id;
+      targetChannelName = chosen.channel_name;
+    }
+
+    // If no per-client mapping, look up the fallback channel by name.
     // Resolve channel ID by name (paginated)
     let channelId: string | null = null;
-    let cursor = '';
-    do {
-      const url = `${GATEWAY_URL}/conversations.list?limit=200&types=public_channel,private_channel${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'X-Connection-Api-Key': SLACK_API_KEY,
-        },
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        throw new Error(`Slack conversations.list error: ${data.error}`);
-      }
-      const match = data.channels?.find((c: { name: string; id: string }) => c.name === TARGET_CHANNEL);
-      if (match) {
-        channelId = match.id;
-        break;
-      }
-      cursor = data.response_metadata?.next_cursor || '';
-    } while (cursor);
+    let resolvedChannelName = targetChannelName || `#${FALLBACK_CHANNEL}`;
+    if (targetChannelId) {
+      channelId = targetChannelId;
+      console.log(`Using mapped channel for client ${creative.client_id}: ${targetChannelName} (${targetChannelId})`);
+    } else {
+      console.warn(`No slack_channel_mappings row for client ${creative.client_id} (${client?.name}). Falling back to #${FALLBACK_CHANNEL}.`);
+      let cursor = '';
+      do {
+        const url = `${GATEWAY_URL}/conversations.list?limit=200&types=public_channel,private_channel${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'X-Connection-Api-Key': SLACK_API_KEY,
+          },
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          throw new Error(`Slack conversations.list error: ${data.error}`);
+        }
+        const match = data.channels?.find((c: { name: string; id: string }) => c.name === FALLBACK_CHANNEL);
+        if (match) {
+          channelId = match.id;
+          break;
+        }
+        cursor = data.response_metadata?.next_cursor || '';
+      } while (cursor);
 
-    if (!channelId) {
-      throw new Error(`Slack channel #${TARGET_CHANNEL} not found. Make sure the bot is invited.`);
+      if (!channelId) {
+        throw new Error(`No mapped Slack channel for this client and fallback #${FALLBACK_CHANNEL} not found.`);
+      }
     }
 
     const approvalUrl = client?.public_token
@@ -152,7 +181,7 @@ serve(async (req) => {
       throw new Error(`Slack chat.postMessage error: ${postData.error}`);
     }
 
-    console.log(`Slack notification sent to #${TARGET_CHANNEL} for creative ${creativeId}`);
+    console.log(`Slack notification sent to ${resolvedChannelName} (${channelId}) for creative ${creativeId} / client ${creative.client_id}`);
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
