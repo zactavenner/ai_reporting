@@ -677,6 +677,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
 
           {/* ADS */}
           <TabsContent value="ads" className="space-y-3">
+            <HealthFilterBar value={healthFilter} onChange={setHealthFilter} counts={healthCounts} />
             {filteredAds.length === 0 ? (
               <EmptyState message={selectedAdSetId ? "No ads for this ad set in cache." : "No ads in cache. Sync a client first."} />
             ) : (
