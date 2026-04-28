@@ -80,6 +80,7 @@ const Index = () => {
   const { currentMember, logout } = useTeamMember();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
   const [agencySettingsOpen, setAgencySettingsOpen] = useState(false);
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
@@ -216,6 +217,13 @@ const Index = () => {
 
   const handleOpenSettings = (client: Client) => {
     setSelectedClient(client);
+    setSettingsInitialTab(undefined);
+    setSettingsOpen(true);
+  };
+
+  const handleOpenSheetSettings = (client: Client) => {
+    setSelectedClient(client);
+    setSettingsInitialTab('data');
     setSettingsOpen(true);
   };
 
