@@ -32,9 +32,10 @@ interface ClientSettingsModalProps {
   client: Client | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: string;
 }
 
-export function ClientSettingsModal({ client, open, onOpenChange }: ClientSettingsModalProps) {
+export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: ClientSettingsModalProps) {
   const queryClient = useQueryClient();
   const { data: settings } = useClientSettings(client?.id);
   const updateSettings = useUpdateClientSettings();
