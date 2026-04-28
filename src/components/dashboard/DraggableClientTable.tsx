@@ -40,7 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart } from 'lucide-react';
+import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -56,6 +56,7 @@ interface DraggableClientTableProps {
   thresholds: Record<string, KPIThresholds>;
   fullSettings?: Record<string, ClientSettings>;
   onOpenSettings: (client: Client) => void;
+  onOpenSheetSettings?: (client: Client) => void;
   onDeleteClient?: (client: Client) => void;
   onReorder?: (orderedClientIds: string[]) => void;
   isAdmin?: boolean;
@@ -163,6 +164,7 @@ export function DraggableClientTable({
   thresholds,
   fullSettings = {},
   onOpenSettings,
+  onOpenSheetSettings,
   onDeleteClient,
   onReorder,
   isAdmin = false,
