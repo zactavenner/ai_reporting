@@ -630,7 +630,7 @@ const Index = () => {
       </div>
 
       {/* Modals */}
-      <ClientSettingsModal client={selectedClient} open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ClientSettingsModal client={selectedClient} open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsInitialTab} />
       <AgencySettingsModal open={agencySettingsOpen} onOpenChange={setAgencySettingsOpen} />
       <AddClientModal open={addClientOpen} onOpenChange={setAddClientOpen} />
       <DeleteClientDialog client={deleteClient} open={!!deleteClient} onOpenChange={(open) => !open && setDeleteClient(null)} />
