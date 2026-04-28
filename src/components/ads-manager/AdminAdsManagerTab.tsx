@@ -15,13 +15,14 @@ import { Calendar } from '@/components/ui/calendar';
 import {
   RefreshCw, Search, Image as ImageIcon, Video, Play,
   TrendingUp, MousePointerClick, Eye, DollarSign, Target, ExternalLink,
-  Layers, Megaphone, FileImage, ChevronRight, Calendar as CalIcon, Plus, Upload, Download
+  Layers, Megaphone, FileImage, ChevronRight, Calendar as CalIcon, Plus, Upload, Download, Rocket
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format, subDays, startOfMonth, endOfMonth, subMonths, formatDistanceToNow } from 'date-fns';
 import { CreateAdDialog } from './CreateAdDialog';
 import { CreateCampaignDialog } from './CreateCampaignDialog';
+import { LaunchCampaignWizard } from './LaunchCampaignWizard';
 import { AdHDPreviewDialog } from './AdHDPreviewDialog';
 import { Switch } from '@/components/ui/switch';
 import { HealthChip } from './shared/HealthChip';
@@ -55,6 +56,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({ from: subDays(new Date(), 30), to: new Date() });
   const [datePreset, setDatePreset] = useState<string>('30d');
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
+  const [launchWizardOpen, setLaunchWizardOpen] = useState(false);
   const [createAdContext, setCreateAdContext] = useState<{ adSetId: string; name: string } | null>(null);
   const [previewAd, setPreviewAd] = useState<any | null>(null);
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
@@ -339,12 +341,22 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
             <Button
               size="sm"
               variant="default"
+              onClick={() => setLaunchWizardOpen(true)}
+              disabled={clientFilter === 'all'}
+              title={clientFilter === 'all' ? 'Select a client first' : 'Guided campaign launch (SOP)'}
+            >
+              <Rocket className="h-3.5 w-3.5 mr-1.5" />
+              Launch Campaign
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => setCreateCampaignOpen(true)}
               disabled={clientFilter === 'all'}
-              title={clientFilter === 'all' ? 'Select a client first' : 'Create new campaign'}
+              title={clientFilter === 'all' ? 'Select a client first' : 'Advanced create (manual fields)'}
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              New Campaign
+              Advanced
             </Button>
             <Button
               size="sm"
@@ -717,6 +729,14 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
           <CreateCampaignDialog
             open={createCampaignOpen}
             onOpenChange={setCreateCampaignOpen}
+            clientId={clientFilter}
+            clientName={clientMap[clientFilter]?.name || ''}
+          />
+        )}
+        {clientFilter !== 'all' && (
+          <LaunchCampaignWizard
+            open={launchWizardOpen}
+            onOpenChange={setLaunchWizardOpen}
             clientId={clientFilter}
             clientName={clientMap[clientFilter]?.name || ''}
           />
