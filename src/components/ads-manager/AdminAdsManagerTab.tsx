@@ -29,6 +29,7 @@ import { HealthFilterBar, type HealthFilter } from './shared/HealthFilterBar';
 import { EditableBudgetCell } from './shared/EditableBudgetCell';
 import { RowActionsMenu } from './shared/RowActionsMenu';
 import { getAdHealth } from './shared/healthSignals';
+import { InsightsPanel } from './shared/InsightsPanel';
 
 const fmt$ = (v: number | null | undefined) =>
   !v ? '$0' : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -498,6 +499,15 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
         )}
 
         {/* Tabs */}
+        <InsightsPanel
+          ads={filteredAds}
+          campaigns={filteredCampaigns}
+          dateRange={dateRange}
+          onJumpTo={({ type, id }) => {
+            if (type === 'campaign') { setActiveTab('campaigns'); setSelectedCampaignId(id); }
+            else if (type === 'ad') { setActiveTab('ads'); }
+          }}
+        />
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="campaigns" className="gap-1.5">

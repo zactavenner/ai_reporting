@@ -17,6 +17,7 @@ import { useCreateTask } from '@/hooks/useTasks';
 import { useDateFilter } from '@/contexts/DateFilterContext';
 import { formatDistanceToNow, addBusinessDays } from 'date-fns';
 import { toast } from 'sonner';
+import { InsightsPanel } from './shared/InsightsPanel';
 
 interface AdsManagerTabProps {
   clientId: string;
@@ -329,6 +330,10 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           <TabsTrigger value="adsets">Ad Sets {filterCampaignName ? `(${adSets.length})` : ''}</TabsTrigger>
           <TabsTrigger value="ads">Ads {filterAdSetName ? `(${ads.length})` : ''}</TabsTrigger>
         </TabsList>
+
+        <div className="mt-3">
+          <InsightsPanel ads={ads} campaigns={activeCampaigns} />
+        </div>
 
         <TabsContent value="campaigns">
           <CampaignsTable data={activeCampaigns} isLoading={cLoading} onSelect={(id) => { setFilterCampaignId(id); setFilterAdSetId(null); setActiveTab('adsets'); }} />
