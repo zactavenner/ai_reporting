@@ -1,9 +1,21 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, Circle, ChevronRight, ListChecks } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { useOnboardingTasks, useToggleOnboardingTask, useSeedOnboardingTasks } from '@/hooks/useOnboardingTasks';
-import { getTemplatesForClientType } from '@/lib/onboardingTaskTemplates';
+import {
+  getTemplatesForClientType,
+  getOnboardingTemplate,
+  ONBOARDING_TEMPLATE_OPTIONS,
+  type OnboardingTemplateKey,
+} from '@/lib/onboardingTaskTemplates';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -16,6 +28,13 @@ export function OnboardingChecklist({ clientId, clientType }: OnboardingChecklis
   const { data: tasks = [], isLoading } = useOnboardingTasks(clientId);
   const toggleTask = useToggleOnboardingTask();
   const seedTasks = useSeedOnboardingTasks();
+
+  // Default the selector based on client type (capital raisers get capital template).
+  const defaultKey: OnboardingTemplateKey = useMemo(() => {
+    const t = (clientType || '').toLowerCase();
+    return t.includes('capital') || t.includes('invest') || t.includes('fund') ? 'capital' : 'standard';
+  }, [clientType]);
+  const [templateKey, setTemplateKey] = useState<OnboardingTemplateKey>(defaultKey);
 
   const grouped = useMemo(() => {
     const map: Record<string, typeof tasks> = {};
@@ -34,23 +53,45 @@ export function OnboardingChecklist({ clientId, clientType }: OnboardingChecklis
 
   if (totalCount === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 flex items-center justify-between">
+      <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
         <div className="flex items-center gap-3">
           <ListChecks className="h-5 w-5 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No onboarding checklist yet.</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            const templates = getTemplatesForClientType(clientType);
-            await seedTasks.mutateAsync({ clientId, tasks: templates });
-            toast.success('Onboarding tasks created');
-          }}
-          disabled={seedTasks.isPending}
-        >
-          Initialize Checklist
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={templateKey} onValueChange={(v) => setTemplateKey(v as OnboardingTemplateKey)}>
+            <SelectTrigger className="h-9 w-[200px]">
+              <SelectValue placeholder="Choose template" />
+            </SelectTrigger>
+            <SelectContent>
+              {ONBOARDING_TEMPLATE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.key} value={opt.key}>
+                  <div className="flex flex-col">
+                    <span className="text-sm">{opt.label}</span>
+                    <span className="text-[10px] text-muted-foreground">{opt.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const templates = getOnboardingTemplate(templateKey)
+                ?? getTemplatesForClientType(clientType);
+              await seedTasks.mutateAsync({ clientId, tasks: templates });
+              toast.success(
+                templateKey === 'capital'
+                  ? 'Capital Raising onboarding loaded'
+                  : 'Onboarding tasks created'
+              );
+            }}
+            disabled={seedTasks.isPending}
+          >
+            Load Template
+          </Button>
+        </div>
       </div>
     );
   }
