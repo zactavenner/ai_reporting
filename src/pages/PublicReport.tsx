@@ -451,7 +451,7 @@ function PublicReportContent() {
       {/* Drill-down modals */}
       <LeadsDrillDownModal
         clientId={client.id}
-        open={drillDownModal === 'leads'}
+        open={drillDownModal === 'leads' || drillDownModal === 'crmLeads'}
         onOpenChange={(open) => !open && setDrillDownModal(null)}
       />
       <CallsDrillDownModal

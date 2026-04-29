@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, TrendingUp, Palette, Layers, Cog, Megaphone, FileText, ClipboardList, CheckSquare, MessageSquare, Globe, Building2, Copy } from 'lucide-react';
+import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, TrendingUp, Palette, Layers, Cog, Megaphone, FileText, ClipboardList, CheckSquare, MessageSquare, Globe, Building2, Copy, AlertCircle } from 'lucide-react';
 import { SlackChatTab } from '@/components/slack/SlackChatTab';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
@@ -189,6 +189,9 @@ export default function ClientDetail() {
     queryClient.invalidateQueries({ queryKey: ['call-recordings', clientId] });
     queryClient.invalidateQueries({ queryKey: ['leads', clientId] });
     queryClient.invalidateQueries({ queryKey: ['calls', clientId] });
+    queryClient.invalidateQueries({ queryKey: ['client-settings', clientId] });
+    queryClient.invalidateQueries({ queryKey: ['client-source-metrics'] });
+    queryClient.invalidateQueries({ queryKey: ['sync-health', clientId] });
     toast.success('Refreshed client data');
   };
 
@@ -254,6 +257,42 @@ export default function ClientDetail() {
           <DateRangeFilter showAddClient={false} onExportCSV={handleExportCSV} onRefresh={handleRefresh} />
         </div>
         <div className="p-6 space-y-6">
+
+        {/* Integration health warnings */}
+        {(() => {
+          const hasAdSpend = aggregatedMetrics.totalAdSpend > 0;
+          const hasGhl = !!(client.ghl_api_key && client.ghl_location_id);
+          const hasHubspot = !!(client.hubspot_portal_id && client.hubspot_access_token);
+          const hasCrm = hasGhl || hasHubspot;
+          const hasCrmLeads = (aggregatedMetrics.crmLeads || 0) > 0;
+          const hasCalendars = ((settings as any)?.tracked_calendar_ids || []).length > 0;
+          const hasCalls = aggregatedMetrics.totalCalls > 0;
+          const warnings: string[] = [];
+
+          if (hasAdSpend && !hasCrm) {
+            warnings.push('No GHL/HubSpot credentials configured — CRM leads and calendar data cannot sync');
+          } else if (hasAdSpend && !hasCrmLeads) {
+            warnings.push('Ad spend detected but 0 CRM leads — check GHL integration or run a master sync');
+          }
+          if (hasAdSpend && hasCrm && !hasCalendars) {
+            warnings.push('No tracked calendars configured — booked calls and show calls will not sync from GHL');
+          }
+          if (hasAdSpend && hasCalendars && !hasCalls) {
+            warnings.push('Tracked calendars configured but 0 booked calls — calendar sync may need to be triggered');
+          }
+
+          if (warnings.length === 0) return null;
+          return (
+            <div className="rounded-md bg-destructive/5 border border-destructive/20 p-3 space-y-1">
+              {warnings.map((w, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs text-destructive">
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>{w}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Grouped Tabs - matching 6.0 */}
         <Tabs value={resolvedTab} onValueChange={setActiveTab} className="space-y-6">
@@ -689,7 +728,7 @@ export default function ClientDetail() {
       <AIAnalysisChat context={aiContext} />
 
       {/* Drill-Down Modals */}
-      <LeadsDrillDownModal clientId={clientId} open={drillDownModal === 'leads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
+      <LeadsDrillDownModal clientId={clientId} open={drillDownModal === 'leads' || drillDownModal === 'crmLeads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal clientId={clientId} open={drillDownModal === 'calls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal clientId={clientId} showedOnly open={drillDownModal === 'showedCalls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <AdSpendDrillDownModal clientId={clientId} open={drillDownModal === 'totalAdSpend'} onOpenChange={(open) => !open && setDrillDownModal(null)} />

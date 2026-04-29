@@ -381,8 +381,54 @@ export function DraggableClientTable({
     }
   };
 
+  const integrityStats = useMemo(() => {
+    let withAdSpend = 0;
+    let missingCrmLeads = 0;
+    let missingCalendars = 0;
+    let missingGhlCredentials = 0;
+
+    for (const { client, metrics: m } of clientsWithComputedValues) {
+      const hasAdSpend = (m.totalAdSpend || 0) > 0;
+      if (!hasAdSpend) continue;
+      withAdSpend++;
+
+      const hasGhl = !!(client.ghl_api_key && client.ghl_location_id);
+      const hasHubspot = !!(client.hubspot_portal_id && client.hubspot_access_token);
+      if (!hasGhl && !hasHubspot) {
+        missingGhlCredentials++;
+        missingCrmLeads++;
+        continue;
+      }
+
+      if ((m.crmLeads || 0) === 0) missingCrmLeads++;
+
+      const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
+      if (!hasCalendars) missingCalendars++;
+    }
+
+    return { withAdSpend, missingCrmLeads, missingCalendars, missingGhlCredentials };
+  }, [clientsWithComputedValues, fullSettings]);
+
   return (
     <div className="space-y-2">
+      {/* Data integrity warnings */}
+      {integrityStats.withAdSpend > 0 && (integrityStats.missingCrmLeads > 0 || integrityStats.missingCalendars > 0) && (
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2 bg-destructive/5 border border-destructive/20 rounded text-xs">
+          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+          <span className="font-medium text-destructive">Integration gaps for clients with ad spend:</span>
+          {integrityStats.missingCrmLeads > 0 && (
+            <span className="text-destructive">
+              {integrityStats.missingCrmLeads}/{integrityStats.withAdSpend} missing CRM leads
+              {integrityStats.missingGhlCredentials > 0 && ` (${integrityStats.missingGhlCredentials} no GHL credentials)`}
+            </span>
+          )}
+          {integrityStats.missingCalendars > 0 && (
+            <span className="text-destructive">
+              {integrityStats.missingCalendars}/{integrityStats.withAdSpend} missing tracked calendars
+            </span>
+          )}
+        </div>
+      )}
       {sortConfig.column && sortConfig.direction && (
         <div className="flex items-center justify-between px-2 py-1 bg-muted/50 rounded border border-border">
           <span className="text-xs text-muted-foreground">

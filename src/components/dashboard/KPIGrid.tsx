@@ -7,6 +7,7 @@ interface KPIMetrics {
   ctr?: number;
   leads?: number;
   totalLeads?: number;
+  crmLeads?: number;
   spamBadLeads?: number;
   spamLeads?: number;
   costPerLead?: number;
@@ -39,6 +40,7 @@ interface PriorMetrics {
   ctr?: number;
   leads?: number;
   totalLeads?: number;
+  crmLeads?: number;
   spamBadLeads?: number;
   spamLeads?: number;
   costPerLead?: number;
@@ -163,7 +165,8 @@ export function KPIGrid({
   const kpis = [
     { key: 'totalAdSpend', label: 'Total Ad Spend', value: metrics.totalAdSpend ?? 0, format: 'currency' as const },
     { key: 'ctr', label: 'CTR', value: metrics.ctr ?? 0, format: 'percent' as const },
-    { key: 'leads', label: 'Leads', value: metrics.leads ?? metrics.totalLeads ?? 0, format: 'number' as const, clickable: true },
+    { key: 'leads', label: 'Meta Leads', value: metrics.leads ?? metrics.totalLeads ?? 0, format: 'number' as const, clickable: true },
+    { key: 'crmLeads', label: 'CRM Leads (GHL)', value: metrics.crmLeads ?? 0, format: 'number' as const, clickable: true },
     { key: 'spamBadLeads', label: 'Spam/Bad Leads', value: metrics.spamBadLeads ?? metrics.spamLeads ?? 0, format: 'number' as const },
     { key: 'costPerLead', label: 'Cost Per Lead', value: metrics.costPerLead ?? 0, format: 'currency' as const, threshold: thresholds?.costPerLead },
     { key: 'pipelineValue', label: 'Pipeline Value', value: metrics.pipelineValue ?? 0, format: 'currency' as const },

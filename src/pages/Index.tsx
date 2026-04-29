@@ -229,12 +229,16 @@ const Index = () => {
     queryClient.invalidateQueries({ queryKey: ['funded-investors'] });
     queryClient.invalidateQueries({ queryKey: ['clients'] });
     queryClient.invalidateQueries({ queryKey: ['all-client-settings'] });
+    queryClient.invalidateQueries({ queryKey: ['all-client-full-settings'] });
+    queryClient.invalidateQueries({ queryKey: ['all-client-mrr'] });
     queryClient.invalidateQueries({ queryKey: ['leads'] });
     queryClient.invalidateQueries({ queryKey: ['calls'] });
     queryClient.invalidateQueries({ queryKey: ['daily-metrics'] });
     queryClient.invalidateQueries({ queryKey: ['client-source-metrics'] });
-    queryClient.invalidateQueries({ queryKey: ['all-client-full-settings'] });
+    queryClient.invalidateQueries({ queryKey: ['yesterday-metrics'] });
     queryClient.invalidateQueries({ queryKey: ['integration-status'] });
+    queryClient.invalidateQueries({ queryKey: ['accuracy-health'] });
+    queryClient.invalidateQueries({ queryKey: ['sync-health'] });
     queryClient.invalidateQueries({ queryKey: ['outreach-campaigns'] });
     queryClient.invalidateQueries({ queryKey: ['outreach-messages'] });
     queryClient.invalidateQueries({ queryKey: ['outreach-stats'] });
@@ -594,7 +598,7 @@ const Index = () => {
       <DeleteClientDialog client={deleteClient} open={!!deleteClient} onOpenChange={(open) => !open && setDeleteClient(null)} />
       <AgencyAIChat clients={clients} clientMetrics={clientMetrics as Record<string, AggregatedMetrics>} agencyMetrics={aggregatedMetrics} />
       <MetricsCustomizeModal open={metricsCustomizeOpen} onOpenChange={setMetricsCustomizeOpen} />
-      <LeadsDrillDownModal open={drillDownModal === 'leads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
+      <LeadsDrillDownModal open={drillDownModal === 'leads' || drillDownModal === 'crmLeads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal open={drillDownModal === 'calls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal showedOnly open={drillDownModal === 'showedCalls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <FundedInvestorsDrillDownModal open={drillDownModal === 'fundedInvestors'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
