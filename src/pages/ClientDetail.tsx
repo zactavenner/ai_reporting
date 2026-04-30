@@ -414,7 +414,7 @@ export default function ClientDetail() {
           {/* ─── TASKS TAB ─── */}
           <TabsContent value="tasks" className="space-y-6">
             <SectionErrorBoundary sectionName="Task Board">
-              <OnboardingChecklist clientId={clientId} clientType={client?.client_type} />
+              <OnboardingChecklist clientId={clientId} clientType={client?.description} />
               <h2 className="text-lg font-bold mb-3">Tasks</h2>
               <TaskBoardView clientId={clientId} />
             </SectionErrorBoundary>
