@@ -42,6 +42,7 @@ import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMa
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
 import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { WeeklySyncTab } from '@/components/weekly-sync/WeeklySyncTab';
+import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { WeeklyRecapCard } from '@/components/weekly-sync/WeeklyRecapCard';
 import { useClient } from '@/hooks/useClients';
 import { useDailyMetrics, useFundedInvestors } from '@/hooks/useMetrics';
@@ -413,6 +414,7 @@ export default function ClientDetail() {
           {/* ─── TASKS TAB ─── */}
           <TabsContent value="tasks" className="space-y-6">
             <SectionErrorBoundary sectionName="Task Board">
+              <OnboardingChecklist clientId={clientId} clientType={client?.description} />
               <h2 className="text-lg font-bold mb-3">Tasks</h2>
               <TaskBoardView clientId={clientId} />
             </SectionErrorBoundary>
