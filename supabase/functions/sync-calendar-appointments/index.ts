@@ -287,10 +287,10 @@ async function syncAppointmentToCall(
 
 // Recalculate daily_metrics for a client based on actual calls data
 async function recalculateClientMetrics(supabase: any, clientId: string) {
-  // Get all calls for this client - need both booked_at and scheduled_at
+  // Get all calls for this client - need booked_at, scheduled_at, created_at, outcome
   const { data: callStats } = await supabase
     .from('calls')
-    .select('booked_at, scheduled_at, showed, is_reconnect')
+    .select('booked_at, scheduled_at, created_at, showed, is_reconnect, outcome')
     .eq('client_id', clientId);
 
   if (!callStats || callStats.length === 0) {
@@ -315,9 +315,14 @@ async function recalculateClientMetrics(supabase: any, clientId: string) {
   };
 
   for (const call of callStats) {
-    // Count booked calls by booked_at date
-    if (call.booked_at) {
-      const metrics = ensureDate(call.booked_at);
+    // Skip cancelled calls from booked counts
+    const outcome = (call.outcome || '').toLowerCase();
+    if (outcome === 'cancelled' || outcome === 'canceled') continue;
+
+    // Use booked_at, fall back to created_at for legacy calls
+    const bookedDate = call.booked_at || call.created_at;
+    if (bookedDate) {
+      const metrics = ensureDate(bookedDate);
       if (call.is_reconnect) {
         metrics.reconnect_calls++;
       } else {
@@ -325,13 +330,16 @@ async function recalculateClientMetrics(supabase: any, clientId: string) {
       }
     }
 
-    // Count showed/no-show by scheduled_at date (the actual appointment date)
-    if (call.showed && call.scheduled_at) {
-      const metrics = ensureDate(call.scheduled_at);
-      if (call.is_reconnect) {
-        metrics.reconnect_showed++;
-      } else {
-        metrics.showed_calls++;
+    // Count showed by scheduled_at date (fall back to booked_at then created_at)
+    if (call.showed) {
+      const showDate = call.scheduled_at || call.booked_at || call.created_at;
+      if (showDate) {
+        const metrics = ensureDate(showDate);
+        if (call.is_reconnect) {
+          metrics.reconnect_showed++;
+        } else {
+          metrics.showed_calls++;
+        }
       }
     }
   }

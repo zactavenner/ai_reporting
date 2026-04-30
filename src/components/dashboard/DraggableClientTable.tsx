@@ -584,8 +584,33 @@ export function DraggableClientTable({
                     </TableCell>
 
                     {/* Meta Spend */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
-                      {formatCurrency(m.totalAdSpend || 0)}
+                    <TableCell className={cn(
+                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
+                      (m.totalAdSpend || 0) === 0 && !!client.meta_ad_account_id && client.status === 'active' && 'text-yellow-600 dark:text-yellow-500'
+                    )}>
+                      <span className="flex items-center justify-end gap-0.5">
+                        {formatCurrency(m.totalAdSpend || 0)}
+                        {(m.totalAdSpend || 0) === 0 && client.status === 'active' && !client.meta_ad_account_id && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AlertTriangle className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[220px]">
+                              No Meta ad account configured — add ad account ID in client settings
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        {(m.totalAdSpend || 0) === 0 && client.status === 'active' && !!client.meta_ad_account_id && computed.metaSync.status !== 'healthy' && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Clock className="h-2.5 w-2.5 text-yellow-600 dark:text-yellow-500 shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[250px]">
+                              Meta account configured but $0 spend — Meta sync may not have run yet{computed.metaSync.lastSyncAt ? ` (last sync: ${formatDistanceToNow(new Date(computed.metaSync.lastSyncAt), { addSuffix: true })})` : ''}, or no ads running in this date range
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </span>
                     </TableCell>
 
                     {/* Expected Spend ($/Day × days in range) */}
@@ -619,9 +644,13 @@ export function DraggableClientTable({
                             <TooltipTrigger asChild>
                               <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs max-w-[250px]">
+                            <TooltipContent side="top" className="text-xs max-w-[280px]">
                               {!client.ghl_api_key || !client.ghl_location_id
                                 ? `${formatCurrency(m.totalAdSpend)} ad spend but no GHL credentials configured — add GHL API key & location ID in settings`
+                                : syncInfo.status === 'error'
+                                ? `${formatCurrency(m.totalAdSpend)} ad spend but GHL sync error — ${syncInfo.error || 'check API key and location ID'}`
+                                : syncInfo.status === 'stale'
+                                ? `${formatCurrency(m.totalAdSpend)} ad spend but GHL sync is stale (last sync: ${syncInfo.lastSyncAt ? formatDistanceToNow(new Date(syncInfo.lastSyncAt), { addSuffix: true }) : 'never'}) — run master sync`
                                 : `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — GHL integration problem, run master sync or check API key`
                               }
                             </TooltipContent>
@@ -647,6 +676,8 @@ export function DraggableClientTable({
                         const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
                         const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
                         if (!hasCalls && hasAdSpend && hasGHL && !hasCalendars) return 'text-destructive font-semibold';
+                        if (!hasCalls && hasAdSpend && hasGHL && hasCalendars) return 'text-yellow-600 dark:text-yellow-500';
+                        if (!hasCalls && hasAdSpend && !hasGHL) return 'text-destructive font-semibold';
                         if (!hasCalls && hasAdSpend && syncInfo.status !== 'healthy') return 'text-yellow-600 dark:text-yellow-500';
                         if (!hasCalls && (m.crmLeads || 0) > 0) return 'text-yellow-600 dark:text-yellow-500';
                         return '';
@@ -654,16 +685,43 @@ export function DraggableClientTable({
                     )}>
                       <span className="flex items-center justify-end gap-0.5">
                         {m.totalCalls || 0}
-                        {(m.totalCalls || 0) === 0 && (m.totalAdSpend || 0) > 0 && !!(client.ghl_api_key && client.ghl_location_id) && (fullSettings[client.id]?.tracked_calendar_ids || []).length === 0 && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs max-w-[220px]">
-                              No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
+                        {(() => {
+                          const hasAdSpend = (m.totalAdSpend || 0) > 0;
+                          const hasCalls = (m.totalCalls || 0) > 0;
+                          const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
+                          const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
+                          if (hasCalls || !hasAdSpend) return null;
+                          if (!hasGHL) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                No GHL credentials configured — add GHL API key &amp; location ID to sync calendar appointments
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (!hasCalendars) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Clock className="h-2.5 w-2.5 text-yellow-600 dark:text-yellow-500 shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[250px]">
+                                Calendars configured but 0 booked calls — calendar sync may not have run yet, or no appointments in this date range
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
                       </span>
                     </TableCell>
 
@@ -680,7 +738,19 @@ export function DraggableClientTable({
                       "text-right font-mono tabular-nums text-[11px] py-0 px-1",
                       (m.totalCalls || 0) > 0 && (m.showedCalls || 0) === 0 && 'text-yellow-600 dark:text-yellow-500'
                     )}>
-                      {m.showedCalls || 0}
+                      <span className="flex items-center justify-end gap-0.5">
+                        {m.showedCalls || 0}
+                        {(m.totalCalls || 0) > 0 && (m.showedCalls || 0) === 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Clock className="h-2.5 w-2.5 text-yellow-600 dark:text-yellow-500 shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[220px]">
+                              {m.totalCalls} booked calls but 0 showed — appointment statuses may not have updated yet, or all were no-shows
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </span>
                     </TableCell>
 
                     {/* Show Rate */}

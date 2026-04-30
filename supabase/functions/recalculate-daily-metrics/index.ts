@@ -118,12 +118,16 @@ Deno.serve(async (req) => {
 
           const totalValidLeads = (leadsCount || 0) + (nullSpamCount || 0);
 
-          // ── Calls booked: by booked_at (non-reconnect) ──
+          // ── Calls booked: by booked_at (non-reconnect, non-cancelled) ──
+          // Use .or() instead of .neq() to correctly include calls where is_reconnect is NULL
+          // (.neq("is_reconnect", true) silently excludes NULLs in PostgreSQL)
+          // Exclude cancelled calls to match RPC behavior
           const { count: callsCount } = await supabase
             .from("calls")
             .select("*", { count: "exact", head: true })
             .eq("client_id", client.id)
-            .neq("is_reconnect", true)
+            .or("is_reconnect.eq.false,is_reconnect.is.null")
+            .not("outcome", "in", '("cancelled","canceled")')
             .gte("booked_at", dayStart)
             .lt("booked_at", dayNext);
 
@@ -133,7 +137,7 @@ Deno.serve(async (req) => {
             .select("*", { count: "exact", head: true })
             .eq("client_id", client.id)
             .eq("showed", true)
-            .neq("is_reconnect", true)
+            .or("is_reconnect.eq.false,is_reconnect.is.null")
             .gte("scheduled_at", dayStart)
             .lt("scheduled_at", dayNext);
 
@@ -142,16 +146,18 @@ Deno.serve(async (req) => {
             .from("calls")
             .select("*", { count: "exact", head: true })
             .eq("client_id", client.id)
-            .neq("is_reconnect", true)
+            .or("is_reconnect.eq.false,is_reconnect.is.null")
+            .not("outcome", "in", '("cancelled","canceled")')
             .gte("scheduled_at", dayStart)
             .lt("scheduled_at", dayNext);
 
-          // ── Reconnect calls by booked_at ──
+          // ── Reconnect calls by booked_at (non-cancelled) ──
           const { count: reconnectCount } = await supabase
             .from("calls")
             .select("*", { count: "exact", head: true })
             .eq("client_id", client.id)
             .eq("is_reconnect", true)
+            .not("outcome", "in", '("cancelled","canceled")')
             .gte("booked_at", dayStart)
             .lt("booked_at", dayNext);
 
