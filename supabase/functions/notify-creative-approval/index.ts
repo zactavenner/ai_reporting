@@ -77,7 +77,7 @@ serve(async (req) => {
     }
 
     let channelId: string | null = null;
-    let resolvedChannelName = targetChannelName || `#${FALLBACK_CHANNEL}`;
+    let resolvedChannelName = targetChannelName || '';
     if (targetChannelId) {
       channelId = targetChannelId;
       console.log(`Using mapped channel for client ${creative.client_id}: ${targetChannelName} (${targetChannelId})`);
