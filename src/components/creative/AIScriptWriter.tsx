@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Select,
   SelectContent,
@@ -114,32 +115,80 @@ export function AIScriptWriter() {
     }
 
     setIsGenerating(true);
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    try {
+      const angleLabels = selectedAngles.map(id => MARKETING_ANGLES.find(a => a.id === id));
+      const formatData = AD_FORMATS.find(f => f.id === selectedFormat);
+      const client = clients.find(c => c.id === clientId);
 
-    const scripts: GeneratedScript[] = selectedAngles.map((angleId, idx) => {
-      const angle = MARKETING_ANGLES.find(a => a.id === angleId)!;
-      const score = Math.floor(Math.random() * 15) + 80;
-      return {
-        id: `script-${Date.now()}-${idx}`,
-        angle: angle.label,
-        format: AD_FORMATS.find(f => f.id === selectedFormat)?.label || selectedFormat,
-        hook: generateHook(angleId, offerDescription),
-        body: generateBody(angleId, offerDescription, targetAudience),
-        cta: generateCTA(angleId),
-        fullScript: '',
-        estimatedDuration: selectedFormat.includes('static') || selectedFormat === 'carousel' ? 'N/A' : `${30 + idx * 15}s`,
-        performanceScore: score,
-      };
-    });
+      const prompt = `Generate ${selectedAngles.length} direct response ad scripts.
 
-    scripts.forEach(s => {
-      s.fullScript = `[HOOK]\n${s.hook}\n\n[BODY]\n${s.body}\n\n[CTA]\n${s.cta}`;
-    });
+Client: ${client?.name || 'Not specified'}
+Offer: ${offerDescription}
+${targetAudience ? `Target Audience: ${targetAudience}` : ''}
+Platform: ${selectedPlatformData?.label || 'General'}${selectedPlatformData ? ` — ${selectedPlatformData.guide}` : ''}
+Ad Format: ${formatData?.label || selectedFormat}
+Tone: ${tone}
 
-    setGeneratedScripts(scripts);
-    setIsGenerating(false);
-    setExpandedScript(scripts[0]?.id || null);
-    toast.success(`${scripts.length} script(s) generated`);
+Generate one script for each marketing angle:
+${angleLabels.map(a => `- ${a?.label}: ${a?.description}`).join('\n')}
+
+For each script return a JSON array with objects:
+- hook: Attention-grabbing opening (1-3 sentences)
+- body: Main script body (3-5 paragraphs, conversational, persuasive)
+- cta: Call to action (1-2 sentences)
+- estimatedDuration: Estimated read/watch time
+- performanceScore: Predicted score 0-100
+
+Write like a top-performing direct response copywriter. Be specific to the offer. No generic filler.
+
+Return ONLY the JSON array, no markdown.`;
+
+      const { data, error } = await supabase.functions.invoke('generate-ad-scripts', {
+        body: { clientId: clientId || undefined, prompt, type: 'dr-script' },
+      });
+
+      if (error) throw error;
+
+      let parsed: any[] = [];
+      if (data?.scripts) {
+        parsed = data.scripts;
+      } else if (data?.result) {
+        try {
+          const cleaned = data.result.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          parsed = JSON.parse(cleaned);
+        } catch {
+          parsed = [{ hook: data.result, body: '', cta: '', estimatedDuration: '30s', performanceScore: 85 }];
+        }
+      }
+
+      const scripts: GeneratedScript[] = parsed.map((s: any, idx: number) => {
+        const angleId = selectedAngles[idx] || selectedAngles[0];
+        const angle = MARKETING_ANGLES.find(a => a.id === angleId);
+        const hook = s.hook || '';
+        const body = s.body || '';
+        const cta = s.cta || '';
+        return {
+          id: `script-${Date.now()}-${idx}`,
+          angle: angle?.label || 'General',
+          format: formatData?.label || selectedFormat,
+          hook,
+          body,
+          cta,
+          fullScript: `[HOOK]\n${hook}\n\n[BODY]\n${body}\n\n[CTA]\n${cta}`,
+          estimatedDuration: s.estimatedDuration || s.estimated_duration || `${30 + idx * 15}s`,
+          performanceScore: s.performanceScore || s.performance_score || Math.floor(Math.random() * 15) + 80,
+        };
+      });
+
+      setGeneratedScripts(scripts);
+      setExpandedScript(scripts[0]?.id || null);
+      toast.success(`${scripts.length} script(s) generated`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate scripts. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleCopy = (script: GeneratedScript) => {
@@ -451,34 +500,3 @@ export function AIScriptWriter() {
 }
 
 // Helper functions for demo script generation
-function generateHook(angleId: string, offer: string): string {
-  const hooks: Record<string, string> = {
-    'pain-agitate-solve': `"Most people are leaving money on the table and don't even know it..." — If you've been watching your savings sit idle while inflation eats away at your purchasing power, you're not alone.`,
-    'social-proof': `"I was skeptical at first, but the numbers don't lie..." — Over 2,400 investors have already seen returns that traditional investments simply can't match.`,
-    'urgency-scarcity': `"This window is closing fast..." — We're only accepting 15 more investors this quarter, and here's why you need to act now.`,
-    'authority': `"After managing $500M+ in assets, here's what I've learned..." — The smartest money in the room isn't chasing trends. It's doing this instead.`,
-    'roi-logic': `"Let me show you the math..." — A $50K investment returning 18% annually means $9,000/year in passive income. Here's exactly how.`,
-    'story-hook': `"A year ago, I was working 80-hour weeks with nothing to show for it..." — Then I discovered an investment vehicle that changed everything.`,
-    'contrarian': `"Everything your financial advisor told you is wrong..." — The traditional 60/40 portfolio is dead. Here's what's replacing it.`,
-    'curiosity-gap': `"There's a reason the ultra-wealthy are pouring money into this asset class..." — And it has nothing to do with stocks, crypto, or real estate flipping.`,
-  };
-  return hooks[angleId] || `Stop scrolling. This changes everything about how you think about ${offer}.`;
-}
-
-function generateBody(angleId: string, offer: string, audience: string): string {
-  return `Here's what makes this different from everything else you've seen:\n\n1. Institutional-grade deal flow that was previously only available to family offices and hedge funds\n2. Hands-off management — you invest, we handle everything from acquisition to operations\n3. Tax-advantaged structure that lets you keep more of what you earn\n\n${audience ? `This is specifically designed for ${audience} who want to build real wealth without the complexity.` : 'This is designed for serious investors who are ready to take the next step.'}\n\nOur track record speaks for itself — consistent returns through every market cycle, with full transparency at every stage.`;
-}
-
-function generateCTA(angleId: string): string {
-  const ctas: Record<string, string> = {
-    'pain-agitate-solve': 'Click below to see how you can stop leaving money on the table. Book your free strategy call today.',
-    'social-proof': 'Join 2,400+ investors who already made the smart move. Schedule your consultation now.',
-    'urgency-scarcity': 'Only 15 spots remaining this quarter. Reserve yours before they\'re gone.',
-    'authority': 'Get the same playbook our top investors use. Book your private briefing.',
-    'roi-logic': 'See the full financial breakdown — no obligation. Click below to get the numbers.',
-    'story-hook': 'Your story starts here. Book a 15-minute intro call and see what\'s possible.',
-    'contrarian': 'Ready to think differently about your money? Let\'s talk. Free consultation below.',
-    'curiosity-gap': 'See what the ultra-wealthy already know. Click below for exclusive access.',
-  };
-  return ctas[angleId] || 'Take the next step. Book your free consultation today.';
-}
