@@ -63,6 +63,7 @@ import {
   ChevronRight,
   Zap,
   Globe,
+  Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
@@ -92,6 +93,7 @@ const PodcastAdsGenerator = lazy(() => import('@/components/creative/PodcastAdsG
 const HyperRealisticAds = lazy(() => import('@/components/creative/HyperRealisticAds').then(m => ({ default: m.HyperRealisticAds })));
 const DirectResponseToolkit = lazy(() => import('@/components/creative/DirectResponseToolkit').then(m => ({ default: m.DirectResponseToolkit })));
 const PlatformIntelligence = lazy(() => import('@/components/creative/PlatformIntelligence').then(m => ({ default: m.PlatformIntelligence })));
+const CreativeReviewPortalLazy = lazy(() => import('@/components/creative/CreativeReviewPortal').then(m => ({ default: m.CreativeReviewPortal })));
 
 interface CreativeWithClient extends Creative {
   clientName?: string;
@@ -139,6 +141,7 @@ const NAV_SECTIONS = [
   {
     title: 'Manage',
     items: [
+      { id: 'client-review', label: 'Client Review', icon: Share2 },
       { id: 'manage-styles', label: 'Styles', icon: Palette },
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'history', label: 'History', icon: History },
@@ -336,6 +339,8 @@ export function CreativesTab() {
         return <Suspense fallback={SuspenseFallback}><CreativeCalendarLazy embedded /></Suspense>;
       case 'analytics':
         return <Suspense fallback={SuspenseFallback}><CreativeAnalyticsLazy embedded /></Suspense>;
+      case 'client-review':
+        return <Suspense fallback={SuspenseFallback}><CreativeReviewPortalLazy embedded /></Suspense>;
       default:
         return null;
     }
@@ -343,11 +348,11 @@ export function CreativesTab() {
 
   const renderApprovalsSection = () => (
     <div className="space-y-6">
-      {/* Agency Review Header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Review & Approve</h2>
-          <p className="text-sm text-muted-foreground/60 mt-0.5">Manage creative approvals for your clients</p>
+          <p className="text-sm text-muted-foreground/40 mt-0.5">Manage creative approvals for your clients</p>
         </div>
         {statusCounts.pending > 0 && (
           <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-full">
@@ -357,20 +362,20 @@ export function CreativesTab() {
         )}
       </div>
 
-      {/* Search and Filters — Apple-style bar */}
-      <div className="flex flex-wrap gap-3 p-3 bg-muted/30 rounded-2xl border border-border/30">
+      {/* Toolbar */}
+      <div className="apple-toolbar p-2 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
-          <Input
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
+          <input
             placeholder="Search creatives..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-10 rounded-xl bg-background border-border/50"
+            className="w-full pl-10 pr-4 h-9 bg-transparent text-sm placeholder:text-muted-foreground/30 focus:outline-none"
           />
         </div>
         <Select value={clientFilter} onValueChange={setClientFilter}>
-          <SelectTrigger className="w-[200px] h-10 rounded-xl bg-background border-border/50">
-            <SelectValue placeholder="Filter by client" />
+          <SelectTrigger className="w-[180px] h-9 rounded-xl bg-transparent border-border/30 text-sm">
+            <SelectValue placeholder="All Clients" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Clients</SelectItem>
@@ -382,8 +387,8 @@ export function CreativesTab() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px] h-10 rounded-xl bg-background border-border/50">
-            <SelectValue placeholder="Filter by status" />
+          <SelectTrigger className="w-[160px] h-9 rounded-xl bg-transparent border-border/30 text-sm">
+            <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
@@ -468,7 +473,7 @@ export function CreativesTab() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {filteredCreatives.map((creative) => (
-            <Card key={creative.id} className="overflow-hidden rounded-2xl border-border/50 hover:shadow-lg hover:border-primary/20 transition-all duration-300 relative group">
+            <Card key={creative.id} className="overflow-hidden rounded-3xl border-border/30 hover:shadow-lg hover:border-primary/15 transition-all duration-300 relative group bg-card">
               {/* Checkbox overlay */}
               <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
                 <Checkbox
@@ -758,19 +763,19 @@ export function CreativesTab() {
 
   return (
     <div className="flex gap-0 -mx-2 -mt-2">
-      {/* Apple-style Sidebar Navigation — frosted glass aesthetic */}
+      {/* Apple-style Sidebar */}
       <div className={`flex-shrink-0 transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-56'}`}>
         <div className="sticky top-0 h-[calc(100vh-120px)]">
           <ScrollArea className="h-full">
-            <div className={`py-4 ${sidebarCollapsed ? 'px-2' : 'px-2.5'} space-y-5`}>
+            <div className={`py-3 ${sidebarCollapsed ? 'px-2' : 'px-2'} space-y-4`}>
               {NAV_SECTIONS.map((section, sectionIdx) => (
                 <div key={sectionIdx}>
                   {section.title && !sidebarCollapsed && (
-                    <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-[0.12em] px-3 mb-2">
+                    <p className="section-label px-3 mb-1.5">
                       {section.title}
                     </p>
                   )}
-                  <div className="space-y-0.5">
+                  <div className="space-y-px">
                     {section.items.map(item => {
                       const isActive = activeSection === item.id;
                       const Icon = item.icon;
@@ -778,24 +783,24 @@ export function CreativesTab() {
                         <button
                           key={item.id}
                           onClick={() => setActiveSection(item.id)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] transition-all duration-200 ${
+                          className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-xl text-[13px] transition-all duration-200 ${
                             isActive
-                              ? 'bg-primary/10 text-primary font-semibold'
-                              : 'text-muted-foreground/80 hover:bg-muted/40 hover:text-foreground'
+                              ? 'bg-primary/10 text-primary font-semibold shadow-sm'
+                              : 'text-muted-foreground/70 hover:bg-muted/40 hover:text-foreground'
                           } ${sidebarCollapsed ? 'justify-center px-0' : ''}`}
                           title={sidebarCollapsed ? item.label : undefined}
                         >
-                          <Icon className={`h-[15px] w-[15px] flex-shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground/60'}`} />
+                          <Icon className={`h-[15px] w-[15px] flex-shrink-0 transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/50'}`} />
                           {!sidebarCollapsed && (
                             <>
                               <span className="truncate">{item.label}</span>
                               {'isNew' in item && item.isNew && (
-                                <span className="ml-auto inline-flex items-center justify-center text-[9px] font-bold px-1.5 py-px rounded-full bg-gradient-to-r from-violet-500 to-blue-500 text-white leading-none">
+                                <span className="ml-auto inline-flex items-center justify-center text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 text-white leading-none tracking-wide">
                                   NEW
                                 </span>
                               )}
                               {'showBadge' in item && item.showBadge && pendingCount > 0 && (
-                                <span className="ml-auto inline-flex items-center justify-center text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white leading-none">
+                                <span className="ml-auto inline-flex items-center justify-center text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white leading-none tabular-nums">
                                   {pendingCount}
                                 </span>
                               )}
@@ -812,8 +817,8 @@ export function CreativesTab() {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 min-w-0 border-l border-border/50 pl-6 pr-2">
+      {/* Main Content */}
+      <div className="flex-1 min-w-0 border-l border-border/30 pl-6 pr-2">
         {renderContent()}
       </div>
     </div>
