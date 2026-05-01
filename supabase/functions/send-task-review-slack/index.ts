@@ -28,6 +28,18 @@ serve(async (req) => {
     const { taskId, clientId } = await req.json();
     if (!taskId || !clientId) throw new Error("taskId and clientId are required");
 
+    // KILL SWITCH: only allow Slack notifications for Blue Capital clients
+    const { data: clientCheck } = await supabase
+      .from("clients").select("name").eq("id", clientId).maybeSingle();
+    const isBlueCapital = (clientCheck?.name || "").toLowerCase().includes("blue capital");
+    if (!isBlueCapital) {
+      console.log(`send-task-review-slack skipped: ${clientCheck?.name || clientId} is not Blue Capital`);
+      return new Response(
+        JSON.stringify({ success: false, skipped: true, reason: "client_not_blue_capital" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Fetch task
     const { data: task, error: taskErr } = await supabase
       .from("tasks").select("*").eq("id", taskId).single();

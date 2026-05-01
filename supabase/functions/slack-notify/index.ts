@@ -30,6 +30,17 @@ serve(async (req) => {
     const { type, task, client_id, user_name, comment } = await req.json();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // KILL SWITCH: only allow Slack notifications for Blue Capital clients
+    const { data: clientCheck } = await supabase
+      .from("clients").select("name").eq("id", client_id).maybeSingle();
+    const isBlueCapital = (clientCheck?.name || "").toLowerCase().includes("blue capital");
+    if (!isBlueCapital) {
+      console.log(`slack-notify skipped: ${clientCheck?.name || client_id} is not Blue Capital`);
+      return new Response(JSON.stringify({ ok: true, skipped: true, reason: "client_not_blue_capital" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Find all Slack channels mapped to this client
     const { data: mappings } = await supabase
       .from("slack_channel_mappings")
