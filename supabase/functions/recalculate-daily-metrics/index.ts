@@ -117,6 +117,7 @@ Deno.serve(async (req) => {
             .lt("created_at", dayNext);
 
           const totalValidLeads = (leadsCount || 0) + (nullSpamCount || 0);
+          const totalCrmLeads = totalValidLeads + (spamCount || 0);
 
           // ── Calls booked: by booked_at (non-reconnect) ──
           const { count: callsCount } = await supabase
@@ -189,6 +190,7 @@ Deno.serve(async (req) => {
                 date: dateStr,
                 leads: totalValidLeads,
                 spam_leads: spamCount || 0,
+                crm_leads: totalCrmLeads,
                 calls: callsCount || 0,
                 showed_calls: showedCount || 0,
                 reconnect_calls: reconnectCount || 0,

@@ -31,6 +31,7 @@ interface PeriodStats {
   month: number;
   adSpend: number;
   leads: number;
+  crmLeads: number;
   cpl: number;
   calls: number;
   costPerCall: number;
@@ -77,6 +78,7 @@ const MONTH_NAMES = [
 const METRIC_ROWS: MetricRowConfig[] = [
   { label: 'Ad Spend', key: 'adSpend', format: (v) => `$${Math.round(v).toLocaleString()}`, editable: true, dbField: 'ad_spend' },
   { label: 'Leads', key: 'leads', format: (v) => v.toLocaleString(), editable: true, dbField: 'leads' },
+  { label: 'CRM Leads', key: 'crmLeads', format: (v) => v.toLocaleString(), editable: false },
   { label: 'CPL', key: 'cpl', format: (v) => `$${Math.round(v).toLocaleString()}`, editable: false },
   { label: 'Calls', key: 'calls', format: (v) => v.toLocaleString(), editable: true, dbField: 'calls' },
   { label: '$/Call', key: 'costPerCall', format: (v) => `$${Math.round(v).toLocaleString()}`, editable: false },
@@ -125,9 +127,10 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
           return isWithinInterval(date, { start: monthStart, end: monthEnd });
         });
 
-        const totals = monthMetrics.reduce((acc, day) => ({
+        const totals = monthMetrics.reduce((acc, day: any) => ({
           adSpend: acc.adSpend + Number(day.ad_spend || 0),
           leads: acc.leads + (day.leads || 0),
+          crmLeads: acc.crmLeads + (day.crm_leads || day.leads || 0) + (day.spam_leads || 0),
           calls: acc.calls + (day.calls || 0),
           showedCalls: acc.showedCalls + (day.showed_calls || 0),
           reconnectCalls: acc.reconnectCalls + (day.reconnect_calls || 0),
@@ -137,7 +140,7 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
           fundedInvestors: acc.fundedInvestors + (day.funded_investors || 0),
           fundedDollars: acc.fundedDollars + Number(day.funded_dollars || 0),
         }), {
-          adSpend: 0, leads: 0, calls: 0, showedCalls: 0, reconnectCalls: 0,
+          adSpend: 0, leads: 0, crmLeads: 0, calls: 0, showedCalls: 0, reconnectCalls: 0,
           reconnectShowed: 0, commitments: 0, commitmentDollars: 0, fundedInvestors: 0, fundedDollars: 0,
         });
 
@@ -151,6 +154,7 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
           hasData,
           adSpend: totals.adSpend,
           leads: totals.leads,
+          crmLeads: totals.crmLeads,
           cpl: totals.leads > 0 ? totals.adSpend / totals.leads : 0,
           calls: totals.calls,
           costPerCall: totals.calls > 0 ? totals.adSpend / totals.calls : 0,
@@ -207,9 +211,10 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
         isWithinInterval(m.parsedDate, { start: period.start, end: period.end })
       );
 
-      const totals = periodMetrics.reduce((acc, day) => ({
+      const totals = periodMetrics.reduce((acc, day: any) => ({
         adSpend: acc.adSpend + Number(day.ad_spend || 0),
         leads: acc.leads + (day.leads || 0),
+        crmLeads: acc.crmLeads + (day.crm_leads || day.leads || 0) + (day.spam_leads || 0),
         calls: acc.calls + (day.calls || 0),
         showedCalls: acc.showedCalls + (day.showed_calls || 0),
         reconnectCalls: acc.reconnectCalls + (day.reconnect_calls || 0),
@@ -219,7 +224,7 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
         fundedInvestors: acc.fundedInvestors + (day.funded_investors || 0),
         fundedDollars: acc.fundedDollars + Number(day.funded_dollars || 0),
       }), {
-        adSpend: 0, leads: 0, calls: 0, showedCalls: 0, reconnectCalls: 0,
+        adSpend: 0, leads: 0, crmLeads: 0, calls: 0, showedCalls: 0, reconnectCalls: 0,
         reconnectShowed: 0, commitments: 0, commitmentDollars: 0, fundedInvestors: 0, fundedDollars: 0,
       });
 
@@ -231,6 +236,7 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
         hasData: periodMetrics.length > 0,
         adSpend: totals.adSpend,
         leads: totals.leads,
+        crmLeads: totals.crmLeads,
         cpl: totals.leads > 0 ? totals.adSpend / totals.leads : 0,
         calls: totals.calls,
         costPerCall: totals.calls > 0 ? totals.adSpend / totals.calls : 0,
@@ -266,6 +272,7 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
     const t = displayStats.reduce((acc, p) => ({
       adSpend: acc.adSpend + p.adSpend,
       leads: acc.leads + p.leads,
+      crmLeads: acc.crmLeads + p.crmLeads,
       calls: acc.calls + p.calls,
       showedCalls: acc.showedCalls + p.showedCalls,
       reconnectCalls: acc.reconnectCalls + p.reconnectCalls,
@@ -275,7 +282,7 @@ export function PeriodicStatsTable({ clientId, dailyMetrics: externalMetrics }: 
       fundedInvestors: acc.fundedInvestors + p.fundedInvestors,
       fundedDollars: acc.fundedDollars + p.fundedDollars,
     }), {
-      adSpend: 0, leads: 0, calls: 0, showedCalls: 0, reconnectCalls: 0,
+      adSpend: 0, leads: 0, crmLeads: 0, calls: 0, showedCalls: 0, reconnectCalls: 0,
       reconnectShowed: 0, commitments: 0, commitmentDollars: 0, fundedInvestors: 0, fundedDollars: 0,
     });
 

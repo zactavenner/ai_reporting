@@ -594,7 +594,7 @@ const Index = () => {
       <DeleteClientDialog client={deleteClient} open={!!deleteClient} onOpenChange={(open) => !open && setDeleteClient(null)} />
       <AgencyAIChat clients={clients} clientMetrics={clientMetrics as Record<string, AggregatedMetrics>} agencyMetrics={aggregatedMetrics} />
       <MetricsCustomizeModal open={metricsCustomizeOpen} onOpenChange={setMetricsCustomizeOpen} />
-      <LeadsDrillDownModal open={drillDownModal === 'leads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
+      <LeadsDrillDownModal open={drillDownModal === 'leads' || drillDownModal === 'crmLeads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal open={drillDownModal === 'calls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal showedOnly open={drillDownModal === 'showedCalls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <FundedInvestorsDrillDownModal open={drillDownModal === 'fundedInvestors'} onOpenChange={(open) => !open && setDrillDownModal(null)} />

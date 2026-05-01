@@ -7,6 +7,7 @@ interface KPIMetrics {
   ctr?: number;
   leads?: number;
   totalLeads?: number;
+  crmLeads?: number;
   spamBadLeads?: number;
   spamLeads?: number;
   costPerLead?: number;
@@ -39,6 +40,7 @@ interface PriorMetrics {
   ctr?: number;
   leads?: number;
   totalLeads?: number;
+  crmLeads?: number;
   spamBadLeads?: number;
   spamLeads?: number;
   costPerLead?: number;
@@ -143,6 +145,7 @@ export function KPIGrid({
     const keyToColumn: Record<string, string> = {
       totalAdSpend: 'ad_spend',
       leads: 'leads',
+      crmLeads: 'crm_leads',
       spamBadLeads: 'spam_leads',
       calls: 'calls',
       showedCalls: 'showed_calls',
@@ -164,6 +167,7 @@ export function KPIGrid({
     { key: 'totalAdSpend', label: 'Total Ad Spend', value: metrics.totalAdSpend ?? 0, format: 'currency' as const },
     { key: 'ctr', label: 'CTR', value: metrics.ctr ?? 0, format: 'percent' as const },
     { key: 'leads', label: 'Leads', value: metrics.leads ?? metrics.totalLeads ?? 0, format: 'number' as const, clickable: true },
+    { key: 'crmLeads', label: 'CRM Leads', value: metrics.crmLeads ?? 0, format: 'number' as const, clickable: true },
     { key: 'spamBadLeads', label: 'Spam/Bad Leads', value: metrics.spamBadLeads ?? metrics.spamLeads ?? 0, format: 'number' as const },
     { key: 'costPerLead', label: 'Cost Per Lead', value: metrics.costPerLead ?? 0, format: 'currency' as const, threshold: thresholds?.costPerLead },
     { key: 'pipelineValue', label: 'Pipeline Value', value: metrics.pipelineValue ?? 0, format: 'currency' as const },
@@ -173,6 +177,8 @@ export function KPIGrid({
     { key: 'showedCalls', label: 'Showed Calls', value: metrics.showedCalls ?? 0, format: 'number' as const, clickable: true },
     { key: 'showedPercent', label: 'Show Rate', value: metrics.showedPercent ?? 0, format: 'percent' as const },
     { key: 'costPerShow', label: 'Cost Per Show', value: metrics.costPerShow ?? 0, format: 'currency' as const, threshold: thresholds?.costPerShow },
+    { key: 'reconnectCalls', label: 'Reconnect Calls', value: metrics.reconnectCalls ?? 0, format: 'number' as const },
+    { key: 'reconnectShowed', label: 'Reconnect Showed', value: metrics.reconnectShowed ?? 0, format: 'number' as const },
     { key: 'closeRate', label: 'Close Rate', value: metrics.closeRate ?? 0, format: 'percent' as const },
     { key: 'commitments', label: 'Commitments', value: metrics.commitments ?? metrics.totalCommitments ?? 0, format: 'number' as const, clickable: true },
     { key: 'commitmentDollars', label: 'Commitment $', value: metrics.commitmentDollars ?? 0, format: 'currency' as const },

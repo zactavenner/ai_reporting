@@ -12,6 +12,7 @@ export interface DailyMetric {
   ctr: number;
   leads: number;
   spam_leads: number;
+  crm_leads?: number;
   calls: number;
   showed_calls: number;
   commitments: number;

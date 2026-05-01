@@ -184,7 +184,7 @@ export function DraggableClientTable({
     queryFn: async () => {
       const { data } = await supabase
         .from('daily_metrics')
-        .select('client_id, ad_spend, leads')
+        .select('client_id, ad_spend, leads, crm_leads')
         .eq('date', yesterday);
       return data || [];
     },
@@ -199,7 +199,7 @@ export function DraggableClientTable({
       if (!clientsWithData.has(id)) set.add(id);
     });
     yesterdayMetrics.forEach((m: any) => {
-      if ((m.ad_spend ?? 0) === 0 && (m.leads ?? 0) === 0) {
+      if ((m.ad_spend ?? 0) === 0 && (m.leads ?? 0) === 0 && (m.crm_leads ?? 0) === 0) {
         set.add(m.client_id);
       }
     });
@@ -654,16 +654,35 @@ export function DraggableClientTable({
                     )}>
                       <span className="flex items-center justify-end gap-0.5">
                         {m.totalCalls || 0}
-                        {(m.totalCalls || 0) === 0 && (m.totalAdSpend || 0) > 0 && !!(client.ghl_api_key && client.ghl_location_id) && (fullSettings[client.id]?.tracked_calendar_ids || []).length === 0 && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs max-w-[220px]">
-                              No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
+                        {(() => {
+                          const hasCalls = (m.totalCalls || 0) > 0;
+                          const hasAdSpend = (m.totalAdSpend || 0) > 0;
+                          const hasCrmLeads = (m.crmLeads || 0) > 0;
+                          const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
+                          const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
+                          if (hasCalls) return null;
+                          if (!hasGHL && (hasAdSpend || hasCrmLeads)) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[250px]">
+                                No GHL credentials configured — add GHL API key & location ID in client settings to sync calendar appointments
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (hasGHL && !hasCalendars) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[250px]">
+                                No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          return null;
+                        })()}
                       </span>
                     </TableCell>
 

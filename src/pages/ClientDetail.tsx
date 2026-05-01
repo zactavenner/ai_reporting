@@ -689,7 +689,7 @@ export default function ClientDetail() {
       <AIAnalysisChat context={aiContext} />
 
       {/* Drill-Down Modals */}
-      <LeadsDrillDownModal clientId={clientId} open={drillDownModal === 'leads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
+      <LeadsDrillDownModal clientId={clientId} open={drillDownModal === 'leads' || drillDownModal === 'crmLeads'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal clientId={clientId} open={drillDownModal === 'calls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <CallsDrillDownModal clientId={clientId} showedOnly open={drillDownModal === 'showedCalls'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
       <AdSpendDrillDownModal clientId={clientId} open={drillDownModal === 'totalAdSpend'} onOpenChange={(open) => !open && setDrillDownModal(null)} />
