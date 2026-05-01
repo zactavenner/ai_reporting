@@ -87,8 +87,8 @@ serve(async (req) => {
 
       if (!isBlueCapital) {
         console.log(
-          `No slack_channel_mappings row for client ${creative.client_id} (${client?.name}). ` +
-          `Skipping Slack notification — refusing to fall back to Blue Capital's channel for non-Blue Capital clients.`
+          `skipped: no_channel_mapping — client ${creative.client_id} (${client?.name || 'Unknown client'}) is not Blue Capital; ` +
+          `refusing to fall back to Blue Capital Slack channel for creative ${creativeId}.`
         );
         return new Response(
           JSON.stringify({ success: false, skipped: true, reason: 'no_channel_mapping' }),
