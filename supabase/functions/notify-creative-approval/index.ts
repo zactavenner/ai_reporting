@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/slack/api';
-const FALLBACK_CHANNEL = 'hpa-bluecapital-tasks';
+// Blue Capital's channel. Only used as a fallback for the Blue Capital client itself.
+const BLUE_CAPITAL_CHANNEL = 'hpa-bluecapital-tasks';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -75,15 +76,28 @@ serve(async (req) => {
       targetChannelName = chosen.channel_name;
     }
 
-    // If no per-client mapping, look up the fallback channel by name.
-    // Resolve channel ID by name (paginated)
     let channelId: string | null = null;
     let resolvedChannelName = targetChannelName || `#${FALLBACK_CHANNEL}`;
     if (targetChannelId) {
       channelId = targetChannelId;
       console.log(`Using mapped channel for client ${creative.client_id}: ${targetChannelName} (${targetChannelId})`);
     } else {
-      console.warn(`No slack_channel_mappings row for client ${creative.client_id} (${client?.name}). Falling back to #${FALLBACK_CHANNEL}.`);
+      const clientNameLower = (client?.name || '').toLowerCase();
+      const isBlueCapital = clientNameLower.includes('blue capital');
+
+      if (!isBlueCapital) {
+        console.log(
+          `No slack_channel_mappings row for client ${creative.client_id} (${client?.name}). ` +
+          `Skipping Slack notification — refusing to fall back to Blue Capital's channel for non-Blue Capital clients.`
+        );
+        return new Response(
+          JSON.stringify({ success: false, skipped: true, reason: 'no_channel_mapping' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.warn(`No slack_channel_mappings row for Blue Capital (${creative.client_id}). Falling back to #${BLUE_CAPITAL_CHANNEL}.`);
+      resolvedChannelName = `#${BLUE_CAPITAL_CHANNEL}`;
       let cursor = '';
       do {
         const url = `${GATEWAY_URL}/conversations.list?limit=200&types=public_channel,private_channel${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
@@ -98,7 +112,7 @@ serve(async (req) => {
         if (!data.ok) {
           throw new Error(`Slack conversations.list error: ${data.error}`);
         }
-        const match = data.channels?.find((c: { name: string; id: string }) => c.name === FALLBACK_CHANNEL);
+        const match = data.channels?.find((c: { name: string; id: string }) => c.name === BLUE_CAPITAL_CHANNEL);
         if (match) {
           channelId = match.id;
           break;
@@ -107,7 +121,7 @@ serve(async (req) => {
       } while (cursor);
 
       if (!channelId) {
-        throw new Error(`No mapped Slack channel for this client and fallback #${FALLBACK_CHANNEL} not found.`);
+        throw new Error(`No mapped Slack channel for Blue Capital and #${BLUE_CAPITAL_CHANNEL} not found.`);
       }
     }
 
