@@ -28,9 +28,9 @@ type LeadPayload = {
 // Fields that must never be overwritten with null/empty values from a partial payload.
 // (We only update them when the incoming value is non-empty.)
 const PRESERVE_IF_EMPTY = new Set([
-  "lead_name", "first_name", "last_name", "email", "phone",
+  "name", "email", "phone",
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-  "source", "ad_id", "adset_id", "campaign_id",
+  "source", "ad_id", "ad_set_name", "campaign_name", "assigned_user",
 ]);
 
 function isEmpty(v: unknown): boolean {
