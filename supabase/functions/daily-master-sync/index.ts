@@ -102,6 +102,8 @@ Deno.serve(async (req) => {
     }
 
     // ── Step 2: GHL All Clients (contacts, calendar, pipelines) ──
+    // NOTE: sync-ghl-all-clients runs in the background via EdgeRuntime.waitUntil
+    // and triggers its own recalculate-daily-metrics when complete.
     if (!skipSteps.includes("ghl")) {
       const start = Date.now();
       console.log(`[daily-master-sync] Step 2: sync-ghl-all-clients`);
@@ -146,9 +148,13 @@ Deno.serve(async (req) => {
     }
 
     // ── Step 4: Recalculate Daily Metrics ──
+    // This is an early recalculation that captures whatever CRM data has been
+    // synced so far. sync-ghl-all-clients and sync-hubspot-all-clients both
+    // trigger their own recalculate when they finish (in the background), so
+    // if those are still running, the metrics will be recalculated again later.
     if (!skipSteps.includes("recalculate")) {
       const start = Date.now();
-      console.log(`[daily-master-sync] Step 4: recalculate-daily-metrics`);
+      console.log(`[daily-master-sync] Step 4: recalculate-daily-metrics (early pass — CRM syncs will re-trigger when complete)`);
       const res = await callFunction(supabaseUrl, supabaseKey, "recalculate-daily-metrics");
       const duration = Date.now() - start;
       results.push({

@@ -41,6 +41,20 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Pre-fetch tracked calendar IDs so we can skip calendar sync for unconfigured clients
+  const clientIds = clients.map(c => c.id);
+  const { data: allSettings } = clientIds.length > 0
+    ? await supabase.from("client_settings").select("client_id, tracked_calendar_ids, reconnect_calendar_ids").in("client_id", clientIds)
+    : { data: [] };
+  const calendarConfigByClient = new Map<string, { tracked: string[]; reconnect: string[] }>();
+  for (const s of allSettings || []) {
+    const tracked = s.tracked_calendar_ids || [];
+    const reconnect = s.reconnect_calendar_ids || [];
+    if (tracked.length > 0 || reconnect.length > 0) {
+      calendarConfigByClient.set(s.client_id, { tracked, reconnect });
+    }
+  }
+
   // Use ALL clients with GHL credentials - do NOT exclude clients that also have HubSpot
   const ghlClients = clients;
   console.log(`[sync-ghl-all-clients] Found ${ghlClients.length} GHL clients to sync`);
@@ -73,22 +87,28 @@ Deno.serve(async (req) => {
 
       await new Promise(resolve => setTimeout(resolve, 10000));
 
-      // 2. Sync calendar appointments
-      try {
-        const calendarBody: Record<string, unknown> = { clientId: client.id };
-        if (sinceDateDays) calendarBody.sinceDateDays = sinceDateDays;
-        
-        const res = await fetch(`${supabaseUrl}/functions/v1/sync-calendar-appointments`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-          body: JSON.stringify(calendarBody),
-        });
-        const data = await res.json();
-        clientResult.calendar = !data.error;
-        if (data.error) clientResult.errors.push(`calendar: ${data.error}`);
-        else console.log(`[sync-ghl-all-clients] ✓ ${client.name} calendar synced`);
-      } catch (err) {
-        clientResult.errors.push(`calendar: ${err instanceof Error ? err.message : "Unknown"}`);
+      // 2. Sync calendar appointments (only if tracked calendars are configured)
+      const hasCalendars = calendarConfigByClient.has(client.id);
+      if (hasCalendars) {
+        try {
+          const calendarBody: Record<string, unknown> = { clientId: client.id };
+          if (sinceDateDays) calendarBody.sinceDateDays = sinceDateDays;
+
+          const res = await fetch(`${supabaseUrl}/functions/v1/sync-calendar-appointments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+            body: JSON.stringify(calendarBody),
+          });
+          const data = await res.json();
+          clientResult.calendar = !data.error;
+          if (data.error) clientResult.errors.push(`calendar: ${data.error}`);
+          else console.log(`[sync-ghl-all-clients] ✓ ${client.name} calendar synced`);
+        } catch (err) {
+          clientResult.errors.push(`calendar: ${err instanceof Error ? err.message : "Unknown"}`);
+        }
+      } else {
+        console.log(`[sync-ghl-all-clients] ⏭ ${client.name} — no tracked calendars configured, skipping calendar sync`);
+        clientResult.calendar = true; // Not an error, just not configured
       }
 
       await new Promise(resolve => setTimeout(resolve, 10000));

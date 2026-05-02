@@ -71,6 +71,28 @@ Deno.serve(async (req) => {
 
     const succeeded = results.filter(r => r.success).length;
     console.log(`[sync-hubspot-all-clients] Complete: ${succeeded}/${results.length} clients synced`);
+
+    // Trigger daily metrics recalculation so CRM data (leads, calls) appears in daily_metrics
+    if (succeeded > 0) {
+      const recalcEnd = new Date();
+      const recalcStart = new Date();
+      recalcStart.setUTCDate(recalcStart.getUTCDate() - 7);
+      const recalcStartStr = recalcStart.toISOString().split("T")[0];
+      const recalcEndStr = recalcEnd.toISOString().split("T")[0];
+      console.log(`[sync-hubspot-all-clients] Triggering daily metrics recalculation for ${recalcStartStr} to ${recalcEndStr}...`);
+      try {
+        const res = await fetch(`${supabaseUrl}/functions/v1/recalculate-daily-metrics`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+          body: JSON.stringify({ startDate: recalcStartStr, endDate: recalcEndStr }),
+        });
+        const data = await res.json();
+        console.log(`[sync-hubspot-all-clients] Metrics recalculation result:`, JSON.stringify(data));
+      } catch (err) {
+        console.error(`[sync-hubspot-all-clients] Metrics recalculation failed:`, err);
+      }
+    }
+
     return results;
   };
 

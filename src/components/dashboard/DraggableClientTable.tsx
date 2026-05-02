@@ -620,10 +620,15 @@ export function DraggableClientTable({
                               <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs max-w-[250px]">
-                              {!client.ghl_api_key || !client.ghl_location_id
-                                ? `${formatCurrency(m.totalAdSpend)} ad spend but no GHL credentials configured — add GHL API key & location ID in settings`
-                                : `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — GHL integration problem, run master sync or check API key`
-                              }
+                              {(() => {
+                                const hasGhl = !!(client.ghl_api_key && client.ghl_location_id);
+                                const hasHubspot = !!(client.hubspot_portal_id && client.hubspot_access_token);
+                                if (!hasGhl && !hasHubspot) {
+                                  return `${formatCurrency(m.totalAdSpend)} ad spend but no CRM credentials configured — add GHL or HubSpot credentials in settings`;
+                                }
+                                const crmName = hasHubspot ? 'HubSpot' : 'GHL';
+                                return `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — ${crmName} integration problem, run master sync or check API credentials`;
+                              })()}
                             </TooltipContent>
                           </Tooltip>
                         )}
@@ -644,9 +649,10 @@ export function DraggableClientTable({
                       (() => {
                         const hasAdSpend = (m.totalAdSpend || 0) > 0;
                         const hasCalls = (m.totalCalls || 0) > 0;
-                        const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
-                        const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
-                        if (!hasCalls && hasAdSpend && hasGHL && !hasCalendars) return 'text-destructive font-semibold';
+                        const hasCRM = !!(client.ghl_api_key && client.ghl_location_id) || !!(client.hubspot_portal_id && client.hubspot_access_token);
+                        const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0 ||
+                          (fullSettings[client.id]?.hubspot_booked_meeting_types || []).length > 0;
+                        if (!hasCalls && hasAdSpend && hasCRM && !hasCalendars) return 'text-destructive font-semibold';
                         if (!hasCalls && hasAdSpend && syncInfo.status !== 'healthy') return 'text-yellow-600 dark:text-yellow-500';
                         if (!hasCalls && (m.crmLeads || 0) > 0) return 'text-yellow-600 dark:text-yellow-500';
                         return '';
@@ -654,13 +660,21 @@ export function DraggableClientTable({
                     )}>
                       <span className="flex items-center justify-end gap-0.5">
                         {m.totalCalls || 0}
-                        {(m.totalCalls || 0) === 0 && (m.totalAdSpend || 0) > 0 && !!(client.ghl_api_key && client.ghl_location_id) && (fullSettings[client.id]?.tracked_calendar_ids || []).length === 0 && (
+                        {(m.totalCalls || 0) === 0 && (m.totalAdSpend || 0) > 0 && (() => {
+                          const hasCRM = !!(client.ghl_api_key && client.ghl_location_id) || !!(client.hubspot_portal_id && client.hubspot_access_token);
+                          const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0 ||
+                            (fullSettings[client.id]?.hubspot_booked_meeting_types || []).length > 0;
+                          return hasCRM && !hasCalendars;
+                        })() && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs max-w-[220px]">
-                              No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
+                              {client.hubspot_portal_id
+                                ? 'No booked meeting types configured — add meeting types in client settings to sync booked/show calls'
+                                : 'No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls'
+                              }
                             </TooltipContent>
                           </Tooltip>
                         )}
@@ -680,7 +694,19 @@ export function DraggableClientTable({
                       "text-right font-mono tabular-nums text-[11px] py-0 px-1",
                       (m.totalCalls || 0) > 0 && (m.showedCalls || 0) === 0 && 'text-yellow-600 dark:text-yellow-500'
                     )}>
-                      {m.showedCalls || 0}
+                      <span className="flex items-center justify-end gap-0.5">
+                        {m.showedCalls || 0}
+                        {(m.totalCalls || 0) > 0 && (m.showedCalls || 0) === 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AlertCircle className="h-2.5 w-2.5 text-yellow-500 shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[220px]">
+                              {m.totalCalls} booked call{(m.totalCalls || 0) !== 1 ? 's' : ''} but 0 shows — calendar may need re-sync to update appointment statuses
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </span>
                     </TableCell>
 
                     {/* Show Rate */}
