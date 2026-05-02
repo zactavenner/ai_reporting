@@ -135,11 +135,15 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Compose worker body
-      const workerBody = {
-        ...(job.payload ?? {}),
+      // Compose worker body. payload should already contain { fields, source, provider }
+      // for lead_upsert jobs (set by enqueueLeadUpsert / manual inserts).
+      const p = (job.payload ?? {}) as Record<string, unknown>;
+      const workerBody: Record<string, unknown> = {
         client_id: job.client_id,
         external_id: job.external_id,
+        source: (p.source as string) ?? job.source ?? "manual",
+        provider: (p.provider as string) ?? job.provider ?? null,
+        fields: (p.fields as Record<string, unknown>) ?? {},
         job_id: job.id,
       };
 
