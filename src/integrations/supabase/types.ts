@@ -5093,6 +5093,74 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_change_log: {
+        Row: {
+          action: string
+          changed_fields: Json | null
+          client_id: string
+          created_at: string
+          external_id: string | null
+          id: string
+          job_id: string | null
+          lead_id: string | null
+          provider: string | null
+          source: string
+        }
+        Insert: {
+          action: string
+          changed_fields?: Json | null
+          client_id: string
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          job_id?: string | null
+          lead_id?: string | null
+          provider?: string | null
+          source: string
+        }
+        Update: {
+          action?: string
+          changed_fields?: Json | null
+          client_id?: string
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          job_id?: string | null
+          lead_id?: string | null
+          provider?: string | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_change_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "lead_change_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_change_log_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "sync_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_change_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_enrichment: {
         Row: {
           address: string | null
@@ -7272,6 +7340,75 @@ export type Database = {
           },
         ]
       }
+      sync_health_snapshots: {
+        Row: {
+          client_id: string
+          db_lead_count: number | null
+          delta_pct: number | null
+          details: Json | null
+          id: string
+          last_cursor_sync_at: string | null
+          last_master_sync_at: string | null
+          last_webhook_at: string | null
+          queue_dead_letter: number
+          queue_failed: number
+          queue_pending: number
+          queue_processing: number
+          snapshot_at: string
+          source_lead_count: number | null
+          success_rate_24h: number | null
+        }
+        Insert: {
+          client_id: string
+          db_lead_count?: number | null
+          delta_pct?: number | null
+          details?: Json | null
+          id?: string
+          last_cursor_sync_at?: string | null
+          last_master_sync_at?: string | null
+          last_webhook_at?: string | null
+          queue_dead_letter?: number
+          queue_failed?: number
+          queue_pending?: number
+          queue_processing?: number
+          snapshot_at?: string
+          source_lead_count?: number | null
+          success_rate_24h?: number | null
+        }
+        Update: {
+          client_id?: string
+          db_lead_count?: number | null
+          delta_pct?: number | null
+          details?: Json | null
+          id?: string
+          last_cursor_sync_at?: string | null
+          last_master_sync_at?: string | null
+          last_webhook_at?: string | null
+          queue_dead_letter?: number
+          queue_failed?: number
+          queue_pending?: number
+          queue_processing?: number
+          snapshot_at?: string
+          source_lead_count?: number | null
+          success_rate_24h?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_health_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sync_health_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_logs: {
         Row: {
           client_id: string
@@ -7388,48 +7525,78 @@ export type Database = {
       }
       sync_queue: {
         Row: {
+          attempts: number
           batch_number: number | null
           client_id: string
           completed_at: string | null
           created_at: string | null
           date_range_end: string | null
           date_range_start: string | null
+          dead_letter: boolean
           error_message: string | null
+          external_id: string | null
           id: string
+          idempotency_key: string | null
+          last_attempted_at: string | null
+          max_attempts: number
+          next_retry_at: string | null
+          payload: Json | null
           priority: number | null
+          provider: string | null
           records_processed: number | null
+          source: string | null
           started_at: string | null
           status: string | null
           sync_type: string
           total_batches: number | null
         }
         Insert: {
+          attempts?: number
           batch_number?: number | null
           client_id: string
           completed_at?: string | null
           created_at?: string | null
           date_range_end?: string | null
           date_range_start?: string | null
+          dead_letter?: boolean
           error_message?: string | null
+          external_id?: string | null
           id?: string
+          idempotency_key?: string | null
+          last_attempted_at?: string | null
+          max_attempts?: number
+          next_retry_at?: string | null
+          payload?: Json | null
           priority?: number | null
+          provider?: string | null
           records_processed?: number | null
+          source?: string | null
           started_at?: string | null
           status?: string | null
           sync_type: string
           total_batches?: number | null
         }
         Update: {
+          attempts?: number
           batch_number?: number | null
           client_id?: string
           completed_at?: string | null
           created_at?: string | null
           date_range_end?: string | null
           date_range_start?: string | null
+          dead_letter?: boolean
           error_message?: string | null
+          external_id?: string | null
           id?: string
+          idempotency_key?: string | null
+          last_attempted_at?: string | null
+          max_attempts?: number
+          next_retry_at?: string | null
+          payload?: Json | null
           priority?: number | null
+          provider?: string | null
           records_processed?: number | null
+          source?: string | null
           started_at?: string | null
           status?: string | null
           sync_type?: string
@@ -8180,6 +8347,64 @@ export type Database = {
           voice_id?: string
         }
         Relationships: []
+      }
+      webhook_events: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          enqueued_job_id: string | null
+          event_type: string | null
+          id: string
+          processed_at: string | null
+          provider: string
+          provider_event_id: string
+          raw_payload: Json | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          enqueued_job_id?: string | null
+          event_type?: string | null
+          id?: string
+          processed_at?: string | null
+          provider: string
+          provider_event_id: string
+          raw_payload?: Json | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          enqueued_job_id?: string | null
+          event_type?: string | null
+          id?: string
+          processed_at?: string | null
+          provider?: string
+          provider_event_id?: string
+          raw_payload?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "webhook_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_events_enqueued_job_id_fkey"
+            columns: ["enqueued_job_id"]
+            isOneToOne: false
+            referencedRelation: "sync_queue"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       webhook_logs: {
         Row: {
