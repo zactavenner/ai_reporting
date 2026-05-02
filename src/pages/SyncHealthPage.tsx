@@ -3,7 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SyncOverviewTab } from '@/components/sync-health/SyncOverviewTab';
 import { WebhookFeedTab } from '@/components/sync-health/WebhookFeedTab';
 import { SyncLogsTab } from '@/components/sync-health/SyncLogsTab';
-import { Activity, Radio, ScrollText, HeartPulse } from 'lucide-react';
+import { QueueHealthTab } from '@/components/sync-health/QueueHealthTab';
+import { Activity, Radio, ScrollText, HeartPulse, Layers } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export default function SyncHealthPage() {
@@ -41,6 +42,9 @@ export default function SyncHealthPage() {
             <TabsTrigger value="sync-logs" className="gap-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm">
               <ScrollText className="h-4 w-4" /> Sync Logs
             </TabsTrigger>
+            <TabsTrigger value="queue" className="gap-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm">
+              <Layers className="h-4 w-4" /> Queue
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-4 animate-fade-in">
@@ -51,6 +55,9 @@ export default function SyncHealthPage() {
           </TabsContent>
           <TabsContent value="sync-logs" className="mt-4 animate-fade-in">
             <SyncLogsTab />
+          </TabsContent>
+          <TabsContent value="queue" className="mt-4 animate-fade-in">
+            <QueueHealthTab />
           </TabsContent>
         </Tabs>
       </div>
