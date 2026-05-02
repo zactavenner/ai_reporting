@@ -336,11 +336,10 @@ serve(async (req) => {
           // 2. Enqueue a lead_upsert job with whatever data we already have
           const fields: Record<string, unknown> = {};
           const c = (payload as any).contact || payload;
-          if (c.firstName || c.first_name) fields.first_name = c.firstName ?? c.first_name;
-          if (c.lastName || c.last_name) fields.last_name = c.lastName ?? c.last_name;
           const fullName = [c.firstName ?? c.first_name, c.lastName ?? c.last_name]
             .filter(Boolean).join(" ").trim();
-          if (fullName) fields.lead_name = fullName;
+          if (fullName) fields.name = fullName;
+          else if (c.name) fields.name = c.name;
           if (c.email) fields.email = c.email;
           if (c.phone) fields.phone = c.phone;
           if (c.source) fields.source = c.source;
