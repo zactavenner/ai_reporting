@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { enqueueLeadUpsert } from "../_shared/enqueue-sync-job.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -308,6 +309,58 @@ serve(async (req) => {
       
       console.log(`[AUTO-SYNC] ${webhookType} webhook - Client: ${client.name}, ContactId: ${contactId || 'unknown'}`);
       
+      // ── Bulletproof safety net ──────────────────────────────────────
+      // Always enqueue a `lead_upsert` job so the queue/dispatcher
+      // guarantees this contact's basic info lands in `leads` even if
+      // the inline `sync-ghl-contacts` call below times out or fails.
+      // Webhook deduplication uses provider event id when present.
+      if (contactId) {
+        try {
+          // 1. Dedup: record the inbound webhook (best-effort)
+          const providerEventId =
+            (payload as any).webhookId ||
+            (payload as any).id ||
+            `${webhookType}:${contactId}:${Date.now()}`;
+          await supabase
+            .from("webhook_events")
+            .insert({
+              provider: "ghl",
+              provider_event_id: String(providerEventId),
+              event_type: webhookType,
+              client_id: clientId,
+              raw_payload: payload,
+            })
+            .select("id")
+            .maybeSingle();
+
+          // 2. Enqueue a lead_upsert job with whatever data we already have
+          const fields: Record<string, unknown> = {};
+          const c = (payload as any).contact || payload;
+          if (c.firstName || c.first_name) fields.first_name = c.firstName ?? c.first_name;
+          if (c.lastName || c.last_name) fields.last_name = c.lastName ?? c.last_name;
+          const fullName = [c.firstName ?? c.first_name, c.lastName ?? c.last_name]
+            .filter(Boolean).join(" ").trim();
+          if (fullName) fields.lead_name = fullName;
+          if (c.email) fields.email = c.email;
+          if (c.phone) fields.phone = c.phone;
+          if (c.source) fields.source = c.source;
+          if ((c as any).utm_source) fields.utm_source = (c as any).utm_source;
+          if ((c as any).utm_campaign) fields.utm_campaign = (c as any).utm_campaign;
+          if ((c as any).utm_medium) fields.utm_medium = (c as any).utm_medium;
+
+          await enqueueLeadUpsert(supabase, {
+            client_id: clientId,
+            external_id: contactId,
+            source: "webhook",
+            provider: "ghl",
+            fields,
+          });
+        } catch (e) {
+          console.error("[webhook-ingest] enqueue safety net failed:", e);
+        }
+      }
+      // ────────────────────────────────────────────────────────────────
+
       if (contactId && client.ghl_api_key && client.ghl_location_id) {
         // Fire-and-forget: call sync-ghl-contacts with single_contact mode
         // This runs the comprehensive sync (contact info, fields, pipelines, value, timelines)
