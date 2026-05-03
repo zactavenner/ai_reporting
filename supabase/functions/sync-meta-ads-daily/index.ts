@@ -62,9 +62,22 @@ Deno.serve(async (req) => {
             .gte("date", fourteenDaysAgoStr)
             .lte("date", yesterdayStr);
 
+          // Dates with confirmed ad spend (> 0) are considered synced.
+          // Dates with ad_spend = 0 may be from recalculate-daily-metrics
+          // creating placeholder rows before Meta sync runs, so treat them
+          // as missing if within the last 3 days.
+          const threeDaysAgo = new Date();
+          threeDaysAgo.setUTCDate(threeDaysAgo.getUTCDate() - 3);
+          const threeDaysAgoStr = threeDaysAgo.toISOString().split("T")[0];
+
           const existingDates = new Set(
             (existingMetrics || [])
-              .filter((m: any) => m.ad_spend !== null && m.ad_spend !== undefined)
+              .filter((m: any) => {
+                if (m.ad_spend === null || m.ad_spend === undefined) return false;
+                // For recent dates (last 3 days), only trust rows with actual spend
+                if (m.date >= threeDaysAgoStr && Number(m.ad_spend) === 0) return false;
+                return true;
+              })
               .map((m: any) => m.date)
           );
 

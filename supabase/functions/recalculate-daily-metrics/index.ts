@@ -180,32 +180,54 @@ Deno.serve(async (req) => {
           const commitmentDollars = (fundedData || []).reduce((sum: number, f: any) => sum + (f.commitment_amount || 0), 0);
           const commitmentCount = (fundedData || []).filter((f: any) => f.commitment_amount && f.commitment_amount > 0).length;
 
-          // UPSERT — only CRM columns, never touch ad_spend/impressions/clicks/ctr
-          const { error: upsertError } = await supabase
+          // Update only CRM columns, never touch ad_spend/impressions/clicks/ctr.
+          // Use separate check+update/insert to avoid UPSERT setting ad_spend to
+          // the DB default (0) on new rows — that would trick the Meta sync gap
+          // detection into thinking ad spend was already synced for this date.
+          const crmData = {
+            leads: totalValidLeads,
+            spam_leads: spamCount || 0,
+            calls: callsCount || 0,
+            showed_calls: showedCount || 0,
+            reconnect_calls: reconnectCount || 0,
+            reconnect_showed: reconnectShowedCount || 0,
+            funded_investors: fundedCount || 0,
+            funded_dollars: fundedDollars,
+            commitments: commitmentCount,
+            commitment_dollars: commitmentDollars,
+            leads_created: totalValidLeads,
+            calls_scheduled: callsScheduledCount || 0,
+            calls_showed: showedCount || 0,
+            commitments_on_day: commitmentCount,
+            funded_on_day: fundedCount || 0,
+            updated_at: new Date().toISOString(),
+          };
+
+          const { data: existingRow } = await supabase
             .from("daily_metrics")
-            .upsert(
-              {
+            .select("id")
+            .eq("client_id", client.id)
+            .eq("date", dateStr)
+            .maybeSingle();
+
+          let upsertError: any = null;
+          if (existingRow) {
+            const { error } = await supabase
+              .from("daily_metrics")
+              .update(crmData)
+              .eq("id", existingRow.id);
+            upsertError = error;
+          } else {
+            const { error } = await supabase
+              .from("daily_metrics")
+              .insert({
                 client_id: client.id,
                 date: dateStr,
-                leads: totalValidLeads,
-                spam_leads: spamCount || 0,
-                calls: callsCount || 0,
-                showed_calls: showedCount || 0,
-                reconnect_calls: reconnectCount || 0,
-                reconnect_showed: reconnectShowedCount || 0,
-                funded_investors: fundedCount || 0,
-                funded_dollars: fundedDollars,
-                commitments: commitmentCount,
-                commitment_dollars: commitmentDollars,
-                leads_created: totalValidLeads,
-                calls_scheduled: callsScheduledCount || 0,
-                calls_showed: showedCount || 0,
-                commitments_on_day: commitmentCount,
-                funded_on_day: fundedCount || 0,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "client_id,date", ignoreDuplicates: false }
-            );
+                ad_spend: null,
+                ...crmData,
+              });
+            upsertError = error;
+          }
 
           if (upsertError) {
             clientResult.errors.push(`${dateStr}: ${upsertError.message}`);

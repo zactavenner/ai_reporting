@@ -3656,12 +3656,15 @@ serve(async (req) => {
     let query = supabase
       .from('clients')
       .select('id, name, ghl_api_key, ghl_location_id')
-      .eq('status', 'active')
       .not('ghl_api_key', 'is', null)
       .not('ghl_location_id', 'is', null);
 
     if (targetClientId) {
+      // When targeting a specific client, sync regardless of status
       query = query.eq('id', targetClientId);
+    } else {
+      // When syncing all, only sync active clients
+      query = query.eq('status', 'active');
     }
 
     const { data: clients, error: clientsError } = await query;
