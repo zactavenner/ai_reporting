@@ -78,6 +78,11 @@ Deno.serve(async (req) => {
   const doSync = async () => {
     const results: StepResult[] = [];
 
+    // Note: sync-meta-ads-daily and sync-ghl-all-clients both use EdgeRuntime.waitUntil()
+    // and return HTTP responses immediately. Their actual sync work runs in the background.
+    // sync-ghl-all-clients triggers recalculate-daily-metrics after it completes, so we
+    // don't need a separate recalculate step here.
+
     // ── Step 1: Meta Ads Daily (campaigns, ad sets, ads + backfill) ──
     if (!skipSteps.includes("meta")) {
       const start = Date.now();
@@ -97,8 +102,8 @@ Deno.serve(async (req) => {
           `The daily Meta Ads sync failed with error: ${res.error}. Check the META_SHARED_ACCESS_TOKEN and client ad account configurations.`
         );
       }
-      // Wait for Meta to finish processing in background
-      await new Promise(r => setTimeout(r, 10000));
+      // Wait before starting next step to help avoid concurrent rate limits
+      await new Promise(r => setTimeout(r, 15000));
     }
 
     // ── Step 2: GHL All Clients (contacts, calendar, pipelines) ──
@@ -146,20 +151,10 @@ Deno.serve(async (req) => {
     }
 
     // ── Step 4: Recalculate Daily Metrics ──
-    if (!skipSteps.includes("recalculate")) {
-      const start = Date.now();
-      console.log(`[daily-master-sync] Step 4: recalculate-daily-metrics`);
-      const res = await callFunction(supabaseUrl, supabaseKey, "recalculate-daily-metrics");
-      const duration = Date.now() - start;
-      results.push({
-        step: "recalculate-daily-metrics",
-        success: res.success,
-        duration_ms: duration,
-        details: `${res.data?.totalUpdated || 0} days updated`,
-        error: res.error,
-      });
-      await new Promise(r => setTimeout(r, 5000));
-    }
+    // Removed: recalculate-daily-metrics is triggered by sync-ghl-all-clients after its
+    // background sync completes. Running it here would produce stale results because
+    // sync-meta-ads-daily and sync-ghl-all-clients use EdgeRuntime.waitUntil() and their
+    // actual data writes happen in the background after their HTTP responses return.
 
     // ── Step 5: Daily Accuracy Check ──
     if (!skipSteps.includes("accuracy")) {

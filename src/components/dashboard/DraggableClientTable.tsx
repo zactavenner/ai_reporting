@@ -605,8 +605,8 @@ export function DraggableClientTable({
                         const crmTotal = m.crmLeads || 0;
                         const metaLeads = m.totalLeads || 0;
                         const hasAdSpend = (m.totalAdSpend || 0) > 0;
-                        // Flag: client has ad spend but 0 CRM leads = GHL integration issue
                         if (hasAdSpend && crmTotal === 0) return 'text-destructive font-semibold';
+                        if (syncInfo.status === 'error') return 'text-destructive font-semibold';
                         if (crmTotal === 0 && metaLeads === 0) return 'text-muted-foreground';
                         if (crmTotal >= metaLeads) return 'text-chart-2';
                         return 'text-destructive font-semibold';
@@ -614,19 +614,54 @@ export function DraggableClientTable({
                     )}>
                       <span className="flex items-center justify-end gap-0.5">
                         {m.crmLeads || 0}
-                        {(m.totalAdSpend || 0) > 0 && (m.crmLeads || 0) === 0 && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs max-w-[250px]">
-                              {!client.ghl_api_key || !client.ghl_location_id
-                                ? `${formatCurrency(m.totalAdSpend)} ad spend but no GHL credentials configured — add GHL API key & location ID in settings`
-                                : `${formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — GHL integration problem, run master sync or check API key`
-                              }
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
+                        {(() => {
+                          const hasAdSpend = (m.totalAdSpend || 0) > 0;
+                          const noCRM = (m.crmLeads || 0) === 0;
+                          const noGHL = !client.ghl_api_key || !client.ghl_location_id;
+                          const syncError = syncInfo.status === 'error';
+
+                          if (hasAdSpend && noCRM && noGHL) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[250px]">
+                                {formatCurrency(m.totalAdSpend)} ad spend but no GHL credentials configured — add GHL API key &amp; location ID in settings
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (hasAdSpend && noCRM && syncError) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[250px]">
+                                {formatCurrency(m.totalAdSpend)} ad spend but GHL sync failed{syncInfo.error ? `: ${syncInfo.error}` : ''} — check API key or re-run sync
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (hasAdSpend && noCRM) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[250px]">
+                                {formatCurrency(m.totalAdSpend)} ad spend but 0 CRM leads — GHL integration problem, run master sync or check API key
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (syncError && !noCRM) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-2.5 w-2.5 text-yellow-500 shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[250px]">
+                                GHL sync error{syncInfo.error ? `: ${syncInfo.error}` : ''} — data may be stale
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          return null;
+                        })()}
                       </span>
                     </TableCell>
 
@@ -647,6 +682,7 @@ export function DraggableClientTable({
                         const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
                         const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
                         if (!hasCalls && hasAdSpend && hasGHL && !hasCalendars) return 'text-destructive font-semibold';
+                        if (!hasCalls && hasAdSpend && hasGHL && hasCalendars && syncInfo.status === 'error') return 'text-destructive font-semibold';
                         if (!hasCalls && hasAdSpend && syncInfo.status !== 'healthy') return 'text-yellow-600 dark:text-yellow-500';
                         if (!hasCalls && (m.crmLeads || 0) > 0) return 'text-yellow-600 dark:text-yellow-500';
                         return '';
@@ -654,16 +690,45 @@ export function DraggableClientTable({
                     )}>
                       <span className="flex items-center justify-end gap-0.5">
                         {m.totalCalls || 0}
-                        {(m.totalCalls || 0) === 0 && (m.totalAdSpend || 0) > 0 && !!(client.ghl_api_key && client.ghl_location_id) && (fullSettings[client.id]?.tracked_calendar_ids || []).length === 0 && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs max-w-[220px]">
-                              No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
+                        {(() => {
+                          const noCalls = (m.totalCalls || 0) === 0;
+                          const hasAdSpend = (m.totalAdSpend || 0) > 0;
+                          const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
+                          const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
+                          const hasLeads = (m.crmLeads || 0) > 0;
+
+                          if (noCalls && hasAdSpend && hasGHL && !hasCalendars) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (noCalls && hasAdSpend && hasGHL && hasCalendars && syncInfo.status === 'error') return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                Calendars configured but GHL sync failed — calls data may not have synced
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          if (noCalls && hasLeads && hasGHL && !hasCalendars) return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Calendar className="h-2.5 w-2.5 text-yellow-500 shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                {m.crmLeads} CRM leads but no calls — add tracked calendar IDs in settings
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                          return null;
+                        })()}
                       </span>
                     </TableCell>
 

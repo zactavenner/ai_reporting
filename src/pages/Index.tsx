@@ -8,6 +8,7 @@ import { DataAccuracyAuditPanel } from '@/components/dashboard/DataAccuracyAudit
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { DraggableClientTable } from '@/components/dashboard/DraggableClientTable';
 import { AgencyStatsBar } from '@/components/dashboard/AgencyStatsBar';
+import { DataHealthSummary } from '@/components/dashboard/DataHealthSummary';
 import { AgencySyncStatusPanel } from '@/components/dashboard/AgencySyncStatusPanel';
 import { ClientSettingsModal } from '@/components/settings/ClientSettingsModal';
 import { AgencySettingsModal } from '@/components/settings/AgencySettingsModal';
@@ -335,6 +336,11 @@ const Index = () => {
                           clientAdSpends={clientAdSpends}
                           clientFullSettings={clientFullSettings}
                           isAdmin={currentMember?.role === 'admin'}
+                        />
+                        <DataHealthSummary
+                          clients={clients}
+                          metrics={clientMetrics}
+                          fullSettings={clientFullSettings}
                         />
                         <DraggableClientTable
                           clients={clients}
