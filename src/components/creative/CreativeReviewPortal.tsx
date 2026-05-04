@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ import {
   FileText,
   Search,
   ChevronRight,
+  ChevronLeft,
   Star,
   Copy,
   ExternalLink,
@@ -40,10 +41,13 @@ import {
   Filter,
   LayoutGrid,
   List,
+  Columns,
   ArrowUpDown,
   ThumbsUp,
   ThumbsDown,
   Sparkles,
+  ArrowRight,
+  ArrowLeft,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useAllCreatives } from '@/hooks/useAllCreatives';
@@ -61,13 +65,206 @@ interface ReviewBatch {
   lastActivity: string;
 }
 
+function CompareView({
+  creatives,
+  clientMap,
+  onApprove,
+  onReject,
+  onRevisions,
+  onExit,
+}: {
+  creatives: any[];
+  clientMap: Record<string, string>;
+  onApprove: (id: string, clientId: string, title: string) => void;
+  onReject: (id: string, clientId: string, title: string) => void;
+  onRevisions: (id: string, clientId: string, title: string) => void;
+  onExit: () => void;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const reviewable = creatives.filter(c => c.status === 'pending' || c.status === 'revisions');
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'ArrowRight') setCurrentIndex(i => Math.min(i + 1, reviewable.length - 1));
+    if (e.key === 'ArrowLeft') setCurrentIndex(i => Math.max(i - 1, 0));
+    if (e.key === 'Escape') onExit();
+  }, [reviewable.length, onExit]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  if (reviewable.length === 0) {
+    return (
+      <div className="text-center py-20">
+        <CheckCircle2 className="h-12 w-12 text-emerald-500/30 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold mb-1">All reviewed</h3>
+        <p className="text-sm text-muted-foreground/40 mb-4">No creatives left to review.</p>
+        <Button variant="outline" onClick={onExit} className="rounded-xl">Back to Overview</Button>
+      </div>
+    );
+  }
+
+  const current = reviewable[currentIndex];
+  const next = reviewable[currentIndex + 1];
+
+  const renderCreativePanel = (creative: any, label: string) => (
+    <div className="compare-panel flex-1" data-verdict={creative?.status === 'approved' ? 'approved' : undefined}>
+      {creative ? (
+        <>
+          <div className="aspect-[4/3] bg-muted/20 relative overflow-hidden">
+            {creative.type === 'image' && creative.file_url ? (
+              <img src={creative.file_url} alt="" className="w-full h-full object-contain bg-muted/10" />
+            ) : creative.type === 'video' && creative.file_url ? (
+              <video src={creative.file_url} controls className="w-full h-full object-contain bg-black" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <FileText className="h-12 w-12 text-muted-foreground/15" />
+              </div>
+            )}
+            <div className="absolute top-3 left-3">
+              <Badge className="bg-black/50 text-white/80 border-0 text-[10px] backdrop-blur-md rounded-lg">
+                {label}
+              </Badge>
+            </div>
+            <Badge className={`absolute top-3 right-3 rounded-lg text-[10px] font-semibold backdrop-blur-md ${
+              creative.status === 'pending' ? 'bg-amber-500/80 text-white border-0' :
+              creative.status === 'revisions' ? 'bg-orange-500/80 text-white border-0' :
+              creative.status === 'approved' ? 'bg-emerald-500/80 text-white border-0' :
+              'bg-muted text-muted-foreground border-0'
+            }`}>
+              {creative.status}
+            </Badge>
+          </div>
+          <div className="p-4">
+            <h4 className="text-sm font-semibold truncate">{creative.title}</h4>
+            <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+              {clientMap[creative.client_id] || 'Unknown'} · {creative.platform}
+            </p>
+            {creative.headline && (
+              <p className="text-xs text-muted-foreground/60 mt-2 line-clamp-2">{creative.headline}</p>
+            )}
+            {creative.comments.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-border/10">
+                <p className="text-[10px] font-semibold text-muted-foreground/40 mb-1.5 flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" /> {creative.comments.length} comments
+                </p>
+                <div className="space-y-1">
+                  {creative.comments.slice(-2).map((c: any) => (
+                    <div key={c.id} className="text-[10px] bg-muted/30 rounded-lg px-2 py-1">
+                      <span className="font-semibold">{c.author}:</span> {c.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="aspect-[4/3] flex items-center justify-center bg-muted/10">
+          <p className="text-sm text-muted-foreground/20">End of queue</p>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Compare Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={onExit} className="rounded-xl gap-1.5">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back
+          </Button>
+          <div className="h-5 w-px bg-border/30" />
+          <p className="text-sm font-medium">
+            Reviewing <span className="font-bold tabular-nums">{currentIndex + 1}</span> of <span className="tabular-nums">{reviewable.length}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl h-8"
+            onClick={() => setCurrentIndex(i => Math.max(i - 1, 0))}
+            disabled={currentIndex === 0}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl h-8"
+            onClick={() => setCurrentIndex(i => Math.min(i + 1, reviewable.length - 1))}
+            disabled={currentIndex >= reviewable.length - 1}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Side-by-side panels */}
+      <div className="grid grid-cols-2 gap-4">
+        {renderCreativePanel(current, `#${currentIndex + 1} — Current`)}
+        {renderCreativePanel(next, `#${currentIndex + 2} — Next`)}
+      </div>
+
+      {/* Action Bar */}
+      <div className="liquid-glass-floating p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold">{current.title}</p>
+          <Badge variant="outline" className="text-[10px] rounded-md">{current.platform}</Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            className="rounded-xl gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => {
+              onApprove(current.id, current.client_id, current.title);
+              if (currentIndex < reviewable.length - 1) setCurrentIndex(i => i + 1);
+            }}
+          >
+            <ThumbsUp className="h-3.5 w-3.5" /> Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5"
+            onClick={() => {
+              onRevisions(current.id, current.client_id, current.title);
+              if (currentIndex < reviewable.length - 1) setCurrentIndex(i => i + 1);
+            }}
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Revisions
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-xl gap-1.5"
+            onClick={() => {
+              onReject(current.id, current.client_id, current.title);
+              if (currentIndex < reviewable.length - 1) setCurrentIndex(i => i + 1);
+            }}
+          >
+            <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground/50" /> Reject
+          </Button>
+          <div className="ml-4 flex items-center gap-2 text-[10px] text-muted-foreground/30">
+            <kbd className="kbd-badge">←→</kbd> navigate
+            <kbd className="kbd-badge">esc</kbd> exit
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean }) {
   const { data: creatives = [] } = useAllCreatives();
   const { data: clients = [] } = useClients();
   const updateStatus = useUpdateCreativeStatus();
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compare'>('grid');
   const [feedbackText, setFeedbackText] = useState('');
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'review' | 'approved' | 'all'>('review');
@@ -139,37 +336,59 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
     toast.success('Review link copied');
   };
 
+  if (viewMode === 'compare') {
+    return (
+      <CompareView
+        creatives={filteredCreatives}
+        clientMap={clientMap}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onRevisions={handleRequestRevisions}
+        onExit={() => setViewMode('grid')}
+      />
+    );
+  }
+
   return (
     <div className="space-y-8">
-      {/* Header — clean Apple style */}
+      {/* Header */}
       <div>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-              <Share2 className="h-5 w-5 text-emerald-500" />
+            <div className="h-10 w-10 rounded-2xl gradient-bg-premium flex items-center justify-center">
+              <Share2 className="h-5 w-5 text-blue-500" />
             </div>
             <div>
               <h2 className="text-2xl font-bold tracking-tight">Client Review</h2>
               <p className="text-sm text-muted-foreground/40">Manage approvals and feedback</p>
             </div>
           </div>
+          {totalPending > 0 && (
+            <Button
+              onClick={() => setViewMode('compare')}
+              className="rounded-xl gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20"
+            >
+              <Columns className="h-4 w-4" />
+              Quick Review ({totalPending})
+            </Button>
+          )}
         </div>
 
-        {/* Stat cards — bento style */}
+        {/* Stats */}
         <div className="grid grid-cols-4 gap-3">
-          <div className="bento-card p-4 text-center cursor-pointer" onClick={() => setStatusFilter('review')}>
+          <div className="bento-card-v2 p-4 text-center cursor-pointer" onClick={() => setStatusFilter('review')}>
             <p className="text-2xl font-bold text-amber-500 tabular-nums">{totalPending}</p>
             <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider font-semibold mt-1">Pending</p>
           </div>
-          <div className="bento-card p-4 text-center cursor-pointer" onClick={() => setStatusFilter('review')}>
+          <div className="bento-card-v2 p-4 text-center cursor-pointer" onClick={() => setStatusFilter('review')}>
             <p className="text-2xl font-bold text-orange-500 tabular-nums">{totalRevisions}</p>
             <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider font-semibold mt-1">Revisions</p>
           </div>
-          <div className="bento-card p-4 text-center cursor-pointer" onClick={() => setStatusFilter('approved')}>
+          <div className="bento-card-v2 p-4 text-center cursor-pointer" onClick={() => setStatusFilter('approved')}>
             <p className="text-2xl font-bold text-emerald-500 tabular-nums">{totalApproved}</p>
             <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider font-semibold mt-1">Approved</p>
           </div>
-          <div className="bento-card p-4 text-center">
+          <div className="bento-card-v2 p-4 text-center">
             <p className="text-2xl font-bold tabular-nums">{overallProgress}%</p>
             <Progress value={overallProgress} className="h-1 rounded-full mt-2" />
             <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider font-semibold mt-1">Complete</p>
@@ -188,15 +407,22 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
             {reviewBatches.filter(b => b.pending > 0 || b.revisions > 0).map(batch => (
               <button
                 key={batch.clientId}
-                className={`bento-card p-4 text-left transition-all ${selectedClientId === batch.clientId ? 'ring-2 ring-primary border-primary/20' : ''}`}
+                className={`bento-card-v2 p-4 text-left transition-all ${selectedClientId === batch.clientId ? 'ring-2 ring-primary border-primary/20' : ''}`}
                 onClick={() => setSelectedClientId(selectedClientId === batch.clientId ? 'all' : batch.clientId)}
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="text-sm font-semibold">{batch.clientName}</p>
-                    <p className="text-[10px] text-muted-foreground/40">
-                      {formatDistanceToNow(new Date(batch.lastActivity), { addSuffix: true })}
-                    </p>
+                  <div className="flex items-center gap-2.5">
+                    <div className="client-ring">
+                      <div className="client-ring-inner h-8 w-8 text-[11px]">
+                        {batch.clientName.charAt(0)}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{batch.clientName}</p>
+                      <p className="text-[10px] text-muted-foreground/40">
+                        {formatDistanceToNow(new Date(batch.lastActivity), { addSuffix: true })}
+                      </p>
+                    </div>
                   </div>
                   <Button
                     variant="ghost"
@@ -239,7 +465,7 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
       )}
 
       {/* Filter toolbar */}
-      <div className="apple-toolbar p-2 flex flex-wrap items-center gap-2">
+      <div className="liquid-glass-subtle border border-border/20 p-2 flex flex-wrap items-center gap-2 rounded-2xl">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
           <input
@@ -291,6 +517,13 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
           >
             <List className="h-3.5 w-3.5" />
           </button>
+          <button
+            onClick={() => setViewMode('compare')}
+            className={`h-8 w-8 rounded-md flex items-center justify-center transition-all text-muted-foreground/40 hover:text-foreground`}
+            title="Side-by-side compare"
+          >
+            <Columns className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
 
@@ -310,7 +543,7 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
             return (
               <div
                 key={creative.id}
-                className={`apple-surface p-0 overflow-hidden transition-all ${
+                className={`liquid-glass p-0 overflow-hidden transition-all ${
                   creative.status === 'approved' ? 'review-glow-approved' :
                   creative.status === 'pending' ? 'review-glow-pending' :
                   creative.status === 'revisions' ? 'review-glow-revision' : ''
@@ -371,19 +604,12 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
                         autoFocus
                       />
                       <div className="flex flex-col gap-1.5">
-                        <Button
-                          size="sm"
-                          className="rounded-xl"
-                          onClick={() => handleRequestRevisions(creative.id, creative.client_id, creative.title)}
-                        >
+                        <Button size="sm" className="rounded-xl"
+                          onClick={() => handleRequestRevisions(creative.id, creative.client_id, creative.title)}>
                           <Send className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="rounded-xl"
-                          onClick={() => { setActiveFeedbackId(null); setFeedbackText(''); }}
-                        >
+                        <Button size="sm" variant="ghost" className="rounded-xl"
+                          onClick={() => { setActiveFeedbackId(null); setFeedbackText(''); }}>
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -401,13 +627,12 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
             return (
               <div
                 key={creative.id}
-                className={`bento-card p-0 overflow-hidden group ${
+                className={`bento-card-v2 p-0 overflow-hidden group ${
                   creative.status === 'approved' ? 'review-glow-approved' :
                   creative.status === 'pending' ? 'review-glow-pending' :
                   creative.status === 'revisions' ? 'review-glow-revision' : ''
                 }`}
               >
-                {/* Thumbnail */}
                 <div className="aspect-video bg-muted/20 relative overflow-hidden">
                   {creative.type === 'image' && creative.file_url ? (
                     <img src={creative.file_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -442,7 +667,6 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
                   )}
                 </div>
 
-                {/* Info */}
                 <div className="p-4">
                   <h4 className="text-sm font-semibold truncate">{creative.title}</h4>
                   <div className="flex items-center justify-between mt-1">
@@ -462,7 +686,6 @@ export function CreativeReviewPortal({ embedded = false }: { embedded?: boolean 
                     </div>
                   </div>
 
-                  {/* Inline feedback */}
                   {isExpanded && (
                     <div className="mt-3 pt-3 border-t border-border/15">
                       <Textarea
