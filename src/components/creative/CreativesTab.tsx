@@ -64,6 +64,7 @@ import {
   Zap,
   Globe,
   Share2,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
@@ -761,12 +762,61 @@ export function CreativesTab() {
     </div>
   );
 
+  const getQuickActions = () => {
+    switch (activeSection) {
+      case 'approvals':
+        return [
+          { icon: Check, label: 'Approve Selected', action: () => selectedIds.size > 0 && handleBulkAction('approved'), primary: selectedIds.size > 0 },
+          { icon: X, label: 'Reject Selected', action: () => selectedIds.size > 0 && handleBulkAction('rejected') },
+          { icon: Download, label: 'Export', action: () => setActiveSection('export') },
+        ];
+      case 'ai-scripts':
+      case 'podcast-ads':
+      case 'hyper-realistic':
+      case 'direct-response':
+        return [
+          { icon: Sparkles, label: 'Generate', action: () => {}, primary: true },
+          { icon: FileText, label: 'New Brief', action: () => setActiveSection('briefs') },
+        ];
+      default:
+        return [
+          { icon: Plus, label: 'New Brief', action: () => setActiveSection('briefs'), primary: true },
+          { icon: Search, label: 'Search', action: () => {}, shortcut: '⌘K' },
+          { icon: Upload, label: 'Review', action: () => setActiveSection('approvals') },
+        ];
+    }
+  };
+
   return (
     <div className="flex gap-0 -mx-2 -mt-2">
       {/* Apple-style Sidebar */}
-      <div className={`flex-shrink-0 transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-56'}`}>
-        <div className="sticky top-0 h-[calc(100vh-120px)]">
-          <ScrollArea className="h-full">
+      <div className={`flex-shrink-0 transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-60'}`}>
+        <div className="sticky top-0 h-[calc(100vh-120px)] flex flex-col">
+          {/* Client Context at top */}
+          {!sidebarCollapsed && (
+            <div className="px-3 pt-3 pb-2 border-b border-border/20">
+              <Select value={clientFilter} onValueChange={setClientFilter}>
+                <SelectTrigger className="w-full h-9 rounded-xl bg-muted/30 border-border/30 text-xs font-medium">
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-5 rounded-md bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center flex-shrink-0">
+                      <Users className="h-3 w-3 text-primary" />
+                    </div>
+                    <SelectValue placeholder="All Clients" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Clients</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <ScrollArea className="flex-1">
             <div className={`py-3 ${sidebarCollapsed ? 'px-2' : 'px-2'} space-y-4`}>
               {NAV_SECTIONS.map((section, sectionIdx) => (
                 <div key={sectionIdx}>
@@ -774,6 +824,11 @@ export function CreativesTab() {
                     <p className="section-label px-3 mb-1.5">
                       {section.title}
                     </p>
+                  )}
+                  {section.title && sidebarCollapsed && (
+                    <div className="w-full flex justify-center my-2">
+                      <div className="w-4 h-px bg-border/40" />
+                    </div>
                   )}
                   <div className="space-y-px">
                     {section.items.map(item => {
@@ -783,19 +838,22 @@ export function CreativesTab() {
                         <button
                           key={item.id}
                           onClick={() => setActiveSection(item.id)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-xl text-[13px] transition-all duration-200 ${
+                          className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-xl text-[13px] transition-all duration-200 relative ${
                             isActive
-                              ? 'bg-primary/10 text-primary font-semibold shadow-sm'
+                              ? 'bg-primary/[0.08] text-primary font-semibold'
                               : 'text-muted-foreground/70 hover:bg-muted/40 hover:text-foreground'
                           } ${sidebarCollapsed ? 'justify-center px-0' : ''}`}
                           title={sidebarCollapsed ? item.label : undefined}
                         >
+                          {isActive && (
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full bg-primary" />
+                          )}
                           <Icon className={`h-[15px] w-[15px] flex-shrink-0 transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/50'}`} />
                           {!sidebarCollapsed && (
                             <>
                               <span className="truncate">{item.label}</span>
                               {'isNew' in item && item.isNew && (
-                                <span className="ml-auto inline-flex items-center justify-center text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 text-white leading-none tracking-wide">
+                                <span className="ml-auto inline-flex items-center justify-center text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white leading-none tracking-wide">
                                   NEW
                                 </span>
                               )}
@@ -814,12 +872,51 @@ export function CreativesTab() {
               ))}
             </div>
           </ScrollArea>
+
+          {/* Sidebar Footer — Quick Actions */}
+          <div className={`border-t border-border/20 p-2 ${sidebarCollapsed ? 'flex flex-col items-center gap-1' : 'flex items-center gap-1'}`}>
+            <button
+              onClick={() => setActiveSection('briefs')}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-muted-foreground/60 hover:bg-muted/40 hover:text-foreground transition-all"
+              title="New Brief"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {!sidebarCollapsed && <span>New</span>}
+            </button>
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-muted-foreground/40 hover:bg-muted/40 hover:text-foreground transition-all ml-auto"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-300 ${sidebarCollapsed ? '' : 'rotate-180'}`} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 min-w-0 border-l border-border/30 pl-6 pr-2">
+      <div className="flex-1 min-w-0 border-l border-border/30 pl-6 pr-2 pb-20">
         {renderContent()}
+      </div>
+
+      {/* Floating Action Bar */}
+      <div className="floating-bar">
+        {getQuickActions().map((action, idx) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={idx}
+              onClick={action.action}
+              className={`floating-bar-action ${action.primary ? 'floating-bar-action-primary' : ''}`}
+            >
+              <Icon className="h-4 w-4" />
+              <span>{action.label}</span>
+              {'shortcut' in action && action.shortcut && (
+                <kbd className="kbd-badge ml-1">{action.shortcut}</kbd>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
