@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -41,20 +41,21 @@ import {
   Layers,
   Monitor,
   ArrowUpRight,
-  Workflow,
   Lightbulb,
   Users,
   Share2,
   CheckCircle2,
-  Send,
-  Plus,
   Search,
   Command,
-  Mic,
   Video,
+  X,
+  MessageSquare,
+  Activity,
+  Workflow,
 } from 'lucide-react';
 import { useClients } from '@/hooks/useClients';
 import { useAllCreatives } from '@/hooks/useAllCreatives';
+import { formatDistanceToNow } from 'date-fns';
 
 interface CommandCenterProps {
   onNavigate: (section: string) => void;
@@ -68,11 +69,36 @@ interface CommandCenterProps {
   };
 }
 
+const ALL_SECTIONS = [
+  { id: 'ai-scripts', label: 'AI Script Writer', description: 'Generate DR scripts from offers & angles', icon: PenTool, keywords: ['script', 'write', 'copy', 'angle', 'dr', 'direct response'] },
+  { id: 'podcast-ads', label: 'Podcast Ads', description: 'Host-read clips & audio-first video ads', icon: Headphones, keywords: ['podcast', 'audio', 'host', 'read', 'clip'] },
+  { id: 'hyper-realistic', label: 'Hyper-Realistic Ads', description: 'Photorealistic AI imagery for ads', icon: Camera, keywords: ['realistic', 'photo', 'image', 'visual', 'hyper'] },
+  { id: 'direct-response', label: 'DR Toolkit', description: 'Hooks, headlines, CTAs & winning copy', icon: Target, keywords: ['hook', 'headline', 'cta', 'copy', 'direct', 'response'] },
+  { id: 'approvals', label: 'Review & Approve', description: 'Manage creative approvals', icon: CheckCircle2, keywords: ['approve', 'review', 'pending', 'status'] },
+  { id: 'briefs', label: 'Briefs & Scripts', description: 'Creative briefs and campaign planning', icon: FileText, keywords: ['brief', 'plan', 'campaign', 'strategy'] },
+  { id: 'static-ads', label: 'Static Ads', description: 'AI-generated image ads', icon: Image, keywords: ['static', 'image', 'banner', 'display'] },
+  { id: 'batch-video', label: 'Batch Video', description: 'Generate video ads at scale', icon: Film, keywords: ['batch', 'video', 'scale', 'bulk'] },
+  { id: 'ad-variations', label: 'Ad Variations', description: 'A/B test creative variations', icon: Wand2, keywords: ['variation', 'ab', 'test', 'split'] },
+  { id: 'avatars', label: 'AI Avatars', description: 'Digital presenters & spokespeople', icon: User, keywords: ['avatar', 'presenter', 'spokesperson', 'digital'] },
+  { id: 'broll', label: 'B-Roll Library', description: 'AI-generated stock footage', icon: Video, keywords: ['broll', 'stock', 'footage', 'background'] },
+  { id: 'video-editor', label: 'Video Editor', description: 'Edit, trim & compose video', icon: Scissors, keywords: ['edit', 'trim', 'cut', 'compose', 'video'] },
+  { id: 'ad-scraping', label: 'Ad Spy', description: 'Research competitor creatives', icon: Radar, keywords: ['spy', 'scrape', 'competitor', 'research'] },
+  { id: 'instagram-intel', label: 'Instagram Intel', description: 'Analyze trending content', icon: Instagram, keywords: ['instagram', 'ig', 'trend', 'social'] },
+  { id: 'winning-ads', label: 'Winning Ads', description: 'Top-performing ad gallery', icon: Trophy, keywords: ['winning', 'top', 'best', 'performer'] },
+  { id: 'platform-intel', label: 'Platform Intel', description: 'Best practices by platform', icon: Globe, keywords: ['platform', 'best practice', 'guide'] },
+  { id: 'client-review', label: 'Client Review Portal', description: 'Share creatives with clients', icon: Share2, keywords: ['client', 'share', 'portal', 'review'] },
+  { id: 'manage-styles', label: 'Brand Styles', description: 'Manage brand kits & styles', icon: Palette, keywords: ['style', 'brand', 'kit', 'color'] },
+  { id: 'calendar', label: 'Creative Calendar', description: 'Timeline & scheduling', icon: Calendar, keywords: ['calendar', 'schedule', 'timeline', 'date'] },
+  { id: 'history', label: 'History', description: 'View past generations', icon: History, keywords: ['history', 'past', 'previous', 'log'] },
+  { id: 'export', label: 'Export Hub', description: 'Batch download & export', icon: Download, keywords: ['export', 'download', 'zip', 'batch'] },
+  { id: 'analytics', label: 'Analytics', description: 'Creative performance metrics', icon: BarChart3, keywords: ['analytics', 'metrics', 'performance', 'data'] },
+];
+
 const AI_TOOLS = [
-  { id: 'ai-scripts', label: 'AI Script Writer', description: 'Generate DR scripts from offers & angles', icon: PenTool, gradient: 'from-violet-500 to-purple-600', bgLight: 'bg-violet-500/10', iconColor: 'text-violet-500', tag: 'Most Used' },
-  { id: 'podcast-ads', label: 'Podcast Ads', description: 'Host-read clips & audio-first video ads', icon: Headphones, gradient: 'from-orange-500 to-amber-600', bgLight: 'bg-orange-500/10', iconColor: 'text-orange-500', tag: 'New' },
-  { id: 'hyper-realistic', label: 'Hyper-Realistic', description: 'Photorealistic AI imagery for ads', icon: Camera, gradient: 'from-cyan-500 to-blue-600', bgLight: 'bg-cyan-500/10', iconColor: 'text-cyan-500', tag: 'Popular' },
-  { id: 'direct-response', label: 'DR Toolkit', description: 'Hooks, headlines, CTAs & winning copy', icon: Target, gradient: 'from-rose-500 to-pink-600', bgLight: 'bg-rose-500/10', iconColor: 'text-rose-500', tag: 'Essential' },
+  { id: 'ai-scripts', label: 'AI Script Writer', description: 'Generate DR scripts from offers & angles', icon: PenTool, gradient: 'from-blue-500 to-indigo-600', bgLight: 'bg-blue-500/10', iconColor: 'text-blue-500', tag: 'Most Used', score: 92 },
+  { id: 'podcast-ads', label: 'Podcast Ads', description: 'Host-read clips & audio-first video ads', icon: Headphones, gradient: 'from-orange-500 to-amber-600', bgLight: 'bg-orange-500/10', iconColor: 'text-orange-500', tag: 'Trending', score: 87 },
+  { id: 'hyper-realistic', label: 'Hyper-Realistic', description: 'Photorealistic AI imagery for ads', icon: Camera, gradient: 'from-cyan-500 to-blue-600', bgLight: 'bg-cyan-500/10', iconColor: 'text-cyan-500', tag: 'Popular', score: 89 },
+  { id: 'direct-response', label: 'DR Toolkit', description: 'Hooks, headlines, CTAs & winning copy', icon: Target, gradient: 'from-rose-500 to-pink-600', bgLight: 'bg-rose-500/10', iconColor: 'text-rose-500', tag: 'Essential', score: 95 },
 ];
 
 const CREATE_TOOLS = [
@@ -92,9 +118,151 @@ const RESEARCH_TOOLS = [
   { id: 'platform-intel', label: 'Platform Intel', icon: Globe, description: 'Best practices' },
 ];
 
+function SpotlightSearch({ open, onClose, onNavigate }: { open: boolean; onClose: () => void; onNavigate: (id: string) => void }) {
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const results = query.trim()
+    ? ALL_SECTIONS.filter(s =>
+        s.label.toLowerCase().includes(query.toLowerCase()) ||
+        s.description.toLowerCase().includes(query.toLowerCase()) ||
+        s.keywords.some(k => k.includes(query.toLowerCase()))
+      )
+    : ALL_SECTIONS.slice(0, 8);
+
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      setActiveIndex(0);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  useEffect(() => { setActiveIndex(0); }, [query]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, results.length - 1)); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)); }
+    if (e.key === 'Enter' && results[activeIndex]) { onNavigate(results[activeIndex].id); onClose(); }
+    if (e.key === 'Escape') onClose();
+  };
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div className="spotlight-overlay" onClick={onClose} />
+      <div className="spotlight-dialog">
+        <div className="liquid-glass-floating overflow-hidden">
+          <div className="flex items-center gap-3 px-5 border-b border-border/30">
+            <Search className="h-5 w-5 text-muted-foreground/40 flex-shrink-0" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="spotlight-input"
+              placeholder="Search tools, actions, clients..."
+            />
+            <div className="flex items-center gap-1">
+              <kbd className="kbd-badge">esc</kbd>
+            </div>
+          </div>
+          <div className="max-h-[400px] overflow-y-auto p-2">
+            {results.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground/50">No results found</div>
+            ) : (
+              <>
+                {!query && <p className="px-4 py-2 text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-[0.1em]">Suggested</p>}
+                {results.map((item, idx) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      data-active={idx === activeIndex}
+                      onClick={() => { onNavigate(item.id); onClose(); }}
+                      onMouseEnter={() => setActiveIndex(idx)}
+                      className="spotlight-result w-full text-left"
+                    >
+                      <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center flex-shrink-0">
+                        <Icon className="h-4 w-4 text-muted-foreground/60" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.label}</p>
+                        <p className="text-[11px] text-muted-foreground/40 truncate">{item.description}</p>
+                      </div>
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/20" />
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </div>
+          <div className="flex items-center justify-between px-5 py-2.5 border-t border-border/20 text-[10px] text-muted-foreground/30">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1"><kbd className="kbd-badge">↑↓</kbd> navigate</span>
+              <span className="flex items-center gap-1"><kbd className="kbd-badge">↵</kbd> open</span>
+            </div>
+            <span>Spotlight Search</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ActivityFeed({ creatives }: { creatives: any[] }) {
+  const recentItems = creatives
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, 5);
+
+  if (recentItems.length === 0) return null;
+
+  const getActivityIcon = (status: string) => {
+    switch (status) {
+      case 'approved': return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+      case 'pending': return <Clock className="h-3.5 w-3.5 text-amber-500" />;
+      case 'revisions': return <MessageSquare className="h-3.5 w-3.5 text-orange-500" />;
+      case 'launched': return <Rocket className="h-3.5 w-3.5 text-blue-500" />;
+      default: return <Activity className="h-3.5 w-3.5 text-muted-foreground/50" />;
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      {recentItems.map(item => (
+        <div key={item.id} className="flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-muted/30 transition-colors">
+          <div className="activity-dot bg-current flex-shrink-0" style={{ color: item.status === 'approved' ? 'rgb(16 185 129)' : item.status === 'pending' ? 'rgb(245 158 11)' : 'rgb(148 163 184)' }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium truncate">{item.title}</p>
+            <p className="text-[10px] text-muted-foreground/40">
+              {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true })}
+            </p>
+          </div>
+          {getActivityIcon(item.status)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCenterProps) {
   const { data: clients = [] } = useClients();
+  const { data: creatives = [] } = useAllCreatives();
   const [selectedClient, setSelectedClient] = useState<string>('all');
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSpotlightOpen(true); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); onNavigate('briefs'); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'a') { e.preventDefault(); onNavigate('approvals'); }
+  }, [onNavigate]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   const approvalRate = statusCounts.all > 0
     ? Math.round(((statusCounts.approved + statusCounts.launched) / statusCounts.all) * 100)
@@ -110,13 +278,15 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
 
   return (
     <div className="space-y-8">
-      {/* Hero — Apple keynote style */}
-      <div className="creative-hero-v2 p-10 md:p-14">
+      <SpotlightSearch open={spotlightOpen} onClose={() => setSpotlightOpen(false)} onNavigate={onNavigate} />
+
+      {/* Hero — Gradient Mesh */}
+      <div className="gradient-mesh-hero p-10 md:p-14">
         <div className="relative z-10">
           {/* Top bar */}
-          <div className="flex items-center justify-between mb-12">
+          <div className="flex items-center justify-between mb-10">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/[0.08]">
+              <div className="h-10 w-10 rounded-2xl bg-white/[0.08] backdrop-blur-md flex items-center justify-center border border-white/[0.06]">
                 <Sparkles className="h-5 w-5 text-white/90" />
               </div>
               <div>
@@ -124,30 +294,44 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
                 <span className="text-[11px] text-white/25">AI-Powered Creative Operations</span>
               </div>
             </div>
-            <Select value={selectedClient} onValueChange={setSelectedClient}>
-              <SelectTrigger className="w-[200px] h-9 rounded-full glass-panel text-white/80 text-sm hover:bg-white/[0.08] transition-colors border-white/[0.06]">
-                <SelectValue placeholder="All Clients" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Clients</SelectItem>
-                {clients.map(client => (
-                  <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSpotlightOpen(true)}
+                className="flex items-center gap-2.5 px-4 py-2 rounded-xl glass-panel hover:bg-white/[0.08] transition-all cursor-pointer group"
+              >
+                <Search className="h-3.5 w-3.5 text-white/40 group-hover:text-white/60 transition-colors" />
+                <span className="text-xs text-white/30 group-hover:text-white/50 transition-colors">Search...</span>
+                <div className="flex items-center gap-0.5 ml-4">
+                  <kbd className="inline-flex items-center justify-center rounded-md bg-white/[0.06] border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-white/30">
+                    <Command className="h-2.5 w-2.5 mr-0.5" />K
+                  </kbd>
+                </div>
+              </button>
+              <Select value={selectedClient} onValueChange={setSelectedClient}>
+                <SelectTrigger className="w-[200px] h-9 rounded-full glass-panel text-white/80 text-sm hover:bg-white/[0.08] transition-colors border-white/[0.06]">
+                  <SelectValue placeholder="All Clients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Clients</SelectItem>
+                  {clients.map(client => (
+                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Headline */}
           <h1 className="text-4xl md:text-[56px] font-bold tracking-[-0.04em] text-white leading-[1.05] mb-4">
             Create. Optimize.
             <br />
-            <span className="gradient-text-vibrant">Launch faster.</span>
+            <span className="gradient-text-premium">Launch faster.</span>
           </h1>
-          <p className="text-[15px] text-white/30 max-w-md leading-relaxed font-normal">
+          <p className="text-[15px] text-white/30 max-w-lg leading-relaxed font-normal">
             AI-powered creative tools for agencies and brands. Scripts, visuals, podcasts, and direct response — all in one studio.
           </p>
 
-          {/* Pipeline counters — bento strip */}
+          {/* Pipeline counters */}
           <div className="mt-12 grid grid-cols-5 gap-2">
             {pipelineStages.map((stage) => (
               <button
@@ -182,13 +366,13 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
         </div>
 
         {/* Ambient orbs */}
-        <div className="absolute top-[-15%] right-[-8%] w-[500px] h-[500px] rounded-full bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-transparent blur-3xl pointer-events-none" />
+        <div className="absolute top-[-15%] right-[-8%] w-[500px] h-[500px] rounded-full bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-transparent blur-3xl pointer-events-none" />
         <div className="absolute bottom-[-25%] left-[10%] w-[400px] h-[400px] rounded-full bg-gradient-to-tr from-cyan-500/6 via-blue-500/3 to-transparent blur-3xl pointer-events-none" />
       </div>
 
-      {/* Needs Attention — contextual banner */}
+      {/* Needs Attention */}
       {(statusCounts.pending > 0 || statusCounts.revisions > 0) && (
-        <div className="apple-surface p-5">
+        <div className="liquid-glass p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="h-6 w-6 rounded-lg bg-amber-500/15 flex items-center justify-center">
               <Clock className="h-3.5 w-3.5 text-amber-500" />
@@ -224,12 +408,12 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
         </div>
       )}
 
-      {/* AI Creative Tools — bento grid */}
+      {/* AI Creative Tools with Performance Scores */}
       <div>
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-xl bg-gradient-to-br from-violet-500/15 to-blue-500/15 flex items-center justify-center">
-              <Zap className="h-4 w-4 text-violet-500" />
+            <div className="h-7 w-7 rounded-xl gradient-bg-premium flex items-center justify-center">
+              <Zap className="h-4 w-4 text-blue-500" />
             </div>
             <h2 className="text-lg font-semibold tracking-tight">AI Creative Tools</h2>
           </div>
@@ -244,15 +428,18 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
               <button
                 key={tool.id}
                 onClick={() => onNavigate(tool.id)}
-                className="bento-card group text-left p-5 relative overflow-hidden"
+                className="bento-card-v2 group text-left p-5 relative overflow-hidden"
               >
                 <div className="flex items-center justify-between mb-5">
                   <div className={`h-11 w-11 rounded-2xl ${tool.bgLight} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
                     <Icon className={`h-5 w-5 ${tool.iconColor}`} />
                   </div>
-                  <Badge className="bg-muted/60 text-muted-foreground border-0 text-[9px] font-semibold">
-                    {tool.tag}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <div className={`perf-score ${tool.score >= 90 ? 'perf-score-high' : 'perf-score-mid'}`}>
+                      <TrendingUp className="h-3 w-3" />
+                      {tool.score}
+                    </div>
+                  </div>
                 </div>
                 <h3 className="text-[15px] font-semibold mb-1">{tool.label}</h3>
                 <p className="text-xs text-muted-foreground/50 leading-relaxed">{tool.description}</p>
@@ -277,13 +464,13 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
-            { id: 'new-campaign', label: 'New Campaign', desc: 'Brief → Script → Creative → Review → Launch', icon: Rocket, color: 'text-violet-500', bg: 'bg-violet-500/10', nav: 'briefs', steps: ['Brief', 'Script', 'Creative', 'Review', 'Launch'] },
+            { id: 'new-campaign', label: 'New Campaign', desc: 'Brief, Script, Creative, Review, Launch', icon: Rocket, color: 'text-blue-500', bg: 'bg-blue-500/10', nav: 'briefs', steps: ['Brief', 'Script', 'Creative', 'Review', 'Launch'] },
             { id: 'quick-ad', label: 'Quick Ad', desc: 'Go straight to generating — skip the brief', icon: Zap, color: 'text-amber-500', bg: 'bg-amber-500/10', nav: 'ai-scripts', steps: ['Client', 'Tool', 'Generate', 'Export'] },
-            { id: 'batch-refresh', label: 'Batch Refresh', desc: 'Refresh existing campaigns at scale', icon: Wand2, color: 'text-cyan-500', bg: 'bg-cyan-500/10', nav: 'batch-video', steps: ['Campaign', 'Variations', 'Batch', 'Review'] },
+            { id: 'batch-refresh', label: 'Batch Refresh', desc: 'Refresh existing campaigns at scale', icon: Wand2, color: 'text-violet-500', bg: 'bg-violet-500/10', nav: 'batch-video', steps: ['Campaign', 'Variations', 'Batch', 'Review'] },
           ].map(flow => {
             const Icon = flow.icon;
             return (
-              <button key={flow.id} onClick={() => onNavigate(flow.nav)} className="bento-card group p-5 text-left">
+              <button key={flow.id} onClick={() => onNavigate(flow.nav)} className="bento-card-v2 group p-5 text-left">
                 <div className="flex items-start justify-between mb-4">
                   <div className={`h-10 w-10 rounded-2xl ${flow.bg} flex items-center justify-center`}>
                     <Icon className={`h-5 w-5 ${flow.color}`} />
@@ -306,8 +493,8 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
         </div>
       </div>
 
-      {/* Create + Research — Apple two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* Create + Research + Activity — Three-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
         {/* Create column */}
         <div className="lg:col-span-3">
           <div className="flex items-center gap-2 mb-4">
@@ -324,7 +511,7 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
                   className="group flex items-center gap-3 p-3.5 rounded-2xl border border-border/30 bg-card hover:bg-muted/30 hover:border-primary/10 transition-all duration-200 text-left"
                 >
                   <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/10 transition-colors">
-                    <Icon className="h-4.5 w-4.5 text-muted-foreground/60 group-hover:text-primary transition-colors" />
+                    <Icon className="h-4 w-4 text-muted-foreground/60 group-hover:text-primary transition-colors" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[13px] font-medium truncate">{tool.label}</p>
@@ -336,7 +523,7 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
           </div>
         </div>
 
-        {/* Research + Manage column */}
+        {/* Research column */}
         <div className="lg:col-span-2 space-y-6">
           <div>
             <div className="flex items-center gap-2 mb-4">
@@ -394,10 +581,27 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
             </div>
           </div>
         </div>
+
+        {/* Activity Feed column */}
+        <div className="lg:col-span-2">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="h-4 w-4 text-muted-foreground/50" />
+            <span className="section-label">Recent Activity</span>
+          </div>
+          <div className="liquid-glass-subtle border border-border/20 p-3 rounded-2xl">
+            <ActivityFeed creatives={creatives} />
+            {creatives.length === 0 && (
+              <div className="py-8 text-center">
+                <Activity className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground/40">No activity yet</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Tips — streamlined */}
-      <div className="apple-surface p-6">
+      {/* Tips */}
+      <div className="liquid-glass p-6">
         <div className="flex items-center gap-2 mb-4">
           <Lightbulb className="h-4 w-4 text-amber-500" />
           <span className="text-sm font-semibold">Quick Tips</span>
@@ -422,6 +626,13 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
             );
           })}
         </div>
+      </div>
+
+      {/* Keyboard shortcuts hint */}
+      <div className="flex items-center justify-center gap-6 py-2 text-[10px] text-muted-foreground/25">
+        <span className="flex items-center gap-1.5"><kbd className="kbd-badge"><Command className="h-2 w-2 inline" />K</kbd> Search</span>
+        <span className="flex items-center gap-1.5"><kbd className="kbd-badge"><Command className="h-2 w-2 inline" />N</kbd> New Brief</span>
+        <span className="flex items-center gap-1.5"><kbd className="kbd-badge"><Command className="h-2 w-2 inline" />A</kbd> Approvals</span>
       </div>
     </div>
   );
