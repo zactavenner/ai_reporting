@@ -65,6 +65,9 @@ import {
   Globe,
   Share2,
   Users,
+  Layers,
+  FlaskConical,
+  Link2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
@@ -95,6 +98,9 @@ const HyperRealisticAds = lazy(() => import('@/components/creative/HyperRealisti
 const DirectResponseToolkit = lazy(() => import('@/components/creative/DirectResponseToolkit').then(m => ({ default: m.DirectResponseToolkit })));
 const PlatformIntelligence = lazy(() => import('@/components/creative/PlatformIntelligence').then(m => ({ default: m.PlatformIntelligence })));
 const CreativeReviewPortalLazy = lazy(() => import('@/components/creative/CreativeReviewPortal').then(m => ({ default: m.CreativeReviewPortal })));
+const CreativeLibraryLazy = lazy(() => import('@/components/creative/CreativeLibrary').then(m => ({ default: m.CreativeLibrary })));
+const HookTestingLabLazy = lazy(() => import('@/components/creative/HookTestingLab').then(m => ({ default: m.HookTestingLab })));
+const ClientSharePortalLazy = lazy(() => import('@/components/creative/ClientSharePortal').then(m => ({ default: m.ClientSharePortal })));
 
 interface CreativeWithClient extends Creative {
   clientName?: string;
@@ -115,11 +121,13 @@ const NAV_SECTIONS = [
       { id: 'podcast-ads', label: 'Podcast Ads', icon: Headphones, isNew: true },
       { id: 'hyper-realistic', label: 'Hyper-Realistic', icon: Camera, isNew: true },
       { id: 'direct-response', label: 'DR Toolkit', icon: Target, isNew: true },
+      { id: 'hook-testing', label: 'Hook Lab', icon: FlaskConical, isNew: true },
     ],
   },
   {
     title: 'Create',
     items: [
+      { id: 'library', label: 'Creative Library', icon: Layers },
       { id: 'approvals', label: 'Approvals', icon: Upload, showBadge: true },
       { id: 'briefs', label: 'Briefs & Scripts', icon: FileText },
       { id: 'static-ads', label: 'Static Ads', icon: Image },
@@ -142,7 +150,8 @@ const NAV_SECTIONS = [
   {
     title: 'Manage',
     items: [
-      { id: 'client-review', label: 'Client Review', icon: Share2 },
+      { id: 'client-share', label: 'Client Portal', icon: Link2, isNew: true },
+      { id: 'client-review', label: 'Internal Review', icon: Share2 },
       { id: 'manage-styles', label: 'Styles', icon: Palette },
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'history', label: 'History', icon: History },
@@ -306,6 +315,12 @@ export function CreativesTab() {
         return <Suspense fallback={SuspenseFallback}><HyperRealisticAds /></Suspense>;
       case 'direct-response':
         return <Suspense fallback={SuspenseFallback}><DirectResponseToolkit /></Suspense>;
+      case 'hook-testing':
+        return <Suspense fallback={SuspenseFallback}><HookTestingLabLazy /></Suspense>;
+      case 'library':
+        return <Suspense fallback={SuspenseFallback}><CreativeLibraryLazy /></Suspense>;
+      case 'client-share':
+        return <Suspense fallback={SuspenseFallback}><ClientSharePortalLazy /></Suspense>;
       case 'platform-intel':
         return <Suspense fallback={SuspenseFallback}><PlatformIntelligence onNavigate={setActiveSection} /></Suspense>;
       case 'approvals':
