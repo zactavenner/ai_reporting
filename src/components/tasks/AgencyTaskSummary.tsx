@@ -38,7 +38,7 @@ export function AgencyTaskSummary({ onOpenFullView }: AgencyTaskSummaryProps) {
   const { overdue, dueToday, upcoming, activeTasks } = useMemo(() => {
     const today = startOfDay(new Date());
     
-    const active = tasks.filter(t => t.status !== 'completed');
+    const active = tasks.filter(t => t.status !== 'completed' && t.stage !== 'done');
     
     const overdue = active.filter(t => {
       if (!t.due_date) return false;

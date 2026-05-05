@@ -304,7 +304,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
         
         switch (dueDateFilter) {
           case 'overdue':
-            return isPast(dueDate) && !isToday(dueDate);
+            return isPast(dueDate) && !isToday(dueDate) && t.stage !== 'done' && t.status !== 'completed';
           case 'today':
             return isToday(dueDate);
           case 'tomorrow':
@@ -621,6 +621,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
             const completionRate = allNonSubtasks > 0 ? Math.round((completedCount / allNonSubtasks) * 100) : 0;
             const overdueCount = filteredTasks.filter(t => {
               if (!t.due_date) return false;
+              if (t.stage === 'done' || t.status === 'completed') return false;
               return isPast(new Date(t.due_date)) && !isToday(new Date(t.due_date));
             }).length;
             const recurringCount = filteredTasks.filter(t => t.recurrence_type && t.recurrence_type !== 'none').length;
