@@ -74,6 +74,9 @@ const ALL_SECTIONS = [
   { id: 'podcast-ads', label: 'Podcast Ads', description: 'Host-read clips & audio-first video ads', icon: Headphones, keywords: ['podcast', 'audio', 'host', 'read', 'clip'] },
   { id: 'hyper-realistic', label: 'Hyper-Realistic Ads', description: 'Photorealistic AI imagery for ads', icon: Camera, keywords: ['realistic', 'photo', 'image', 'visual', 'hyper'] },
   { id: 'direct-response', label: 'DR Toolkit', description: 'Hooks, headlines, CTAs & winning copy', icon: Target, keywords: ['hook', 'headline', 'cta', 'copy', 'direct', 'response'] },
+  { id: 'hook-testing', label: 'Hook Testing Lab', description: 'A/B test hook variations against locked body copy', icon: Zap, keywords: ['hook', 'test', 'ab', 'variation', 'split', 'lab'] },
+  { id: 'library', label: 'Creative Library', description: 'Organize creatives into folders & boards', icon: Layers, keywords: ['library', 'folder', 'board', 'organize', 'collection', 'swipe'] },
+  { id: 'client-share', label: 'Client Portal', description: 'Zero-friction review links for clients', icon: Share2, keywords: ['share', 'client', 'link', 'review', 'portal', 'approve'] },
   { id: 'approvals', label: 'Review & Approve', description: 'Manage creative approvals', icon: CheckCircle2, keywords: ['approve', 'review', 'pending', 'status'] },
   { id: 'briefs', label: 'Briefs & Scripts', description: 'Creative briefs and campaign planning', icon: FileText, keywords: ['brief', 'plan', 'campaign', 'strategy'] },
   { id: 'static-ads', label: 'Static Ads', description: 'AI-generated image ads', icon: Image, keywords: ['static', 'image', 'banner', 'display'] },
@@ -86,7 +89,7 @@ const ALL_SECTIONS = [
   { id: 'instagram-intel', label: 'Instagram Intel', description: 'Analyze trending content', icon: Instagram, keywords: ['instagram', 'ig', 'trend', 'social'] },
   { id: 'winning-ads', label: 'Winning Ads', description: 'Top-performing ad gallery', icon: Trophy, keywords: ['winning', 'top', 'best', 'performer'] },
   { id: 'platform-intel', label: 'Platform Intel', description: 'Best practices by platform', icon: Globe, keywords: ['platform', 'best practice', 'guide'] },
-  { id: 'client-review', label: 'Client Review Portal', description: 'Share creatives with clients', icon: Share2, keywords: ['client', 'share', 'portal', 'review'] },
+  { id: 'client-review', label: 'Internal Review', description: 'Internal team review workflow', icon: Eye, keywords: ['internal', 'team', 'review', 'workflow'] },
   { id: 'manage-styles', label: 'Brand Styles', description: 'Manage brand kits & styles', icon: Palette, keywords: ['style', 'brand', 'kit', 'color'] },
   { id: 'calendar', label: 'Creative Calendar', description: 'Timeline & scheduling', icon: Calendar, keywords: ['calendar', 'schedule', 'timeline', 'date'] },
   { id: 'history', label: 'History', description: 'View past generations', icon: History, keywords: ['history', 'past', 'previous', 'log'] },
@@ -96,6 +99,7 @@ const ALL_SECTIONS = [
 
 const AI_TOOLS = [
   { id: 'ai-scripts', label: 'AI Script Writer', description: 'Generate DR scripts from offers & angles', icon: PenTool, gradient: 'from-blue-500 to-indigo-600', bgLight: 'bg-blue-500/10', iconColor: 'text-blue-500', tag: 'Most Used', score: 92 },
+  { id: 'hook-testing', label: 'Hook Testing Lab', description: 'A/B test hooks against locked body copy', icon: Zap, gradient: 'from-violet-500 to-purple-600', bgLight: 'bg-violet-500/10', iconColor: 'text-violet-500', tag: 'New', score: 96 },
   { id: 'podcast-ads', label: 'Podcast Ads', description: 'Host-read clips & audio-first video ads', icon: Headphones, gradient: 'from-orange-500 to-amber-600', bgLight: 'bg-orange-500/10', iconColor: 'text-orange-500', tag: 'Trending', score: 87 },
   { id: 'hyper-realistic', label: 'Hyper-Realistic', description: 'Photorealistic AI imagery for ads', icon: Camera, gradient: 'from-cyan-500 to-blue-600', bgLight: 'bg-cyan-500/10', iconColor: 'text-cyan-500', tag: 'Popular', score: 89 },
   { id: 'direct-response', label: 'DR Toolkit', description: 'Hooks, headlines, CTAs & winning copy', icon: Target, gradient: 'from-rose-500 to-pink-600', bgLight: 'bg-rose-500/10', iconColor: 'text-rose-500', tag: 'Essential', score: 95 },
@@ -421,7 +425,7 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
             <Sparkles className="h-3 w-3" /> Powered by AI
           </Badge>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {AI_TOOLS.map(tool => {
             const Icon = tool.icon;
             return (
@@ -465,8 +469,8 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
             { id: 'new-campaign', label: 'New Campaign', desc: 'Brief, Script, Creative, Review, Launch', icon: Rocket, color: 'text-blue-500', bg: 'bg-blue-500/10', nav: 'briefs', steps: ['Brief', 'Script', 'Creative', 'Review', 'Launch'] },
-            { id: 'quick-ad', label: 'Quick Ad', desc: 'Go straight to generating — skip the brief', icon: Zap, color: 'text-amber-500', bg: 'bg-amber-500/10', nav: 'ai-scripts', steps: ['Client', 'Tool', 'Generate', 'Export'] },
-            { id: 'batch-refresh', label: 'Batch Refresh', desc: 'Refresh existing campaigns at scale', icon: Wand2, color: 'text-violet-500', bg: 'bg-violet-500/10', nav: 'batch-video', steps: ['Campaign', 'Variations', 'Batch', 'Review'] },
+            { id: 'hook-test', label: 'Hook A/B Test', desc: 'Generate & score hook variations for split testing', icon: Zap, color: 'text-violet-500', bg: 'bg-violet-500/10', nav: 'hook-testing', steps: ['Offer', 'Types', 'Generate', 'Export'] },
+            { id: 'client-review', label: 'Client Review', desc: 'Share creatives via zero-login review link', icon: Share2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', nav: 'client-share', steps: ['Select', 'Configure', 'Share', 'Track'] },
           ].map(flow => {
             const Icon = flow.icon;
             return (
@@ -608,9 +612,9 @@ export function CreativeCommandCenter({ onNavigate, statusCounts }: CommandCente
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
-            { icon: Target, color: 'text-blue-500', bg: 'bg-blue-500/10', title: 'Hook-First Strategy', tip: 'The hook determines 80% of ad performance. Test 5+ hooks per winning body copy.' },
-            { icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', title: 'UGC Outperforms 2:1', tip: 'Native UGC-style beats polished ads on Meta and TikTok. Use AI avatars for scale.' },
-            { icon: Headphones, color: 'text-violet-500', bg: 'bg-violet-500/10', title: 'Podcast Ads Rising', tip: 'Podcast-style clips are the #1 rising format. Host-read authenticity converts.' },
+            { icon: Target, color: 'text-blue-500', bg: 'bg-blue-500/10', title: 'Hook-First Strategy', tip: 'The hook determines 80% of ad performance. Use Hook Lab to test 5+ variations per winning body copy.' },
+            { icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', title: 'Score Before You Spend', tip: 'Every creative gets a performance score before launch. Focus budget on A-graded hooks only.' },
+            { icon: Headphones, color: 'text-violet-500', bg: 'bg-violet-500/10', title: 'Podcast Ads Rising', tip: 'Podcast-style clips are the #1 rising format. Host-read authenticity converts 3x better.' },
           ].map(tip => {
             const Icon = tip.icon;
             return (
