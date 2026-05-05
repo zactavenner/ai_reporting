@@ -111,16 +111,17 @@ export function useCalls(clientId?: string, showedOnly?: boolean, startDate?: st
   return useQuery({
     queryKey: ['calls', clientId, showedOnly, startDate, endDate],
     queryFn: async () => {
-      const data = await fetchAllRows((sb) => {
+      // Fetch calls booked in date range (for "Booked" count)
+      const bookedCalls = await fetchAllRows((sb) => {
         let query = sb
           .from('calls')
           .select('*')
           .order('booked_at', { ascending: false });
-        
+
         if (clientId) {
           query = query.eq('client_id', clientId);
         }
-        
+
         if (showedOnly) {
           query = query.eq('showed', true);
         }
@@ -133,11 +134,42 @@ export function useCalls(clientId?: string, showedOnly?: boolean, startDate?: st
           endNext.setUTCDate(endNext.getUTCDate() + 1);
           query = query.lt('booked_at', endNext.toISOString());
         }
-        
+
         return query;
       });
 
-      return data as Call[];
+      // Also fetch showed calls by scheduled_at in date range (matches RPC logic).
+      // A call booked earlier but scheduled/attended in this range should count as a show.
+      if (startDate && endDate) {
+        const scheduledShows = await fetchAllRows((sb) => {
+          let query = sb
+            .from('calls')
+            .select('*')
+            .eq('showed', true)
+            .order('scheduled_at', { ascending: false });
+
+          if (clientId) {
+            query = query.eq('client_id', clientId);
+          }
+
+          const endNext = new Date(endDate + 'T00:00:00.000Z');
+          endNext.setUTCDate(endNext.getUTCDate() + 1);
+          query = query.gte('scheduled_at', startDate + 'T00:00:00.000Z');
+          query = query.lt('scheduled_at', endNext.toISOString());
+
+          return query;
+        });
+
+        // Merge: include any showed calls from scheduled_at range not already in bookedCalls
+        const existingIds = new Set(bookedCalls.map(c => c.id));
+        for (const call of scheduledShows) {
+          if (!existingIds.has(call.id)) {
+            bookedCalls.push(call);
+          }
+        }
+      }
+
+      return bookedCalls as Call[];
     },
   });
 }

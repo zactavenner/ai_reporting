@@ -647,6 +647,7 @@ export function DraggableClientTable({
                         const hasGHL = !!(client.ghl_api_key && client.ghl_location_id);
                         const hasCalendars = (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0;
                         if (!hasCalls && hasAdSpend && hasGHL && !hasCalendars) return 'text-destructive font-semibold';
+                        if (!hasCalls && hasAdSpend && hasGHL && hasCalendars) return 'text-yellow-600 dark:text-yellow-500';
                         if (!hasCalls && hasAdSpend && syncInfo.status !== 'healthy') return 'text-yellow-600 dark:text-yellow-500';
                         if (!hasCalls && (m.crmLeads || 0) > 0) return 'text-yellow-600 dark:text-yellow-500';
                         return '';
@@ -661,6 +662,16 @@ export function DraggableClientTable({
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs max-w-[220px]">
                               No tracked calendars configured — add calendar IDs in client settings to sync booked/show calls
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        {(m.totalCalls || 0) === 0 && (m.crmLeads || 0) > 0 && !!(client.ghl_api_key && client.ghl_location_id) && (fullSettings[client.id]?.tracked_calendar_ids || []).length > 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Clock className="h-2.5 w-2.5 text-yellow-600 dark:text-yellow-500 shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[220px]">
+                              Calendars configured but 0 calls — calendar sync may not have run yet or no appointments booked for this date range
                             </TooltipContent>
                           </Tooltip>
                         )}

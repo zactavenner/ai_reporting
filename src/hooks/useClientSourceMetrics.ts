@@ -109,6 +109,8 @@ function buildSingleClientMetrics(
  * Converts RPC results + daily_metrics into per-client SourceAggregatedMetrics.
  * Ensures every client with ad spend in daily_metrics gets an entry, even if the
  * RPC returned no lead/call data for them (e.g. GHL not configured).
+ * Also ensures every client in clientFullSettings gets an entry so the dashboard
+ * never has a gap for a visible client.
  */
 export function buildClientMetricsFromRPC(
   rpcData: ClientSourceMetricsRow[],
@@ -145,6 +147,18 @@ export function buildClientMetricsFromRPC(
       const dailyTotals = aggregateDailyTotals(dailyByClient[clientId]);
       const defaultPipelineValue = clientFullSettings[clientId]?.default_lead_pipeline_value || 0;
       result[clientId] = buildSingleClientMetrics(dailyTotals, null, defaultPipelineValue);
+    }
+  }
+
+  // Final defensive: ensure every client that has settings (and thus is visible
+  // on the dashboard) gets a metrics entry even if they have no RPC or daily data.
+  // This prevents the table from showing a blank row for newly added clients.
+  for (const clientId of Object.keys(clientFullSettings)) {
+    if (!result[clientId]) {
+      const emptyTotals = { totalAdSpend: 0, totalClicks: 0, totalImpressions: 0, totalCommitments: 0, commitmentDollars: 0 };
+      const rpcRow = rpcByClient[clientId] || null;
+      const defaultPipelineValue = clientFullSettings[clientId]?.default_lead_pipeline_value || 0;
+      result[clientId] = buildSingleClientMetrics(emptyTotals, rpcRow, defaultPipelineValue);
     }
   }
 
