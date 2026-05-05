@@ -271,7 +271,6 @@
     animation: slideInRight 0.3s ease-out both;
   }
 
-  /* Apple-inspired elevated surface */
   .apple-surface {
     @apply rounded-3xl border border-border/30 bg-card/95;
     backdrop-filter: blur(20px) saturate(180%);
@@ -288,14 +287,12 @@
       0 8px 32px -8px rgb(0 0 0 / 0.3);
   }
 
-  /* Frosted toolbar */
   .apple-toolbar {
     @apply rounded-2xl border border-border/30 bg-background/80;
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
 
-  /* Segmented control (Apple-style tab pills) */
   .apple-segment {
     @apply inline-flex items-center gap-1 rounded-xl px-4 py-2 text-sm font-medium;
     @apply text-muted-foreground transition-all duration-200;
@@ -308,7 +305,6 @@
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
   }
 
-  /* Bento grid card */
   .bento-card {
     @apply rounded-3xl border border-border/30 bg-card p-6 transition-all duration-500;
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.03);
@@ -319,7 +315,6 @@
     transform: translateY(-2px);
   }
 
-  /* Inline status indicator */
   .status-dot {
     @apply h-2 w-2 rounded-full;
     box-shadow: 0 0 0 2px hsl(var(--background));
@@ -328,12 +323,10 @@
     animation: statusPulse 2s ease-in-out infinite;
   }
 
-  /* Apple-style section header */
   .section-label {
     @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/50;
   }
 
-  /* Spotlight search bar */
   .spotlight-bar {
     @apply w-full rounded-2xl border border-border/40 bg-muted/30 px-5 py-3;
     @apply text-sm placeholder:text-muted-foreground/40;
@@ -345,7 +338,6 @@
     box-shadow: 0 4px 16px -4px hsl(var(--primary) / 0.08);
   }
 
-  /* Creative thumbnail with loading shimmer */
   .creative-thumb {
     @apply relative overflow-hidden rounded-2xl bg-muted/30;
   }
@@ -358,7 +350,6 @@
     opacity: 1;
   }
 
-  /* Review card with verdict glow */
   .review-glow-approved {
     box-shadow: 0 0 0 1px hsl(142 71% 45% / 0.15), 0 4px 16px -4px hsl(142 71% 45% / 0.1);
   }
@@ -369,7 +360,6 @@
     box-shadow: 0 0 0 1px hsl(25 95% 53% / 0.15), 0 4px 16px -4px hsl(25 95% 53% / 0.1);
   }
 
-  /* Creative hero v2 — deeper, wider gradient */
   .creative-hero-v2 {
     @apply relative overflow-hidden rounded-[32px];
     background: linear-gradient(145deg, #050508 0%, #0d0d1a 25%, #131328 50%, #0a1628 75%, #050508 100%);
@@ -380,14 +370,11 @@
     background: radial-gradient(ellipse 80% 60% at 70% 20%, hsl(252 80% 60% / 0.08), transparent);
   }
 
-  /* Keyboard shortcut badge */
   .kbd-badge {
     @apply inline-flex items-center justify-center rounded-md border border-border/50 bg-muted/50 px-1.5 py-0.5;
     @apply text-[10px] font-medium text-muted-foreground/60;
     box-shadow: 0 1px 0 hsl(var(--border) / 0.3);
   }
-
-  /* ─── Liquid Glass Design System ─── */
 
   .liquid-glass {
     @apply rounded-3xl border border-white/[0.12];
@@ -437,8 +424,6 @@
       inset 0 0.5px 0 hsl(0 0% 100% / 0.05);
   }
 
-  /* ─── Spotlight Search ─── */
-
   .spotlight-overlay {
     @apply fixed inset-0 z-50;
     background: hsl(0 0% 0% / 0.4);
@@ -473,8 +458,6 @@
     @apply bg-primary/[0.10];
   }
 
-  /* ─── Performance Score Badge ─── */
-
   .perf-score {
     @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold tabular-nums;
     @apply border;
@@ -491,8 +474,6 @@
   .dark .perf-score-high { @apply text-emerald-400; }
   .dark .perf-score-mid { @apply text-amber-400; }
   .dark .perf-score-low { @apply text-red-400; }
-
-  /* ─── Gradient Mesh Hero ─── */
 
   .gradient-mesh-hero {
     @apply relative overflow-hidden rounded-[32px];
@@ -511,8 +492,6 @@
     animation: meshShift 12s ease-in-out infinite alternate;
   }
 
-  /* ─── Activity Pulse ─── */
-
   .activity-dot {
     @apply h-2 w-2 rounded-full relative;
   }
@@ -522,8 +501,6 @@
     animation: activityPing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
     background: inherit;
   }
-
-  /* ─── Floating Action Bar ─── */
 
   .floating-bar {
     @apply fixed bottom-6 left-1/2 -translate-x-1/2 z-40;
@@ -550,8 +527,6 @@
     @apply hover:bg-primary/90;
   }
 
-  /* ─── Improved Bento Cards ─── */
-
   .bento-card-v2 {
     @apply rounded-[28px] border border-border/25 bg-card p-6 transition-all duration-500;
     box-shadow: 0 1px 2px hsl(0 0% 0% / 0.03);
@@ -567,8 +542,6 @@
     transform: translateY(-1px) scale(0.995);
   }
 
-  /* ─── Premium Gradient Accents ─── */
-
   .gradient-text-premium {
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(135deg, hsl(215 90% 58%), hsl(252 68% 58%), hsl(290 60% 55%));
@@ -583,8 +556,6 @@
     background: linear-gradient(135deg, hsl(215 90% 52% / 0.08), hsl(252 68% 58% / 0.06));
   }
 
-  /* ─── Client Avatar Ring ─── */
-
   .client-ring {
     @apply relative rounded-full p-[2px];
     background: linear-gradient(135deg, hsl(215 90% 52%), hsl(252 68% 58%));
@@ -592,8 +563,6 @@
   .client-ring-inner {
     @apply rounded-full bg-background flex items-center justify-center font-bold;
   }
-
-  /* ─── Side-by-side comparison ─── */
 
   .compare-panel {
     @apply rounded-2xl border border-border/30 bg-card overflow-hidden;
@@ -610,39 +579,142 @@
     @apply border-red-500/25;
     box-shadow: 0 0 0 1px hsl(0 72% 51% / 0.1), 0 8px 32px -8px hsl(0 72% 51% / 0.08);
   }
+
+  /* ─── Apple Masonry Grid ─── */
+
+  .masonry-grid {
+    columns: 4;
+    column-gap: 12px;
+  }
+  .masonry-grid > * {
+    break-inside: avoid;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 1024px) { .masonry-grid { columns: 3; } }
+  @media (max-width: 768px) { .masonry-grid { columns: 2; } }
+
+  .creative-scored-card {
+    @apply relative rounded-[20px] border border-border/25 bg-card overflow-hidden;
+    @apply transition-all duration-300;
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.02);
+  }
+  .creative-scored-card:hover {
+    box-shadow:
+      0 12px 40px -12px hsl(0 0% 0% / 0.12),
+      0 4px 12px -4px hsl(0 0% 0% / 0.04);
+    border-color: hsl(var(--primary) / 0.15);
+    transform: translateY(-2px);
+  }
+  .creative-scored-card:active {
+    transform: translateY(-1px) scale(0.99);
+  }
+
+  .iterate-btn {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold;
+    @apply bg-white/15 backdrop-blur-md border border-white/20 text-white;
+    @apply transition-all duration-200;
+  }
+  .iterate-btn:hover {
+    @apply bg-white/25 border-white/30;
+    transform: scale(1.02);
+  }
+  .iterate-btn:active {
+    transform: scale(0.97);
+  }
+
+  .segment-group {
+    @apply inline-flex items-center rounded-2xl p-1 bg-muted/40 border border-border/30;
+  }
+  .segment-item {
+    @apply inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-medium;
+    @apply text-muted-foreground/60 transition-all duration-200 cursor-pointer;
+  }
+  .segment-item:hover {
+    @apply text-foreground;
+  }
+  .segment-item[data-active="true"] {
+    @apply bg-background text-foreground shadow-sm border border-border/30;
+  }
+
+  .review-link-card {
+    @apply rounded-[24px] border border-border/25 bg-card p-5;
+    @apply transition-all duration-300;
+    box-shadow: 0 1px 3px hsl(0 0% 0% / 0.03);
+  }
+  .review-link-card:hover {
+    box-shadow:
+      0 8px 32px -8px hsl(0 0% 0% / 0.08),
+      0 4px 12px -4px hsl(0 0% 0% / 0.03);
+    border-color: hsl(var(--primary) / 0.1);
+  }
+
+  .grade-badge {
+    @apply inline-flex items-center justify-center h-8 w-8 rounded-lg text-sm font-bold;
+    @apply border;
+  }
+  .grade-badge-a {
+    @apply bg-emerald-500/10 text-emerald-600 border-emerald-500/20;
+  }
+  .grade-badge-b {
+    @apply bg-blue-500/10 text-blue-600 border-blue-500/20;
+  }
+  .grade-badge-c {
+    @apply bg-amber-500/10 text-amber-600 border-amber-500/20;
+  }
+  .dark .grade-badge-a { @apply text-emerald-400; }
+  .dark .grade-badge-b { @apply text-blue-400; }
+  .dark .grade-badge-c { @apply text-amber-400; }
+
+  .apple-progress {
+    @apply h-2 rounded-full overflow-hidden;
+    background: hsl(var(--muted));
+  }
+  .apple-progress-fill {
+    @apply h-full rounded-full transition-all duration-700 ease-out;
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)));
+  }
+
+  .folder-card {
+    @apply rounded-[24px] border border-border/25 bg-card p-6;
+    @apply cursor-pointer;
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.02);
+    transition: all 0.4s ease;
+  }
+  .folder-card:hover {
+    box-shadow:
+      0 16px 48px -12px hsl(0 0% 0% / 0.1),
+      0 4px 12px -4px hsl(0 0% 0% / 0.04);
+    border-color: hsl(var(--primary) / 0.12);
+    transform: translateY(-3px) scale(1.005);
+  }
+  .folder-card:active {
+    transform: translateY(-1px) scale(0.995);
+  }
+
+  .page-enter {
+    animation: pageEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .notification-badge {
+    @apply absolute -top-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center;
+    @apply text-[8px] font-bold text-white bg-red-500;
+    box-shadow: 0 0 0 2px hsl(var(--background));
+  }
 }
 
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes staggerFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes statusPulse {
@@ -689,6 +761,11 @@
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes slideUp {
