@@ -184,21 +184,38 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     })
   );
 
-  // Bulk fetch all task assignees for the current task set
+  // Bulk fetch all task assignees for the current task set.
+  // We fetch ALL assignees (paginated) rather than filtering by taskIds, because:
+  //  (1) `.in('task_id', [...])` with thousands of ids hits URL/row caps and silently truncates,
+  //  (2) the result set itself can exceed Supabase's default 1000-row cap.
+  // This guarantees no assignment row is missed when filtering by a specific user/pod.
   const taskIds = useMemo(() => tasks.map(t => t.id), [tasks]);
-  const { data: allTaskAssignees = [] } = useQuery({
-    queryKey: ['all-task-assignees', taskIds],
+  const taskIdSet = useMemo(() => new Set(taskIds), [taskIds]);
+  const { data: allTaskAssigneesRaw = [] } = useQuery({
+    queryKey: ['all-task-assignees-full'],
     queryFn: async () => {
-      if (taskIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from('task_assignees')
-        .select('task_id, member_id, pod_id, member:agency_members(id, name, pod_id, pod:agency_pods(id, name, color)), pod:agency_pods(id, name, color)')
-        .in('task_id', taskIds);
-      if (error) throw error;
-      return data || [];
+      const PAGE = 1000;
+      let from = 0;
+      const rows: any[] = [];
+      while (true) {
+        const { data, error } = await supabase
+          .from('task_assignees')
+          .select('task_id, member_id, pod_id, member:agency_members(id, name, pod_id, pod:agency_pods(id, name, color)), pod:agency_pods(id, name, color)')
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const batch = data || [];
+        rows.push(...batch);
+        if (batch.length < PAGE) break;
+        from += PAGE;
+      }
+      return rows;
     },
-    enabled: taskIds.length > 0,
+    staleTime: 30_000,
   });
+  const allTaskAssignees = useMemo(
+    () => allTaskAssigneesRaw.filter((ta: any) => taskIdSet.has(ta.task_id)),
+    [allTaskAssigneesRaw, taskIdSet]
+  );
 
   // Build a set of task IDs assigned to the current member (via individual or pod assignment)
   const myTaskIds = useMemo(() => {
@@ -248,11 +265,17 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
           t.assigned_to === currentMember.id || myTaskIds.has(t.id)
         );
       } else {
-        // Specific assignee filter: check legacy field AND junction table
+        // Specific assignee filter: include legacy field, direct junction assignment,
+        // AND tasks assigned to a pod that this member belongs to.
+        const targetMember = agencyMembers.find(m => m.id === filterAssigneeId);
+        const targetPodId = targetMember?.pod_id || null;
         filtered = filtered.filter(t => {
           if (t.assigned_to === filterAssigneeId) return true;
-          return allTaskAssignees.some((ta: any) => 
-            ta.task_id === t.id && ta.member_id === filterAssigneeId
+          return allTaskAssignees.some((ta: any) =>
+            ta.task_id === t.id && (
+              ta.member_id === filterAssigneeId ||
+              (targetPodId && ta.pod_id === targetPodId)
+            )
           );
         });
       }
