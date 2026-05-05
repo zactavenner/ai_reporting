@@ -81,8 +81,9 @@ export function KanbanTaskCard({
     return new Date(year, month - 1, day, 23, 59, 59);
   };
   
+  const isCompletedForOverdue = task.stage === 'done' || task.status === 'completed';
   const dueDateTime = task.due_date ? parseDueDate(task.due_date) : null;
-  const isOverdue = dueDateTime && isPast(dueDateTime) && task.status !== 'completed';
+  const isOverdue = dueDateTime && isPast(dueDateTime) && !isCompletedForOverdue;
   const isDueToday = task.due_date ? (() => {
     const [year, month, day] = task.due_date.split('-').map(Number);
     const dueDate = new Date(year, month - 1, day);
