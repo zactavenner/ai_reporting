@@ -213,6 +213,17 @@ async function sendTaskNotification(taskId: string, action: 'assigned' | 'update
   }
 }
 
+// Post to #6-task-updates Slack channel
+async function postTaskFeed(event: 'task_created' | 'task_completed', task: any, userName?: string) {
+  try {
+    await supabase.functions.invoke('slack-task-feed', {
+      body: { event, task, user_name: userName },
+    });
+  } catch (err) {
+    console.error('slack-task-feed error:', err);
+  }
+}
+
 // Create task mutation
 export function useCreateTask() {
   const queryClient = useQueryClient();
@@ -240,6 +251,7 @@ export function useCreateTask() {
       if (data.assigned_to) {
         sendTaskNotification(data.id, 'assigned', data.client_id);
       }
+      postTaskFeed('task_created', data);
     },
     onError: (error: Error) => {
       toast.error('Failed to create task: ' + error.message);
@@ -271,6 +283,7 @@ export function useUpdateTask() {
       // Send notification for completion
       if (data.status === 'completed') {
         sendTaskNotification(data.id, 'completed', data.client_id);
+        postTaskFeed('task_completed', data);
       }
     },
     onError: (error: Error) => {
