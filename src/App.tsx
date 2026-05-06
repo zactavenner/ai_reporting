@@ -29,6 +29,7 @@ const ClientRecords = lazyRetry(() => import("./pages/ClientRecords"));
 const PublicReport = lazyRetry(() => import("./pages/PublicReport"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
 const PublicCreatives = lazyRetry(() => import("./pages/PublicCreatives"));
+const PublicTaskUrl = lazyRetry(() => import("./pages/PublicTaskUrl"));
 const SheetsHealthPage = lazyRetry(() => import("./pages/SheetsHealthPage"));
 const ClientProjectsPage = lazyRetry(() => import("./pages/ClientProjectsPage"));
 const ProjectPage = lazyRetry(() => import("./pages/ProjectPage"));
@@ -75,6 +76,7 @@ const App = () => (
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
             <Route path="/public/:token/creatives" element={<PublicCreatives />} />
+            <Route path="/taskurl" element={<PublicTaskUrl />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
