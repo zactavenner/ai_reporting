@@ -5,6 +5,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function postSlack(payload: any) {
+  try {
+    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/slack-task-feed`;
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.error("slack-task-feed call failed:", e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -52,7 +68,12 @@ Deno.serve(async (req) => {
           changed_by: "Overdue Watchdog (48h)",
         });
 
-        if (!task.client_id) continue;
+        // Lookup task title for slack
+        const { data: taskRow } = await supabase
+          .from("tasks").select("title, due_date").eq("id", task.id).maybeSingle();
+
+        let amName: string | undefined;
+        if (task.client_id) {
 
         // Lookup client account_manager
         const { data: client } = await supabase
@@ -61,8 +82,8 @@ Deno.serve(async (req) => {
           .eq("id", task.client_id)
           .maybeSingle();
 
-        const amName = client?.account_manager?.trim();
-        if (!amName) continue;
+        amName = client?.account_manager?.trim() || undefined;
+        if (amName) {
 
         // Find agency_member by name (case-insensitive)
         const { data: member } = await supabase
@@ -71,8 +92,7 @@ Deno.serve(async (req) => {
           .ilike("name", amName)
           .maybeSingle();
 
-        if (!member) continue;
-
+        if (member) {
         // Check if AM is already assigned
         const { data: existing } = await supabase
           .from("task_assignees")
@@ -81,8 +101,7 @@ Deno.serve(async (req) => {
           .eq("member_id", member.id)
           .maybeSingle();
 
-        if (existing) continue;
-
+        if (!existing) {
         // Add AM as additional assignee (preserving existing)
         const { error: insErr } = await supabase
           .from("task_assignees")
@@ -90,21 +109,35 @@ Deno.serve(async (req) => {
 
         if (insErr) {
           errors.push(`assignee insert failed for ${task.id}: ${insErr.message}`);
-          continue;
+        } else {
+          amAssignedCount++;
+          await supabase.from("task_history").insert({
+            task_id: task.id,
+            action: "assignee_added",
+            new_value: `${member.name} (account manager auto-assigned: stuck >48h)`,
+            changed_by: "Overdue Watchdog (48h)",
+          });
+        }
+        }
+        }
+        }
         }
 
-        amAssignedCount++;
-
-        await supabase.from("task_history").insert({
-          task_id: task.id,
-          action: "assignee_added",
-          new_value: `${member.name} (account manager auto-assigned: stuck >48h)`,
-          changed_by: "Overdue Watchdog (48h)",
+        await postSlack({
+          event: "task_overdue_stuck",
+          task: { id: task.id, title: taskRow?.title, due_date: taskRow?.due_date, account_manager: amName },
         });
       } catch (e) {
         errors.push(`task ${task.id}: ${(e as Error).message}`);
       }
     }
+
+    await postSlack({
+      event: "watchdog_summary",
+      scanned: tasks?.length ?? 0,
+      moved_to_stuck: movedCount,
+      errors,
+    });
 
     return new Response(
       JSON.stringify({
@@ -117,6 +150,7 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
+    await postSlack({ event: "watchdog_error", error: (e as Error).message });
     return new Response(
       JSON.stringify({ success: false, error: (e as Error).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
