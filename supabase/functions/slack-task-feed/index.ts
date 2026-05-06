@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const SLACK_GATEWAY_URL = "https://connector-gateway.lovable.dev/slack/api";
 const CHANNEL_NAME = "6-task-updates";
+const PUBLIC_TASKS_URL = "https://reporting.highperformanceads.com/taskurl";
 
 let cachedChannelId: string | null = null;
 
@@ -43,11 +44,11 @@ function buildMessage(payload: any): string {
     case "task_completed":
       return `✅ *Task Completed* — *${task?.title ?? "Untitled"}*\n👤 By: ${user_name || "System"}`;
     case "task_overdue_stuck":
-      return `⚠️ *Task Auto-Moved to Stuck (overdue 48h+)* — *${task?.title ?? "Untitled"}*\n📅 Due: ${task?.due_date || "n/a"}${task?.account_manager ? `\n👤 Account Manager added: ${task.account_manager}` : ""}`;
+      return `⚠️ *Task Auto-Moved to Stuck (overdue 48h+)* — *${task?.title ?? "Untitled"}*\n📅 Due: ${task?.due_date || "n/a"}${task?.account_manager ? `\n👤 Account Manager added: ${task.account_manager}` : ""}\n🔗 <${PUBLIC_TASKS_URL}|View Stuck & Overdue Tasks>`;
     case "watchdog_summary":
-      return `🕒 *Overdue Watchdog Run* — Scanned ${scanned ?? 0}, moved to Stuck: ${moved_to_stuck ?? 0}${errors?.length ? `\n❌ Errors (${errors.length}):\n${errors.slice(0, 5).map((e: string) => `• ${e}`).join("\n")}` : ""}`;
+      return `🕒 *Overdue Watchdog Run* — Scanned ${scanned ?? 0}, moved to Stuck: ${moved_to_stuck ?? 0}${(moved_to_stuck ?? 0) > 0 || errors?.length ? `\n🔗 <${PUBLIC_TASKS_URL}|View Stuck & Overdue Tasks>` : ""}${errors?.length ? `\n❌ Errors (${errors.length}):\n${errors.slice(0, 5).map((e: string) => `• ${e}`).join("\n")}` : ""}`;
     case "watchdog_error":
-      return `🚨 *Overdue Watchdog ERROR*\n\`\`\`${(error || "unknown").toString().slice(0, 1500)}\`\`\``;
+      return `🚨 *Overdue Watchdog ERROR*\n\`\`\`${(error || "unknown").toString().slice(0, 1500)}\`\`\`\n🔗 <${PUBLIC_TASKS_URL}|View Stuck & Overdue Tasks>`;
     default:
       return `📢 *Task Feed*: ${JSON.stringify(payload).slice(0, 800)}`;
   }
