@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreativeApproval } from './CreativeApproval';
-import { MetaTopCreatives } from './MetaTopCreatives';
-import { Upload, Image, Video, Target, ExternalLink, TrendingUp } from 'lucide-react';
+import { Upload, Image, Video, Target, ExternalLink } from 'lucide-react';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
@@ -36,7 +36,9 @@ const generatorLinks = [
 ];
 
 export function CreativesSection({ clientId, clientName, isPublicView = false }: CreativesSectionProps) {
-  const [activeSubTab, setActiveSubTab] = useState('top-creatives');
+  const [activeSubTab, setActiveSubTab] = useState('approval');
+  const { data: agencySettings } = useAgencySettings();
+  const canvaUrl = (agencySettings as any)?.canva_url || 'https://www.canva.com';
 
   if (isPublicView) {
     return (
@@ -52,13 +54,13 @@ export function CreativesSection({ clientId, clientName, isPublicView = false }:
     <div className="space-y-4">
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
         <TabsList className="bg-muted/50">
-          <TabsTrigger value="top-creatives" className="gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Top Creatives (7d)
-          </TabsTrigger>
           <TabsTrigger value="approval" className="gap-2">
             <Upload className="h-4 w-4" />
             Creative Approval
+          </TabsTrigger>
+          <TabsTrigger value="canva" className="gap-2">
+            <ExternalLink className="h-4 w-4" />
+            Canva
           </TabsTrigger>
           <TabsTrigger value="generators" className="gap-2">
             <Image className="h-4 w-4" />
@@ -66,16 +68,23 @@ export function CreativesSection({ clientId, clientName, isPublicView = false }:
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="top-creatives" className="mt-4">
-          <MetaTopCreatives clientId={clientId} clientName={clientName} />
-        </TabsContent>
-
         <TabsContent value="approval" className="mt-4">
           <CreativeApproval 
             clientId={clientId} 
             clientName={clientName} 
             isPublicView={false}
           />
+        </TabsContent>
+
+        <TabsContent value="canva" className="mt-4">
+          <Card className="p-6 flex flex-col items-start gap-3">
+            <h3 className="font-semibold">Canva Workspace</h3>
+            <p className="text-sm text-muted-foreground">Open Canva to design and edit creative assets.</p>
+            <Button onClick={() => window.open(canvaUrl, '_blank')} className="gap-2">
+              <ExternalLink className="h-4 w-4" />
+              Open Canva
+            </Button>
+          </Card>
         </TabsContent>
 
         <TabsContent value="generators" className="mt-4">
