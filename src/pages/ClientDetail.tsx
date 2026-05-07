@@ -117,6 +117,7 @@ export default function ClientDetail() {
   const { data: leads = [], isLoading: leadsLoading } = useLeads(clientId, startDate, endDate);
   const { data: calls = [] } = useCalls(clientId, false, startDate, endDate);
   const { data: settings } = useClientSettings(clientId);
+  const { data: agencySettings } = useAgencySettings();
   const { data: customTabs = [] } = useCustomTabs(clientId);
   const { data: allTasks = [] } = useAllTasks();
   const { data: voiceNotes = [] } = useVoiceNotes(clientId);
