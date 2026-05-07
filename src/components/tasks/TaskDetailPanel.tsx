@@ -833,6 +833,30 @@ const getHistoryIcon = (action: string) => {
                         </a>
                       </Button>
                     ))}
+                    {(agencySettings as any)?.kpi_google_doc_url && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={(agencySettings as any).kpi_google_doc_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          KPI Doc
+                        </a>
+                      </Button>
+                    )}
+                    {(agencySettings as any)?.kpi_google_sheet_url && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={(agencySettings as any).kpi_google_sheet_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          KPI Sheet
+                        </a>
+                      </Button>
+                    )}
                    <Button
                      variant={task.stage === 'done' ? 'secondary' : 'outline'}
                      size="sm"
