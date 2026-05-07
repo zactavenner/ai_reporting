@@ -175,7 +175,7 @@ export default function ClientDetail() {
   const thresholds = useMemo(() => getThresholdsFromSettings(settings), [settings]);
   const fundedInvestorLabel = settings?.funded_investor_label || 'Funded Investors';
   const isLeasing = (client as any)?.client_type === 'LEASING' || ((client?.name || '').toLowerCase().includes('lscre') && (client?.name || '').toLowerCase().includes('leasing'));
-  const defaultTab = isLeasing ? 'properties' : 'performance';
+  const defaultTab = isLeasing ? 'properties' : 'tasks';
   const resolvedTab = activeTab || defaultTab;
   const isLoading = clientLoading || metricsLoading;
 
@@ -283,52 +283,35 @@ export default function ClientDetail() {
         {/* Grouped Tabs - matching 6.0 */}
         <Tabs value={resolvedTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-muted/50 flex-wrap">
-            {isLeasing ? (
+            {isLeasing && (
               <TabsTrigger value="properties" className="gap-2">
                 <Building2 className="h-4 w-4" />
                 Properties
-              </TabsTrigger>
-            ) : (
-              <TabsTrigger value="performance" className="gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Performance
               </TabsTrigger>
             )}
             <TabsTrigger value="tasks" className="gap-2">
               <CheckSquare className="h-4 w-4" />
               Tasks
             </TabsTrigger>
-            <TabsTrigger value="records" className="gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Attribution & Records
-            </TabsTrigger>
-            <TabsTrigger value="ads-manager" className="gap-2">
-              <Megaphone className="h-4 w-4" />
-              Ads Manager
-            </TabsTrigger>
             <TabsTrigger value="creatives" className="gap-2">
               <Palette className="h-4 w-4" />
               Creatives
             </TabsTrigger>
-            <TabsTrigger value="offers" className="gap-2">
+            <TabsTrigger value="master-doc" className="gap-2">
               <FileText className="h-4 w-4" />
-              Offers
+              Master Doc
+            </TabsTrigger>
+            <TabsTrigger value="reporting-sheet" className="gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Reporting Sheet
+            </TabsTrigger>
+            <TabsTrigger value="onboarding-info" className="gap-2">
+              <CheckSquare className="h-4 w-4" />
+              Onboarding Info
             </TabsTrigger>
             <TabsTrigger value="pipeline" className="gap-2">
               <Layers className="h-4 w-4" />
               Pipeline
-            </TabsTrigger>
-            <TabsTrigger value="weekly-sync" className="gap-2">
-              <CalendarCheck className="h-4 w-4" />
-              Weekly Sync
-            </TabsTrigger>
-            <TabsTrigger value="slack" className="gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Slack
-            </TabsTrigger>
-            <TabsTrigger value="funnels" className="gap-2">
-              <Globe className="h-4 w-4" />
-              Funnels
             </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2">
               <Cog className="h-4 w-4" />
