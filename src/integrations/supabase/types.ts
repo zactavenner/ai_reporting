@@ -512,6 +512,8 @@ export type Database = {
           created_at: string
           gemini_api_key: string | null
           id: string
+          kpi_google_doc_url: string | null
+          kpi_google_sheet_url: string | null
           meetgeek_api_key: string | null
           meetgeek_webhook_secret: string | null
           openai_api_key: string | null
@@ -532,6 +534,8 @@ export type Database = {
           created_at?: string
           gemini_api_key?: string | null
           id?: string
+          kpi_google_doc_url?: string | null
+          kpi_google_sheet_url?: string | null
           meetgeek_api_key?: string | null
           meetgeek_webhook_secret?: string | null
           openai_api_key?: string | null
@@ -552,6 +556,8 @@ export type Database = {
           created_at?: string
           gemini_api_key?: string | null
           id?: string
+          kpi_google_doc_url?: string | null
+          kpi_google_sheet_url?: string | null
           meetgeek_api_key?: string | null
           meetgeek_webhook_secret?: string | null
           openai_api_key?: string | null
