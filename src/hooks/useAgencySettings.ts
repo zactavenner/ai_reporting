@@ -10,6 +10,8 @@ export interface AgencySettings {
   api_usage_limit: number;
   meetgeek_api_key: string | null;
   meetgeek_webhook_secret: string | null;
+  kpi_google_doc_url: string | null;
+  kpi_google_sheet_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +38,8 @@ export function useAgencySettings() {
           api_usage_limit: 100,
           meetgeek_api_key: null,
           meetgeek_webhook_secret: null,
+          kpi_google_doc_url: null,
+          kpi_google_sheet_url: null,
         } as AgencySettings;
       }
       
