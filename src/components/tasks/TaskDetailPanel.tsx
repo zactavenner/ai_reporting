@@ -83,6 +83,7 @@ import { SubtaskRow } from './SubtaskRow';
 import { MentionTextarea, parseMentions } from './MentionTextarea';
 import { useCreateNotification } from './NotificationsTab';
 import { useAgencyPods } from '@/hooks/useAgencyPods';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -149,6 +150,7 @@ function useClientMetaAdAccounts(clientId?: string) {
     const uploadFile = useUploadTaskFile();
     const createNotification = useCreateNotification();
     const { data: pods = [] } = useAgencyPods();
+  const { data: agencySettings } = useAgencySettings();
    const { currentMember } = useTeamMember();
    const { reviewFile, isReviewing, reviewingFileId } = useTaskFileReview();
    
@@ -831,6 +833,30 @@ const getHistoryIcon = (action: string) => {
                         </a>
                       </Button>
                     ))}
+                    {(agencySettings as any)?.kpi_google_doc_url && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={(agencySettings as any).kpi_google_doc_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          KPI Doc
+                        </a>
+                      </Button>
+                    )}
+                    {(agencySettings as any)?.kpi_google_sheet_url && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={(agencySettings as any).kpi_google_sheet_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          KPI Sheet
+                        </a>
+                      </Button>
+                    )}
                    <Button
                      variant={task.stage === 'done' ? 'secondary' : 'outline'}
                      size="sm"

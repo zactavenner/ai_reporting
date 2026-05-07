@@ -17,7 +17,7 @@ import { useAgencySettings, useUpdateAgencySettings } from '@/hooks/useAgencySet
 import { useSyncMeetings } from '@/hooks/useMeetings';
 import { TeamManagementTab } from './TeamManagementTab';
 import { SyncQueueStatus } from './SyncQueueStatus';
-import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2 } from 'lucide-react';
+import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet } from 'lucide-react';
 import { ApiReferenceTab } from './ApiReferenceTab';
 
 const OPENAI_MODELS = [
@@ -72,6 +72,8 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   // MeetGeek Integration
   const [meetgeekApiKey, setMeetgeekApiKey] = useState('');
   const [showMeetgeekKey, setShowMeetgeekKey] = useState(false);
+  const [kpiDocUrl, setKpiDocUrl] = useState('');
+  const [kpiSheetUrl, setKpiSheetUrl] = useState('');
   const syncMeetings = useSyncMeetings();
   
   const webhookUrl = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/meetgeek-webhook`;
@@ -85,6 +87,8 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
       setXaiKey((settings as any).xai_api_key || '');
       setApiUsageLimit(String(settings.api_usage_limit || 100));
       setMeetgeekApiKey((settings as any).meetgeek_api_key || '');
+      setKpiDocUrl((settings as any).kpi_google_doc_url || '');
+      setKpiSheetUrl((settings as any).kpi_google_sheet_url || '');
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
       setSelectedGeminiModel((settings as any).selected_gemini_model || 'gemini-2.5-pro');
       setSelectedGrokModel((settings as any).selected_grok_model || 'grok-3');
@@ -102,6 +106,8 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         xai_api_key: xaiKey || null,
         api_usage_limit: parseFloat(apiUsageLimit) || 100,
         meetgeek_api_key: meetgeekApiKey || null,
+        kpi_google_doc_url: kpiDocUrl.trim() || null,
+        kpi_google_sheet_url: kpiSheetUrl.trim() || null,
         selected_openai_model: selectedOpenaiModel,
         selected_gemini_model: selectedGeminiModel,
         selected_grok_model: selectedGrokModel,
@@ -422,6 +428,47 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
           </TabsContent>
 
           <TabsContent value="integrations" className="space-y-6 mt-4">
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1 flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  KPI Tracker Links
+                </h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Paste the URLs to your master KPI Google Doc and Google Sheet.
+                  These links appear as buttons on every task for quick access.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="kpiDocUrl" className="flex items-center gap-2">
+                      <FileText className="h-3.5 w-3.5" /> Google Doc URL
+                    </Label>
+                    <Input
+                      id="kpiDocUrl"
+                      type="url"
+                      value={kpiDocUrl}
+                      onChange={(e) => setKpiDocUrl(e.target.value)}
+                      placeholder="https://docs.google.com/document/d/..."
+                      className="font-mono text-xs mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="kpiSheetUrl" className="flex items-center gap-2">
+                      <Sheet className="h-3.5 w-3.5" /> Google Sheet URL
+                    </Label>
+                    <Input
+                      id="kpiSheetUrl"
+                      type="url"
+                      value={kpiSheetUrl}
+                      onChange={(e) => setKpiSheetUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      className="font-mono text-xs mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="border-2 border-border p-4 space-y-4">
               <div>
                 <h4 className="font-medium mb-1 flex items-center gap-2">
