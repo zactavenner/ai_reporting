@@ -328,106 +328,11 @@ export default function ClientDetail() {
             </TabsContent>
           )}
 
-          {/* ─── PERFORMANCE TAB ─── */}
-          <TabsContent value="performance" className="space-y-6">
-            
-            <SectionErrorBoundary sectionName="Weekly Recap">
-              <WeeklyRecapCard clientId={clientId} compact />
-            </SectionErrorBoundary>
-
-            <Collapsible open={kpiOpen} onOpenChange={setKpiOpen}>
-              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
-                <h2 className="text-lg font-bold">Key Performance Indicators</h2>
-                <span className="text-xs text-muted-foreground">{kpiOpen ? '▾' : '▸'}</span>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-3">
-                <SectionErrorBoundary sectionName="KPI Grid">
-                  <KPIGrid
-                    metrics={activeMetrics}
-                    priorMetrics={priorMetrics || undefined}
-                    showFundedMetrics
-                    thresholds={thresholds}
-                    fundedInvestorLabel={fundedInvestorLabel}
-                    onMetricClick={(metric) => setDrillDownModal(metric)}
-                  />
-                </SectionErrorBoundary>
-              </CollapsibleContent>
-            </Collapsible>
-
-            <SectionErrorBoundary sectionName="Performance Summary">
-              <PeriodicStatsTable clientId={clientId} />
-            </SectionErrorBoundary>
-
-            <Collapsible open={chartsOpen} onOpenChange={setChartsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
-                <h2 className="text-lg font-bold">Metric Charts</h2>
-                <span className="text-xs text-muted-foreground">{chartsOpen ? '▾' : '▸'}</span>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-3">
-                <SectionErrorBoundary sectionName="Metric Charts">
-                  <MetricChartsGrid dailyMetrics={activeDailyMetrics} />
-                </SectionErrorBoundary>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {meetings.length > 0 && (
-              <Collapsible open={meetingsOpen} onOpenChange={setMeetingsOpen}>
-                <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
-                  <Video className="h-5 w-5 text-muted-foreground" />
-                  <h2 className="text-lg font-bold">Recent Meetings</h2>
-                  <span className="text-xs text-muted-foreground">{meetingsOpen ? '▾' : '▸'}</span>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-3">
-                  <SectionErrorBoundary sectionName="Meetings">
-                    <ClientMeetingsSection meetings={meetings} client={client} />
-                  </SectionErrorBoundary>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-          </TabsContent>
-
           {/* ─── TASKS TAB ─── */}
           <TabsContent value="tasks" className="space-y-6">
             <SectionErrorBoundary sectionName="Task Board">
-              <OnboardingChecklist clientId={clientId} clientType={client?.description} />
               <h2 className="text-lg font-bold mb-3">Tasks</h2>
               <TaskBoardView clientId={clientId} />
-            </SectionErrorBoundary>
-          </TabsContent>
-
-          {/* ─── ATTRIBUTION & RECORDS TAB ─── */}
-          <TabsContent value="records" className="space-y-6">
-            <SectionErrorBoundary sectionName="Records">
-              <h2 className="text-lg font-bold mb-3">Detailed Records</h2>
-              <InlineRecordsView
-                dailyMetrics={dailyMetrics}
-                leads={leads}
-                calls={calls}
-                fundedInvestors={fundedInvestors}
-                isLoading={metricsLoading || leadsLoading}
-                onRecordSelect={handleRecordSelect}
-                selectedRecord={selectedRecord}
-                selectedType={selectedType}
-                clientId={clientId}
-                ghlLocationId={client.ghl_location_id}
-              />
-            </SectionErrorBoundary>
-            {clientId && (
-              <SectionErrorBoundary sectionName="Data Audit">
-                <DataAuditSection clientId={clientId} />
-              </SectionErrorBoundary>
-            )}
-          </TabsContent>
-
-          {/* ─── ADS MANAGER TAB ─── */}
-          <TabsContent value="ads-manager" className="space-y-6">
-            <SectionErrorBoundary sectionName="Ads Manager">
-              <AdsManagerTab clientId={client.id} clientName={client.name} />
-            </SectionErrorBoundary>
-
-            <SectionErrorBoundary sectionName="Attribution Settings">
-              <h2 className="text-lg font-bold mb-3">Attribution Settings</h2>
-              <AttributionSettings clientId={client.id} />
             </SectionErrorBoundary>
           </TabsContent>
 
@@ -443,10 +348,58 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
-          {/* ─── OFFERS TAB ─── */}
-          <TabsContent value="offers" className="space-y-6">
-            <SectionErrorBoundary sectionName="Offers">
-              <ClientFulfillmentWorkspace client={client} />
+          {/* ─── MASTER DOC TAB ─── */}
+          <TabsContent value="master-doc" className="space-y-4">
+            <SectionErrorBoundary sectionName="Master Doc">
+              <h2 className="text-lg font-bold mb-3">Master Doc</h2>
+              {agencySettings?.kpi_google_doc_url ? (
+                <div className="space-y-3">
+                  <Button asChild variant="outline" size="sm">
+                    <a href={agencySettings.kpi_google_doc_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in new tab
+                    </a>
+                  </Button>
+                  <iframe
+                    src={agencySettings.kpi_google_doc_url.replace('/edit', '/preview')}
+                    className="w-full h-[80vh] border border-border rounded-lg"
+                    title="Master Doc"
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No Master Doc URL configured. Add one in Agency Settings → Integrations.</p>
+              )}
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── REPORTING SHEET TAB ─── */}
+          <TabsContent value="reporting-sheet" className="space-y-4">
+            <SectionErrorBoundary sectionName="Reporting Sheet">
+              <h2 className="text-lg font-bold mb-3">Reporting Sheet</h2>
+              {agencySettings?.kpi_google_sheet_url ? (
+                <div className="space-y-3">
+                  <Button asChild variant="outline" size="sm">
+                    <a href={agencySettings.kpi_google_sheet_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in new tab
+                    </a>
+                  </Button>
+                  <iframe
+                    src={agencySettings.kpi_google_sheet_url.replace('/edit', '/preview')}
+                    className="w-full h-[80vh] border border-border rounded-lg"
+                    title="Reporting Sheet"
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No Reporting Sheet URL configured. Add one in Agency Settings → Integrations.</p>
+              )}
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── ONBOARDING INFO TAB ─── */}
+          <TabsContent value="onboarding-info" className="space-y-6">
+            <SectionErrorBoundary sectionName="Onboarding Info">
+              <OnboardingChecklist clientId={clientId} clientType={client?.description} />
             </SectionErrorBoundary>
           </TabsContent>
 
@@ -455,39 +408,6 @@ export default function ClientDetail() {
             <SectionErrorBoundary sectionName="Pipeline">
               <h2 className="text-lg font-bold mb-3">Sales Pipeline</h2>
               <PipelineTab clientId={client.id} isPublicView={false} />
-            </SectionErrorBoundary>
-
-            <SectionErrorBoundary sectionName="Funnel Preview">
-              <h2 className="text-lg font-bold mb-3">Funnel Pages</h2>
-              <FunnelPreviewTab clientId={client.id} isPublicView={false} />
-            </SectionErrorBoundary>
-          </TabsContent>
-
-          {/* ─── SLACK TAB ─── */}
-          <TabsContent value="slack" className="space-y-6">
-            <SectionErrorBoundary sectionName="Slack Chat">
-              <h2 className="text-lg font-bold mb-3">Slack Channels</h2>
-              <SlackChatTab clientId={client.id} clientName={client.name} />
-            </SectionErrorBoundary>
-          </TabsContent>
-
-          {/* ─── WEEKLY SYNC TAB ─── */}
-          <TabsContent value="weekly-sync" className="space-y-6">
-            <SectionErrorBoundary sectionName="Weekly Sync">
-              <WeeklySyncTab clientId={client.id} clientName={client.name} />
-            </SectionErrorBoundary>
-          </TabsContent>
-
-          {/* ─── FUNNELS TAB ─── */}
-          <TabsContent value="funnels" className="space-y-6">
-            <SectionErrorBoundary sectionName="Funnels">
-              <ClientFunnelsTab
-                clientId={clientId!}
-                clientName={client?.name || ''}
-                clientSlug={(client as any)?.slug}
-                offerDescription={(client as any)?.offer_description}
-                logoUrl={(client as any)?.logo_url}
-              />
             </SectionErrorBoundary>
           </TabsContent>
 
