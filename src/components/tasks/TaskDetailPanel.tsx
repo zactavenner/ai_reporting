@@ -83,6 +83,7 @@ import { SubtaskRow } from './SubtaskRow';
 import { MentionTextarea, parseMentions } from './MentionTextarea';
 import { useCreateNotification } from './NotificationsTab';
 import { useAgencyPods } from '@/hooks/useAgencyPods';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -149,6 +150,7 @@ function useClientMetaAdAccounts(clientId?: string) {
     const uploadFile = useUploadTaskFile();
     const createNotification = useCreateNotification();
     const { data: pods = [] } = useAgencyPods();
+  const { data: agencySettings } = useAgencySettings();
    const { currentMember } = useTeamMember();
    const { reviewFile, isReviewing, reviewingFileId } = useTaskFileReview();
    
