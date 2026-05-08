@@ -614,6 +614,13 @@ const Index = () => {
               </SectionErrorBoundary>
             )}
 
+            {/* Lead Enrichment */}
+            {activeTab === 'enrichment' && (
+              <SectionErrorBoundary sectionName="Enrichment">
+                <EnrichmentTab />
+              </SectionErrorBoundary>
+            )}
+
             {/* Avatar Ad Generator */}
             {activeTab === 'avatar-ad-gen' && (
               <SectionErrorBoundary sectionName="Avatar Ad Generator">
