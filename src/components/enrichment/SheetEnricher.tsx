@@ -85,7 +85,9 @@ export function SheetEnricher({ clients }: Props) {
   async function runEnrichment() {
     if (!clientId) { toast.error('Select a client'); return; }
     if (!rows.length) { toast.error('Upload a file first'); return; }
-    if (!emailCol && !phoneCol) { toast.error('Pick an email or phone column'); return; }
+    const eCol = emailCol && emailCol !== '__none__' ? emailCol : '';
+    const pCol = phoneCol && phoneCol !== '__none__' ? phoneCol : '';
+    if (!eCol && !pCol) { toast.error('Pick an email or phone column'); return; }
 
     setRunning(true);
     setProgress({ done: 0, total: rows.length, matched: 0 });
@@ -98,8 +100,8 @@ export function SheetEnricher({ clients }: Props) {
       while (idx < rows.length) {
         const i = idx++;
         const row = rows[i];
-        const email = emailCol ? String(row[emailCol] || '').trim() : '';
-        const phone = phoneCol ? String(row[phoneCol] || '').trim() : '';
+          const email = eCol ? String(row[eCol] || '').trim() : '';
+          const phone = pCol ? String(row[pCol] || '').trim() : '';
         const enriched: Row = { ...row };
         try {
           const { data, error } = await supabase.functions.invoke('enrich-contact-lookup', {
