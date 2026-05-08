@@ -660,9 +660,88 @@ Deno.serve(async (req) => {
       }
     }
 
-    // [DISABLED] Enrichment push-back to GHL (notes + 'enriched' tag) was removed
-    // per agency request to keep enrichment data local and avoid cluttering GHL contacts.
-    // Re-enable by restoring the prior block from git history if needed.
+    // ============================================================
+    // Push enrichment summary as a NOTE to the GHL contact
+    // (Re-enabled — clean financial summary formatted for readability)
+    // ============================================================
+    try {
+      const { data: ghlClient } = await supabase
+        .from('clients')
+        .select('ghl_api_key, ghl_location_id')
+        .eq('id', client_id)
+        .single();
+
+      if (ghlClient?.ghl_api_key && external_id) {
+        const er = enrichRecord;
+        const fmtMoney = (v: any) => {
+          if (v === null || v === undefined || v === '') return null;
+          const n = typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, ''));
+          return Number.isFinite(n) && n > 0 ? `$${n.toLocaleString()}` : String(v);
+        };
+
+        const lines: string[] = [];
+        lines.push('📊 RETARGETIQ ENRICHMENT');
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('');
+        lines.push('💰 FINANCIAL PROFILE');
+        if (dataFields.net_worth)          lines.push(`  • Net Worth:          ${dataFields.net_worth}`);
+        if (dataFields.household_income)   lines.push(`  • Household Income:   ${dataFields.household_income}`);
+        if (dataFields.discretionary_income) lines.push(`  • Discretionary Inc:  ${dataFields.discretionary_income}`);
+        if (dataFields.financial_power != null) lines.push(`  • Financial Power:    ${dataFields.financial_power}`);
+        if (dataFields.credit_range)       lines.push(`  • Credit Range:       ${dataFields.credit_range}`);
+        if (dataFields.is_investor)        lines.push(`  • Active Investor:    Yes`);
+        if (dataFields.owns_stocks_bonds)  lines.push(`  • Owns Stocks/Bonds:  Yes`);
+        if (dataFields.owns_investments)   lines.push(`  • Owns Investments:   Yes`);
+        lines.push('');
+        lines.push('🏡 PROPERTY & HOME');
+        if (dataFields.home_ownership)     lines.push(`  • Ownership:          ${dataFields.home_ownership}`);
+        if (dataFields.home_value)         lines.push(`  • Home Value:         ${fmtMoney(dataFields.home_value)}`);
+        if (dataFields.median_home_value)  lines.push(`  • Median Home Value:  ${fmtMoney(dataFields.median_home_value)}`);
+        if (dataFields.mortgage_amount)    lines.push(`  • Mortgage:           ${fmtMoney(dataFields.mortgage_amount)}`);
+        if (er.address)                    lines.push(`  • Address:            ${er.address}`);
+        lines.push('');
+        lines.push('👤 DEMOGRAPHICS');
+        if (dataFields.age)                lines.push(`  • Age:                ${dataFields.age}`);
+        if (er.gender)                     lines.push(`  • Gender:             ${er.gender}`);
+        if (dataFields.marital_status)     lines.push(`  • Marital Status:     ${dataFields.marital_status}`);
+        if (dataFields.education)          lines.push(`  • Education:          ${dataFields.education}`);
+        if (dataFields.occupation)         lines.push(`  • Occupation:         ${dataFields.occupation}`);
+        if (er.company_name)               lines.push(`  • Company:            ${er.company_name}${er.company_title ? ` (${er.company_title})` : ''}`);
+        if (er.linkedin_url)               lines.push(`  • LinkedIn:           ${er.linkedin_url}`);
+        if (spouseIdentities.length > 0) {
+          lines.push('');
+          lines.push('👥 HOUSEHOLD');
+          for (const sp of spouseIdentities) {
+            const nm = `${sp.firstName || ''} ${sp.lastName || ''}`.trim() || '(unnamed)';
+            lines.push(`  • ${nm}${sp.occupation ? ` — ${sp.occupation}` : ''}`);
+          }
+        }
+        lines.push('');
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push(`Enriched ${new Date().toLocaleDateString()} via ${merged.methods.join('+')} (${merged.allIdentities.length} identities)`);
+
+        const noteBody = lines.join('\n');
+
+        const noteRes = await fetch(`https://services.leadconnectorhq.com/contacts/${external_id}/notes`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+            'Content-Type': 'application/json',
+            'Version': '2021-07-28',
+          },
+          body: JSON.stringify({ body: noteBody }),
+        });
+
+        if (noteRes.ok) {
+          console.log(`[RetargetIQ] ✓ Pushed enrichment note to GHL contact ${external_id}`);
+        } else {
+          const errText = await noteRes.text();
+          console.error(`[RetargetIQ] Failed to push GHL note (${noteRes.status}):`, errText.slice(0, 300));
+        }
+      }
+    } catch (ghlErr) {
+      console.error('[RetargetIQ] GHL note push error (non-fatal):', ghlErr);
+    }
 
     // Push enrichment summary to HubSpot contact engagement/note
     try {

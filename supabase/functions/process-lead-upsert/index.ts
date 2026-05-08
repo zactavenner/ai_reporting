@@ -190,6 +190,53 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 4. Auto-enrich newly inserted leads via RetargetIQ (fire-and-forget)
+    if (action === "insert" && leadId) {
+      const enrichTask = (async () => {
+        try {
+          // Require a configured RetargetIQ slug for this client; otherwise skip.
+          const { data: cs } = await supabase
+            .from("client_settings")
+            .select("retargetiq_website_slug, retargetiq_auto_enrich")
+            .eq("client_id", client_id)
+            .maybeSingle();
+
+          if (!cs?.retargetiq_website_slug) return;
+          // If the auto-enrich flag exists and is explicitly false, respect it.
+          if (cs.retargetiq_auto_enrich === false) return;
+
+          const phone = (fields as any).phone as string | undefined;
+          const email = (fields as any).email as string | undefined;
+          const name = ((fields as any).name as string | undefined) || "";
+          if (!phone && !email) return;
+
+          const parts = name.trim().split(/\s+/);
+          const first_name = parts[0] || undefined;
+          const last_name = parts.slice(1).join(" ") || undefined;
+
+          await supabase.functions.invoke("enrich-lead-retargetiq", {
+            body: {
+              client_id,
+              lead_id: leadId,
+              external_id,
+              phone,
+              email,
+              first_name,
+              last_name,
+            },
+          });
+        } catch (e) {
+          console.error("[process-lead-upsert] auto-enrich failed:", e);
+        }
+      })();
+
+      if (typeof (globalThis as any).EdgeRuntime !== "undefined") {
+        (globalThis as any).EdgeRuntime.waitUntil(enrichTask);
+      } else {
+        enrichTask.catch(() => {});
+      }
+    }
+
     return jsonResponse({
       ok: true,
       action,
