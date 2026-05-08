@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sparkles, RefreshCw, CheckCircle2, AlertCircle, Database as DbIcon, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { SheetEnricher } from './SheetEnricher';
 
 interface ClientEnrichmentRow {
   id: string;
@@ -165,6 +166,9 @@ export function EnrichmentTab() {
           <p>Use <b>Bulk Enrich</b> to backfill existing un-enriched leads (50 at a time).</p>
         </CardContent>
       </Card>
+
+      {/* Sheet enrichment */}
+      <SheetEnricher clients={(rows || []).map(r => ({ id: r.id, name: r.name }))} />
 
       {/* Per-client table */}
       <Card>
