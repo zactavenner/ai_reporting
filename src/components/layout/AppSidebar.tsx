@@ -29,6 +29,7 @@ import {
   Cpu,
   TrendingUp,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -86,6 +87,11 @@ const navStructure = [
     title: 'Agents',
     value: 'agents',
     icon: Cpu,
+  },
+  {
+    title: 'Enrichment',
+    value: 'enrichment',
+    icon: Sparkles,
   },
   {
     title: 'Ads Manager',
