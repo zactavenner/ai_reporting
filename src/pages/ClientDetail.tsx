@@ -8,6 +8,8 @@ import { FundedInvestorsDrillDownModal } from '@/components/drilldown/FundedInve
 import { toast } from 'sonner';
 import { VoiceRecordButton } from '@/components/voice/VoiceRecordButton';
 import { ActivityPanel } from '@/components/activity/ActivityPanel';
+import { ActivityTabView } from '@/components/activity/ActivityTabView';
+import { Activity as ActivityIcon } from 'lucide-react';
 import { ClientMeetingsSection } from '@/components/meetings/ClientMeetingsSection';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -318,6 +320,10 @@ export default function ClientDetail() {
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
+            <TabsTrigger value="activity" className="gap-2">
+              <ActivityIcon className="h-4 w-4" />
+              Activity
+            </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2">
               <Cog className="h-4 w-4" />
               Settings
@@ -388,6 +394,20 @@ export default function ClientDetail() {
           <TabsContent value="pipeline" className="space-y-6">
             <SectionErrorBoundary sectionName="Funnel">
               <FunnelPreviewTab clientId={client.id} isPublicView={false} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── ACTIVITY TAB ─── */}
+          <TabsContent value="activity" className="space-y-6">
+            <SectionErrorBoundary sectionName="Activity">
+              <h2 className="text-lg font-bold mb-3">Activity</h2>
+              <ActivityTabView
+                tasks={clientTasks}
+                voiceNotes={voiceNotes}
+                meetings={meetings}
+                creatives={creatives}
+                onActivityClick={handleActivityClick}
+              />
             </SectionErrorBoundary>
           </TabsContent>
 
