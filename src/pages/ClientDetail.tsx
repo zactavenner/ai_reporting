@@ -377,6 +377,7 @@ export default function ClientDetail() {
                 label="Master Doc"
                 url={agencySettings?.kpi_google_doc_url || ''}
                 fieldKey="kpi_google_doc_url"
+                clientId={clientId}
               />
             </SectionErrorBoundary>
           </TabsContent>
@@ -389,6 +390,7 @@ export default function ClientDetail() {
                 label="Reporting Sheet"
                 url={agencySettings?.kpi_google_sheet_url || ''}
                 fieldKey="kpi_google_sheet_url"
+                clientId={clientId}
               />
             </SectionErrorBoundary>
           </TabsContent>

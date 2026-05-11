@@ -28,6 +28,49 @@ import { SyncHealthIndicator, getSyncStatus } from './SyncHealthIndicator';
 import { useSyncQueue } from '@/hooks/useSyncQueue';
 import { DollarSign, Target, Plug, Loader2, RefreshCw, CheckCircle, XCircle, Users, Lock, Eye, EyeOff, AlertTriangle, ListOrdered, MessageSquare as MessageSquareIcon } from 'lucide-react';
 import { ClientSheetBindingCard } from './ClientSheetBindingCard';
+
+function ClientUrlField({
+  clientId,
+  label,
+  fieldKey,
+}: {
+  clientId: string;
+  label: string;
+  fieldKey: 'kpi_google_doc_url' | 'kpi_google_sheet_url';
+}) {
+  const { data: cs } = useClientSettings(clientId);
+  const update = useUpdateClientSettings();
+  const initial = ((cs as any)?.[fieldKey] as string | null | undefined) || '';
+  const [val, setVal] = useState(initial);
+  useEffect(() => { setVal(initial); }, [initial]);
+  const dirty = val.trim() !== initial.trim();
+  return (
+    <div className="space-y-1">
+      <Label className="text-sm">{label}</Label>
+      <div className="flex gap-2">
+        <Input
+          placeholder="https://docs.google.com/..."
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+        />
+        <Button
+          size="sm"
+          disabled={!dirty || update.isPending}
+          onClick={async () => {
+            try {
+              await update.mutateAsync({ client_id: clientId, [fieldKey]: val.trim() || null } as any);
+              toast.success(`${label} saved`);
+            } catch (e: any) {
+              toast.error('Failed to save: ' + (e?.message || 'Unknown error'));
+            }
+          }}
+        >
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
 interface ClientSettingsModalProps {
   client: Client | null;
   open: boolean;
@@ -450,6 +493,27 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
 
           <TabsContent value="data" className="space-y-4 mt-4">
             {client && <ClientSheetBindingCard clientId={client.id} clientName={client.name} />}
+            {client && (
+              <div className="border-2 border-border p-4 space-y-4">
+                <div>
+                  <h4 className="font-medium mb-1">Reporting Sheet & Master Doc URLs</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Set this client's Google Sheet (Reporting Sheet) and Google Doc (Master Doc) URLs.
+                    These power the embedded Reporting Sheet and Master Doc tabs on the client page.
+                  </p>
+                </div>
+                <ClientUrlField
+                  clientId={client.id}
+                  label="Reporting Sheet URL"
+                  fieldKey="kpi_google_sheet_url"
+                />
+                <ClientUrlField
+                  clientId={client.id}
+                  label="Master Doc URL"
+                  fieldKey="kpi_google_doc_url"
+                />
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="teams" className="space-y-4 mt-4">
