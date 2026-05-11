@@ -455,6 +455,85 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
             <div className="border-2 border-border p-4 space-y-4">
               <div>
                 <h4 className="font-medium mb-1 flex items-center gap-2">
+                  <Sheet className="h-4 w-4" />
+                  Master Spreadsheet (Agency-wide)
+                </h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  This sheet is embedded on the main dashboard for all admins. Edits made there save directly in Google Sheets.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="masterSheetUrl">Master Sheet URL</Label>
+                    <Input
+                      id="masterSheetUrl"
+                      type="url"
+                      value={masterSheetUrl}
+                      onChange={(e) => setMasterSheetUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      className="font-mono text-xs mt-1"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="masterDefaultGid">Default tab gid</Label>
+                      <Input
+                        id="masterDefaultGid"
+                        value={masterDefaultGid}
+                        onChange={(e) => setMasterDefaultGid(e.target.value)}
+                        placeholder="e.g. 943777908"
+                        className="font-mono text-xs mt-1"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!masterSheetUrl.trim() || discoveringTabs}
+                        onClick={async () => {
+                          const m = masterSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                          if (!m) { toast.error('Invalid sheet URL'); return; }
+                          setDiscoveringTabs(true);
+                          try {
+                            const { data, error } = await (await import('@/integrations/supabase/client')).supabase.functions.invoke('fetch-sheet-metrics', {
+                              body: { sheet_id: m[1], action: 'list_tabs' },
+                            });
+                            if (error) throw error;
+                            const tabs = (data as any)?.tabs || [];
+                            setMasterPinnedRaw(tabs.map((t: any) => `${t.gid}|${t.title}`).join('\n'));
+                            toast.success(`Found ${tabs.length} tabs`);
+                          } catch (err: any) {
+                            toast.error(`Failed: ${err.message || 'unknown'}`);
+                          } finally {
+                            setDiscoveringTabs(false);
+                          }
+                        }}
+                      >
+                        {discoveringTabs ? 'Loading…' : 'Discover tabs'}
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="masterPinned">Pinned tabs (one per line: <code>gid|Label</code>)</Label>
+                    <Textarea
+                      id="masterPinned"
+                      value={masterPinnedRaw}
+                      onChange={(e) => setMasterPinnedRaw(e.target.value)}
+                      rows={6}
+                      placeholder={'943777908|Master Dashboard\n0|Current Clients'}
+                      className="font-mono text-xs mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      These show as quick buttons above the embedded sheet on the dashboard.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1 flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   KPI Tracker Links
                 </h4>
