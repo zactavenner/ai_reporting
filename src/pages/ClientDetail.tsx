@@ -34,6 +34,7 @@ import { DataAuditSection } from '@/components/dashboard/DataAuditSection';
 import { PipelineTab } from '@/components/pipeline/PipelineTab';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
 import { Input } from '@/components/ui/input';
+import { InlineUrlEmbed } from '@/components/settings/InlineUrlEmbed';
 import { PropertyManagerTab } from '@/components/properties/PropertyManagerTab';
 import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMappingSection';
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
