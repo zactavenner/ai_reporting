@@ -101,7 +101,9 @@ export function AgentsTab({ clients }: Props) {
       icon: selectedAgent.icon,
       connectors: selectedAgent.connectors,
       client_id: selectedAgent.client_id,
-    });
+      notify_channels: (selectedAgent as any).notify_channels || ['slack'],
+      whatsapp_recipients: (selectedAgent as any).whatsapp_recipients || [],
+    } as any);
     setEditMode(true);
   };
 
