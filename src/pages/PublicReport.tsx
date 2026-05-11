@@ -33,7 +33,7 @@ import { SectionErrorBoundary } from '@/components/ui/SectionErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { useQueryClient } from '@tanstack/react-query';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
-import { ExternalLink, ClipboardList, Smartphone, Layers, AlertCircle, Palette, Upload } from 'lucide-react';
+import { ExternalLink, ClipboardList, Smartphone, Layers, AlertCircle, Palette, Upload, FileText } from 'lucide-react';
 import { ClientUploadPortal } from '@/components/uploads/ClientUploadPortal';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
 import { VoiceRecordButton } from '@/components/voice/VoiceRecordButton';
@@ -332,6 +332,26 @@ function PublicReportContent() {
             <Upload className="h-4 w-4 mr-1" />
             Upload Files
           </Button>
+          {((clientSettings as any)?.kpi_google_doc_url) && (
+            <Button
+              variant={activeSection === 'master-doc' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveSection('master-doc')}
+            >
+              <FileText className="h-4 w-4 mr-1" />
+              Master Doc
+            </Button>
+          )}
+          {((clientSettings as any)?.kpi_google_sheet_url) && (
+            <Button
+              variant={activeSection === 'reporting-sheet' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveSection('reporting-sheet')}
+            >
+              <ClipboardList className="h-4 w-4 mr-1" />
+              Reporting Sheet
+            </Button>
+          )}
           {customTabs.map((tab) => (
             <Button 
               key={tab.id}
@@ -434,6 +454,56 @@ function PublicReportContent() {
               clientName={client.name} 
               isPublicView={true}
             />
+          </SectionErrorBoundary>
+        )}
+
+        {/* Master Doc Section */}
+        {activeSection === 'master-doc' && (clientSettings as any)?.kpi_google_doc_url && (
+          <SectionErrorBoundary sectionName="Master Doc">
+            <div className="border-2 border-border bg-card rounded-lg overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <h3 className="font-bold">Master Doc</h3>
+                <a
+                  href={(clientSettings as any).kpi_google_doc_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  Open in new tab
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <iframe
+                src={String((clientSettings as any).kpi_google_doc_url).replace('/edit', '/preview')}
+                className="w-full h-[80vh] border-0"
+                title="Master Doc"
+              />
+            </div>
+          </SectionErrorBoundary>
+        )}
+
+        {/* Reporting Sheet Section */}
+        {activeSection === 'reporting-sheet' && (clientSettings as any)?.kpi_google_sheet_url && (
+          <SectionErrorBoundary sectionName="Reporting Sheet">
+            <div className="border-2 border-border bg-card rounded-lg overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <h3 className="font-bold">Reporting Sheet</h3>
+                <a
+                  href={(clientSettings as any).kpi_google_sheet_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  Open in new tab
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <iframe
+                src={String((clientSettings as any).kpi_google_sheet_url).replace('/edit', '/preview')}
+                className="w-full h-[80vh] border-0"
+                title="Reporting Sheet"
+              />
+            </div>
           </SectionErrorBoundary>
         )}
 
