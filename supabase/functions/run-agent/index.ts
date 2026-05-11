@@ -555,6 +555,33 @@ serve(async (req) => {
             }
           }
 
+          // ── WhatsApp dispatch (notify_channels includes 'whatsapp') ──
+          const notifyChannels: string[] = (agent as any).notify_channels || ['slack'];
+          if (notifyChannels.includes('whatsapp')) {
+            try {
+              const waMsg = parsed.whatsapp_message || parsed.slack_message || parsed.summary || aiOutput.slice(0, 500);
+              const agentRecipients: string[] = (agent as any).whatsapp_recipients || [];
+              const clientRecipients: string[] = (client as any).whatsapp_notify_numbers || [];
+              const { data: ag } = await cloudDb.from('agency_settings').select('whatsapp_default_recipients').limit(1).maybeSingle();
+              const defaultRecipients: string[] = (ag as any)?.whatsapp_default_recipients || [];
+              const recipients = Array.from(new Set([...agentRecipients, ...clientRecipients, ...defaultRecipients].filter(Boolean)));
+              if (recipients.length && waMsg) {
+                await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-whatsapp-report`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                    'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ to: recipients, message: `🤖 ${agent.name} — ${client.name}\n\n${waMsg}` }),
+                });
+                actionsTaken.push({ type: 'whatsapp_message', recipients: recipients.length });
+              }
+            } catch (e) {
+              console.error('WhatsApp dispatch failed', e);
+            }
+          }
+
           // DM notification to agency owner
           const slackApiKey = Deno.env.get('SLACK_API_KEY');
           if (slackApiKey && LOVABLE_API_KEY) {
