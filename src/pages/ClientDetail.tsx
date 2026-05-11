@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy } from 'lucide-react';
+import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles } from 'lucide-react';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
 import { AdSpendDrillDownModal } from '@/components/drilldown/AdSpendDrillDownModal';
@@ -42,6 +42,7 @@ import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMa
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
 import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
+import { AIStudioTab } from '@/components/ai/AIStudioTab';
 import { useClient } from '@/hooks/useClients';
 import { useDailyMetrics, useFundedInvestors } from '@/hooks/useMetrics';
 import { useSourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
@@ -314,6 +315,10 @@ export default function ClientDetail() {
               <Palette className="h-4 w-4" />
               Creatives
             </TabsTrigger>
+            <TabsTrigger value="ai-studio" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              AI Studio
+            </TabsTrigger>
             <TabsTrigger value="master-doc" className="gap-2">
               <FileText className="h-4 w-4" />
               Master Doc
@@ -366,6 +371,13 @@ export default function ClientDetail() {
                 clientName={client.name}
                 isPublicView={false}
               />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── AI STUDIO TAB ─── */}
+          <TabsContent value="ai-studio" className="space-y-4">
+            <SectionErrorBoundary sectionName="AI Studio">
+              <AIStudioTab clientId={client.id} clientName={client.name} />
             </SectionErrorBoundary>
           </TabsContent>
 
