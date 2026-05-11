@@ -228,28 +228,36 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
               </div>
             )}
-            {messages.map((m, i) => (
-              <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
-                <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                  {m.content}
-                  {m.tools && m.tools.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {m.tools.map((t, j) => (
-                        <div key={j} className="text-xs flex items-center gap-1 opacity-80">
-                          <Badge variant="secondary" className="text-[10px]">{t.name}</Badge>
-                          {t.result?.error ? <span className="text-destructive">{t.result.error}</span> : <span>✓</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+            {messages.map((m, i) => {
+              const isLast = i === messages.length - 1;
+              const isEmptyAssistant = m.role === 'assistant' && !m.content && (!m.tools || m.tools.length === 0);
+              if (isEmptyAssistant && !(loading && isLast)) return null;
+              return (
+                <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
+                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                    {m.tools && m.tools.length > 0 && (
+                      <div className="mb-2 space-y-1">
+                        {m.tools.map((t: any, j: number) => (
+                          <div key={j} className="text-xs flex items-center gap-2 opacity-80">
+                            <Badge variant="secondary" className="text-[10px]">{t.name}</Badge>
+                            {t.status === 'running' ? (
+                              <span className="flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
+                            ) : t.status === 'error' || t.result?.error ? (
+                              <span className="text-destructive truncate max-w-[260px]">{t.result?.error || 'failed'}</span>
+                            ) : (
+                              <span>✓</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {m.content || (loading && isLast && m.role === 'assistant' ? (
+                      <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> thinking…</span>
+                    ) : null)}
+                  </div>
                 </div>
-              </div>
-            ))}
-            {loading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Thinking…
-              </div>
-            )}
+              );
+            })}
           </div>
         </ScrollArea>
 
