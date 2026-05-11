@@ -457,6 +457,56 @@ function PublicReportContent() {
           </SectionErrorBoundary>
         )}
 
+        {/* Master Doc Section */}
+        {activeSection === 'master-doc' && (clientSettings as any)?.kpi_google_doc_url && (
+          <SectionErrorBoundary sectionName="Master Doc">
+            <div className="border-2 border-border bg-card rounded-lg overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <h3 className="font-bold">Master Doc</h3>
+                <a
+                  href={(clientSettings as any).kpi_google_doc_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  Open in new tab
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <iframe
+                src={String((clientSettings as any).kpi_google_doc_url).replace('/edit', '/preview')}
+                className="w-full h-[80vh] border-0"
+                title="Master Doc"
+              />
+            </div>
+          </SectionErrorBoundary>
+        )}
+
+        {/* Reporting Sheet Section */}
+        {activeSection === 'reporting-sheet' && (clientSettings as any)?.kpi_google_sheet_url && (
+          <SectionErrorBoundary sectionName="Reporting Sheet">
+            <div className="border-2 border-border bg-card rounded-lg overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <h3 className="font-bold">Reporting Sheet</h3>
+                <a
+                  href={(clientSettings as any).kpi_google_sheet_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  Open in new tab
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <iframe
+                src={String((clientSettings as any).kpi_google_sheet_url).replace('/edit', '/preview')}
+                className="w-full h-[80vh] border-0"
+                title="Reporting Sheet"
+              />
+            </div>
+          </SectionErrorBoundary>
+        )}
+
         {/* Custom Embed Tabs */}
         {customTabs.map((tab) => (
           activeSection === `custom-${tab.id}` && (
