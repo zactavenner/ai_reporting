@@ -14,7 +14,8 @@ serve(async (req) => {
 
   try {
      const body = await req.json();
-     const { action, audioUrl, audioBase64, clientId, clientName, isPublicRecording, durationSeconds, existingTaskContext, agencyMembers, agencyPods } = body;
+     const { action, audioUrl, audioBase64, clientId, isPublicRecording, durationSeconds, existingTaskContext, agencyMembers, agencyPods } = body;
+     let { clientName } = body;
 
      // Handle transcribe_only action (for task voice notes)
      if (action === "transcribe_only") {
@@ -36,6 +37,16 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Fallback: if clientName not provided, look it up so AI has client context
+    if (!clientName && clientId) {
+      const { data: clientRow } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .maybeSingle();
+      if (clientRow?.name) clientName = clientRow.name;
+    }
 
      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
      if (!LOVABLE_API_KEY) {
