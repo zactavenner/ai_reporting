@@ -68,6 +68,11 @@ const navStructure = [
     icon: ClipboardCheck,
   },
   {
+    title: 'Feedback',
+    value: 'feedback',
+    icon: MessageSquare,
+  },
+  {
     title: 'Onboarding',
     value: 'onboarding',
     icon: Users,
