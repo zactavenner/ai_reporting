@@ -1,4 +1,5 @@
-// AI Studio edge function - streaming SSE chat with Google Docs/Sheets tools + image generation
+// AI Studio v2 — streaming SSE chat with Google Docs/Sheets tools, high-quality static ad
+// generation, server-side persistence, and Manus-style canvas events.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -7,27 +8,44 @@ const corsHeaders = {
 };
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const GOOGLE_DOCS_API_KEY = Deno.env.get("GOOGLE_DOCS_API_KEY");
 const GOOGLE_SHEETS_API_KEY = Deno.env.get("GOOGLE_SHEETS_API_KEY");
 const GATEWAY = "https://connector-gateway.lovable.dev";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-function extractDocId(url: string): string | null {
-  const m = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
-  return m ? m[1] : null;
-}
-function extractSheetId(url: string): string | null {
-  const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
-  return m ? m[1] : null;
+// ---------- helpers ----------
+const extractDocId = (u: string) => u.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
+const extractSheetId = (u: string) => u.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + chunk, bytes.length))));
+  }
+  return btoa(binary);
 }
 
-async function gFetch(connectorPath: string, apiKey: string, init?: RequestInit) {
-  const res = await fetch(`${GATEWAY}${connectorPath}`, {
+function getDimensions(ar: string) {
+  switch (ar) {
+    case "1:1": return { w: 1024, h: 1024 };
+    case "4:5": return { w: 1024, h: 1280 };
+    case "9:16": return { w: 768, h: 1365 };
+    case "16:9": return { w: 1365, h: 768 };
+    default: return { w: 1024, h: 1024 };
+  }
+}
+
+async function gFetch(path: string, apiKey: string, init?: RequestInit) {
+  const res = await fetch(`${GATEWAY}${path}`, {
     ...init,
     headers: {
       ...(init?.headers || {}),
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "X-Connection-Api-Key": apiKey,
       "Content-Type": "application/json",
     },
@@ -38,14 +56,14 @@ async function gFetch(connectorPath: string, apiKey: string, init?: RequestInit)
   return data;
 }
 
-// ----- Tool implementations -----
+// ---------- Google tools ----------
 async function readDoc(docId: string) {
   if (!GOOGLE_DOCS_API_KEY) throw new Error("Google Docs not connected");
   const doc = await gFetch(`/google_docs/v1/documents/${docId}`, GOOGLE_DOCS_API_KEY, { method: "GET" });
   const text = (doc.body?.content || [])
     .flatMap((el: any) => el.paragraph?.elements?.map((e: any) => e.textRun?.content || "") || [])
     .join("");
-  return { title: doc.title, text: text.slice(0, 20000), endIndex: doc.body?.content?.slice(-1)?.[0]?.endIndex || 1 };
+  return { title: doc.title, text: text.slice(0, 20000) };
 }
 async function appendToDoc(docId: string, content: string) {
   if (!GOOGLE_DOCS_API_KEY) throw new Error("Google Docs not connected");
@@ -86,83 +104,342 @@ async function appendSheetRow(sheetId: string, range: string, values: any[][]) {
   });
   return { ok: true, appended_rows: values.length };
 }
-async function generateAdImage(prompt: string, model: "nano-banana-2" | "gpt-image"): Promise<{ url: string; mime: string }> {
-  const actualModel = model === "gpt-image" ? "openai/gpt-image-1" : "google/gemini-3.1-flash-image-preview";
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: actualModel,
-      messages: [{ role: "user", content: prompt }],
-      modalities: ["image", "text"],
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Image gen failed [${res.status}]: ${err}`);
-  }
-  const data = await res.json();
-  const imgUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-  if (!imgUrl) throw new Error(`No image returned`);
-  if (imgUrl.startsWith("data:")) {
-    const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-    const match = imgUrl.match(/^data:(.+?);base64,(.+)$/);
-    if (match) {
-      const mime = match[1]; const b64 = match[2];
-      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-      const ext = mime.split("/")[1] || "png";
-      const path = `ai-studio/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supa.storage.from("creatives").upload(path, bytes, { contentType: mime, upsert: false });
-      if (!error) {
-        const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
-        return { url: pub.publicUrl, mime };
-      }
-    }
-  }
-  return { url: imgUrl, mime: "image/png" };
+
+// ---------- Image generation ----------
+function buildAdPrompt(args: {
+  prompt: string;
+  aspectRatio: string;
+  brandColors?: string[];
+  brandFonts?: string[];
+  offerDescription?: string;
+  productDescription?: string;
+  includeDisclaimer?: boolean;
+  disclaimerText?: string;
+  strictBrandAdherence?: boolean;
+  hasReference?: boolean;
+}) {
+  const { w, h } = getDimensions(args.aspectRatio);
+  const hasBrand = !!args.brandColors?.length;
+  const colorRule = hasBrand
+    ? args.strictBrandAdherence
+      ? `STRICT BRAND ADHERENCE: Use ONLY these exact brand colors — no deviations: ${args.brandColors!.join(", ")}`
+      : `Use these brand colors prominently: ${args.brandColors!.join(", ")}.`
+    : args.hasReference
+      ? `Extract and replicate the EXACT color palette from the reference image.`
+      : "";
+  const fontRule = args.brandFonts?.length
+    ? `Brand fonts: ${args.brandFonts.join(", ")}`
+    : "";
+  const product = args.productDescription ? `Product/Service: ${args.productDescription}` : "";
+  const offer = args.offerDescription ? `Offer/Value Proposition: ${args.offerDescription}` : "";
+  const refRule = args.hasReference
+    ? `CRITICAL — PIXEL-PERFECT REPLICATION: A reference ad image is included. CLONE its layout, composition, colors, typography style, effects, and overall design. Replace ONLY the copy with the new product's messaging. Treat the reference as an exact template.`
+    : "";
+  const disclaimer = args.includeDisclaimer && args.disclaimerText
+    ? `MANDATORY DISCLAIMER: Include this disclaimer clearly legible at the bottom in a small but readable font: "${args.disclaimerText}"`
+    : "";
+  const safeZone = args.aspectRatio === "9:16"
+    ? `INSTAGRAM STORIES/REELS SAFE ZONE: Do NOT place important content in the top 14% or bottom 20%.`
+    : "";
+  return `Create a high-converting advertisement image.
+
+${args.prompt}
+
+${product}
+${offer}
+${colorRule}
+${fontRule}
+${refRule}
+${disclaimer}
+${safeZone}
+
+Image dimensions: ${w}x${h} (${args.aspectRatio} aspect ratio).
+
+REQUIREMENTS:
+- Professional advertisement quality
+- Eye-catching visual design with clear focal point
+- Balanced composition, modern polished aesthetic
+- Suitable for paid social platforms
+- Ultra high resolution
+
+DO NOT include:
+- Watermarks
+- Logos or brand marks of any kind
+- Stock photo artifacts
+- Low quality or blurry elements
+- The word "guaranteed" — for investment offers use "targeted returns"`.trim();
 }
 
+type ImageResult = { url: string; mime: string; storage_path: string; model: string; aspect_ratio: string };
+
+async function generateStaticAd(opts: {
+  prompt: string;
+  aspectRatio?: string;
+  referenceImageUrl?: string;
+  clientId: string | null;
+  brandContext: any;
+  quality: "pro" | "fast";
+}): Promise<ImageResult> {
+  const aspect = opts.aspectRatio || "1:1";
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+
+  const fullPrompt = buildAdPrompt({
+    prompt: opts.prompt,
+    aspectRatio: aspect,
+    brandColors: opts.brandContext?.brandColors,
+    brandFonts: opts.brandContext?.brandFonts,
+    offerDescription: opts.brandContext?.offerDescription,
+    productDescription: opts.brandContext?.productDescription,
+    includeDisclaimer: opts.brandContext?.includeDisclaimer,
+    disclaimerText: opts.brandContext?.disclaimerText,
+    strictBrandAdherence: opts.brandContext?.strictBrandAdherence,
+    hasReference: !!opts.referenceImageUrl,
+  });
+
+  let base64Image = "";
+  let mime = "image/png";
+  let modelUsed = "";
+
+  if (opts.quality === "pro" && GEMINI_API_KEY) {
+    // Direct Gemini 3 Pro Image Preview (Ads Generator 5.0 pipeline)
+    const parts: any[] = [{ text: fullPrompt }];
+    if (opts.referenceImageUrl) {
+      try {
+        const r = await fetch(opts.referenceImageUrl);
+        if (r.ok) {
+          const buf = await r.arrayBuffer();
+          parts.push({
+            inlineData: {
+              mimeType: r.headers.get("content-type") || "image/png",
+              data: arrayBufferToBase64(buf),
+            },
+          });
+        }
+      } catch (e) { console.warn("ref image fetch failed", e); }
+    }
+    modelUsed = "gemini-3-pro-image-preview";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+      },
+    );
+    if (!res.ok) throw new Error(`Gemini image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    const data = await res.json();
+    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) =>
+      p.inlineData?.mimeType?.startsWith("image/"),
+    );
+    if (!imagePart?.inlineData?.data) throw new Error("No image in Gemini response");
+    base64Image = imagePart.inlineData.data;
+    mime = imagePart.inlineData.mimeType || "image/png";
+  } else {
+    // Fast path via AI Gateway (Nano Banana 2)
+    modelUsed = "google/gemini-3.1-flash-image-preview";
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: modelUsed,
+        messages: [{ role: "user", content: fullPrompt }],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (!res.ok) throw new Error(`Gateway image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    const data = await res.json();
+    const imgUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imgUrl?.startsWith("data:")) throw new Error("Gateway returned no inline image");
+    const m = imgUrl.match(/^data:(.+?);base64,(.+)$/)!;
+    mime = m[1]; base64Image = m[2];
+  }
+
+  // Upload
+  const bytes = Uint8Array.from(atob(base64Image), c => c.charCodeAt(0));
+  const ext = (mime.split("/")[1] || "png").split("+")[0];
+  const path = `ai-studio/${opts.clientId || "shared"}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const { error } = await supa.storage.from("creatives").upload(path, bytes, { contentType: mime, upsert: false });
+  if (error) throw new Error(`Storage upload: ${error.message}`);
+  const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+
+  // Save to client_assets so it appears in existing asset views
+  if (opts.clientId) {
+    await supa.from("client_assets").insert({
+      client_id: opts.clientId,
+      asset_type: "static_ad",
+      title: opts.prompt.slice(0, 120),
+      status: "completed",
+      content: {
+        image_url: pub.publicUrl,
+        storage_path: path,
+        model: modelUsed,
+        aspect_ratio: aspect,
+        source: "ai_studio",
+        prompt: opts.prompt.slice(0, 1000),
+      },
+    });
+  }
+
+  return { url: pub.publicUrl, mime, storage_path: path, model: modelUsed, aspect_ratio: aspect };
+}
+
+// ---------- Tool schema ----------
 const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
-  { type: "function", function: { name: "append_to_doc", description: "Append new content to the end of the active Google Doc.", parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] } } },
-  { type: "function", function: { name: "replace_doc_text", description: "Find and replace all instances of a string in the active Google Doc.", parameters: { type: "object", properties: { find: { type: "string" }, replace: { type: "string" } }, required: ["find", "replace"] } } },
+  { type: "function", function: { name: "append_to_doc", description: "Append paragraphs to the end of the active Google Doc.", parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] } } },
+  { type: "function", function: { name: "replace_doc_text", description: "Find and replace text in the active Google Doc.", parameters: { type: "object", properties: { find: { type: "string" }, replace: { type: "string" } }, required: ["find", "replace"] } } },
   { type: "function", function: { name: "read_sheet", description: "Read a range from the active Google Sheet (e.g. 'Sheet1!A1:Z100').", parameters: { type: "object", properties: { range: { type: "string" } }, required: ["range"] } } },
   { type: "function", function: { name: "update_sheet_range", description: "Overwrite cells in the active Google Sheet at the given A1 range.", parameters: { type: "object", properties: { range: { type: "string" }, values: { type: "array", items: { type: "array", items: {} } } }, required: ["range", "values"] } } },
   { type: "function", function: { name: "append_sheet_row", description: "Append rows to the bottom of the active Google Sheet at the given A1 range.", parameters: { type: "object", properties: { range: { type: "string" }, values: { type: "array", items: { type: "array", items: {} } } }, required: ["range", "values"] } } },
-  { type: "function", function: { name: "generate_ad_image", description: "Generate an ad creative image. Use 'nano-banana-2' for photo-real or 'gpt-image' for text-heavy ads.", parameters: { type: "object", properties: { prompt: { type: "string" }, model: { type: "string", enum: ["nano-banana-2", "gpt-image"] } }, required: ["prompt", "model"] } } },
+  {
+    type: "function",
+    function: {
+      name: "generate_static_ad",
+      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Use 'pro' (Gemini 3 Pro Image, default) for finals; 'fast' (Nano Banana 2) for quick iteration. Optionally pass a reference_image_url to clone an existing ad's layout.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What the ad should communicate, headline ideas, key visuals." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "1:1 feed, 4:5 IG feed tall, 9:16 stories/reels, 16:9 landscape." },
+          quality: { type: "string", enum: ["pro", "fast"], description: "pro = highest quality (default), fast = quick iteration" },
+          reference_image_url: { type: "string", description: "Optional URL of a reference ad to clone the layout/style from." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
 ];
 
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
+  "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
+  "",
+  "OUTPUT RULES (CRITICAL):",
+  "- Your chat reply is for the human only. NEVER embed images, markdown image syntax (![...](...)), HTML <img> tags, or raw image URLs in your reply.",
+  "- Generated images appear automatically on the right-side Canvas. Just describe what you built in 1–2 short sentences.",
+  "- Example good reply: 'Built a 1:1 ad creative on the canvas — open it to review.'",
+  "- Example BAD reply: 'Here is the ad: ![ad](https://...)'",
+  "",
+  "TOOL USE:",
+  "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro'.",
+  "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
+  "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
+  "",
+  "COMPLIANCE:",
+  "- Never use the word 'guaranteed' for investments. Use 'targeted returns' and include risk disclaimers when writing investor copy.",
+  "",
+  `User's quality preference: ${ctx.quality}.`,
+  ctx.brandSummary,
+  ctx.docId ? `Active Google Doc: ${ctx.docUrl} (id ${ctx.docId})` : "No active Google Doc.",
+  ctx.sheetId ? `Active Google Sheet: ${ctx.sheetUrl} (id ${ctx.sheetId})` : "No active Google Sheet.",
+].filter(Boolean).join("\n");
+
+// Strip any image markdown / bare image URLs as a safety net
+function sanitizeAssistantText(t: string) {
+  return t
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
+    .replace(/<img[^>]*>/gi, "")
+    .replace(/https?:\/\/\S+\.(png|jpg|jpeg|webp|gif)\b/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// ---------- Main handler ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const { messages, docUrl, sheetUrl, defaultImageModel } = await req.json();
+  const authHeader = req.headers.get("Authorization") || "";
+  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+
+  let userId: string | null = null;
+  try {
+    const { data } = await userClient.auth.getUser();
+    userId = data.user?.id ?? null;
+  } catch {}
+  if (!userId) {
+    return new Response(JSON.stringify({ error: "Not authenticated" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const body = await req.json();
+  const { clientId, userText, docUrl, sheetUrl, quality = "pro" } = body as {
+    clientId: string; userText: string; docUrl?: string; sheetUrl?: string; quality?: "pro" | "fast";
+  };
+
+  // Upsert conversation
+  const { data: convoRow } = await supa
+    .from("ai_studio_conversations")
+    .upsert(
+      { user_id: userId, client_id: clientId, doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality, last_active_at: new Date().toISOString(), cleared_at: null },
+      { onConflict: "user_id,client_id" },
+    )
+    .select("id, cleared_at")
+    .single();
+  const conversationId = convoRow!.id;
+
+  // Load history (since cleared_at, or all)
+  const { data: history } = await supa
+    .from("ai_studio_messages")
+    .select("role, content, tools, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  const priorMessages = (history || []).map(m => ({ role: m.role, content: m.content || "" }));
+
+  // Persist user message immediately
+  await supa.from("ai_studio_messages").insert({
+    conversation_id: conversationId,
+    user_id: userId,
+    role: "user",
+    content: userText,
+  });
+
+  // Brand context
+  let brandContext: any = {};
+  let brandSummary = "No client brand context loaded.";
+  if (clientId) {
+    const { data: c } = await supa
+      .from("clients")
+      .select("name, brand_colors, brand_fonts, offer_description")
+      .eq("id", clientId).maybeSingle();
+    if (c) {
+      brandContext = {
+        brandColors: Array.isArray(c.brand_colors) ? c.brand_colors : (c.brand_colors ? Object.values(c.brand_colors) : []),
+        brandFonts: Array.isArray(c.brand_fonts) ? c.brand_fonts : (c.brand_fonts ? Object.values(c.brand_fonts) : []),
+        offerDescription: c.offer_description || "",
+        includeDisclaimer: /invest|fund|capital|return/i.test(c.offer_description || ""),
+        disclaimerText: "Investing involves risk including loss of principal. Targeted returns are not guaranteed. Past performance does not guarantee future results.",
+      };
+      brandSummary = `Client: ${c.name}. Brand colors: ${(brandContext.brandColors || []).join(", ") || "n/a"}. Brand fonts: ${(brandContext.brandFonts || []).join(", ") || "n/a"}. Offer: ${(c.offer_description || "n/a").slice(0, 200)}`;
+    }
+  }
+
   const docId = docUrl ? extractDocId(docUrl) : null;
   const sheetId = sheetUrl ? extractSheetId(sheetUrl) : null;
 
-  const sysParts = [
-    "You are an AI Studio assistant for an ads agency. You help the user edit Google Docs/Sheets and generate ad creative images.",
-    "Use tools whenever the user asks to read, write, edit, append, or summarize a doc or sheet, or to create/edit ad images.",
-    "When generating images, prefer 'nano-banana-2' for photo-real visuals; use 'gpt-image' when the ad has lots of text/typography.",
-    "Keep responses concise. After running tools, summarize what was changed.",
-    "Compliance: never use the word 'guaranteed' for investments; use 'targeted returns' and include risk disclaimers when writing investor copy.",
-    docId ? `Active Google Doc: ${docUrl} (id ${docId})` : "No active Google Doc.",
-    sheetId ? `Active Google Sheet: ${sheetUrl} (id ${sheetId})` : "No active Google Sheet.",
-    defaultImageModel ? `User default image model: ${defaultImageModel}.` : "",
-  ].filter(Boolean);
-
   const convo: any[] = [
-    { role: "system", content: sysParts.join("\n") },
-    ...messages,
+    { role: "system", content: SYSTEM({ docUrl, docId, sheetUrl, sheetId, quality, brandSummary }) },
+    ...priorMessages,
+    { role: "user", content: userText },
   ];
 
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
-      const send = (obj: any) => {
-        try { controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch {}
-      };
+      const send = (obj: any) => { try { controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch {} };
       const aborted = { v: false };
       req.signal.addEventListener("abort", () => { aborted.v = true; });
+
+      send({ type: "conversation", conversationId });
+
+      let finalAssistantText = "";
+      const finalToolEvents: any[] = [];
 
       try {
         for (let step = 0; step < 8; step++) {
@@ -171,7 +448,7 @@ Deno.serve(async (req) => {
 
           const llm = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
-            headers: { "Authorization": `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               model: "google/gemini-2.5-pro",
               messages: convo,
@@ -188,12 +465,11 @@ Deno.serve(async (req) => {
             throw new Error(`AI gateway [${llm.status}]: ${err}`);
           }
 
-          // Parse OpenAI-style SSE: stream text deltas to client; accumulate tool_calls
           const reader = llm.body!.getReader();
           const decoder = new TextDecoder();
           let buffer = "";
-          let assistantText = "";
-          const toolCallsAcc: any[] = []; // {id,name,args:string}
+          let stepText = "";
+          const toolCallsAcc: any[] = [];
 
           outer: while (true) {
             if (aborted.v) { try { reader.cancel(); } catch {} break; }
@@ -211,7 +487,7 @@ Deno.serve(async (req) => {
               const delta = evt.choices?.[0]?.delta;
               if (!delta) continue;
               if (typeof delta.content === "string" && delta.content) {
-                assistantText += delta.content;
+                stepText += delta.content;
                 send({ type: "text", delta: delta.content });
               }
               if (Array.isArray(delta.tool_calls)) {
@@ -226,8 +502,9 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Push assistant message into convo
-          const assistantMsg: any = { role: "assistant", content: assistantText || null };
+          finalAssistantText += (finalAssistantText ? "\n\n" : "") + stepText;
+
+          const assistantMsg: any = { role: "assistant", content: stepText || null };
           if (toolCallsAcc.length) {
             assistantMsg.tool_calls = toolCallsAcc.map(t => ({
               id: t.id, type: "function", function: { name: t.name, arguments: t.args || "{}" },
@@ -236,15 +513,30 @@ Deno.serve(async (req) => {
           convo.push(assistantMsg);
 
           if (!toolCallsAcc.length) {
-            send({ type: "done", text: assistantText });
+            send({ type: "done" });
             break;
           }
 
-          // Execute tools sequentially, streaming progress
+          // Execute tools
           for (const tc of toolCallsAcc) {
             if (aborted.v) break;
             const name = tc.name;
             let args: any = {}; try { args = JSON.parse(tc.args || "{}"); } catch {}
+
+            // Pre-emit canvas placeholder for image tools so UI shows skeleton
+            let canvasPlaceholderId: string | null = null;
+            if (name === "generate_static_ad") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: args.prompt || "",
+                aspect_ratio: args.aspect_ratio || "1:1",
+                quality: args.quality || quality,
+              });
+            }
+
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
             try {
@@ -254,27 +546,68 @@ Deno.serve(async (req) => {
               } else if (name === "append_to_doc") {
                 if (!docId) throw new Error("No active Google Doc URL provided.");
                 result = await appendToDoc(docId, args.content);
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "doc_edit",
+                  payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: docUrl },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data });
               } else if (name === "replace_doc_text") {
                 if (!docId) throw new Error("No active Google Doc URL provided.");
                 result = await replaceDocText(docId, args.find, args.replace);
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "doc_edit",
+                  payload: { action: "replace", find: args.find, replace: args.replace, doc_url: docUrl },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data });
               } else if (name === "read_sheet") {
                 if (!sheetId) throw new Error("No active Google Sheet URL provided.");
                 result = await readSheet(sheetId, args.range);
               } else if (name === "update_sheet_range") {
                 if (!sheetId) throw new Error("No active Google Sheet URL provided.");
                 result = await updateSheetRange(sheetId, args.range, args.values);
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "sheet_edit",
+                  payload: { action: "update", range: args.range, cells: (args.values || []).flat().length, sheet_url: sheetUrl },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data });
               } else if (name === "append_sheet_row") {
                 if (!sheetId) throw new Error("No active Google Sheet URL provided.");
                 result = await appendSheetRow(sheetId, args.range, args.values);
-              } else if (name === "generate_ad_image") {
-                const model = args.model || defaultImageModel || "nano-banana-2";
-                result = await generateAdImage(args.prompt, model);
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "sheet_edit",
+                  payload: { action: "append", range: args.range, rows: (args.values || []).length, sheet_url: sheetUrl },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data });
+              } else if (name === "generate_static_ad") {
+                const img = await generateStaticAd({
+                  prompt: args.prompt,
+                  aspectRatio: args.aspect_ratio || "1:1",
+                  referenceImageUrl: args.reference_image_url,
+                  clientId: clientId || null,
+                  brandContext,
+                  quality: (args.quality === "fast" ? "fast" : "pro"),
+                });
+                result = { ok: true, model: img.model, aspect_ratio: img.aspect_ratio, url_for_internal_use_only: img.url };
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "image",
+                  payload: {
+                    image_url: img.url,
+                    storage_path: img.storage_path,
+                    mime: img.mime,
+                    model: img.model,
+                    aspect_ratio: img.aspect_ratio,
+                    prompt: args.prompt,
+                  },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
               } else {
                 result = { error: `Unknown tool: ${name}` };
               }
             } catch (e: any) {
               result = { error: e?.message || String(e) };
+              if (canvasPlaceholderId) send({ type: "canvas_placeholder_failed", placeholder_id: canvasPlaceholderId, error: result.error });
             }
+            finalToolEvents.push({ name, args, result });
             send({ type: "tool_end", id: tc.id, name, args, result });
             convo.push({
               role: "tool",
@@ -287,6 +620,17 @@ Deno.serve(async (req) => {
         console.error("ai-studio stream error", e);
         send({ type: "error", message: e?.message || String(e) });
       } finally {
+        // Persist final assistant message
+        const cleaned = sanitizeAssistantText(finalAssistantText);
+        try {
+          await supa.from("ai_studio_messages").insert({
+            conversation_id: conversationId,
+            user_id: userId,
+            role: "assistant",
+            content: cleaned,
+            tools: finalToolEvents,
+          });
+        } catch (e) { console.error("persist assistant", e); }
         try { controller.close(); } catch {}
       }
     },

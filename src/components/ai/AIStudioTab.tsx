@@ -1,96 +1,122 @@
-import { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Copy, Wand2, Square } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAgencySettings } from '@/hooks/useAgencySettings';
-import { toast } from 'sonner';
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAgencySettings } from "@/hooks/useAgencySettings";
+import { toast } from "sonner";
+import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 
 interface Props {
   clientId: string;
   clientName: string;
 }
 
-type Msg = { role: 'user' | 'assistant'; content: string; tools?: any[] };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
 
 const SUGGESTIONS = [
-  { icon: <FileText className="h-4 w-4" />, label: 'Summarize the master doc' },
-  { icon: <TableIcon className="h-4 w-4" />, label: 'Read the first 20 rows of the sheet' },
-  { icon: <Wand2 className="h-4 w-4" />, label: 'Append a weekly recap section to the doc' },
-  { icon: <ImageIcon className="h-4 w-4" />, label: 'Generate a 1:1 ad creative for our offer' },
+  { icon: <ImageIcon className="h-4 w-4" />, label: "Generate a 1:1 ad creative for our offer" },
+  { icon: <Wand2 className="h-4 w-4" />, label: "Build a 9:16 Reels ad with a bold headline" },
+  { icon: <FileText className="h-4 w-4" />, label: "Summarize the master doc" },
+  { icon: <TableIcon className="h-4 w-4" />, label: "Read the first 20 rows of the sheet" },
 ];
+
+// Defensive: strip any image markdown / image URLs from streamed assistant text
+function stripImageMarkup(t: string) {
+  return t
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
+    .replace(/<img[^>]*>/gi, "")
+    .replace(/https?:\/\/\S+\.(png|jpg|jpeg|webp|gif)\b/gi, "")
+    .replace(/\n{3,}/g, "\n\n");
+}
 
 export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: agencySettings } = useAgencySettings();
-  const [docUrl, setDocUrl] = useState<string>('');
-  const [sheetUrl, setSheetUrl] = useState<string>('');
-  const [imageModel, setImageModel] = useState<'nano-banana-2' | 'gpt-image'>('nano-banana-2');
-  const storageKey = `ai-studio:${clientId}`;
-  const [hydrated, setHydrated] = useState(false);
+  const [docUrl, setDocUrl] = useState<string>("");
+  const [sheetUrl, setSheetUrl] = useState<string>("");
+  const [quality, setQuality] = useState<"pro" | "fast">("pro");
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [input, setInput] = useState('');
+  const [canvas, setCanvas] = useState<CanvasEntry[]>([]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [generatedImages, setGeneratedImages] = useState<{ url: string; prompt: string }[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Hydrate from localStorage per client
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setMessages(parsed.messages || []);
-        setGeneratedImages(parsed.generatedImages || []);
-        if (parsed.docUrl) setDocUrl(parsed.docUrl);
-        if (parsed.sheetUrl) setSheetUrl(parsed.sheetUrl);
-        if (parsed.imageModel) setImageModel(parsed.imageModel);
-      } else {
-        setMessages([]);
-        setGeneratedImages([]);
-      }
-    } catch {}
-    setHydrated(true);
-  }, [storageKey]);
+  // Load conversation + history + canvas items from DB
+  const loadHistory = useCallback(async () => {
+    setHydrated(false);
+    const { data: convo } = await supabase
+      .from("ai_studio_conversations")
+      .select("*")
+      .eq("client_id", clientId)
+      .maybeSingle();
 
-  // Persist on change
+    if (convo) {
+      setConversationId(convo.id);
+      if (convo.doc_url) setDocUrl(convo.doc_url);
+      if (convo.sheet_url) setSheetUrl(convo.sheet_url);
+      if (convo.image_quality === "fast" || convo.image_quality === "pro") setQuality(convo.image_quality);
+
+      const sinceClause = convo.cleared_at || "1970-01-01T00:00:00Z";
+      const [{ data: msgs }, { data: items }] = await Promise.all([
+        supabase
+          .from("ai_studio_messages")
+          .select("id, role, content, tools, created_at")
+          .eq("conversation_id", convo.id)
+          .gte("created_at", sinceClause)
+          .order("created_at", { ascending: true })
+          .limit(200),
+        supabase
+          .from("ai_studio_canvas_items")
+          .select("id, kind, payload, created_at")
+          .eq("conversation_id", convo.id)
+          .gte("created_at", sinceClause)
+          .order("created_at", { ascending: false })
+          .limit(50),
+      ]);
+      setMessages((msgs || []).map(m => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content || "",
+        tools: Array.isArray(m.tools) ? m.tools : [],
+      })));
+      setCanvas((items || []) as CanvasItem[]);
+    } else {
+      setConversationId(null);
+      setMessages([]);
+      setCanvas([]);
+    }
+    setHydrated(true);
+  }, [clientId]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  // Default URLs from agency settings (only if conversation has none)
   useEffect(() => {
     if (!hydrated) return;
-    try {
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({ messages, generatedImages, docUrl, sheetUrl, imageModel }),
-      );
-    } catch {}
-  }, [hydrated, storageKey, messages, generatedImages, docUrl, sheetUrl, imageModel]);
-
-  // Default URLs from agency settings
-  useEffect(() => {
     if (!docUrl && agencySettings?.kpi_google_doc_url) setDocUrl(agencySettings.kpi_google_doc_url);
     if (!sheetUrl && agencySettings?.kpi_google_sheet_url) setSheetUrl(agencySettings.kpi_google_sheet_url);
-  }, [agencySettings]);
+  }, [agencySettings, hydrated, docUrl, sheetUrl]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
-    const baseHistory = messages.map(m => ({ role: m.role, content: m.content }));
-    const next: Msg[] = [
-      ...messages,
-      { role: 'user', content: text },
-      { role: 'assistant', content: '', tools: [] },
-    ];
-    setMessages(next);
-    const assistantIdx = next.length - 1;
-    setInput('');
+    const userMsg: Msg = { role: "user", content: text };
+    const placeholder: Msg = { role: "assistant", content: "", tools: [] };
+    setMessages(curr => [...curr, userMsg, placeholder]);
+    const assistantIdx = messages.length + 1;
+    setInput("");
     setLoading(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -106,68 +132,91 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
+      if (!token) throw new Error("You must be signed in.");
+
       const url = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
       const res = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
         },
         body: JSON.stringify({
-          messages: [...baseHistory, { role: 'user', content: text }],
+          clientId,
+          userText: text,
           docUrl: docUrl || undefined,
           sheetUrl: sheetUrl || undefined,
-          defaultImageModel: imageModel,
-          clientId,
+          quality,
         }),
         signal: ctrl.signal,
       });
-      if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status}`);
+      if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() || '';
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
         for (const part of parts) {
-          const line = part.split('\n').find(l => l.startsWith('data:'));
+          const line = part.split("\n").find(l => l.startsWith("data:"));
           if (!line) continue;
           let evt: any; try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
-          if (evt.type === 'text') {
-            updateAssistant(m => ({ ...m, content: (m.content || '') + evt.delta }));
-          } else if (evt.type === 'tool_start') {
+
+          if (evt.type === "conversation") {
+            setConversationId(evt.conversationId);
+          } else if (evt.type === "text") {
+            updateAssistant(m => ({ ...m, content: stripImageMarkup((m.content || "") + evt.delta) }));
+          } else if (evt.type === "tool_start") {
             updateAssistant(m => ({
               ...m,
-              tools: [...(m.tools || []), { id: evt.id, name: evt.name, args: evt.args, status: 'running' }],
+              tools: [...(m.tools || []), { id: evt.id, name: evt.name, args: evt.args, status: "running" }],
             }));
-          } else if (evt.type === 'tool_end') {
+          } else if (evt.type === "tool_end") {
             updateAssistant(m => ({
               ...m,
               tools: (m.tools || []).map(t =>
-                t.id === evt.id ? { ...t, result: evt.result, status: evt.result?.error ? 'error' : 'done' } : t,
+                t.id === evt.id ? { ...t, result: evt.result, status: evt.result?.error ? "error" : "done" } : t,
               ),
             }));
-            if (evt.name === 'generate_ad_image' && evt.result?.url) {
-              setGeneratedImages(g => [{ url: evt.result.url, prompt: evt.args?.prompt || '' }, ...g]);
-            }
-          } else if (evt.type === 'error') {
-            updateAssistant(m => ({ ...m, content: (m.content || '') + `\n\n⚠️ ${evt.message}` }));
+          } else if (evt.type === "canvas_placeholder") {
+            const ph: CanvasPlaceholder = {
+              __placeholder: true,
+              placeholder_id: evt.placeholder_id,
+              kind: "image",
+              prompt: evt.prompt,
+              aspect_ratio: evt.aspect_ratio,
+              quality: evt.quality,
+            };
+            setCanvas(curr => [ph, ...curr]);
+          } else if (evt.type === "canvas_placeholder_failed") {
+            setCanvas(curr =>
+              curr.map(c => "__placeholder" in c && c.placeholder_id === evt.placeholder_id ? { ...c, failed: evt.error } : c),
+            );
+          } else if (evt.type === "canvas_item") {
+            setCanvas(curr => {
+              const filtered = evt.replace_placeholder_id
+                ? curr.filter(c => !("__placeholder" in c) || c.placeholder_id !== evt.replace_placeholder_id)
+                : curr;
+              return [evt.item as CanvasItem, ...filtered];
+            });
+          } else if (evt.type === "error") {
+            updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\n⚠️ ${evt.message}` }));
             toast.error(evt.message);
           }
         }
       }
     } catch (e: any) {
-      if (e?.name === 'AbortError') {
-        updateAssistant(m => ({ ...m, content: (m.content || '') + '\n\n_(stopped)_' }));
+      if (e?.name === "AbortError") {
+        updateAssistant(m => ({ ...m, content: (m.content || "") + "\n\n_(stopped)_" }));
       } else {
-        toast.error(e?.message || 'AI Studio failed');
-        updateAssistant(m => ({ ...m, content: (m.content || '') + `\n\nError: ${e?.message || e}` }));
+        toast.error(e?.message || "AI Studio failed");
+        updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\nError: ${e?.message || e}` }));
       }
     } finally {
       abortRef.current = null;
@@ -175,9 +224,32 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     }
   }
 
-  function stop() {
-    abortRef.current?.abort();
+  function stop() { abortRef.current?.abort(); }
+
+  async function clearConversation() {
+    if (!conversationId) { setMessages([]); setCanvas([]); return; }
+    if (!confirm("Clear this AI Studio conversation? Past messages and canvas items will be hidden.")) return;
+    const { error } = await supabase
+      .from("ai_studio_conversations")
+      .update({ cleared_at: new Date().toISOString() })
+      .eq("id", conversationId);
+    if (error) { toast.error("Failed to clear"); return; }
+    setMessages([]);
+    setCanvas([]);
+    toast.success("Conversation cleared");
   }
+
+  // Persist URL/quality changes back to conversation row
+  useEffect(() => {
+    if (!hydrated || !conversationId) return;
+    const t = setTimeout(() => {
+      supabase
+        .from("ai_studio_conversations")
+        .update({ doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality })
+        .eq("id", conversationId);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [docUrl, sheetUrl, quality, conversationId, hydrated]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr,1.1fr] gap-4 h-[calc(100vh-220px)] min-h-[600px]">
@@ -186,29 +258,22 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         <div className="p-4 border-b space-y-2">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold">AI Studio · {clientName}</h3>
+            <h3 className="font-semibold flex-1">AI Studio · {clientName}</h3>
+            <Button variant="ghost" size="sm" onClick={clearConversation} title="Clear conversation">
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Input
-              placeholder="Google Doc URL"
-              value={docUrl}
-              onChange={e => setDocUrl(e.target.value)}
-              className="h-8 text-xs"
-            />
-            <Input
-              placeholder="Google Sheet URL"
-              value={sheetUrl}
-              onChange={e => setSheetUrl(e.target.value)}
-              className="h-8 text-xs"
-            />
+            <Input placeholder="Google Doc URL" value={docUrl} onChange={e => setDocUrl(e.target.value)} className="h-8 text-xs" />
+            <Input placeholder="Google Sheet URL" value={sheetUrl} onChange={e => setSheetUrl(e.target.value)} className="h-8 text-xs" />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Image model:</span>
-            <Select value={imageModel} onValueChange={(v: any) => setImageModel(v)}>
-              <SelectTrigger className="h-7 w-[200px] text-xs"><SelectValue /></SelectTrigger>
+            <span className="text-xs text-muted-foreground">Image quality:</span>
+            <Select value={quality} onValueChange={(v: any) => setQuality(v)}>
+              <SelectTrigger className="h-7 w-[220px] text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="nano-banana-2">Nano Banana 2 (Gemini 3.1)</SelectItem>
-                <SelectItem value="gpt-image">GPT Image (best for text)</SelectItem>
+                <SelectItem value="pro">Pro — Gemini 3 Pro Image (best)</SelectItem>
+                <SelectItem value="fast">Fast — Nano Banana 2 (iterate)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -216,9 +281,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
           <div className="p-4 space-y-4">
-            {messages.length === 0 && (
+            {messages.length === 0 && hydrated && (
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">Ask anything about this client's doc, sheet, or generate an ad.</p>
+                <p className="text-sm text-muted-foreground">
+                  Ask anything about this client's doc, sheet, or generate an ad. Built creatives appear on the Canvas →
+                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {SUGGESTIONS.map(s => (
                     <Button key={s.label} variant="outline" size="sm" className="justify-start h-auto py-2" onClick={() => send(s.label)}>
@@ -230,20 +297,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             )}
             {messages.map((m, i) => {
               const isLast = i === messages.length - 1;
-              const isEmptyAssistant = m.role === 'assistant' && !m.content && (!m.tools || m.tools.length === 0);
+              const isEmptyAssistant = m.role === "assistant" && !m.content && (!m.tools || m.tools.length === 0);
               if (isEmptyAssistant && !(loading && isLast)) return null;
               return (
-                <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
-                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                <div key={m.id || i} className={m.role === "user" ? "flex justify-end" : ""}>
+                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                     {m.tools && m.tools.length > 0 && (
                       <div className="mb-2 space-y-1">
                         {m.tools.map((t: any, j: number) => (
                           <div key={j} className="text-xs flex items-center gap-2 opacity-80">
                             <Badge variant="secondary" className="text-[10px]">{t.name}</Badge>
-                            {t.status === 'running' ? (
+                            {t.status === "running" ? (
                               <span className="flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
-                            ) : t.status === 'error' || t.result?.error ? (
-                              <span className="text-destructive truncate max-w-[260px]">{t.result?.error || 'failed'}</span>
+                            ) : t.status === "error" || t.result?.error ? (
+                              <span className="text-destructive truncate max-w-[260px]">{t.result?.error || "failed"}</span>
                             ) : (
                               <span>✓</span>
                             )}
@@ -251,7 +318,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         ))}
                       </div>
                     )}
-                    {m.content || (loading && isLast && m.role === 'assistant' ? (
+                    {m.content || (loading && isLast && m.role === "assistant" ? (
                       <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> thinking…</span>
                     ) : null)}
                   </div>
@@ -265,8 +332,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
-            placeholder="Edit the doc, query the sheet, or generate an ad…"
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+            placeholder="Build an ad, edit the doc, query the sheet…"
             className="resize-none min-h-[44px] max-h-32"
             rows={1}
           />
@@ -284,35 +351,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
       {/* RIGHT — Canvas */}
       <Card className="flex flex-col overflow-hidden">
-        <Tabs defaultValue="creatives" className="flex-1 flex flex-col">
+        <Tabs defaultValue="canvas" className="flex-1 flex flex-col">
           <TabsList className="m-2 self-start">
-            <TabsTrigger value="creatives"><ImageIcon className="h-4 w-4 mr-1" /> Generated</TabsTrigger>
+            <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
             <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
             <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="creatives" className="flex-1 m-0 overflow-auto p-4">
-            {generatedImages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                Generated ad creatives will appear here.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {generatedImages.map((img, i) => (
-                  <div key={i} className="space-y-2 group">
-                    <a href={img.url} target="_blank" rel="noopener noreferrer">
-                      <img src={img.url} alt={img.prompt} className="w-full rounded-lg border" />
-                    </a>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{img.prompt}</p>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { navigator.clipboard.writeText(img.url); toast.success('URL copied'); }}>
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden">
+            <AIStudioCanvas entries={canvas} />
           </TabsContent>
 
           <TabsContent value="doc" className="flex-1 m-0 overflow-hidden">
@@ -322,7 +369,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   <span className="text-xs text-muted-foreground truncate">{docUrl}</span>
                   <a href={docUrl} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1 text-primary"><ExternalLink className="h-3 w-3" /> Open</a>
                 </div>
-                <iframe src={docUrl.replace(/\/edit.*$/, '/preview')} className="flex-1 w-full" title="Doc preview" />
+                <iframe src={docUrl.replace(/\/edit.*$/, "/preview")} className="flex-1 w-full" title="Doc preview" />
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Add a Google Doc URL above.</div>
@@ -336,7 +383,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   <span className="text-xs text-muted-foreground truncate">{sheetUrl}</span>
                   <a href={sheetUrl} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1 text-primary"><ExternalLink className="h-3 w-3" /> Open</a>
                 </div>
-                <iframe src={sheetUrl.replace(/\/edit.*$/, '/preview')} className="flex-1 w-full" title="Sheet preview" />
+                <iframe src={sheetUrl.replace(/\/edit.*$/, "/preview")} className="flex-1 w-full" title="Sheet preview" />
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Add a Google Sheet URL above.</div>
