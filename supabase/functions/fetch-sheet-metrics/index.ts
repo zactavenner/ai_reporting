@@ -231,6 +231,43 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Raw-grid mode: return headers + rows for a tab so callers (e.g. audits) can inspect data.
+    if (action === 'raw_grid') {
+      let rawTitle: string | undefined;
+      const metaRes = await fetch(
+        `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title))`,
+        { headers }
+      );
+      const metaText = await metaRes.text();
+      if (!metaRes.ok) throw new Error(`Sheet metadata fetch failed [${metaRes.status}]: ${metaText}`);
+      const meta = JSON.parse(metaText);
+      const sheets = meta?.sheets || [];
+      let target = sheets[0]?.properties;
+      if (gid !== undefined && gid !== null && gid !== '') {
+        const found = sheets.find((s: any) => String(s?.properties?.sheetId) === String(gid));
+        if (found) target = found.properties;
+      }
+      rawTitle = target?.title;
+      if (!rawTitle) throw new Error('Could not resolve sheet title for raw_grid');
+      const valuesRes = await fetch(
+        `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${rawTitle}`,
+        { headers }
+      );
+      const valuesText = await valuesRes.text();
+      if (!valuesRes.ok) throw new Error(`Sheet values fetch failed [${valuesRes.status}]: ${valuesText}`);
+      const valuesJson = JSON.parse(valuesText);
+      const allRows: any[][] = valuesJson?.values || [];
+      const headerRow = allRows[0] || [];
+      const dataRows = allRows.slice(1);
+      return new Response(JSON.stringify({
+        sheetTitle: rawTitle,
+        headers: headerRow,
+        rows: dataRows,
+        rowCount: dataRows.length,
+        fetchedAt: new Date().toISOString(),
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // 1. Resolve gid -> sheet title
     let sheetTitle: string;
     if (range && typeof range === 'string') {
