@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Copy, Wand2 } from 'lucide-react';
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Copy, Wand2, Square } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { toast } from 'sonner';
@@ -38,6 +38,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [loading, setLoading] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<{ url: string; prompt: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Hydrate from localStorage per client
   useEffect(() => {
@@ -81,36 +82,101 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
-    const next: Msg[] = [...messages, { role: 'user', content: text }];
+    const baseHistory = messages.map(m => ({ role: m.role, content: m.content }));
+    const next: Msg[] = [
+      ...messages,
+      { role: 'user', content: text },
+      { role: 'assistant', content: '', tools: [] },
+    ];
     setMessages(next);
+    const assistantIdx = next.length - 1;
     setInput('');
     setLoading(true);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    const updateAssistant = (mut: (m: Msg) => Msg) => {
+      setMessages(curr => {
+        const copy = curr.slice();
+        if (copy[assistantIdx]) copy[assistantIdx] = mut(copy[assistantIdx]);
+        return copy;
+      });
+    };
+
     try {
-      const { data, error } = await supabase.functions.invoke('ai-studio', {
-        body: {
-          messages: next.map(m => ({ role: m.role, content: m.content })),
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      const url = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+        },
+        body: JSON.stringify({
+          messages: [...baseHistory, { role: 'user', content: text }],
           docUrl: docUrl || undefined,
           sheetUrl: sheetUrl || undefined,
           defaultImageModel: imageModel,
           clientId,
-        },
+        }),
+        signal: ctrl.signal,
       });
-      if (error) throw error;
-      if ((data as any).error) throw new Error((data as any).error);
-      const tools = (data as any).tools || [];
-      setMessages(m => [...m, { role: 'assistant', content: (data as any).text || '(no reply)', tools }]);
-      // Surface generated images on the canvas
-      for (const t of tools) {
-        if (t.name === 'generate_ad_image' && t.result?.url) {
-          setGeneratedImages(g => [{ url: t.result.url, prompt: t.args?.prompt || '' }, ...g]);
+      if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        for (const part of parts) {
+          const line = part.split('\n').find(l => l.startsWith('data:'));
+          if (!line) continue;
+          let evt: any; try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (evt.type === 'text') {
+            updateAssistant(m => ({ ...m, content: (m.content || '') + evt.delta }));
+          } else if (evt.type === 'tool_start') {
+            updateAssistant(m => ({
+              ...m,
+              tools: [...(m.tools || []), { id: evt.id, name: evt.name, args: evt.args, status: 'running' }],
+            }));
+          } else if (evt.type === 'tool_end') {
+            updateAssistant(m => ({
+              ...m,
+              tools: (m.tools || []).map(t =>
+                t.id === evt.id ? { ...t, result: evt.result, status: evt.result?.error ? 'error' : 'done' } : t,
+              ),
+            }));
+            if (evt.name === 'generate_ad_image' && evt.result?.url) {
+              setGeneratedImages(g => [{ url: evt.result.url, prompt: evt.args?.prompt || '' }, ...g]);
+            }
+          } else if (evt.type === 'error') {
+            updateAssistant(m => ({ ...m, content: (m.content || '') + `\n\n⚠️ ${evt.message}` }));
+            toast.error(evt.message);
+          }
         }
       }
     } catch (e: any) {
-      toast.error(e?.message || 'AI Studio failed');
-      setMessages(m => [...m, { role: 'assistant', content: `Error: ${e?.message || e}` }]);
+      if (e?.name === 'AbortError') {
+        updateAssistant(m => ({ ...m, content: (m.content || '') + '\n\n_(stopped)_' }));
+      } else {
+        toast.error(e?.message || 'AI Studio failed');
+        updateAssistant(m => ({ ...m, content: (m.content || '') + `\n\nError: ${e?.message || e}` }));
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
   }
 
   return (
@@ -162,28 +228,36 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
               </div>
             )}
-            {messages.map((m, i) => (
-              <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
-                <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                  {m.content}
-                  {m.tools && m.tools.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {m.tools.map((t, j) => (
-                        <div key={j} className="text-xs flex items-center gap-1 opacity-80">
-                          <Badge variant="secondary" className="text-[10px]">{t.name}</Badge>
-                          {t.result?.error ? <span className="text-destructive">{t.result.error}</span> : <span>✓</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+            {messages.map((m, i) => {
+              const isLast = i === messages.length - 1;
+              const isEmptyAssistant = m.role === 'assistant' && !m.content && (!m.tools || m.tools.length === 0);
+              if (isEmptyAssistant && !(loading && isLast)) return null;
+              return (
+                <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
+                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                    {m.tools && m.tools.length > 0 && (
+                      <div className="mb-2 space-y-1">
+                        {m.tools.map((t: any, j: number) => (
+                          <div key={j} className="text-xs flex items-center gap-2 opacity-80">
+                            <Badge variant="secondary" className="text-[10px]">{t.name}</Badge>
+                            {t.status === 'running' ? (
+                              <span className="flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
+                            ) : t.status === 'error' || t.result?.error ? (
+                              <span className="text-destructive truncate max-w-[260px]">{t.result?.error || 'failed'}</span>
+                            ) : (
+                              <span>✓</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {m.content || (loading && isLast && m.role === 'assistant' ? (
+                      <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> thinking…</span>
+                    ) : null)}
+                  </div>
                 </div>
-              </div>
-            ))}
-            {loading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Thinking…
-              </div>
-            )}
+              );
+            })}
           </div>
         </ScrollArea>
 
@@ -196,9 +270,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             className="resize-none min-h-[44px] max-h-32"
             rows={1}
           />
-          <Button onClick={() => send(input)} disabled={loading || !input.trim()} size="icon">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+          {loading ? (
+            <Button onClick={stop} size="icon" variant="destructive" title="Stop">
+              <Square className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button onClick={() => send(input)} disabled={!input.trim()} size="icon">
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </Card>
 
