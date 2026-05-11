@@ -24,6 +24,7 @@ import { ImportHistoryModal } from '@/components/import/ImportHistoryModal';
 import { AddCustomTabModal } from '@/components/import/AddCustomTabModal';
 import { CreativesSection } from '@/components/creative/CreativesSection';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
+import { useUpdateAgencySettings } from '@/hooks/useAgencySettings';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { AIAnalysisChat } from '@/components/ai/AIAnalysisChat';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
@@ -31,6 +32,8 @@ import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { DataAuditSection } from '@/components/dashboard/DataAuditSection';
 
 import { PipelineTab } from '@/components/pipeline/PipelineTab';
+import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
+import { Input } from '@/components/ui/input';
 import { PropertyManagerTab } from '@/components/properties/PropertyManagerTab';
 import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMappingSection';
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
@@ -312,7 +315,7 @@ export default function ClientDetail() {
             </TabsTrigger>
             <TabsTrigger value="pipeline" className="gap-2">
               <Layers className="h-4 w-4" />
-              Pipeline
+              Funnel
             </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2">
               <Cog className="h-4 w-4" />
@@ -353,23 +356,11 @@ export default function ClientDetail() {
           <TabsContent value="master-doc" className="space-y-4">
             <SectionErrorBoundary sectionName="Master Doc">
               <h2 className="text-lg font-bold mb-3">Master Doc</h2>
-              {agencySettings?.kpi_google_doc_url ? (
-                <div className="space-y-3">
-                  <Button asChild variant="outline" size="sm">
-                    <a href={agencySettings.kpi_google_doc_url} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open in new tab
-                    </a>
-                  </Button>
-                  <iframe
-                    src={agencySettings.kpi_google_doc_url.replace('/edit', '/preview')}
-                    className="w-full h-[80vh] border border-border rounded-lg"
-                    title="Master Doc"
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No Master Doc URL configured. Add one in Agency Settings → Integrations.</p>
-              )}
+              <InlineUrlEmbed
+                label="Master Doc"
+                url={agencySettings?.kpi_google_doc_url || ''}
+                fieldKey="kpi_google_doc_url"
+              />
             </SectionErrorBoundary>
           </TabsContent>
 
@@ -377,23 +368,11 @@ export default function ClientDetail() {
           <TabsContent value="reporting-sheet" className="space-y-4">
             <SectionErrorBoundary sectionName="Reporting Sheet">
               <h2 className="text-lg font-bold mb-3">Reporting Sheet</h2>
-              {agencySettings?.kpi_google_sheet_url ? (
-                <div className="space-y-3">
-                  <Button asChild variant="outline" size="sm">
-                    <a href={agencySettings.kpi_google_sheet_url} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open in new tab
-                    </a>
-                  </Button>
-                  <iframe
-                    src={agencySettings.kpi_google_sheet_url.replace('/edit', '/preview')}
-                    className="w-full h-[80vh] border border-border rounded-lg"
-                    title="Reporting Sheet"
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No Reporting Sheet URL configured. Add one in Agency Settings → Integrations.</p>
-              )}
+              <InlineUrlEmbed
+                label="Reporting Sheet"
+                url={agencySettings?.kpi_google_sheet_url || ''}
+                fieldKey="kpi_google_sheet_url"
+              />
             </SectionErrorBoundary>
           </TabsContent>
 
@@ -406,9 +385,8 @@ export default function ClientDetail() {
 
           {/* ─── PIPELINE TAB ─── */}
           <TabsContent value="pipeline" className="space-y-6">
-            <SectionErrorBoundary sectionName="Pipeline">
-              <h2 className="text-lg font-bold mb-3">Sales Pipeline</h2>
-              <PipelineTab clientId={client.id} isPublicView={false} />
+            <SectionErrorBoundary sectionName="Funnel">
+              <FunnelPreviewTab clientId={client.id} isPublicView={false} />
             </SectionErrorBoundary>
           </TabsContent>
 
