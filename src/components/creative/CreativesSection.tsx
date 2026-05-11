@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreativeApproval } from './CreativeApproval';
-import { Upload, Image, Video, Target, ExternalLink } from 'lucide-react';
+import { Upload, Image, Video, Target, ExternalLink, Pencil, Save, X } from 'lucide-react';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
+import { useClientSettings, useUpdateClientSettings } from '@/hooks/useClientSettings';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 
 const ADS_GENERATOR_URL = 'https://id-preview--b57a79c0-3e59-4a78-be94-340c58fe824e.lovable.app';
 
@@ -38,7 +41,25 @@ const generatorLinks = [
 export function CreativesSection({ clientId, clientName, isPublicView = false }: CreativesSectionProps) {
   const [activeSubTab, setActiveSubTab] = useState('approval');
   const { data: agencySettings } = useAgencySettings();
-  const canvaUrl = (agencySettings as any)?.canva_url || 'https://www.canva.com';
+  const { data: clientSettings } = useClientSettings(clientId);
+  const updateClient = useUpdateClientSettings();
+  const clientCanvaUrl = (clientSettings as any)?.canva_url as string | null | undefined;
+  const agencyCanvaUrl = (agencySettings as any)?.canva_url as string | null | undefined;
+  const canvaUrl = clientCanvaUrl || agencyCanvaUrl || '';
+
+  const [editingCanva, setEditingCanva] = useState(false);
+  const [canvaInput, setCanvaInput] = useState(clientCanvaUrl || '');
+  useEffect(() => { setCanvaInput(clientCanvaUrl || ''); }, [clientCanvaUrl]);
+
+  const saveCanva = async () => {
+    try {
+      await updateClient.mutateAsync({ client_id: clientId, canva_url: canvaInput.trim() || null } as any);
+      toast.success('Canva URL saved for this client');
+      setEditingCanva(false);
+    } catch (e: any) {
+      toast.error('Failed to save: ' + (e?.message || 'Unknown error'));
+    }
+  };
 
   if (isPublicView) {
     return (
@@ -79,11 +100,40 @@ export function CreativesSection({ clientId, clientName, isPublicView = false }:
         <TabsContent value="canva" className="mt-4">
           <Card className="p-6 flex flex-col items-start gap-3">
             <h3 className="font-semibold">Canva Workspace</h3>
-            <p className="text-sm text-muted-foreground">Open Canva to design and edit creative assets.</p>
-            <Button onClick={() => window.open(canvaUrl, '_blank')} className="gap-2">
-              <ExternalLink className="h-4 w-4" />
-              Open Canva
-            </Button>
+            <p className="text-sm text-muted-foreground">
+              Open this client's Canva design to create and edit creative assets.
+            </p>
+
+            {editingCanva || !canvaUrl ? (
+              <div className="flex gap-2 w-full max-w-2xl">
+                <Input
+                  placeholder="https://www.canva.com/design/..."
+                  value={canvaInput}
+                  onChange={(e) => setCanvaInput(e.target.value)}
+                />
+                <Button onClick={saveCanva} disabled={updateClient.isPending} className="gap-2">
+                  <Save className="h-4 w-4" /> Save
+                </Button>
+                {canvaUrl && (
+                  <Button variant="ghost" onClick={() => { setCanvaInput(clientCanvaUrl || ''); setEditingCanva(false); }} className="gap-2">
+                    <X className="h-4 w-4" /> Cancel
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button onClick={() => window.open(canvaUrl, '_blank')} className="gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  Open Canva
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setEditingCanva(true)} className="gap-2">
+                  <Pencil className="h-4 w-4" /> Edit URL
+                </Button>
+                {!clientCanvaUrl && agencyCanvaUrl && (
+                  <span className="text-xs text-muted-foreground">Using agency default</span>
+                )}
+              </div>
+            )}
           </Card>
         </TabsContent>
 
