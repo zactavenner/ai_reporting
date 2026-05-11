@@ -46,6 +46,7 @@ import { useAllDailyMetrics, useFundedInvestors, AggregatedMetrics } from '@/hoo
 import { aggregateFromSourceData, SourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
 import { useClientSourceMetrics, buildClientMetricsFromRPC } from '@/hooks/useClientSourceMetrics';
 import { useAllClientSettings, useAllClientFullSettings } from '@/hooks/useAllClientSettings';
+import { useSheetClientMetrics } from '@/hooks/useSheetClientMetrics';
 import { useAllClientMRR } from '@/hooks/useClientMRR';
 import { useMeetings, usePendingMeetingTasks, useSyncMeetings } from '@/hooks/useMeetings';
 import { useApiConnectionTest } from '@/hooks/useApiConnectionTest';
@@ -139,6 +140,15 @@ const Index = () => {
   const { data: clientThresholds = {} } = useAllClientSettings(clientIds);
   const { data: clientFullSettings = {} } = useAllClientFullSettings(clientIds);
   const { data: clientMRRSettings = {} } = useAllClientMRR(clientIds);
+
+  // Per-client KPI Google Sheet metrics (powers the dashboard table).
+  // Clients without a configured kpi_google_sheet_url are omitted, leaving their row blank.
+  const { data: sheetClientMetrics } = useSheetClientMetrics(
+    clientIds,
+    clientFullSettings as any,
+    startDate,
+    endDate,
+  );
   
   const { data: meetings = [] } = useMeetings();
   const { data: pendingTasks = [] } = usePendingMeetingTasks();
@@ -378,7 +388,7 @@ const Index = () => {
                         />
                         <DraggableClientTable
                           clients={clients}
-                          metrics={clientMetrics}
+                          metrics={sheetClientMetrics}
                           thresholds={clientThresholds}
                           fullSettings={clientFullSettings}
                           onOpenSettings={handleOpenSettings}
