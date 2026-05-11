@@ -62,7 +62,7 @@ interface Props {
   voiceNotes?: VoiceNote[];
   meetings?: Meeting[];
   creatives?: Creative[];
-  onActivityClick?: (sourceId: string, type: ActivityType) => void;
+  onActivityClick?: (sourceId: string, type: ActivityType, link?: string | null) => void;
 }
 
 export function ActivityTabView({
@@ -230,7 +230,7 @@ export function ActivityTabView({
                 <div
                   key={a.id}
                   className="flex items-start gap-3 p-4 hover:bg-muted/40 transition-colors cursor-pointer"
-                  onClick={() => onActivityClick?.(a.sourceId, a.type)}
+                  onClick={() => onActivityClick?.(a.sourceId, a.type, a.link)}
                 >
                   <span className={`mt-0.5 ${meta.tone}`}>{meta.icon}</span>
                   <div className="flex-1 min-w-0">
@@ -247,16 +247,9 @@ export function ActivityTabView({
                       <span title={format(a.timestamp, 'PPpp')}>
                         {formatDistanceToNow(a.timestamp, { addSuffix: true })}
                       </span>
-                      {a.link && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs gap-1"
-                          onClick={(e) => { e.stopPropagation(); window.open(a.link!, '_blank'); }}
-                        >
-                          <ExternalLink className="h-3 w-3" /> Open link
-                        </Button>
-                      )}
+                      <span className="inline-flex items-center gap-1 text-primary">
+                        <ExternalLink className="h-3 w-3" /> Open record
+                      </span>
                     </div>
                   </div>
                 </div>

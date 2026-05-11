@@ -137,12 +137,25 @@ export default function ClientDetail() {
     return allTasks.filter(t => t.client_id === clientId);
   }, [allTasks, clientId]);
 
-  const handleActivityClick = (activityId: string, type: string) => {
+  const handleActivityClick = (activityId: string, type: string, link?: string | null) => {
     if (type.startsWith('task_')) {
       setSearchParams({ task: activityId }, { replace: true });
       setActiveTab('tasks');
     } else if (type.startsWith('creative_')) {
+      setSearchParams({ creative: activityId }, { replace: true });
       setActiveTab('creatives');
+    } else if (type === 'meeting_synced') {
+      if (link) {
+        window.open(link, '_blank');
+      } else {
+        setSearchParams({ meeting: activityId }, { replace: true });
+      }
+    } else if (type === 'voice_note_recorded') {
+      if (link) {
+        window.open(link, '_blank');
+      } else {
+        setSearchParams({ voice: activityId }, { replace: true });
+      }
     }
   };
 
