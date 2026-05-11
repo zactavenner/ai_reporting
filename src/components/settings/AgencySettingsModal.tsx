@@ -74,6 +74,10 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const [showMeetgeekKey, setShowMeetgeekKey] = useState(false);
   const [kpiDocUrl, setKpiDocUrl] = useState('');
   const [kpiSheetUrl, setKpiSheetUrl] = useState('');
+  const [masterSheetUrl, setMasterSheetUrl] = useState('');
+  const [masterDefaultGid, setMasterDefaultGid] = useState('');
+  const [masterPinnedRaw, setMasterPinnedRaw] = useState('');
+  const [discoveringTabs, setDiscoveringTabs] = useState(false);
   const syncMeetings = useSyncMeetings();
   
   const webhookUrl = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/meetgeek-webhook`;
@@ -89,6 +93,14 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
       setMeetgeekApiKey((settings as any).meetgeek_api_key || '');
       setKpiDocUrl((settings as any).kpi_google_doc_url || '');
       setKpiSheetUrl((settings as any).kpi_google_sheet_url || '');
+      setMasterSheetUrl((settings as any).master_google_sheet_url || '');
+      setMasterDefaultGid((settings as any).master_default_gid || '');
+      const pinned = (settings as any).master_pinned_gids;
+      setMasterPinnedRaw(
+        Array.isArray(pinned)
+          ? pinned.map((p: any) => `${p?.gid ?? ''}|${p?.title ?? ''}`).join('\n')
+          : ''
+      );
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
       setSelectedGeminiModel((settings as any).selected_gemini_model || 'gemini-2.5-pro');
       setSelectedGrokModel((settings as any).selected_grok_model || 'grok-3');
@@ -98,6 +110,15 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const handleSave = async () => {
     setSaving(true);
     try {
+      const pinnedTabs = masterPinnedRaw
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const [gid, ...rest] = line.split('|');
+          return { gid: gid.trim(), title: rest.join('|').trim() || gid.trim() };
+        })
+        .filter(t => t.gid);
       await updateSettings.mutateAsync({
         ai_prompt_agency: agencyPrompt,
         ai_prompt_client: clientPrompt,
@@ -108,6 +129,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         meetgeek_api_key: meetgeekApiKey || null,
         kpi_google_doc_url: kpiDocUrl.trim() || null,
         kpi_google_sheet_url: kpiSheetUrl.trim() || null,
+        master_google_sheet_url: masterSheetUrl.trim() || null,
+        master_default_gid: masterDefaultGid.trim() || null,
+        master_pinned_gids: pinnedTabs,
         selected_openai_model: selectedOpenaiModel,
         selected_gemini_model: selectedGeminiModel,
         selected_grok_model: selectedGrokModel,
@@ -428,6 +452,85 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
           </TabsContent>
 
           <TabsContent value="integrations" className="space-y-6 mt-4">
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1 flex items-center gap-2">
+                  <Sheet className="h-4 w-4" />
+                  Master Spreadsheet (Agency-wide)
+                </h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  This sheet is embedded on the main dashboard for all admins. Edits made there save directly in Google Sheets.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="masterSheetUrl">Master Sheet URL</Label>
+                    <Input
+                      id="masterSheetUrl"
+                      type="url"
+                      value={masterSheetUrl}
+                      onChange={(e) => setMasterSheetUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      className="font-mono text-xs mt-1"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="masterDefaultGid">Default tab gid</Label>
+                      <Input
+                        id="masterDefaultGid"
+                        value={masterDefaultGid}
+                        onChange={(e) => setMasterDefaultGid(e.target.value)}
+                        placeholder="e.g. 943777908"
+                        className="font-mono text-xs mt-1"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!masterSheetUrl.trim() || discoveringTabs}
+                        onClick={async () => {
+                          const m = masterSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                          if (!m) { toast.error('Invalid sheet URL'); return; }
+                          setDiscoveringTabs(true);
+                          try {
+                            const { data, error } = await (await import('@/integrations/supabase/client')).supabase.functions.invoke('fetch-sheet-metrics', {
+                              body: { sheet_id: m[1], action: 'list_tabs' },
+                            });
+                            if (error) throw error;
+                            const tabs = (data as any)?.tabs || [];
+                            setMasterPinnedRaw(tabs.map((t: any) => `${t.gid}|${t.title}`).join('\n'));
+                            toast.success(`Found ${tabs.length} tabs`);
+                          } catch (err: any) {
+                            toast.error(`Failed: ${err.message || 'unknown'}`);
+                          } finally {
+                            setDiscoveringTabs(false);
+                          }
+                        }}
+                      >
+                        {discoveringTabs ? 'Loading…' : 'Discover tabs'}
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="masterPinned">Pinned tabs (one per line: <code>gid|Label</code>)</Label>
+                    <Textarea
+                      id="masterPinned"
+                      value={masterPinnedRaw}
+                      onChange={(e) => setMasterPinnedRaw(e.target.value)}
+                      rows={6}
+                      placeholder={'943777908|Master Dashboard\n0|Current Clients'}
+                      className="font-mono text-xs mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      These show as quick buttons above the embedded sheet on the dashboard.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="border-2 border-border p-4 space-y-4">
               <div>
                 <h4 className="font-medium mb-1 flex items-center gap-2">

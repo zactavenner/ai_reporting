@@ -9,6 +9,7 @@ import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { DraggableClientTable } from '@/components/dashboard/DraggableClientTable';
 import { AgencyStatsBar } from '@/components/dashboard/AgencyStatsBar';
 import { AgencySyncStatusPanel } from '@/components/dashboard/AgencySyncStatusPanel';
+import { MasterSheetPanel } from '@/components/dashboard/MasterSheetPanel';
 
 import { ClientSettingsModal } from '@/components/settings/ClientSettingsModal';
 import { AgencySettingsModal } from '@/components/settings/AgencySettingsModal';
@@ -324,6 +325,10 @@ const Index = () => {
                   onAddClient={() => setAddClientOpen(true)}
                   onRefresh={handleRefresh}
                 />
+
+                <SectionErrorBoundary sectionName="Master Spreadsheet">
+                  <MasterSheetPanel />
+                </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="Client Summary">
                   <section>
