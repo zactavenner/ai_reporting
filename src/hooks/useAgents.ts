@@ -20,6 +20,8 @@ export interface Agent {
   last_run_status: string | null;
   max_tokens: number | null;
   temperature: number | null;
+  notify_channels?: string[] | null;
+  whatsapp_recipients?: string[] | null;
   created_at: string;
   updated_at: string;
   client?: { id: string; name: string } | null;
@@ -197,9 +199,21 @@ export const AVAILABLE_CONNECTORS = [
   { key: 'ghl_crm', label: 'GHL CRM', description: 'Access GoHighLevel contacts, pipelines, calendars' },
   { key: 'slack', label: 'Slack', description: 'Send messages and reports to Slack channels' },
   { key: 'claude_code', label: 'Claude Code', description: 'Connect to Claude Code Desktop for automations via MCP' },
+  { key: 'google_sheets', label: 'Google Sheets QA', description: 'Audit client KPI sheet for spam, quality issues, and accuracy vs DB' },
+  { key: 'whatsapp', label: 'WhatsApp (Twilio)', description: 'Send agent reports via WhatsApp to configured recipients' },
 ];
 
 export const AGENT_TEMPLATES = [
+  {
+    key: 'sheet_auditor',
+    name: 'Sheet QA Agent (AUDITOR)',
+    icon: '📑',
+    description: 'Reviews client Google Sheets for spam, quality issues, and accuracy vs database. Sends WhatsApp + Slack report.',
+    connectors: ['database', 'google_sheets', 'whatsapp', 'slack'],
+    schedule_cron: '0 7 * * *',
+    model: 'google/gemini-2.5-flash',
+    prompt_template: 'You are AUDITOR for {{client_name}}. The deterministic checks already ran — see sheet_audit in data.\n\n## Data ({{yesterday}})\n{{data}}\n\nReturn JSON: { "quality_score": 1-100, "spam_flags": [], "accuracy_deltas": [], "top_priorities": [], "summary": "...", "slack_message": "...", "whatsapp_message": "under 600 chars, plain text, top 3 issues + score, NO guaranteed language" }',
+  },
   {
     key: 'ai_coo',
     name: 'AI COO (JARVIS)',

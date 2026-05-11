@@ -375,6 +375,33 @@ serve(async (req) => {
           }
         }
 
+        // ── Google Sheets QA connector — runs sheet audit and injects findings ──
+        if (connectors.includes('google_sheets') && client.kpi_google_sheet_url) {
+          try {
+            const auditRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agent-sheet-audit`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ client_id: client.id, scope: 'client' }),
+            });
+            const auditJson = await auditRes.json();
+            dataContext.sheet_audit = {
+              quality_score: auditJson.quality_score,
+              spam_count: auditJson.spam_count,
+              quality_issue_count: auditJson.quality_issue_count,
+              accuracy: auditJson.accuracy,
+              summary: auditJson.summary,
+              top_spam: (auditJson.findings?.spamFlags || []).slice(0, 10),
+              top_quality: (auditJson.findings?.qualityIssues || []).slice(0, 10),
+            };
+          } catch (e) {
+            dataContext.sheet_audit = { error: 'Sheet audit failed' };
+          }
+        }
+
         // Build prompt with variable interpolation
         let prompt = agent.prompt_template;
         prompt = prompt.replace(/\{\{client_name\}\}/g, client.name);
@@ -525,6 +552,33 @@ serve(async (req) => {
                 });
                 actionsTaken.push({ type: 'slack_channel_message', channel: channelId });
               }
+            }
+          }
+
+          // ── WhatsApp dispatch (notify_channels includes 'whatsapp') ──
+          const notifyChannels: string[] = (agent as any).notify_channels || ['slack'];
+          if (notifyChannels.includes('whatsapp')) {
+            try {
+              const waMsg = parsed.whatsapp_message || parsed.slack_message || parsed.summary || aiOutput.slice(0, 500);
+              const agentRecipients: string[] = (agent as any).whatsapp_recipients || [];
+              const clientRecipients: string[] = (client as any).whatsapp_notify_numbers || [];
+              const { data: ag } = await cloudDb.from('agency_settings').select('whatsapp_default_recipients').limit(1).maybeSingle();
+              const defaultRecipients: string[] = (ag as any)?.whatsapp_default_recipients || [];
+              const recipients = Array.from(new Set([...agentRecipients, ...clientRecipients, ...defaultRecipients].filter(Boolean)));
+              if (recipients.length && waMsg) {
+                await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-whatsapp-report`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                    'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ to: recipients, message: `🤖 ${agent.name} — ${client.name}\n\n${waMsg}` }),
+                });
+                actionsTaken.push({ type: 'whatsapp_message', recipients: recipients.length });
+              }
+            } catch (e) {
+              console.error('WhatsApp dispatch failed', e);
             }
           }
 

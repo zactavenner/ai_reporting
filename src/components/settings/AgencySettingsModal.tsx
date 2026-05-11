@@ -78,6 +78,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const [masterDefaultGid, setMasterDefaultGid] = useState('');
   const [masterPinnedRaw, setMasterPinnedRaw] = useState('');
   const [discoveringTabs, setDiscoveringTabs] = useState(false);
+  const [twilioWhatsappFrom, setTwilioWhatsappFrom] = useState('');
+  const [whatsappRecipientsRaw, setWhatsappRecipientsRaw] = useState('');
+  const [testingWa, setTestingWa] = useState(false);
   const syncMeetings = useSyncMeetings();
   
   const webhookUrl = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/meetgeek-webhook`;
@@ -101,6 +104,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
           ? pinned.map((p: any) => `${p?.gid ?? ''}|${p?.title ?? ''}`).join('\n')
           : ''
       );
+      setTwilioWhatsappFrom((settings as any).twilio_whatsapp_from || '');
+      const recips = (settings as any).whatsapp_default_recipients;
+      setWhatsappRecipientsRaw(Array.isArray(recips) ? recips.join('\n') : '');
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
       setSelectedGeminiModel((settings as any).selected_gemini_model || 'gemini-2.5-pro');
       setSelectedGrokModel((settings as any).selected_grok_model || 'grok-3');
@@ -132,6 +138,8 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         master_google_sheet_url: masterSheetUrl.trim() || null,
         master_default_gid: masterDefaultGid.trim() || null,
         master_pinned_gids: pinnedTabs,
+        twilio_whatsapp_from: twilioWhatsappFrom.trim() || null,
+        whatsapp_default_recipients: whatsappRecipientsRaw.split('\n').map(s => s.trim()).filter(Boolean),
         selected_openai_model: selectedOpenaiModel,
         selected_gemini_model: selectedGeminiModel,
         selected_grok_model: selectedGrokModel,
@@ -527,6 +535,68 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
                       These show as quick buttons above the embedded sheet on the dashboard.
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1 flex items-center gap-2">
+                  📱 WhatsApp Reports (Twilio)
+                </h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Agents with the WhatsApp notify channel will send reports here. Connect Twilio first via the Connectors panel. Enable SMS Pumping Protection + Geo Permissions in your Twilio console for production safety.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="twilioFrom">Twilio WhatsApp sender (E.164)</Label>
+                    <Input
+                      id="twilioFrom"
+                      value={twilioWhatsappFrom}
+                      onChange={(e) => setTwilioWhatsappFrom(e.target.value)}
+                      placeholder="+14155238886 (Twilio sandbox) or your approved number"
+                      className="font-mono text-xs mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="waRecips">Default recipients (one per line, E.164)</Label>
+                    <Textarea
+                      id="waRecips"
+                      value={whatsappRecipientsRaw}
+                      onChange={(e) => setWhatsappRecipientsRaw(e.target.value)}
+                      rows={4}
+                      placeholder="+15555550100"
+                      className="font-mono text-xs mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Receives every agent's WhatsApp message in addition to per-agent and per-client recipients.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={testingWa || !twilioWhatsappFrom.trim() || !whatsappRecipientsRaw.trim()}
+                    onClick={async () => {
+                      setTestingWa(true);
+                      try {
+                        const supa = (await import('@/integrations/supabase/client')).supabase;
+                        const recips = whatsappRecipientsRaw.split('\n').map(s => s.trim()).filter(Boolean);
+                        const { data, error } = await supa.functions.invoke('send-whatsapp-report', {
+                          body: { to: recips, from: twilioWhatsappFrom.trim(), message: '✅ Test message from your agency dashboard. WhatsApp reporting is wired up.' },
+                        });
+                        if (error) throw error;
+                        const ok = (data as any)?.success;
+                        ok ? toast.success('Test sent') : toast.warning(`Send finished: ${JSON.stringify(data)}`);
+                      } catch (err: any) {
+                        toast.error(`Test failed: ${err.message || 'unknown'}`);
+                      } finally {
+                        setTestingWa(false);
+                      }
+                    }}
+                  >
+                    {testingWa ? 'Sending…' : 'Send test WhatsApp'}
+                  </Button>
                 </div>
               </div>
             </div>

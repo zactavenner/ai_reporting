@@ -1,47 +1,62 @@
+# Sheet QA Agents + WhatsApp Reports
+
 ## Goal
 
-Use the shared master spreadsheet (`docs.google.com/spreadsheets/d/1vuD4QA45XuVgRw1SKgq2nlRWJTIjwj4X6avyED5DpKU`) as the agency-wide overview embedded directly on the main client summary page. Each client row in the table continues to drill into its own `ClientDetail`, where the per-client KPI sheet stays the source of truth.
+Let AI agents (existing workforce: OPS, Data QA, ANALYST) read each client's KPI Google Sheet **and** the agency Master Sheet, run spam/quality/accuracy checks, and deliver findings via WhatsApp (in addition to Slack).
 
-## Behavior
+## Scope
 
-- New "Master Spreadsheet" panel on `/` (above or as a collapsible section next to the client table) showing the master sheet as a live, scrollable iframe with a tab switcher for the most-used tabs (Master Dashboard, Current Clients, HPA SCORECARD 2025, All Funded Investors, Capital Raising Clients, FB Spend - *).
-- Each client row in the existing `DraggableClientTable` keeps current behavior: row stats come from that client's `kpi_google_sheet_url`, clicking the row opens `ClientDetail` → "Reporting Sheet" tab.
-- Header has "Open in Google Sheets ↗" and a tab dropdown so an admin can jump to any tab without leaving the app.
-- Edits made inside the embedded master sheet save in Google Sheets directly (no two-way write needed from our app).
+### 1. Sheet review capability (new edge function: `agent-sheet-audit`)
 
-## Settings
+Reusable function the agents call. Input: `client_id` (or `master`), optional `tab_gid`. Steps:
 
-- New row in `agency_settings`:
-  - `master_google_sheet_url text`
-  - `master_default_gid text` (which tab to show first)
-  - `master_pinned_gids jsonb` (array of `{gid, title}` for the tab switcher)
-- Edit UI lives in **Agency Settings → Integrations → Master Spreadsheet** (admin only via existing `has_role('admin')`).
-- Includes "Discover tabs" button that calls `fetch-sheet-metrics` with `action: list_tabs` to populate the pin picker.
+- Pull sheet values via existing `fetch-sheet-metrics` (extend with a `raw_grid` action that returns headers + rows, not just parsed metrics).
+- Run deterministic checks first (cheap, no LLM):
+  - **Spam signals**: duplicate emails/phones, disposable-email domains, obvious test names ("asdf", "test"), >N leads from same IP/UTM in <1h, role emails (info@, admin@), invalid phone formats.
+  - **Quality**: missing email AND phone (project rule: both required to count), blank funnel-stage cells, negative/zero spend with leads, future-dated rows, duplicate row keys.
+  - **Accuracy vs DB**: compare sheet totals (leads, calls booked, shows, funded, spend) against `v_client_performance_*` views and `daily_metrics` for the same date window. Flag deltas >5%.
+- Pass the reduced findings to Gemini 2.5 Flash for a short narrative summary + prioritized action list (JSON output).
+- Persist a row in new `sheet_audit_runs` table (client_id, scope, score, findings jsonb, summary, run_at).
 
-## Drill-through
+### 2. Agent integration
 
-- Master sheet panel is read-only embed for non-admins.
-- For admins, a small "Match clients" helper renders below the embed: parses the "Current Clients" tab and shows any client name in that tab that doesn't match a `clients.name` in our DB, with a one-click "Link to existing client" picker. Stored in a new `client_sheet_aliases (client_id, alias)` table so future syncs can resolve aliases.
-- This avoids changing how the main client table currently looks or behaves.
+- Add a new `connector` key `google_sheets` to `AVAILABLE_CONNECTORS` in `useAgents.ts`. When an agent has it enabled, `run-agent` injects sheet audit results into the prompt context via `agent-sheet-audit`.
+- Add a new template **"Sheet QA Agent (AUDITOR)"** in `AGENT_TEMPLATES`: cron `0 7 * * *`, model `gemini-2.5-flash`, connectors `[database, google_sheets, whatsapp]`. Returns JSON with `quality_score`, `spam_flags[]`, `accuracy_deltas[]`, `whatsapp_message`.
+- Existing OPS / Data QA / ANALYST templates get the `google_sheets` connector added so they can cross-check.
 
-## Files to add / change
+### 4. UI changes
 
-- DB migration: extend `agency_settings`, add `client_sheet_aliases`.
-- Edge function: reuse `fetch-sheet-metrics` (`action: list_tabs`) — no changes needed.
-- Hook: `useAgencyMasterSheet()` reading `agency_settings`.
-- Components:
-  - `src/components/dashboard/MasterSheetPanel.tsx` — collapsible card with tab switcher + iframe.
-  - `src/components/settings/MasterSheetSettings.tsx` — admin form (URL + pinned tabs picker).
-- Page: `src/pages/Index.tsx` — mount `MasterSheetPanel` above the client table.
-- Settings page: insert `MasterSheetSettings` card.
+- **Agent editor** (existing AI Workforce dashboard): multi-select "Notify channels" + textarea for WhatsApp numbers (E.164). Toggle to enable Sheet QA connector.
+- **Agency Settings → Integrations**: new "WhatsApp (Twilio)" card showing connection status, default sender number input, test-send button.
+- **Sheet Audit results panel** on Client Detail → "Reporting Sheet" tab: latest run score, spam flags, accuracy deltas, "Run audit now" button.
 
-## Out of scope (per your answers)
+### 5. Compliance & safety
 
-- Replacing per-client row stats with master-sheet stats.
-- Parser/audit fixes to `fetch-sheet-metrics` column-major detection (will track as separate follow-up).
-- Public link exposure of the master sheet (admin-only).
+- Investment-marketing rule: WhatsApp messages must not use "guaranteed"; reuse existing compliance lint before send.
+- Rate limit `send-whatsapp-report` to 1 msg / recipient / minute.
 
-## Open follow-ups (not built now)
+## Files
 
-- Tighten the column-major date parser in `fetch-sheet-metrics` (currently picks up `0250-01-01` style false dates on the Master Dashboard tab).
-- Optional later: parse "All Funded Investors" / "Capital Raising Clients" tabs into structured agency views.
+**New**
+
+- `supabase/functions/agent-sheet-audit/index.ts`
+- `supabase/functions/send-whatsapp-report/index.ts`
+- `supabase/migrations/<ts>_sheet_audits_and_whatsapp.sql` — `sheet_audit_runs` table; add `whatsapp_recipients`, `notify_channels` to `agents`; add `whatsapp_notify_numbers` to `clients`; RLS.
+- `src/components/dashboard/SheetAuditPanel.tsx`
+- `src/components/settings/WhatsAppSettingsCard.tsx`
+- `src/hooks/useSheetAudits.ts`
+
+**Edited**
+
+- `supabase/functions/fetch-sheet-metrics/index.ts` — add `raw_grid` action.
+- `supabase/functions/run-agent/index.ts` — inject sheet-audit context when `google_sheets` connector enabled; dispatch to WhatsApp when `notify_channels` includes it.
+- `src/hooks/useAgents.ts` — add `google_sheets` + `whatsapp` connectors, AUDITOR template, `notify_channels`/`whatsapp_recipients` fields.
+- `src/components/agents/AgentEditor.tsx` (or equivalent) — channel + recipients UI.
+- `src/components/settings/AgencySettingsModal.tsx` — Twilio/WhatsApp section.
+- `src/pages/ClientDetail.tsx` — mount `SheetAuditPanel` in Reporting Sheet tab.
+
+## Out of scope
+
+- Auto-fixing sheet data (read-only audit).
+- &nbsp;
+- Master Sheet audit can also DM you a daily digest (1 message rolling up all clients) — easy add once channel plumbing is in.
