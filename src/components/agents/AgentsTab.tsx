@@ -440,6 +440,39 @@ export function AgentsTab({ clients }: Props) {
                             </div>
                           </div>
                           <div>
+                            <label className="text-xs text-muted-foreground">Notify Channels</label>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {['slack','whatsapp'].map(ch => {
+                                const channels = (editData as any).notify_channels || ['slack'];
+                                const active = channels.includes(ch);
+                                return (
+                                  <Badge
+                                    key={ch}
+                                    variant={active ? 'default' : 'outline'}
+                                    className="cursor-pointer capitalize"
+                                    onClick={() => {
+                                      const next = active ? channels.filter((x: string) => x !== ch) : [...channels, ch];
+                                      setEditData(p => ({ ...p, notify_channels: next } as any));
+                                    }}
+                                  >
+                                    {ch}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {((editData as any).notify_channels || []).includes('whatsapp') && (
+                            <div>
+                              <label className="text-xs text-muted-foreground">WhatsApp Recipients (E.164, one per line)</label>
+                              <Textarea
+                                className="min-h-[60px] font-mono text-xs"
+                                placeholder="+15551234567"
+                                value={(((editData as any).whatsapp_recipients) || []).join('\n')}
+                                onChange={e => setEditData(p => ({ ...p, whatsapp_recipients: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) } as any))}
+                              />
+                            </div>
+                          )}
+                          <div>
                             <label className="text-xs text-muted-foreground">System Prompt</label>
                             <Textarea
                               className="min-h-[200px] font-mono text-xs"
