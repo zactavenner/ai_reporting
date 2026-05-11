@@ -450,6 +450,27 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
 
           <TabsContent value="data" className="space-y-4 mt-4">
             {client && <ClientSheetBindingCard clientId={client.id} clientName={client.name} />}
+            {client && (
+              <div className="border-2 border-border p-4 space-y-4">
+                <div>
+                  <h4 className="font-medium mb-1">Reporting Sheet & Master Doc URLs</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Set this client's Google Sheet (Reporting Sheet) and Google Doc (Master Doc) URLs.
+                    These power the embedded Reporting Sheet and Master Doc tabs on the client page.
+                  </p>
+                </div>
+                <ClientUrlField
+                  clientId={client.id}
+                  label="Reporting Sheet URL"
+                  fieldKey="kpi_google_sheet_url"
+                />
+                <ClientUrlField
+                  clientId={client.id}
+                  label="Master Doc URL"
+                  fieldKey="kpi_google_doc_url"
+                />
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="teams" className="space-y-4 mt-4">
