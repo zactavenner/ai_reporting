@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Copy, Wand2 } from 'lucide-react';
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Copy, Wand2, Square } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { toast } from 'sonner';
@@ -38,6 +38,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [loading, setLoading] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<{ url: string; prompt: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Hydrate from localStorage per client
   useEffect(() => {
@@ -81,36 +82,101 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
-    const next: Msg[] = [...messages, { role: 'user', content: text }];
+    const baseHistory = messages.map(m => ({ role: m.role, content: m.content }));
+    const next: Msg[] = [
+      ...messages,
+      { role: 'user', content: text },
+      { role: 'assistant', content: '', tools: [] },
+    ];
     setMessages(next);
+    const assistantIdx = next.length - 1;
     setInput('');
     setLoading(true);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    const updateAssistant = (mut: (m: Msg) => Msg) => {
+      setMessages(curr => {
+        const copy = curr.slice();
+        if (copy[assistantIdx]) copy[assistantIdx] = mut(copy[assistantIdx]);
+        return copy;
+      });
+    };
+
     try {
-      const { data, error } = await supabase.functions.invoke('ai-studio', {
-        body: {
-          messages: next.map(m => ({ role: m.role, content: m.content })),
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      const url = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+        },
+        body: JSON.stringify({
+          messages: [...baseHistory, { role: 'user', content: text }],
           docUrl: docUrl || undefined,
           sheetUrl: sheetUrl || undefined,
           defaultImageModel: imageModel,
           clientId,
-        },
+        }),
+        signal: ctrl.signal,
       });
-      if (error) throw error;
-      if ((data as any).error) throw new Error((data as any).error);
-      const tools = (data as any).tools || [];
-      setMessages(m => [...m, { role: 'assistant', content: (data as any).text || '(no reply)', tools }]);
-      // Surface generated images on the canvas
-      for (const t of tools) {
-        if (t.name === 'generate_ad_image' && t.result?.url) {
-          setGeneratedImages(g => [{ url: t.result.url, prompt: t.args?.prompt || '' }, ...g]);
+      if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        for (const part of parts) {
+          const line = part.split('\n').find(l => l.startsWith('data:'));
+          if (!line) continue;
+          let evt: any; try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (evt.type === 'text') {
+            updateAssistant(m => ({ ...m, content: (m.content || '') + evt.delta }));
+          } else if (evt.type === 'tool_start') {
+            updateAssistant(m => ({
+              ...m,
+              tools: [...(m.tools || []), { id: evt.id, name: evt.name, args: evt.args, status: 'running' }],
+            }));
+          } else if (evt.type === 'tool_end') {
+            updateAssistant(m => ({
+              ...m,
+              tools: (m.tools || []).map(t =>
+                t.id === evt.id ? { ...t, result: evt.result, status: evt.result?.error ? 'error' : 'done' } : t,
+              ),
+            }));
+            if (evt.name === 'generate_ad_image' && evt.result?.url) {
+              setGeneratedImages(g => [{ url: evt.result.url, prompt: evt.args?.prompt || '' }, ...g]);
+            }
+          } else if (evt.type === 'error') {
+            updateAssistant(m => ({ ...m, content: (m.content || '') + `\n\n⚠️ ${evt.message}` }));
+            toast.error(evt.message);
+          }
         }
       }
     } catch (e: any) {
-      toast.error(e?.message || 'AI Studio failed');
-      setMessages(m => [...m, { role: 'assistant', content: `Error: ${e?.message || e}` }]);
+      if (e?.name === 'AbortError') {
+        updateAssistant(m => ({ ...m, content: (m.content || '') + '\n\n_(stopped)_' }));
+      } else {
+        toast.error(e?.message || 'AI Studio failed');
+        updateAssistant(m => ({ ...m, content: (m.content || '') + `\n\nError: ${e?.message || e}` }));
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
   }
 
   return (
