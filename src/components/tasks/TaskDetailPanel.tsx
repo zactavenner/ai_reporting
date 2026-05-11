@@ -137,6 +137,8 @@ function useClientMetaAdAccounts(clientId?: string) {
  
  export function TaskDetailPanel({ task, open, onOpenChange, clientName, clientId, isPublicView = false }: TaskDetailPanelProps) {
    const updateTask = useUpdateTask();
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
    const deleteTask = useDeleteTask();
    const createTask = useCreateTask();
    const addHistory = useAddTaskHistory();
