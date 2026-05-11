@@ -1,0 +1,1 @@
+ALTER TABLE public.client_settings ADD COLUMN IF NOT EXISTS canva_url text;

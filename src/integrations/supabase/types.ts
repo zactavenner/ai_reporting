@@ -2507,6 +2507,7 @@ export type Database = {
           ad_spend_fee_threshold: number | null
           ads_library_page_id: string | null
           ads_library_url: string | null
+          canva_url: string | null
           client_id: string
           committed_stage_ids: string[] | null
           cost_of_capital_threshold_red: number | null
@@ -2591,6 +2592,7 @@ export type Database = {
           ad_spend_fee_threshold?: number | null
           ads_library_page_id?: string | null
           ads_library_url?: string | null
+          canva_url?: string | null
           client_id: string
           committed_stage_ids?: string[] | null
           cost_of_capital_threshold_red?: number | null
@@ -2675,6 +2677,7 @@ export type Database = {
           ad_spend_fee_threshold?: number | null
           ads_library_page_id?: string | null
           ads_library_url?: string | null
+          canva_url?: string | null
           client_id?: string
           committed_stage_ids?: string[] | null
           cost_of_capital_threshold_red?: number | null
