@@ -123,30 +123,34 @@ serve(async (req) => {
            },
            {
              role: "user",
-             content: `You are analyzing a voice note recording from an agency meeting or call with a client${clientName ? ` named "${clientName}"` : ""}.
+             content: `You are analyzing a voice note recorded by an agency team member${clientName ? ` about the client "${clientName}"` : ""}.
 
 Transcript:
 ${transcript}
 
-Based on this transcript, extract:
-1. A short descriptive title (max 60 characters)
-2. A concise 2-3 sentence summary of the key points discussed
-3. Any action items or tasks mentioned that need to be done
+Extract:
+1. A short descriptive title (max 60 characters) for the voice note
+2. A concise 2-3 sentence summary of the key points
+3. Every action item / task mentioned that needs to be done${clientName ? ` for ${clientName}` : ""}
 
-Return your response in the following JSON format:
+CRITICAL RULES for action_items (these will become real tasks in our system):
+- "title": Action-oriented, starts with a verb (Create, Review, Update, Send, Build, Fix, Schedule, Follow up on…). Max 80 chars. ${clientName ? `If the task is specific to ${clientName}, include their name in the title (e.g. "Send ${clientName} the new VSL script").` : ""}
+- "description": REQUIRED. Always 1-3 full sentences. Pull concrete context from the transcript: what exactly to do, why it matters, any names/dates/numbers/links mentioned, and the desired outcome. Never leave this empty, never write "N/A", never repeat the title verbatim.${clientName ? ` Reference "${clientName}" by name when relevant so the assignee has full context.` : ""}
+- "priority": "high" if urgent/ASAP/blocker is implied, "low" if explicitly low-priority or nice-to-have, otherwise "medium".
+- Only include real, actionable tasks. Skip status updates, observations, or already-completed work.
+
+Return ONLY valid JSON in this exact shape:
 {
-  "title": "Short title here",
-  "summary": "2-3 sentence summary here",
+  "title": "Short voice note title",
+  "summary": "2-3 sentence summary",
   "action_items": [
-    {"title": "Task title", "description": "Optional description", "priority": "low|medium|high"}
+    { "title": "Action-oriented task title", "description": "Detailed 1-3 sentence description with context", "priority": "low|medium|high" }
   ]
-}
-
-Only return valid JSON, no other text.`
+}`
            }
          ],
          max_tokens: 4096,
-         temperature: 0.7,
+         temperature: 0.4,
        }),
      });
 
