@@ -74,6 +74,10 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const [showMeetgeekKey, setShowMeetgeekKey] = useState(false);
   const [kpiDocUrl, setKpiDocUrl] = useState('');
   const [kpiSheetUrl, setKpiSheetUrl] = useState('');
+  const [masterSheetUrl, setMasterSheetUrl] = useState('');
+  const [masterDefaultGid, setMasterDefaultGid] = useState('');
+  const [masterPinnedRaw, setMasterPinnedRaw] = useState('');
+  const [discoveringTabs, setDiscoveringTabs] = useState(false);
   const syncMeetings = useSyncMeetings();
   
   const webhookUrl = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/meetgeek-webhook`;
@@ -89,6 +93,14 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
       setMeetgeekApiKey((settings as any).meetgeek_api_key || '');
       setKpiDocUrl((settings as any).kpi_google_doc_url || '');
       setKpiSheetUrl((settings as any).kpi_google_sheet_url || '');
+      setMasterSheetUrl((settings as any).master_google_sheet_url || '');
+      setMasterDefaultGid((settings as any).master_default_gid || '');
+      const pinned = (settings as any).master_pinned_gids;
+      setMasterPinnedRaw(
+        Array.isArray(pinned)
+          ? pinned.map((p: any) => `${p?.gid ?? ''}|${p?.title ?? ''}`).join('\n')
+          : ''
+      );
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
       setSelectedGeminiModel((settings as any).selected_gemini_model || 'gemini-2.5-pro');
       setSelectedGrokModel((settings as any).selected_grok_model || 'grok-3');
@@ -98,6 +110,15 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const handleSave = async () => {
     setSaving(true);
     try {
+      const pinnedTabs = masterPinnedRaw
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const [gid, ...rest] = line.split('|');
+          return { gid: gid.trim(), title: rest.join('|').trim() || gid.trim() };
+        })
+        .filter(t => t.gid);
       await updateSettings.mutateAsync({
         ai_prompt_agency: agencyPrompt,
         ai_prompt_client: clientPrompt,
@@ -108,6 +129,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         meetgeek_api_key: meetgeekApiKey || null,
         kpi_google_doc_url: kpiDocUrl.trim() || null,
         kpi_google_sheet_url: kpiSheetUrl.trim() || null,
+        master_google_sheet_url: masterSheetUrl.trim() || null,
+        master_default_gid: masterDefaultGid.trim() || null,
+        master_pinned_gids: pinnedTabs,
         selected_openai_model: selectedOpenaiModel,
         selected_gemini_model: selectedGeminiModel,
         selected_grok_model: selectedGrokModel,
