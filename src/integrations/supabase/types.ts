@@ -2548,6 +2548,8 @@ export type Database = {
           hubspot_reconnect_meeting_types: string[] | null
           hubspot_sync_enabled: boolean | null
           id: string
+          kpi_google_doc_url: string | null
+          kpi_google_sheet_url: string | null
           meetgeek_api_key: string | null
           meetgeek_enabled: boolean | null
           meetgeek_last_sync: string | null
@@ -2630,6 +2632,8 @@ export type Database = {
           hubspot_reconnect_meeting_types?: string[] | null
           hubspot_sync_enabled?: boolean | null
           id?: string
+          kpi_google_doc_url?: string | null
+          kpi_google_sheet_url?: string | null
           meetgeek_api_key?: string | null
           meetgeek_enabled?: boolean | null
           meetgeek_last_sync?: string | null
@@ -2712,6 +2716,8 @@ export type Database = {
           hubspot_reconnect_meeting_types?: string[] | null
           hubspot_sync_enabled?: boolean | null
           id?: string
+          kpi_google_doc_url?: string | null
+          kpi_google_sheet_url?: string | null
           meetgeek_api_key?: string | null
           meetgeek_enabled?: boolean | null
           meetgeek_last_sync?: string | null
