@@ -78,6 +78,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const [masterDefaultGid, setMasterDefaultGid] = useState('');
   const [masterPinnedRaw, setMasterPinnedRaw] = useState('');
   const [discoveringTabs, setDiscoveringTabs] = useState(false);
+  const [twilioWhatsappFrom, setTwilioWhatsappFrom] = useState('');
+  const [whatsappRecipientsRaw, setWhatsappRecipientsRaw] = useState('');
+  const [testingWa, setTestingWa] = useState(false);
   const syncMeetings = useSyncMeetings();
   
   const webhookUrl = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/meetgeek-webhook`;
@@ -101,6 +104,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
           ? pinned.map((p: any) => `${p?.gid ?? ''}|${p?.title ?? ''}`).join('\n')
           : ''
       );
+      setTwilioWhatsappFrom((settings as any).twilio_whatsapp_from || '');
+      const recips = (settings as any).whatsapp_default_recipients;
+      setWhatsappRecipientsRaw(Array.isArray(recips) ? recips.join('\n') : '');
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
       setSelectedGeminiModel((settings as any).selected_gemini_model || 'gemini-2.5-pro');
       setSelectedGrokModel((settings as any).selected_grok_model || 'grok-3');
@@ -132,6 +138,8 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         master_google_sheet_url: masterSheetUrl.trim() || null,
         master_default_gid: masterDefaultGid.trim() || null,
         master_pinned_gids: pinnedTabs,
+        twilio_whatsapp_from: twilioWhatsappFrom.trim() || null,
+        whatsapp_default_recipients: whatsappRecipientsRaw.split('\n').map(s => s.trim()).filter(Boolean),
         selected_openai_model: selectedOpenaiModel,
         selected_gemini_model: selectedGeminiModel,
         selected_grok_model: selectedGrokModel,
