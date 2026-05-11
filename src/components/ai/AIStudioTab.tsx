@@ -31,11 +31,43 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [docUrl, setDocUrl] = useState<string>('');
   const [sheetUrl, setSheetUrl] = useState<string>('');
   const [imageModel, setImageModel] = useState<'nano-banana-2' | 'gpt-image'>('nano-banana-2');
+  const storageKey = `ai-studio:${clientId}`;
+  const [hydrated, setHydrated] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<{ url: string; prompt: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Hydrate from localStorage per client
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setMessages(parsed.messages || []);
+        setGeneratedImages(parsed.generatedImages || []);
+        if (parsed.docUrl) setDocUrl(parsed.docUrl);
+        if (parsed.sheetUrl) setSheetUrl(parsed.sheetUrl);
+        if (parsed.imageModel) setImageModel(parsed.imageModel);
+      } else {
+        setMessages([]);
+        setGeneratedImages([]);
+      }
+    } catch {}
+    setHydrated(true);
+  }, [storageKey]);
+
+  // Persist on change
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ messages, generatedImages, docUrl, sheetUrl, imageModel }),
+      );
+    } catch {}
+  }, [hydrated, storageKey, messages, generatedImages, docUrl, sheetUrl, imageModel]);
 
   // Default URLs from agency settings
   useEffect(() => {
