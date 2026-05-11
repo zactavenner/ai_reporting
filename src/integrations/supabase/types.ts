@@ -912,6 +912,118 @@ export type Database = {
           },
         ]
       }
+      ai_studio_canvas_items: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: string
+          kind: string
+          payload: Json
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          payload?: Json
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_studio_canvas_items_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_studio_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_studio_conversations: {
+        Row: {
+          cleared_at: string | null
+          client_id: string
+          created_at: string
+          doc_url: string | null
+          id: string
+          image_quality: string
+          last_active_at: string
+          sheet_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cleared_at?: string | null
+          client_id: string
+          created_at?: string
+          doc_url?: string | null
+          id?: string
+          image_quality?: string
+          last_active_at?: string
+          sheet_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cleared_at?: string | null
+          client_id?: string
+          created_at?: string
+          doc_url?: string | null
+          id?: string
+          image_quality?: string
+          last_active_at?: string
+          sheet_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_studio_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+          tools: Json
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+          tools?: Json
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+          tools?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_studio_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_studio_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alert_configs: {
         Row: {
           client_id: string
