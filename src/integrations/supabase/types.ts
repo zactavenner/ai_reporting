@@ -1092,6 +1092,54 @@ export type Database = {
           },
         ]
       }
+      app_feedback: {
+        Row: {
+          admin_notes: string | null
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          priority: string | null
+          reviewed_at: string | null
+          reviewed_by_name: string | null
+          status: string
+          submitted_by_id: string | null
+          submitted_by_name: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          priority?: string | null
+          reviewed_at?: string | null
+          reviewed_by_name?: string | null
+          status?: string
+          submitted_by_id?: string | null
+          submitted_by_name?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          priority?: string | null
+          reviewed_at?: string | null
+          reviewed_by_name?: string | null
+          status?: string
+          submitted_by_id?: string | null
+          submitted_by_name?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           client_id: string | null
