@@ -33,7 +33,7 @@ import { SectionErrorBoundary } from '@/components/ui/SectionErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { useQueryClient } from '@tanstack/react-query';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
-import { ExternalLink, ClipboardList, Smartphone, Layers, AlertCircle, Palette, Upload } from 'lucide-react';
+import { ExternalLink, ClipboardList, Smartphone, Layers, AlertCircle, Palette, Upload, FileText } from 'lucide-react';
 import { ClientUploadPortal } from '@/components/uploads/ClientUploadPortal';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
 import { VoiceRecordButton } from '@/components/voice/VoiceRecordButton';
@@ -332,6 +332,26 @@ function PublicReportContent() {
             <Upload className="h-4 w-4 mr-1" />
             Upload Files
           </Button>
+          {((clientSettings as any)?.kpi_google_doc_url) && (
+            <Button
+              variant={activeSection === 'master-doc' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveSection('master-doc')}
+            >
+              <FileText className="h-4 w-4 mr-1" />
+              Master Doc
+            </Button>
+          )}
+          {((clientSettings as any)?.kpi_google_sheet_url) && (
+            <Button
+              variant={activeSection === 'reporting-sheet' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveSection('reporting-sheet')}
+            >
+              <ClipboardList className="h-4 w-4 mr-1" />
+              Reporting Sheet
+            </Button>
+          )}
           {customTabs.map((tab) => (
             <Button 
               key={tab.id}
