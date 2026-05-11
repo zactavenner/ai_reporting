@@ -326,6 +326,10 @@ const Index = () => {
                   onRefresh={handleRefresh}
                 />
 
+                <SectionErrorBoundary sectionName="Master Spreadsheet">
+                  <MasterSheetPanel />
+                </SectionErrorBoundary>
+
                 <SectionErrorBoundary sectionName="Client Summary">
                   <section>
                     <div className="flex items-center justify-between mb-2">
