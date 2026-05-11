@@ -542,6 +542,68 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
             <div className="border-2 border-border p-4 space-y-4">
               <div>
                 <h4 className="font-medium mb-1 flex items-center gap-2">
+                  📱 WhatsApp Reports (Twilio)
+                </h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Agents with the WhatsApp notify channel will send reports here. Connect Twilio first via the Connectors panel. Enable SMS Pumping Protection + Geo Permissions in your Twilio console for production safety.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="twilioFrom">Twilio WhatsApp sender (E.164)</Label>
+                    <Input
+                      id="twilioFrom"
+                      value={twilioWhatsappFrom}
+                      onChange={(e) => setTwilioWhatsappFrom(e.target.value)}
+                      placeholder="+14155238886 (Twilio sandbox) or your approved number"
+                      className="font-mono text-xs mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="waRecips">Default recipients (one per line, E.164)</Label>
+                    <Textarea
+                      id="waRecips"
+                      value={whatsappRecipientsRaw}
+                      onChange={(e) => setWhatsappRecipientsRaw(e.target.value)}
+                      rows={4}
+                      placeholder="+15555550100"
+                      className="font-mono text-xs mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Receives every agent's WhatsApp message in addition to per-agent and per-client recipients.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={testingWa || !twilioWhatsappFrom.trim() || !whatsappRecipientsRaw.trim()}
+                    onClick={async () => {
+                      setTestingWa(true);
+                      try {
+                        const supa = (await import('@/integrations/supabase/client')).supabase;
+                        const recips = whatsappRecipientsRaw.split('\n').map(s => s.trim()).filter(Boolean);
+                        const { data, error } = await supa.functions.invoke('send-whatsapp-report', {
+                          body: { to: recips, from: twilioWhatsappFrom.trim(), message: '✅ Test message from your agency dashboard. WhatsApp reporting is wired up.' },
+                        });
+                        if (error) throw error;
+                        const ok = (data as any)?.success;
+                        ok ? toast.success('Test sent') : toast.warning(`Send finished: ${JSON.stringify(data)}`);
+                      } catch (err: any) {
+                        toast.error(`Test failed: ${err.message || 'unknown'}`);
+                      } finally {
+                        setTestingWa(false);
+                      }
+                    }}
+                  >
+                    {testingWa ? 'Sending…' : 'Send test WhatsApp'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1 flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   KPI Tracker Links
                 </h4>
