@@ -525,7 +525,9 @@ export type Database = {
           selected_grok_model: string | null
           selected_openai_model: string | null
           slack_dm_user_id: string | null
+          twilio_whatsapp_from: string | null
           updated_at: string
+          whatsapp_default_recipients: string[]
           xai_api_key: string | null
         }
         Insert: {
@@ -550,7 +552,9 @@ export type Database = {
           selected_grok_model?: string | null
           selected_openai_model?: string | null
           slack_dm_user_id?: string | null
+          twilio_whatsapp_from?: string | null
           updated_at?: string
+          whatsapp_default_recipients?: string[]
           xai_api_key?: string | null
         }
         Update: {
@@ -575,7 +579,9 @@ export type Database = {
           selected_grok_model?: string | null
           selected_openai_model?: string | null
           slack_dm_user_id?: string | null
+          twilio_whatsapp_from?: string | null
           updated_at?: string
+          whatsapp_default_recipients?: string[]
           xai_api_key?: string | null
         }
         Relationships: []
@@ -770,12 +776,14 @@ export type Database = {
           max_tokens: number | null
           model: string | null
           name: string
+          notify_channels: string[]
           prompt_template: string
           schedule_cron: string | null
           schedule_timezone: string | null
           temperature: number | null
           template_key: string | null
           updated_at: string
+          whatsapp_recipients: string[]
         }
         Insert: {
           client_id?: string | null
@@ -791,12 +799,14 @@ export type Database = {
           max_tokens?: number | null
           model?: string | null
           name: string
+          notify_channels?: string[]
           prompt_template?: string
           schedule_cron?: string | null
           schedule_timezone?: string | null
           temperature?: number | null
           template_key?: string | null
           updated_at?: string
+          whatsapp_recipients?: string[]
         }
         Update: {
           client_id?: string | null
@@ -812,12 +822,14 @@ export type Database = {
           max_tokens?: number | null
           model?: string | null
           name?: string
+          notify_channels?: string[]
           prompt_template?: string
           schedule_cron?: string | null
           schedule_timezone?: string | null
           temperature?: number | null
           template_key?: string | null
           updated_at?: string
+          whatsapp_recipients?: string[]
         }
         Relationships: [
           {
@@ -2865,6 +2877,7 @@ export type Database = {
           updated_at: string
           webhook_secret: string | null
           website_url: string | null
+          whatsapp_notify_numbers: string[]
         }
         Insert: {
           account_manager?: string | null
@@ -2905,6 +2918,7 @@ export type Database = {
           updated_at?: string
           webhook_secret?: string | null
           website_url?: string | null
+          whatsapp_notify_numbers?: string[]
         }
         Update: {
           account_manager?: string | null
@@ -2945,6 +2959,7 @@ export type Database = {
           updated_at?: string
           webhook_secret?: string | null
           website_url?: string | null
+          whatsapp_notify_numbers?: string[]
         }
         Relationships: []
       }
@@ -7107,6 +7122,75 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sheet_audit_runs: {
+        Row: {
+          accuracy_delta_count: number
+          client_id: string | null
+          created_at: string
+          findings: Json
+          id: string
+          quality_issue_count: number
+          quality_score: number | null
+          run_at: string
+          scope: string
+          sheet_url: string | null
+          spam_count: number
+          summary: string | null
+          tab_gid: string | null
+          triggered_by: string | null
+          whatsapp_message: string | null
+        }
+        Insert: {
+          accuracy_delta_count?: number
+          client_id?: string | null
+          created_at?: string
+          findings?: Json
+          id?: string
+          quality_issue_count?: number
+          quality_score?: number | null
+          run_at?: string
+          scope?: string
+          sheet_url?: string | null
+          spam_count?: number
+          summary?: string | null
+          tab_gid?: string | null
+          triggered_by?: string | null
+          whatsapp_message?: string | null
+        }
+        Update: {
+          accuracy_delta_count?: number
+          client_id?: string | null
+          created_at?: string
+          findings?: Json
+          id?: string
+          quality_issue_count?: number
+          quality_score?: number | null
+          run_at?: string
+          scope?: string
+          sheet_url?: string | null
+          spam_count?: number
+          summary?: string | null
+          tab_gid?: string | null
+          triggered_by?: string | null
+          whatsapp_message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sheet_audit_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sheet_audit_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
