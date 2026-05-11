@@ -750,7 +750,43 @@ const getHistoryIcon = (action: string) => {
               <div className="space-y-3">
               <div className="min-w-0">
                  <SheetTitle className="text-lg font-semibold leading-tight w-[80%]">
-                   {task.title}
+                   {editingTitle ? (
+                     <Input
+                       autoFocus
+                       value={editedTitle}
+                       onChange={(e) => setEditedTitle(e.target.value)}
+                       onBlur={async () => {
+                         const next = editedTitle.trim();
+                         if (next && next !== task.title) {
+                           await updateTask.mutateAsync({ id: task.id, title: next });
+                         }
+                         setEditingTitle(false);
+                       }}
+                       onKeyDown={async (e) => {
+                         if (e.key === 'Enter') {
+                           e.preventDefault();
+                           (e.target as HTMLInputElement).blur();
+                         } else if (e.key === 'Escape') {
+                           setEditedTitle(task.title);
+                           setEditingTitle(false);
+                         }
+                       }}
+                       className="text-lg font-semibold h-auto py-1"
+                     />
+                   ) : (
+                     <button
+                       type="button"
+                       onClick={() => {
+                         if (isPublicView) return;
+                         setEditedTitle(task.title);
+                         setEditingTitle(true);
+                       }}
+                       className="text-left w-full hover:bg-muted/50 rounded px-1 -mx-1 py-0.5 transition-colors cursor-text"
+                       title={isPublicView ? undefined : 'Click to edit title'}
+                     >
+                       {task.title}
+                     </button>
+                   )}
                  </SheetTitle>
                 {clientName && (
                   <p className="text-sm text-muted-foreground mt-1">Client: {clientName}</p>
