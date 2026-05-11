@@ -375,6 +375,33 @@ serve(async (req) => {
           }
         }
 
+        // ── Google Sheets QA connector — runs sheet audit and injects findings ──
+        if (connectors.includes('google_sheets') && client.kpi_google_sheet_url) {
+          try {
+            const auditRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agent-sheet-audit`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ client_id: client.id, scope: 'client' }),
+            });
+            const auditJson = await auditRes.json();
+            dataContext.sheet_audit = {
+              quality_score: auditJson.quality_score,
+              spam_count: auditJson.spam_count,
+              quality_issue_count: auditJson.quality_issue_count,
+              accuracy: auditJson.accuracy,
+              summary: auditJson.summary,
+              top_spam: (auditJson.findings?.spamFlags || []).slice(0, 10),
+              top_quality: (auditJson.findings?.qualityIssues || []).slice(0, 10),
+            };
+          } catch (e) {
+            dataContext.sheet_audit = { error: 'Sheet audit failed' };
+          }
+        }
+
         // Build prompt with variable interpolation
         let prompt = agent.prompt_template;
         prompt = prompt.replace(/\{\{client_name\}\}/g, client.name);
