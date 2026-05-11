@@ -18,6 +18,7 @@ import { AgencyAIChat } from '@/components/ai/AgencyAIChat';
 import { AIHubTab } from '@/components/ai/AIHubTab';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
+import { FeedbackTab } from '@/components/feedback/FeedbackTab';
 import { MetricsCustomizeModal } from '@/components/dashboard/MetricsCustomizeModal';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
@@ -448,6 +449,13 @@ const Index = () => {
             {activeTab === 'tasks' && (
               <SectionErrorBoundary sectionName="Task Board">
                 <TaskBoardView />
+              </SectionErrorBoundary>
+            )}
+
+            {/* Feedback */}
+            {activeTab === 'feedback' && (
+              <SectionErrorBoundary sectionName="Feedback">
+                <FeedbackTab />
               </SectionErrorBoundary>
             )}
 
