@@ -262,9 +262,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             className="resize-none min-h-[44px] max-h-32"
             rows={1}
           />
-          <Button onClick={() => send(input)} disabled={loading || !input.trim()} size="icon">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+          {loading ? (
+            <Button onClick={stop} size="icon" variant="destructive" title="Stop">
+              <Square className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button onClick={() => send(input)} disabled={!input.trim()} size="icon">
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </Card>
 
