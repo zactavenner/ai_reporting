@@ -250,6 +250,26 @@ export function useCreateTask() {
       // Send notification if task is assigned
       if (data.assigned_to) {
         sendTaskNotification(data.id, 'assigned', data.client_id);
+      } else {
+        // No assignee - let AI suggest one based on title/description/team context
+        (async () => {
+          try {
+            const { data: result, error } = await supabase.functions.invoke('ai-auto-assign-task', {
+              body: { taskId: data.id },
+            });
+            if (error) {
+              console.error('AI auto-assign error:', error);
+              return;
+            }
+            if (result?.assigned && result?.member_name) {
+              toast.success(`AI assigned task to ${result.member_name}`);
+              queryClient.invalidateQueries({ queryKey: ['tasks'] });
+              queryClient.invalidateQueries({ queryKey: ['all-tasks'] });
+            }
+          } catch (err) {
+            console.error('AI auto-assign failed:', err);
+          }
+        })();
       }
       postTaskFeed('task_created', data);
     },
