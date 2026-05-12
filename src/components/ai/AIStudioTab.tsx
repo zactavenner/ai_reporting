@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
+import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 
@@ -38,6 +39,8 @@ function stripImageMarkup(t: string) {
 
 export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: agencySettings } = useAgencySettings();
+  const { data: clientSettings } = useClientSettings(clientId);
+  const updateClientSettings = useUpdateClientSettings();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
@@ -102,9 +105,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Default URLs from agency settings (only if conversation has none)
   useEffect(() => {
     if (!hydrated) return;
-    if (!docUrl && agencySettings?.kpi_google_doc_url) setDocUrl(agencySettings.kpi_google_doc_url);
-    if (!sheetUrl && agencySettings?.kpi_google_sheet_url) setSheetUrl(agencySettings.kpi_google_sheet_url);
-  }, [agencySettings, hydrated, docUrl, sheetUrl]);
+    if (!docUrl) {
+      const fallback = (clientSettings as any)?.kpi_google_doc_url || agencySettings?.kpi_google_doc_url;
+      if (fallback) setDocUrl(fallback);
+    }
+    if (!sheetUrl) {
+      const fallback = (clientSettings as any)?.kpi_google_sheet_url || agencySettings?.kpi_google_sheet_url;
+      if (fallback) setSheetUrl(fallback);
+    }
+  }, [agencySettings, clientSettings, hydrated, docUrl, sheetUrl]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
