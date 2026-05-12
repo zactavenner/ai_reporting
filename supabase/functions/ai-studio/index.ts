@@ -436,6 +436,101 @@ async function editStaticAd(opts: {
   };
 }
 
+// ---------- Variations (multiple options, save-on-pick) ----------
+async function generateOneVariation(opts: {
+  prompt: string;
+  aspectRatio: string;
+  brandContext: any;
+  variantHint: string;
+  sourceImageUrl?: string;
+  clientId: string | null;
+}): Promise<ImageResult> {
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+  const basePrompt = buildAdPrompt({
+    prompt: `${opts.prompt}\n\nVARIATION DIRECTION: ${opts.variantHint}`,
+    aspectRatio: opts.aspectRatio,
+    brandColors: opts.brandContext?.brandColors,
+    brandFonts: opts.brandContext?.brandFonts,
+    offerDescription: opts.brandContext?.offerDescription,
+    includeDisclaimer: opts.brandContext?.includeDisclaimer,
+    disclaimerText: opts.brandContext?.disclaimerText,
+    hasReference: !!opts.sourceImageUrl,
+  });
+
+  const modelUsed = "google/gemini-3.1-flash-image-preview";
+  const userContent: any = opts.sourceImageUrl
+    ? [
+        { type: "text", text: basePrompt },
+        ...(await (async () => {
+          try {
+            const r = await fetch(opts.sourceImageUrl);
+            if (!r.ok) return [];
+            const m = r.headers.get("content-type") || "image/png";
+            const b = arrayBufferToBase64(await r.arrayBuffer());
+            return [{ type: "image_url", image_url: { url: `data:${m};base64,${b}` } }];
+          } catch { return []; }
+        })()),
+      ]
+    : basePrompt;
+
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: modelUsed, messages: [{ role: "user", content: userContent }], modalities: ["image", "text"] }),
+  });
+  if (!res.ok) throw new Error(`Variation [${res.status}]: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const imgUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  if (!imgUrl?.startsWith("data:")) throw new Error("No image in variation response");
+  const m = imgUrl.match(/^data:(.+?);base64,(.+)$/)!;
+  const mime = m[1]; const base64Image = m[2];
+
+  const bytes = Uint8Array.from(atob(base64Image), c => c.charCodeAt(0));
+  const ext = (mime.split("/")[1] || "png").split("+")[0];
+  const path = `ai-studio/${opts.clientId || "shared"}/variations/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const { error } = await supa.storage.from("creatives").upload(path, bytes, { contentType: mime, upsert: false });
+  if (error) throw new Error(`Storage upload: ${error.message}`);
+  const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+  return { url: pub.publicUrl, mime, storage_path: path, model: modelUsed, aspect_ratio: opts.aspectRatio };
+}
+
+const VARIATION_HINTS = [
+  "Bold typographic poster — oversized headline, generous negative space, single hero element.",
+  "Editorial split layout — strong photography on one half, clean copy block on the other.",
+  "Premium gradient background with layered glass UI elements and a centered headline.",
+  "Lifestyle/product-in-context scene with a small floating badge for the headline.",
+  "Conversion-focused layout — big number/stat as the visual hero, supporting headline below.",
+];
+
+async function generateAdVariations(opts: {
+  prompt: string;
+  aspectRatio?: string;
+  count?: number;
+  sourceImageUrl?: string;
+  clientId: string | null;
+  brandContext: any;
+}) {
+  const aspect = opts.aspectRatio || "1:1";
+  const count = Math.max(2, Math.min(5, opts.count || 4));
+  const hints = VARIATION_HINTS.slice(0, count);
+  const settled = await Promise.allSettled(
+    hints.map(h => generateOneVariation({
+      prompt: opts.prompt,
+      aspectRatio: aspect,
+      brandContext: opts.brandContext,
+      variantHint: h,
+      sourceImageUrl: opts.sourceImageUrl,
+      clientId: opts.clientId,
+    })),
+  );
+  const variants = settled
+    .map((r, i) => r.status === "fulfilled" ? { ...r.value, hint: hints[i] } : null)
+    .filter(Boolean) as (ImageResult & { hint: string })[];
+  const errors = settled.filter(r => r.status === "rejected").map((r: any) => String(r.reason?.message || r.reason));
+  if (variants.length === 0) throw new Error(`All variations failed: ${errors.join(" | ")}`);
+  return { variants, aspect_ratio: aspect, errors };
+}
+
 // ---------- Tool schema ----------
 const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
@@ -482,6 +577,23 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "generate_ad_variations",
+      description: "Generate multiple Instagram-sized creative options (2–5) so the user can pick favorites to save. Use whenever the user asks for variations, options, alternatives, or 'a few different versions'. Variants are NOT auto-saved as client assets — the user picks which to save from the canvas card. Optionally pass source_image_url to riff on an existing ad.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What the ads should communicate (offer, hook ideas, vibe)." },
+          count: { type: "integer", minimum: 2, maximum: 5, description: "How many variations (2–5). Defaults to 4." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16"], description: "Instagram sizes only. Defaults to 1:1." },
+          source_image_url: { type: "string", description: "Optional canvas image to riff on." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
 ];
 
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
@@ -496,6 +608,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "TOOL USE:",
   "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro'.",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
+  "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
   "",
@@ -719,6 +832,17 @@ Deno.serve(async (req) => {
                 quality: args.quality || quality,
               });
             }
+            if (name === "generate_ad_variations") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Generating ${Math.max(2, Math.min(5, args.count || 4))} variations: ${args.prompt || ""}`,
+                aspect_ratio: args.aspect_ratio || "1:1",
+                quality: "fast",
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
@@ -812,6 +936,40 @@ Deno.serve(async (req) => {
                     new_hook: args.new_hook || null,
                     new_colors: args.new_colors || null,
                     new_disclaimer: args.new_disclaimer || null,
+                  },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "generate_ad_variations") {
+                const v = await generateAdVariations({
+                  prompt: args.prompt,
+                  aspectRatio: args.aspect_ratio || "1:1",
+                  count: args.count,
+                  sourceImageUrl: args.source_image_url,
+                  clientId: clientId || null,
+                  brandContext,
+                });
+                result = {
+                  ok: true,
+                  count: v.variants.length,
+                  aspect_ratio: v.aspect_ratio,
+                  variant_urls_internal: v.variants.map(x => x.url),
+                  errors: v.errors,
+                };
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "variation_set",
+                  payload: {
+                    prompt: args.prompt,
+                    aspect_ratio: v.aspect_ratio,
+                    source_image_url: args.source_image_url || null,
+                    saved_indices: [] as number[],
+                    variants: v.variants.map(x => ({
+                      image_url: x.url,
+                      storage_path: x.storage_path,
+                      mime: x.mime,
+                      model: x.model,
+                      aspect_ratio: x.aspect_ratio,
+                      hint: x.hint,
+                    })),
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
