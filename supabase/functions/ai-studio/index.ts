@@ -495,6 +495,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "",
   "TOOL USE:",
   "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro'.",
+  "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
   "",
