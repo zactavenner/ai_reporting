@@ -3,18 +3,20 @@ import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, Calendar, Aler
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SortableTableHeader, SortConfig } from '@/components/dashboard/SortableTableHeader';
-import { useMetaCampaigns, useMetaAdSets, useMetaAds, useSyncMetaAds } from '@/hooks/useMetaAds';
+import { useMetaCampaigns, useMetaAdSets, useMetaAds, useSyncMetaAds, useToggleMetaStatus } from '@/hooks/useMetaAds';
 import { useFetchAdMediaHD } from '@/hooks/useAdMediaHD';
 import { useRunAttribution } from '@/hooks/useRunAttribution';
 import { GenerateBriefButton } from '@/components/briefs/GenerateBriefButton';
 import { useClientSettings } from '@/hooks/useClientSettings';
 import { useCreateTask } from '@/hooks/useTasks';
 import { useDateFilter } from '@/contexts/DateFilterContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { formatDistanceToNow, addBusinessDays } from 'date-fns';
 import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
@@ -29,6 +31,47 @@ function StatusDot({ status }: { status: string | null }) {
   const s = (status || '').toUpperCase();
   const color = s === 'ACTIVE' ? 'bg-green-500' : s === 'PAUSED' ? 'bg-yellow-500' : 'bg-muted-foreground/40';
   return <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} />;
+}
+
+function StatusToggle({
+  clientId, level, row, size = 'sm',
+}: {
+  clientId: string;
+  level: 'campaign' | 'adset' | 'ad';
+  row: any;
+  size?: 'sm' | 'md';
+}) {
+  const toggle = useToggleMetaStatus();
+  const status = (row.effective_status || row.status || '').toUpperCase();
+  const isActive = status === 'ACTIVE';
+  const disabled = toggle.isPending || (status && status !== 'ACTIVE' && status !== 'PAUSED');
+  return (
+    <div className="inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <Switch
+        checked={isActive}
+        disabled={disabled}
+        onCheckedChange={(checked) =>
+          toggle.mutate({
+            clientId,
+            level,
+            rowId: row.id,
+            status: checked ? 'ACTIVE' : 'PAUSED',
+          })
+        }
+        aria-label={isActive ? 'Pause' : 'Resume'}
+      />
+      {toggle.isPending ? (
+        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+      ) : (
+        <StatusDot status={status} />
+      )}
+      {size === 'md' && (
+        <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
+          {status || 'unknown'}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function fmt$(val: number | null) {
@@ -129,6 +172,58 @@ function MetricCells({ row }: { row: any }) {
   );
 }
 
+// ── Mobile card list (touch-friendly toggle for campaigns / ad sets / ads) ──
+function MobileRowList({
+  data, level, clientId, onSelect,
+}: {
+  data: any[];
+  level: 'campaign' | 'adset' | 'ad';
+  clientId: string;
+  onSelect?: (id: string) => void;
+}) {
+  if (data.length === 0) return <EmptyState />;
+  return (
+    <div className="space-y-2">
+      {data.map((r: any) => {
+        const creativeUrl = level === 'ad' ? (r.full_image_url || r.image_url || r.thumbnail_url) : null;
+        return (
+          <div
+            key={r.id}
+            className="rounded-lg border bg-card p-3 active:bg-muted/50 transition-colors"
+            onClick={() => onSelect?.(r.id)}
+          >
+            <div className="flex items-start gap-3">
+              {level === 'ad' && (
+                creativeUrl ? (
+                  <img src={creativeUrl} alt="" className="w-12 h-12 rounded-md object-cover border flex-shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                )
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-sm leading-snug break-words pr-1">{r.name}</div>
+                <div className="grid grid-cols-3 gap-2 mt-2 text-[11px]">
+                  <div><div className="text-muted-foreground">Spend</div><div className="font-semibold tabular-nums">{fmt$(r.spend)}</div></div>
+                  <div><div className="text-muted-foreground">CTR</div><div className="font-semibold tabular-nums">{fmtPct(r.ctr)}</div></div>
+                  <div><div className="text-muted-foreground">CPL</div><div className="font-semibold tabular-nums">{fmt$(r.cost_per_lead)}</div></div>
+                  <div><div className="text-muted-foreground">Leads</div><div className="font-semibold tabular-nums">{fmtN(r.attributed_leads)}</div></div>
+                  <div><div className="text-muted-foreground">Funded</div><div className="font-semibold tabular-nums">{fmtN(r.attributed_funded)}</div></div>
+                  <div><div className="text-muted-foreground">CPA</div><div className="font-semibold tabular-nums">{fmt$(r.cost_per_funded)}</div></div>
+                </div>
+              </div>
+              <div className="flex-shrink-0">
+                <StatusToggle clientId={clientId} level={level} row={r} size="md" />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Variation Task Modal ──
 function VariationTaskModal({
   ad,
@@ -216,6 +311,7 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
   const [filterCampaignId, setFilterCampaignId] = useState<string | null>(null);
   const [filterAdSetId, setFilterAdSetId] = useState<string | null>(null);
   const lastSyncedRange = useRef<string | null>(null);
+  const isMobile = useIsMobile();
 
   const { data: campaigns = [], isLoading: cLoading } = useMetaCampaigns(clientId);
   const { data: allAdSets = [], isLoading: asLoading } = useMetaAdSets(clientId);
@@ -338,20 +434,48 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
         </div>
 
         <TabsContent value="campaigns">
-          <CampaignsTable data={activeCampaigns} isLoading={cLoading} onSelect={(id) => { setFilterCampaignId(id); setFilterAdSetId(null); setActiveTab('adsets'); }} />
+          {isMobile ? (
+            cLoading ? <LoadingState /> : (
+              <MobileRowList
+                data={activeCampaigns}
+                level="campaign"
+                clientId={clientId}
+                onSelect={(id) => { setFilterCampaignId(id); setFilterAdSetId(null); setActiveTab('adsets'); }}
+              />
+            )
+          ) : (
+            <CampaignsTable data={activeCampaigns} isLoading={cLoading} clientId={clientId} onSelect={(id) => { setFilterCampaignId(id); setFilterAdSetId(null); setActiveTab('adsets'); }} />
+          )}
         </TabsContent>
         <TabsContent value="adsets">
-          <AdSetsTable data={adSets} isLoading={asLoading} onSelect={(id) => { setFilterAdSetId(id); setActiveTab('ads'); }} />
+          {isMobile ? (
+            asLoading ? <LoadingState /> : (
+              <MobileRowList
+                data={adSets}
+                level="adset"
+                clientId={clientId}
+                onSelect={(id) => { setFilterAdSetId(id); setActiveTab('ads'); }}
+              />
+            )
+          ) : (
+            <AdSetsTable data={adSets} isLoading={asLoading} clientId={clientId} onSelect={(id) => { setFilterAdSetId(id); setActiveTab('ads'); }} />
+          )}
         </TabsContent>
         <TabsContent value="ads">
-          <AdsTable data={ads} isLoading={adLoading} clientId={clientId} />
+          {isMobile ? (
+            adLoading ? <LoadingState /> : (
+              <MobileRowList data={ads} level="ad" clientId={clientId} />
+            )
+          ) : (
+            <AdsTable data={ads} isLoading={adLoading} clientId={clientId} />
+          )}
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function CampaignsTable({ data, isLoading, onSelect }: { data: any[]; isLoading: boolean; onSelect: (id: string) => void }) {
+function CampaignsTable({ data, isLoading, clientId, onSelect }: { data: any[]; isLoading: boolean; clientId: string; onSelect: (id: string) => void }) {
   const { sortConfig, onSort } = useSort();
   const sorted = useMemo(() => sortData(data, sortConfig), [data, sortConfig]);
 
@@ -376,7 +500,7 @@ function CampaignsTable({ data, isLoading, onSelect }: { data: any[]; isLoading:
               <TableCell className="font-medium sticky left-0 bg-card z-10">
                 <span className="whitespace-normal break-words leading-snug">{c.name}</span>
               </TableCell>
-              <TableCell className="text-center"><StatusDot status={c.status} /></TableCell>
+              <TableCell className="text-center"><StatusToggle clientId={clientId} level="campaign" row={c} /></TableCell>
               <MetricCells row={c} />
             </TableRow>
           ))}
@@ -386,7 +510,7 @@ function CampaignsTable({ data, isLoading, onSelect }: { data: any[]; isLoading:
   );
 }
 
-function AdSetsTable({ data, isLoading, onSelect }: { data: any[]; isLoading: boolean; onSelect: (id: string) => void }) {
+function AdSetsTable({ data, isLoading, clientId, onSelect }: { data: any[]; isLoading: boolean; clientId: string; onSelect: (id: string) => void }) {
   const { sortConfig, onSort } = useSort();
   const sorted = useMemo(() => sortData(data, sortConfig), [data, sortConfig]);
 
@@ -411,7 +535,7 @@ function AdSetsTable({ data, isLoading, onSelect }: { data: any[]; isLoading: bo
               <TableCell className="font-medium sticky left-0 bg-card z-10">
                 <span className="whitespace-normal break-words leading-snug">{a.name}</span>
               </TableCell>
-              <TableCell className="text-center"><StatusDot status={a.effective_status || a.status} /></TableCell>
+              <TableCell className="text-center"><StatusToggle clientId={clientId} level="adset" row={a} /></TableCell>
               <MetricCells row={a} />
             </TableRow>
           ))}
