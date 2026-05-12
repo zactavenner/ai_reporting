@@ -620,7 +620,7 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-center"><StatusDot status={a.effective_status || a.status} /></TableCell>
+                  <TableCell className="text-center"><StatusToggle clientId={clientId} level="ad" row={a} /></TableCell>
                   <MetricCells row={a} />
                   <TableCell className="text-center">
                     <Button
