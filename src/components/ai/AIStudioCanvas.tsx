@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 export type CanvasPlaceholder = {
@@ -21,7 +21,7 @@ export type CanvasItem = {
 };
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
-export function AIStudioCanvas({ entries }: { entries: CanvasEntry[] }) {
+export function AIStudioCanvas({ entries, onEditImage }: { entries: CanvasEntry[]; onEditImage?: (imageUrl: string, aspectRatio: string) => void }) {
   if (entries.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8 text-center">
@@ -73,6 +73,12 @@ export function AIStudioCanvas({ entries }: { entries: CanvasEntry[] }) {
                 <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{p.prompt}</p>
                 {p.image_url && (
                   <>
+                    {onEditImage && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Edit (offer / hook / colors / disclaimer)"
+                        onClick={() => onEditImage(p.image_url, p.aspect_ratio || "1:1")}>
+                        <Wand2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
                       onClick={() => { navigator.clipboard.writeText(p.image_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
@@ -83,6 +89,9 @@ export function AIStudioCanvas({ entries }: { entries: CanvasEntry[] }) {
                       </a>
                     </Button>
                   </>
+                )}
+                {p.parent_image_url && (
+                  <Badge variant="outline" className="text-[10px] mt-1">revision</Badge>
                 )}
               </div>
             </Card>
