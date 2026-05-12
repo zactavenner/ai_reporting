@@ -361,6 +361,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden">
             <AIStudioCanvas
               entries={canvas}
+              clientId={clientId}
+              onCanvasItemUpdated={(updated) => {
+                setCanvas(curr => curr.map(c => ("__placeholder" in c) ? c : (c.id === updated.id ? updated : c)));
+              }}
               onEditImage={(imageUrl, aspectRatio) => {
                 setInput(
                   `Edit this ad on the canvas (source_image_url: ${imageUrl}, aspect_ratio: ${aspectRatio}).\n` +
