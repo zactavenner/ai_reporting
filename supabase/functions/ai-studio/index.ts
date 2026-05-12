@@ -577,6 +577,23 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "generate_ad_variations",
+      description: "Generate multiple Instagram-sized creative options (2–5) so the user can pick favorites to save. Use whenever the user asks for variations, options, alternatives, or 'a few different versions'. Variants are NOT auto-saved as client assets — the user picks which to save from the canvas card. Optionally pass source_image_url to riff on an existing ad.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What the ads should communicate (offer, hook ideas, vibe)." },
+          count: { type: "integer", minimum: 2, maximum: 5, description: "How many variations (2–5). Defaults to 4." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16"], description: "Instagram sizes only. Defaults to 1:1." },
+          source_image_url: { type: "string", description: "Optional canvas image to riff on." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
 ];
 
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
@@ -591,6 +608,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "TOOL USE:",
   "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro'.",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
+  "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
   "",
