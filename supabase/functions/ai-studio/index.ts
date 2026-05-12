@@ -832,6 +832,17 @@ Deno.serve(async (req) => {
                 quality: args.quality || quality,
               });
             }
+            if (name === "generate_ad_variations") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Generating ${Math.max(2, Math.min(5, args.count || 4))} variations: ${args.prompt || ""}`,
+                aspect_ratio: args.aspect_ratio || "1:1",
+                quality: "fast",
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
@@ -925,6 +936,40 @@ Deno.serve(async (req) => {
                     new_hook: args.new_hook || null,
                     new_colors: args.new_colors || null,
                     new_disclaimer: args.new_disclaimer || null,
+                  },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "generate_ad_variations") {
+                const v = await generateAdVariations({
+                  prompt: args.prompt,
+                  aspectRatio: args.aspect_ratio || "1:1",
+                  count: args.count,
+                  sourceImageUrl: args.source_image_url,
+                  clientId: clientId || null,
+                  brandContext,
+                });
+                result = {
+                  ok: true,
+                  count: v.variants.length,
+                  aspect_ratio: v.aspect_ratio,
+                  variant_urls_internal: v.variants.map(x => x.url),
+                  errors: v.errors,
+                };
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "variation_set",
+                  payload: {
+                    prompt: args.prompt,
+                    aspect_ratio: v.aspect_ratio,
+                    source_image_url: args.source_image_url || null,
+                    saved_indices: [] as number[],
+                    variants: v.variants.map(x => ({
+                      image_url: x.url,
+                      storage_path: x.storage_path,
+                      mime: x.mime,
+                      model: x.model,
+                      aspect_ratio: x.aspect_ratio,
+                      hint: x.hint,
+                    })),
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
