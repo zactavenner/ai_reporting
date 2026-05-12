@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
+import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 
@@ -38,6 +39,8 @@ function stripImageMarkup(t: string) {
 
 export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: agencySettings } = useAgencySettings();
+  const { data: clientSettings } = useClientSettings(clientId);
+  const updateClientSettings = useUpdateClientSettings();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
@@ -102,9 +105,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Default URLs from agency settings (only if conversation has none)
   useEffect(() => {
     if (!hydrated) return;
-    if (!docUrl && agencySettings?.kpi_google_doc_url) setDocUrl(agencySettings.kpi_google_doc_url);
-    if (!sheetUrl && agencySettings?.kpi_google_sheet_url) setSheetUrl(agencySettings.kpi_google_sheet_url);
-  }, [agencySettings, hydrated, docUrl, sheetUrl]);
+    if (!docUrl) {
+      const fallback = (clientSettings as any)?.kpi_google_doc_url || agencySettings?.kpi_google_doc_url;
+      if (fallback) setDocUrl(fallback);
+    }
+    if (!sheetUrl) {
+      const fallback = (clientSettings as any)?.kpi_google_sheet_url || agencySettings?.kpi_google_sheet_url;
+      if (fallback) setSheetUrl(fallback);
+    }
+  }, [agencySettings, clientSettings, hydrated, docUrl, sheetUrl]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -263,10 +272,50 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Input placeholder="Google Doc URL" value={docUrl} onChange={e => setDocUrl(e.target.value)} className="h-8 text-xs" />
-            <Input placeholder="Google Sheet URL" value={sheetUrl} onChange={e => setSheetUrl(e.target.value)} className="h-8 text-xs" />
-          </div>
+          {(() => {
+            const clientDoc = (clientSettings as any)?.kpi_google_doc_url || "";
+            const agencyDoc = agencySettings?.kpi_google_doc_url || "";
+            const clientSheet = (clientSettings as any)?.kpi_google_sheet_url || "";
+            const agencySheet = agencySettings?.kpi_google_sheet_url || "";
+            const docSource = !docUrl ? "" : docUrl === clientDoc ? "client default" : docUrl === agencyDoc ? "agency default" : "override";
+            const sheetSource = !sheetUrl ? "" : sheetUrl === clientSheet ? "client default" : sheetUrl === agencySheet ? "agency default" : "override";
+            const saveDoc = async () => {
+              if (!docUrl.trim()) return;
+              try {
+                await updateClientSettings.mutateAsync({ client_id: clientId, kpi_google_doc_url: docUrl.trim() } as any);
+                toast.success("Saved as this client's default doc");
+              } catch (e: any) { toast.error(e?.message || "Failed to save"); }
+            };
+            const saveSheet = async () => {
+              if (!sheetUrl.trim()) return;
+              try {
+                await updateClientSettings.mutateAsync({ client_id: clientId, kpi_google_sheet_url: sheetUrl.trim() } as any);
+                toast.success("Saved as this client's default sheet");
+              } catch (e: any) { toast.error(e?.message || "Failed to save"); }
+            };
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <div className="flex gap-1">
+                    <Input placeholder="Google Doc URL" value={docUrl} onChange={e => setDocUrl(e.target.value)} className="h-8 text-xs" />
+                    <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0"
+                      disabled={!docUrl.trim() || docUrl === clientDoc || updateClientSettings.isPending}
+                      onClick={saveDoc}>Save</Button>
+                  </div>
+                  {docSource && <Badge variant="secondary" className="text-[9px]">{docSource}</Badge>}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex gap-1">
+                    <Input placeholder="Google Sheet URL" value={sheetUrl} onChange={e => setSheetUrl(e.target.value)} className="h-8 text-xs" />
+                    <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0"
+                      disabled={!sheetUrl.trim() || sheetUrl === clientSheet || updateClientSettings.isPending}
+                      onClick={saveSheet}>Save</Button>
+                  </div>
+                  {sheetSource && <Badge variant="secondary" className="text-[9px]">{sheetSource}</Badge>}
+                </div>
+              </div>
+            );
+          })()}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Image quality:</span>
             <Select value={quality} onValueChange={(v: any) => setQuality(v)}>
