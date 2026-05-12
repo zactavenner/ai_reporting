@@ -359,7 +359,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </TabsList>
 
           <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden">
-            <AIStudioCanvas entries={canvas} />
+            <AIStudioCanvas
+              entries={canvas}
+              onEditImage={(imageUrl, aspectRatio) => {
+                setInput(
+                  `Edit this ad on the canvas (source_image_url: ${imageUrl}, aspect_ratio: ${aspectRatio}).\n` +
+                  `Describe what to change — for example: new offer, new hook/headline, new colors (hex list), or new disclaimer text. ` +
+                  `Use the edit_static_ad tool.`
+                );
+                toast.success("Edit prompt loaded — refine and send");
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="doc" className="flex-1 m-0 overflow-hidden">

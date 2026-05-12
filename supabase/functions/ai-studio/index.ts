@@ -286,6 +286,156 @@ async function generateStaticAd(opts: {
   return { url: pub.publicUrl, mime, storage_path: path, model: modelUsed, aspect_ratio: aspect };
 }
 
+// ---------- Edit existing static ad ----------
+function buildEditPrompt(args: {
+  editInstruction: string;
+  newOffer?: string;
+  newHook?: string;
+  newColors?: string[];
+  newDisclaimer?: string;
+  brandContext: any;
+  aspectRatio: string;
+}) {
+  const { w, h } = getDimensions(args.aspectRatio);
+  const colorRule = args.newColors?.length
+    ? `Override the color palette with these EXACT colors: ${args.newColors.join(", ")}.`
+    : (args.brandContext?.brandColors?.length
+        ? `Keep the brand palette: ${args.brandContext.brandColors.join(", ")}.`
+        : "");
+  const offerLine = args.newOffer ? `Update the offer / value proposition to: ${args.newOffer}` : "";
+  const hookLine = args.newHook ? `Replace the headline / hook with: "${args.newHook}"` : "";
+  const disclaimerLine = args.newDisclaimer
+    ? `Update the bottom disclaimer to read clearly: "${args.newDisclaimer}"`
+    : (args.brandContext?.includeDisclaimer
+        ? `Keep a small legible bottom disclaimer: "${args.brandContext.disclaimerText}"`
+        : "");
+  return `Revise the attached advertisement image. Preserve the overall composition, layout grid, photography/illustration treatment and brand feel. Only change what is requested.
+
+EDIT INSTRUCTION: ${args.editInstruction}
+
+${hookLine}
+${offerLine}
+${colorRule}
+${disclaimerLine}
+
+Output dimensions: ${w}x${h} (${args.aspectRatio}). Ultra high resolution, no watermarks, no logos. Never use the word "guaranteed" for investment offers — use "targeted returns".`.trim();
+}
+
+async function editStaticAd(opts: {
+  sourceImageUrl: string;
+  editInstruction: string;
+  newOffer?: string;
+  newHook?: string;
+  newColors?: string[];
+  newDisclaimer?: string;
+  aspectRatio?: string;
+  clientId: string | null;
+  brandContext: any;
+  quality: "pro" | "fast";
+}): Promise<ImageResult & { parent_image_url: string }> {
+  const aspect = opts.aspectRatio || "1:1";
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+  const fullPrompt = buildEditPrompt({
+    editInstruction: opts.editInstruction,
+    newOffer: opts.newOffer,
+    newHook: opts.newHook,
+    newColors: opts.newColors,
+    newDisclaimer: opts.newDisclaimer,
+    brandContext: opts.brandContext,
+    aspectRatio: aspect,
+  });
+
+  // Fetch source image as base64
+  const srcRes = await fetch(opts.sourceImageUrl);
+  if (!srcRes.ok) throw new Error(`Could not fetch source image (${srcRes.status})`);
+  const srcMime = srcRes.headers.get("content-type") || "image/png";
+  const srcB64 = arrayBufferToBase64(await srcRes.arrayBuffer());
+
+  let base64Image = "";
+  let mime = "image/png";
+  let modelUsed = "";
+
+  if (opts.quality === "pro" && GEMINI_API_KEY) {
+    modelUsed = "gemini-3-pro-image-preview";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }, { inlineData: { mimeType: srcMime, data: srcB64 } }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+      },
+    );
+    if (!res.ok) throw new Error(`Gemini edit [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    const data = await res.json();
+    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) =>
+      p.inlineData?.mimeType?.startsWith("image/"),
+    );
+    if (!imagePart?.inlineData?.data) throw new Error("No image in Gemini edit response");
+    base64Image = imagePart.inlineData.data;
+    mime = imagePart.inlineData.mimeType || "image/png";
+  } else {
+    modelUsed = "google/gemini-3.1-flash-image-preview";
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: modelUsed,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: fullPrompt },
+            { type: "image_url", image_url: { url: `data:${srcMime};base64,${srcB64}` } },
+          ],
+        }],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (!res.ok) throw new Error(`Gateway edit [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    const data = await res.json();
+    const imgUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imgUrl?.startsWith("data:")) throw new Error("Gateway returned no inline image");
+    const m = imgUrl.match(/^data:(.+?);base64,(.+)$/)!;
+    mime = m[1]; base64Image = m[2];
+  }
+
+  const bytes = Uint8Array.from(atob(base64Image), c => c.charCodeAt(0));
+  const ext = (mime.split("/")[1] || "png").split("+")[0];
+  const path = `ai-studio/${opts.clientId || "shared"}/edit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const { error } = await supa.storage.from("creatives").upload(path, bytes, { contentType: mime, upsert: false });
+  if (error) throw new Error(`Storage upload: ${error.message}`);
+  const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+
+  if (opts.clientId) {
+    await supa.from("client_assets").insert({
+      client_id: opts.clientId,
+      asset_type: "static_ad",
+      title: `Edit: ${opts.editInstruction.slice(0, 100)}`,
+      status: "completed",
+      content: {
+        image_url: pub.publicUrl,
+        storage_path: path,
+        model: modelUsed,
+        aspect_ratio: aspect,
+        source: "ai_studio",
+        parent_image_url: opts.sourceImageUrl,
+        edit_instruction: opts.editInstruction,
+        new_offer: opts.newOffer || null,
+        new_hook: opts.newHook || null,
+        new_colors: opts.newColors || null,
+        new_disclaimer: opts.newDisclaimer || null,
+      },
+    });
+  }
+
+  return {
+    url: pub.publicUrl, mime, storage_path: path, model: modelUsed,
+    aspect_ratio: aspect, parent_image_url: opts.sourceImageUrl,
+  };
+}
+
 // ---------- Tool schema ----------
 const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
@@ -311,6 +461,27 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "edit_static_ad",
+      description: "Revise an EXISTING static ad on the canvas. Use this when the user references an ad already shown (e.g. 'change the offer to X', 'swap the hook', 'use brand green', 'update the disclaimer'). Persists a new versioned image card linked to the source. Always pass the original image URL as source_image_url.",
+      parameters: {
+        type: "object",
+        properties: {
+          source_image_url: { type: "string", description: "Public URL of the original ad image to revise (from a prior canvas card)." },
+          edit_instruction: { type: "string", description: "Plain-English description of the revision (visual, layout, copy)." },
+          new_offer: { type: "string", description: "Optional updated offer / value proposition copy." },
+          new_hook: { type: "string", description: "Optional updated headline / hook line." },
+          new_colors: { type: "array", items: { type: "string" }, description: "Optional override color palette (hex or named)." },
+          new_disclaimer: { type: "string", description: "Optional updated bottom disclaimer text." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "Defaults to 1:1." },
+          quality: { type: "string", enum: ["pro", "fast"], description: "pro = highest quality (default), fast = quick iteration" },
+        },
+        required: ["source_image_url", "edit_instruction"],
+      },
+    },
+  },
 ];
 
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
@@ -324,6 +495,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "",
   "TOOL USE:",
   "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro'.",
+  "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
   "",
@@ -536,6 +708,17 @@ Deno.serve(async (req) => {
                 quality: args.quality || quality,
               });
             }
+            if (name === "edit_static_ad") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Editing: ${args.edit_instruction || ""}`,
+                aspect_ratio: args.aspect_ratio || "1:1",
+                quality: args.quality || quality,
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
@@ -597,6 +780,38 @@ Deno.serve(async (req) => {
                     model: img.model,
                     aspect_ratio: img.aspect_ratio,
                     prompt: args.prompt,
+                  },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "edit_static_ad") {
+                const img = await editStaticAd({
+                  sourceImageUrl: args.source_image_url,
+                  editInstruction: args.edit_instruction,
+                  newOffer: args.new_offer,
+                  newHook: args.new_hook,
+                  newColors: args.new_colors,
+                  newDisclaimer: args.new_disclaimer,
+                  aspectRatio: args.aspect_ratio || "1:1",
+                  clientId: clientId || null,
+                  brandContext,
+                  quality: (args.quality === "fast" ? "fast" : "pro"),
+                });
+                result = { ok: true, model: img.model, aspect_ratio: img.aspect_ratio, url_for_internal_use_only: img.url, parent_image_url: img.parent_image_url };
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "image",
+                  payload: {
+                    image_url: img.url,
+                    storage_path: img.storage_path,
+                    mime: img.mime,
+                    model: img.model,
+                    aspect_ratio: img.aspect_ratio,
+                    prompt: `Edit: ${args.edit_instruction}`,
+                    parent_image_url: img.parent_image_url,
+                    edit_instruction: args.edit_instruction,
+                    new_offer: args.new_offer || null,
+                    new_hook: args.new_hook || null,
+                    new_colors: args.new_colors || null,
+                    new_disclaimer: args.new_disclaimer || null,
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
