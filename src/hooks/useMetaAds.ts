@@ -84,3 +84,54 @@ export function useSyncMetaAds() {
     },
   });
 }
+
+export function useToggleMetaStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      clientId, level, rowId, status,
+    }: {
+      clientId: string;
+      level: 'campaign' | 'adset' | 'ad';
+      rowId: string;
+      status: 'ACTIVE' | 'PAUSED';
+    }) => {
+      const { data, error } = await supabase.functions.invoke('toggle-meta-status', {
+        body: { clientId, level, rowId, status },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Toggle failed');
+      return data;
+    },
+    onMutate: async ({ clientId, level, rowId, status }) => {
+      const keyMap = {
+        campaign: ['meta-campaigns', clientId],
+        adset: ['meta-ad-sets', clientId],
+        ad: ['meta-ads', clientId],
+      } as const;
+      const baseKey = keyMap[level];
+      await queryClient.cancelQueries({ queryKey: baseKey });
+      const snapshots = queryClient.getQueriesData({ queryKey: baseKey });
+      queryClient.setQueriesData({ queryKey: baseKey }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((r: any) => r.id === rowId ? { ...r, status, effective_status: status } : r);
+      });
+      return { snapshots };
+    },
+    onError: (error, _vars, ctx) => {
+      if (ctx?.snapshots) ctx.snapshots.forEach(([key, data]) => queryClient.setQueryData(key as any, data));
+      toast.error(error instanceof Error ? error.message : 'Failed to toggle status');
+    },
+    onSuccess: (_d, { status }) => {
+      toast.success(status === 'ACTIVE' ? 'Resumed on Meta' : 'Paused on Meta');
+    },
+    onSettled: (_d, _e, { clientId, level }) => {
+      const keyMap = {
+        campaign: ['meta-campaigns', clientId],
+        adset: ['meta-ad-sets', clientId],
+        ad: ['meta-ads', clientId],
+      } as const;
+      queryClient.invalidateQueries({ queryKey: keyMap[level] });
+    },
+  });
+}
