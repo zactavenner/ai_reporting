@@ -1,8 +1,10 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2 } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export type CanvasPlaceholder = {
   __placeholder: true;
@@ -15,13 +17,20 @@ export type CanvasPlaceholder = {
 };
 export type CanvasItem = {
   id: string;
-  kind: "image" | "doc_edit" | "sheet_edit";
+  kind: "image" | "doc_edit" | "sheet_edit" | "variation_set";
   payload: any;
   created_at: string;
 };
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
-export function AIStudioCanvas({ entries, onEditImage }: { entries: CanvasEntry[]; onEditImage?: (imageUrl: string, aspectRatio: string) => void }) {
+export function AIStudioCanvas({
+  entries, onEditImage, clientId, onCanvasItemUpdated,
+}: {
+  entries: CanvasEntry[];
+  onEditImage?: (imageUrl: string, aspectRatio: string) => void;
+  clientId?: string;
+  onCanvasItemUpdated?: (item: CanvasItem) => void;
+}) {
   if (entries.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8 text-center">
@@ -139,8 +148,135 @@ export function AIStudioCanvas({ entries, onEditImage }: { entries: CanvasEntry[
             </Card>
           );
         }
+        if (e.kind === "variation_set") {
+          return <VariationSetCard key={e.id} item={e} clientId={clientId} onUpdated={onCanvasItemUpdated} />;
+        }
         return null;
       })}
     </div>
+  );
+}
+
+function VariationSetCard({
+  item, clientId, onUpdated,
+}: {
+  item: CanvasItem;
+  clientId?: string;
+  onUpdated?: (item: CanvasItem) => void;
+}) {
+  const p = item.payload || {};
+  const variants: any[] = Array.isArray(p.variants) ? p.variants : [];
+  const savedIndices: number[] = Array.isArray(p.saved_indices) ? p.saved_indices : [];
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [saving, setSaving] = useState(false);
+
+  const toggle = (i: number) => {
+    if (savedIndices.includes(i)) return;
+    setPicked(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else if (next.size + savedIndices.length < 5) next.add(i);
+      else toast.error("Max 5 selected");
+      return next;
+    });
+  };
+
+  const save = async () => {
+    if (!clientId || picked.size === 0) return;
+    setSaving(true);
+    try {
+      const rows = Array.from(picked).map(i => {
+        const v = variants[i];
+        return {
+          client_id: clientId,
+          asset_type: "static_ad",
+          title: `Variation ${i + 1}: ${(p.prompt || "").slice(0, 100)}`,
+          status: "completed",
+          content: {
+            image_url: v.image_url,
+            storage_path: v.storage_path,
+            model: v.model,
+            aspect_ratio: v.aspect_ratio,
+            source: "ai_studio_variation",
+            prompt: p.prompt,
+            variant_hint: v.hint,
+            variation_set_id: item.id,
+            variant_index: i,
+          },
+        };
+      });
+      const { error: insErr } = await supabase.from("client_assets").insert(rows);
+      if (insErr) throw insErr;
+
+      const newSaved = [...savedIndices, ...Array.from(picked)].sort((a, b) => a - b);
+      const newPayload = { ...p, saved_indices: newSaved };
+      const { error: updErr } = await supabase
+        .from("ai_studio_canvas_items")
+        .update({ payload: newPayload })
+        .eq("id", item.id);
+      if (updErr) throw updErr;
+
+      toast.success(`Saved ${picked.size} variation${picked.size > 1 ? "s" : ""} to client assets`);
+      setPicked(new Set());
+      onUpdated?.({ ...item, payload: newPayload });
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <ImageIcon className="h-4 w-4 text-primary" />
+        <span className="text-sm font-medium">Variations</span>
+        <Badge variant="outline" className="text-[10px]">{p.aspect_ratio || "1:1"}</Badge>
+        <Badge variant="secondary" className="text-[10px]">{variants.length} options</Badge>
+        <span className="text-xs text-muted-foreground ml-auto">{new Date(item.created_at).toLocaleTimeString()}</span>
+      </div>
+      <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{p.prompt}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {variants.map((v, i) => {
+          const isSaved = savedIndices.includes(i);
+          const isPicked = picked.has(i);
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => toggle(i)}
+              disabled={isSaved}
+              className={`relative block rounded-md overflow-hidden border-2 transition ${
+                isSaved ? "border-emerald-500 cursor-default" : isPicked ? "border-primary" : "border-transparent hover:border-muted-foreground/40"
+              }`}
+              title={v.hint}
+            >
+              <img src={v.image_url} alt={`variation ${i + 1}`} className="w-full aspect-square object-cover" loading="lazy" />
+              {(isSaved || isPicked) && (
+                <div className={`absolute top-1 right-1 rounded-full p-1 ${isSaved ? "bg-emerald-500" : "bg-primary"} text-white`}>
+                  <Check className="h-3 w-3" />
+                </div>
+              )}
+              {isSaved && (
+                <div className="absolute bottom-1 left-1 right-1 text-[10px] text-white bg-emerald-600/80 rounded px-1 py-0.5 text-center">Saved</div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2 mt-3">
+        <span className="text-xs text-muted-foreground flex-1">
+          {picked.size > 0
+            ? `${picked.size} selected — pick 1–5 to save as client assets`
+            : savedIndices.length > 0
+              ? `${savedIndices.length} already saved`
+              : "Click thumbnails to pick 1–5 favorites"}
+        </span>
+        <Button size="sm" disabled={picked.size === 0 || saving || !clientId} onClick={save}>
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+          Save {picked.size || ""}
+        </Button>
+      </div>
+    </Card>
   );
 }
