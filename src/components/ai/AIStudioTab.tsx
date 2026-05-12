@@ -22,7 +22,7 @@ type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: a
 
 const SUGGESTIONS = [
   { icon: <ImageIcon className="h-4 w-4" />, label: "Generate a 1:1 ad creative for our offer" },
-  { icon: <Wand2 className="h-4 w-4" />, label: "Build a 9:16 Reels ad with a bold headline" },
+  { icon: <Wand2 className="h-4 w-4" />, label: "Generate 4 Instagram 1:1 variations of our offer" },
   { icon: <FileText className="h-4 w-4" />, label: "Summarize the master doc" },
   { icon: <TableIcon className="h-4 w-4" />, label: "Read the first 20 rows of the sheet" },
 ];
