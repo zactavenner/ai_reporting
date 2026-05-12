@@ -707,6 +707,17 @@ Deno.serve(async (req) => {
                 quality: args.quality || quality,
               });
             }
+            if (name === "edit_static_ad") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Editing: ${args.edit_instruction || ""}`,
+                aspect_ratio: args.aspect_ratio || "1:1",
+                quality: args.quality || quality,
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
@@ -768,6 +779,38 @@ Deno.serve(async (req) => {
                     model: img.model,
                     aspect_ratio: img.aspect_ratio,
                     prompt: args.prompt,
+                  },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "edit_static_ad") {
+                const img = await editStaticAd({
+                  sourceImageUrl: args.source_image_url,
+                  editInstruction: args.edit_instruction,
+                  newOffer: args.new_offer,
+                  newHook: args.new_hook,
+                  newColors: args.new_colors,
+                  newDisclaimer: args.new_disclaimer,
+                  aspectRatio: args.aspect_ratio || "1:1",
+                  clientId: clientId || null,
+                  brandContext,
+                  quality: (args.quality === "fast" ? "fast" : "pro"),
+                });
+                result = { ok: true, model: img.model, aspect_ratio: img.aspect_ratio, url_for_internal_use_only: img.url, parent_image_url: img.parent_image_url };
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "image",
+                  payload: {
+                    image_url: img.url,
+                    storage_path: img.storage_path,
+                    mime: img.mime,
+                    model: img.model,
+                    aspect_ratio: img.aspect_ratio,
+                    prompt: `Edit: ${args.edit_instruction}`,
+                    parent_image_url: img.parent_image_url,
+                    edit_instruction: args.edit_instruction,
+                    new_offer: args.new_offer || null,
+                    new_hook: args.new_hook || null,
+                    new_colors: args.new_colors || null,
+                    new_disclaimer: args.new_disclaimer || null,
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
