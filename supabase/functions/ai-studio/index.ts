@@ -1532,12 +1532,17 @@ Deno.serve(async (req) => {
                 const notes = args.notes ? String(args.notes).slice(0, 500) : null;
                 let appendedToDoc = false;
                 let appendError: string | null = null;
-                if (args.append_to_doc && docId) {
-                  try {
-                    await appendToDoc(docId, `\n\n## ${title}\n\n${content}\n`);
-                    appendedToDoc = true;
-                  } catch (e: any) {
-                    appendError = e?.message || String(e);
+                if (args.append_to_doc) {
+                  const pc = await precheckDoc();
+                  if (!pc.ok) {
+                    appendError = pc.error || "Doc precheck failed";
+                  } else {
+                    try {
+                      await appendToDoc(docId!, `\n\n## ${title}\n\n${content}\n`);
+                      appendedToDoc = true;
+                    } catch (e: any) {
+                      appendError = e?.message || String(e);
+                    }
                   }
                 }
                 const ci = await supa.from("ai_studio_canvas_items").insert({
