@@ -24,21 +24,25 @@ function base64UrlEncode(value: ArrayBuffer): string {
 }
 
 async function verifyDashboardToken(token: string | null): Promise<string | null> {
-  if (!token || !token.includes(".")) return null;
-  const [payload, signature] = token.split(".");
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(SERVICE_KEY),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const expected = base64UrlEncode(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
-  if (signature !== expected) return null;
-  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-  const parsed = JSON.parse(atob(base64 + "=".repeat((4 - base64.length % 4) % 4)));
-  if (!parsed?.memberId || typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
-  return parsed.memberId;
+  try {
+    if (!token || !token.includes(".")) return null;
+    const [payload, signature] = token.split(".");
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(SERVICE_KEY),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const expected = base64UrlEncode(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+    if (signature !== expected) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const parsed = JSON.parse(atob(base64 + "=".repeat((4 - base64.length % 4) % 4)));
+    if (!parsed?.memberId || typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
+    return parsed.memberId;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- helpers ----------
