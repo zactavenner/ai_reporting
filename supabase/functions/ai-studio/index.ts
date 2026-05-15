@@ -1059,10 +1059,11 @@ Deno.serve(async (req) => {
   // Brand context
   let brandContext: any = {};
   let brandSummary = "No client brand context loaded.";
+  let clientDocUrl: string | null = null;
   if (clientId) {
     const { data: c } = await supa
       .from("clients")
-      .select("name, brand_colors, brand_fonts, offer_description")
+      .select("name, brand_colors, brand_fonts, offer_description, google_doc_url, google_doc_id")
       .eq("id", clientId).maybeSingle();
     if (c) {
       brandContext = {
@@ -1073,14 +1074,17 @@ Deno.serve(async (req) => {
         disclaimerText: "Investing involves risk including loss of principal. Targeted returns are not guaranteed. Past performance does not guarantee future results.",
       };
       brandSummary = `Client: ${c.name}. Brand colors: ${(brandContext.brandColors || []).join(", ") || "n/a"}. Brand fonts: ${(brandContext.brandFonts || []).join(", ") || "n/a"}. Offer: ${(c.offer_description || "n/a").slice(0, 200)}`;
+      clientDocUrl = (c as any).google_doc_url || null;
     }
   }
 
-  const docId = docUrl ? extractDocId(docUrl) : null;
+  // Server-side fallback: if the conversation didn't supply a Doc, use the one tied to the client.
+  const effectiveDocUrl = docUrl || clientDocUrl || null;
+  const docId = effectiveDocUrl ? extractDocId(effectiveDocUrl) : null;
   const sheetId = sheetUrl ? extractSheetId(sheetUrl) : null;
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl, docId, sheetUrl, sheetId, quality, brandSummary }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary }) },
     ...priorMessages,
     { role: "user", content: userText },
   ];
