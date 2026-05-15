@@ -21,7 +21,7 @@ function PasswordGateContent({ children }: PasswordGateProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const { login, currentMember } = useTeamMember();
+  const { login } = useTeamMember();
 
   useEffect(() => {
     // Check if already authenticated in this session
