@@ -51,6 +51,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [clientDocUrl, setClientDocUrl] = useState<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
@@ -122,18 +123,32 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
+  // Load the Google Doc tied directly to this client (clients.google_doc_url)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("clients")
+        .select("google_doc_url")
+        .eq("id", clientId)
+        .maybeSingle();
+      if (!cancelled) setClientDocUrl(((data as any)?.google_doc_url as string) || "");
+    })();
+    return () => { cancelled = true; };
+  }, [clientId]);
+
   // Default URLs from agency settings (only if conversation has none)
   useEffect(() => {
     if (!hydrated) return;
     if (!docUrl) {
-      const fallback = (clientSettings as any)?.kpi_google_doc_url || agencySettings?.kpi_google_doc_url;
+      const fallback = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url || agencySettings?.kpi_google_doc_url;
       if (fallback) setDocUrl(fallback);
     }
     if (!sheetUrl) {
       const fallback = (clientSettings as any)?.kpi_google_sheet_url || agencySettings?.kpi_google_sheet_url;
       if (fallback) setSheetUrl(fallback);
     }
-  }, [agencySettings, clientSettings, hydrated, docUrl, sheetUrl]);
+  }, [agencySettings, clientSettings, hydrated, docUrl, sheetUrl, clientDocUrl]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
