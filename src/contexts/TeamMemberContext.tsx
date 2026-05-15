@@ -21,6 +21,7 @@ const SESSION_MEMBER_ID = 'team_member_id';
 const SESSION_MEMBER_NAME = 'team_member_name';
 const SESSION_MEMBER_EMAIL = 'team_member_email';
 const SESSION_MEMBER_ROLE = 'team_member_role';
+const SESSION_DASHBOARD_TOKEN = 'dashboard_session_token';
 
 export function TeamMemberProvider({ children }: { children: ReactNode }) {
   const [currentMember, setCurrentMember] = useState<TeamMember | null>(null);
@@ -75,6 +76,7 @@ export function TeamMemberProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(SESSION_MEMBER_NAME);
     localStorage.removeItem(SESSION_MEMBER_EMAIL);
     localStorage.removeItem(SESSION_MEMBER_ROLE);
+    localStorage.removeItem(SESSION_DASHBOARD_TOKEN);
     localStorage.removeItem('dashboard_auth');
     setCurrentMember(null);
   };
