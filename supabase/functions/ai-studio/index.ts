@@ -906,6 +906,28 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "create_text_artifact",
+      description: "Manus-style: write a long-form text deliverable (ad copy, video script, VSL script, caller script, email, landing-page copy, captions, outline, plan, brief, etc.) and drop it on the canvas as its own card. ALWAYS use this tool when the user asks you to WRITE, DRAFT, GENERATE, or CREATE any kind of script, copy, email, post, caption, outline, plan, or document body — instead of putting that text in your chat reply. The chat reply must only be a 1–2 sentence status (e.g. 'Drafted the 60s VSL script on the canvas.'). Render the body as Markdown.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short title for the artifact (e.g. 'Hero VSL — 60s', 'Meta ad copy v1')." },
+          artifact_type: {
+            type: "string",
+            enum: ["ad_copy", "video_script", "vsl_script", "caller_script", "email", "landing_copy", "caption", "outline", "plan", "brief", "other"],
+            description: "Kind of deliverable.",
+          },
+          content: { type: "string", description: "Full body in Markdown. Use headings, bullets, numbered hooks/variations as appropriate. No image embeds." },
+          notes: { type: "string", description: "Optional one-line subhead / context (e.g. 'CTA: Book a call', 'Targets: 45–65 accredited investors')." },
+          append_to_doc: { type: "boolean", description: "If true and a Google Doc is tied to this client, also append this artifact to that doc." },
+        },
+        required: ["title", "artifact_type", "content"],
+      },
+    },
+  },
 ];
 
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
