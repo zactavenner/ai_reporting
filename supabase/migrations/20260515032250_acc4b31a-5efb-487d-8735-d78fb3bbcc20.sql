@@ -1,0 +1,1 @@
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS google_doc_id text, ADD COLUMN IF NOT EXISTS google_doc_url text;

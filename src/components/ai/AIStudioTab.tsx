@@ -51,6 +51,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [clientDocUrl, setClientDocUrl] = useState<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
@@ -122,18 +123,32 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
+  // Load the Google Doc tied directly to this client (clients.google_doc_url)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("clients")
+        .select("google_doc_url")
+        .eq("id", clientId)
+        .maybeSingle();
+      if (!cancelled) setClientDocUrl(((data as any)?.google_doc_url as string) || "");
+    })();
+    return () => { cancelled = true; };
+  }, [clientId]);
+
   // Default URLs from agency settings (only if conversation has none)
   useEffect(() => {
     if (!hydrated) return;
     if (!docUrl) {
-      const fallback = (clientSettings as any)?.kpi_google_doc_url || agencySettings?.kpi_google_doc_url;
+      const fallback = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url || agencySettings?.kpi_google_doc_url;
       if (fallback) setDocUrl(fallback);
     }
     if (!sheetUrl) {
       const fallback = (clientSettings as any)?.kpi_google_sheet_url || agencySettings?.kpi_google_sheet_url;
       if (fallback) setSheetUrl(fallback);
     }
-  }, [agencySettings, clientSettings, hydrated, docUrl, sheetUrl]);
+  }, [agencySettings, clientSettings, hydrated, docUrl, sheetUrl, clientDocUrl]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -274,17 +289,32 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Button>
           </div>
           {(() => {
-            const clientDoc = (clientSettings as any)?.kpi_google_doc_url || "";
+            const clientDoc = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url || "";
             const agencyDoc = agencySettings?.kpi_google_doc_url || "";
             const clientSheet = (clientSettings as any)?.kpi_google_sheet_url || "";
             const agencySheet = agencySettings?.kpi_google_sheet_url || "";
-            const docSource = !docUrl ? "" : docUrl === clientDoc ? "client default" : docUrl === agencyDoc ? "agency default" : "override";
+            const docSource = !docUrl
+              ? ""
+              : docUrl === clientDocUrl
+                ? "tied to client"
+                : docUrl === (clientSettings as any)?.kpi_google_doc_url
+                  ? "client KPI default"
+                  : docUrl === agencyDoc
+                    ? "agency default"
+                    : "override";
             const sheetSource = !sheetUrl ? "" : sheetUrl === clientSheet ? "client default" : sheetUrl === agencySheet ? "agency default" : "override";
             const saveDoc = async () => {
               if (!docUrl.trim()) return;
               try {
-                await updateClientSettings.mutateAsync({ client_id: clientId, kpi_google_doc_url: docUrl.trim() } as any);
-                toast.success("Saved as this client's default doc");
+                const trimmed = docUrl.trim();
+                const m = trimmed.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+                const { error } = await supabase
+                  .from("clients")
+                  .update({ google_doc_url: trimmed, google_doc_id: m?.[1] || null })
+                  .eq("id", clientId);
+                if (error) throw error;
+                setClientDocUrl(trimmed);
+                toast.success("Linked Google Doc to this client");
               } catch (e: any) { toast.error(e?.message || "Failed to save"); }
             };
             const saveSheet = async () => {
@@ -300,8 +330,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   <div className="flex gap-1">
                     <Input placeholder="Google Doc URL" value={docUrl} onChange={e => setDocUrl(e.target.value)} className="h-8 text-xs" />
                     <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0"
-                      disabled={!docUrl.trim() || docUrl === clientDoc || updateClientSettings.isPending}
-                      onClick={saveDoc}>Save</Button>
+                      disabled={!docUrl.trim() || docUrl === clientDocUrl}
+                      onClick={saveDoc}>Tie to client</Button>
                   </div>
                   {docSource && <Badge variant="secondary" className="text-[9px]">{docSource}</Badge>}
                 </div>

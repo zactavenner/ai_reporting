@@ -1059,10 +1059,11 @@ Deno.serve(async (req) => {
   // Brand context
   let brandContext: any = {};
   let brandSummary = "No client brand context loaded.";
+  let clientDocUrl: string | null = null;
   if (clientId) {
     const { data: c } = await supa
       .from("clients")
-      .select("name, brand_colors, brand_fonts, offer_description")
+      .select("name, brand_colors, brand_fonts, offer_description, google_doc_url, google_doc_id")
       .eq("id", clientId).maybeSingle();
     if (c) {
       brandContext = {
@@ -1073,14 +1074,17 @@ Deno.serve(async (req) => {
         disclaimerText: "Investing involves risk including loss of principal. Targeted returns are not guaranteed. Past performance does not guarantee future results.",
       };
       brandSummary = `Client: ${c.name}. Brand colors: ${(brandContext.brandColors || []).join(", ") || "n/a"}. Brand fonts: ${(brandContext.brandFonts || []).join(", ") || "n/a"}. Offer: ${(c.offer_description || "n/a").slice(0, 200)}`;
+      clientDocUrl = (c as any).google_doc_url || null;
     }
   }
 
-  const docId = docUrl ? extractDocId(docUrl) : null;
+  // Server-side fallback: if the conversation didn't supply a Doc, use the one tied to the client.
+  const effectiveDocUrl = docUrl || clientDocUrl || null;
+  const docId = effectiveDocUrl ? extractDocId(effectiveDocUrl) : null;
   const sheetId = sheetUrl ? extractSheetId(sheetUrl) : null;
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl, docId, sheetUrl, sheetId, quality, brandSummary }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary }) },
     ...priorMessages,
     { role: "user", content: userText },
   ];
@@ -1238,7 +1242,7 @@ Deno.serve(async (req) => {
                 result = await appendToDoc(docId, args.content);
                 const ci = await supa.from("ai_studio_canvas_items").insert({
                   conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: docUrl },
+                  payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: effectiveDocUrl },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
               } else if (name === "replace_doc_text") {
@@ -1246,7 +1250,7 @@ Deno.serve(async (req) => {
                 result = await replaceDocText(docId, args.find, args.replace);
                 const ci = await supa.from("ai_studio_canvas_items").insert({
                   conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "replace", find: args.find, replace: args.replace, doc_url: docUrl },
+                  payload: { action: "replace", find: args.find, replace: args.replace, doc_url: effectiveDocUrl },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
               } else if (name === "read_sheet") {
