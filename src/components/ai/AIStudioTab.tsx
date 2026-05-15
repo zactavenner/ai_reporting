@@ -13,6 +13,7 @@ import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
+import ReactMarkdown from "react-markdown";
 
 interface Props {
   clientId: string;
@@ -20,6 +21,47 @@ interface Props {
 }
 
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
+
+function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: boolean }) {
+  if (m.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2 text-sm whitespace-pre-wrap text-foreground">
+          {m.content}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="text-sm text-foreground leading-relaxed">
+      {m.tools && m.tools.length > 0 && (
+        <div className="mb-2 space-y-1">
+          {m.tools.map((t: any, j: number) => (
+            <div key={j} className="text-xs flex items-center gap-2 text-muted-foreground">
+              <Badge variant="secondary" className="text-[10px]">{t.name}</Badge>
+              {t.status === "running" ? (
+                <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
+              ) : t.status === "error" || t.result?.error ? (
+                <span className="text-destructive truncate max-w-[260px]">{t.result?.error || "failed"}</span>
+              ) : (
+                <span>✓</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {m.content ? (
+        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-4 prose-headings:mb-2">
+          <ReactMarkdown>{m.content}</ReactMarkdown>
+        </div>
+      ) : isStreaming ? (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> thinking…
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 const SUGGESTIONS = [
   { icon: <ImageIcon className="h-4 w-4" />, label: "Generate a 1:1 ad creative for our offer" },
