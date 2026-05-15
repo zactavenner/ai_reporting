@@ -1242,7 +1242,7 @@ Deno.serve(async (req) => {
                 result = await appendToDoc(docId, args.content);
                 const ci = await supa.from("ai_studio_canvas_items").insert({
                   conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: docUrl },
+                  payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: effectiveDocUrl },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
               } else if (name === "replace_doc_text") {
@@ -1250,7 +1250,7 @@ Deno.serve(async (req) => {
                 result = await replaceDocText(docId, args.find, args.replace);
                 const ci = await supa.from("ai_studio_canvas_items").insert({
                   conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "replace", find: args.find, replace: args.replace, doc_url: docUrl },
+                  payload: { action: "replace", find: args.find, replace: args.replace, doc_url: effectiveDocUrl },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
               } else if (name === "read_sheet") {
