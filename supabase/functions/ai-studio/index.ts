@@ -944,6 +944,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
+  "- COPYWRITING / SCRIPTS: ALWAYS call create_text_artifact when the user asks you to write, draft, or generate ANY kind of script (VSL, caller, video script), ad copy, email, caption, landing page copy, outline, plan, or brief. Put the full body in the artifact (Markdown), not in your chat reply. Your chat reply must only be a 1–2 sentence summary like 'Drafted the 60s VSL script on the canvas.' Pass append_to_doc:true if the user said to put it in the doc.",
   "- VIDEO / REEL / SCENE WORKFLOW (Manus-style, FULLY AUTOMATIC, NO APPROVALS):",
   "  Step 1: Call plan_storyboard once with the user's brief.",
   "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene in the storyboard (parallel calls).",
