@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
@@ -323,15 +323,29 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr,1.1fr] gap-4 h-[calc(100vh-220px)] min-h-[600px]">
       {/* LEFT — Chat */}
-      <Card className="flex flex-col overflow-hidden">
-        <div className="p-4 border-b space-y-2">
+      <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm">
+        <div className="px-5 pt-4 pb-3 border-b border-border/60">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold flex-1">AI Studio · {clientName}</h3>
-            <Button variant="ghost" size="sm" onClick={clearConversation} title="Clear conversation">
-              <Trash2 className="h-4 w-4" />
+            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-sm leading-tight truncate">AI Studio</h3>
+              <p className="text-[11px] text-muted-foreground truncate">{clientName}</p>
+            </div>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={clearConversation} title="Clear conversation">
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
+        </div>
+
+        <details className="group border-b border-border/60 bg-muted/20">
+          <summary className="flex items-center gap-2 px-5 py-2 cursor-pointer text-xs text-muted-foreground hover:bg-muted/40 select-none [&::-webkit-details-marker]:hidden">
+            <Settings2 className="h-3.5 w-3.5" />
+            <span className="flex-1">Connections & quality</span>
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="px-5 pb-3 pt-1 space-y-2">
           {(() => {
             const clientDoc = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url || "";
             const agencyDoc = agencySettings?.kpi_google_doc_url || "";
@@ -440,20 +454,29 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </SelectContent>
             </Select>
           </div>
-        </div>
+          </div>
+        </details>
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
-          <div className="p-4 space-y-4">
+          <div className="px-4 sm:px-6 py-6 space-y-5 max-w-3xl mx-auto w-full">
             {messages.length === 0 && hydrated && (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Ask anything about this client's doc, sheet, or generate an ad. Built creatives appear on the Canvas →
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="py-8 space-y-6">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-semibold tracking-tight">What can I build for {clientName.split(" ")[0]}?</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Ask for ad creatives, scripts, copy, doc edits, or sheet queries. Visual results appear on the Canvas →
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   {SUGGESTIONS.map(s => (
-                    <Button key={s.label} variant="outline" size="sm" className="justify-start h-auto py-2" onClick={() => send(s.label)}>
-                      {s.icon}<span className="ml-2 text-xs text-left">{s.label}</span>
-                    </Button>
+                    <button
+                      key={s.label}
+                      onClick={() => send(s.label)}
+                      className="group flex items-center gap-2 rounded-full border border-border/60 bg-background hover:bg-muted/60 hover:border-border transition px-3 py-1.5 text-xs text-left"
+                    >
+                      <span className="text-primary/80 group-hover:text-primary">{s.icon}</span>
+                      <span className="line-clamp-1">{s.label}</span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -473,24 +496,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </ScrollArea>
 
-        <div className="p-3 border-t flex gap-2">
-          <Textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-            placeholder="Build an ad, edit the doc, query the sheet…"
-            className="resize-none min-h-[44px] max-h-32"
-            rows={1}
-          />
-          {loading ? (
-            <Button onClick={stop} size="icon" variant="destructive" title="Stop">
-              <Square className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button onClick={() => send(input)} disabled={!input.trim()} size="icon">
-              <Send className="h-4 w-4" />
-            </Button>
-          )}
+        <div className="px-4 sm:px-6 pb-4 pt-2">
+          <div className="max-w-3xl mx-auto w-full">
+            <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
+              <Textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+                placeholder="Ask AI Studio to build, write, or edit anything…"
+                className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 py-4 text-sm"
+                rows={1}
+              />
+              <div className="absolute bottom-2 right-2">
+                {loading ? (
+                  <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
+                    <Square className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
+                    <Send className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline</p>
+          </div>
         </div>
       </Card>
 
