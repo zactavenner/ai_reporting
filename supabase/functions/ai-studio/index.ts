@@ -944,6 +944,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
+  "- DOC PRECHECK: Every doc tool (read_doc, append_to_doc, replace_doc_text) auto-runs a connection test before executing. If a tool result contains `precheck_failed: true`, the operation was BLOCKED — do NOT retry the same tool. Instead, write a chat reply that surfaces the `error` field verbatim and asks the user how to proceed (e.g. tie a different doc, share the doc with the connector account, paste a session-override URL). Never silently ignore a precheck failure.",
   "- COPYWRITING / SCRIPTS: ALWAYS call create_text_artifact when the user asks you to write, draft, or generate ANY kind of script (VSL, caller, video script), ad copy, email, caption, landing page copy, outline, plan, or brief. Put the full body in the artifact (Markdown), not in your chat reply. Your chat reply must only be a 1–2 sentence summary like 'Drafted the 60s VSL script on the canvas.' Pass append_to_doc:true if the user said to put it in the doc.",
   "- VIDEO / REEL / SCENE WORKFLOW (Manus-style, FULLY AUTOMATIC, NO APPROVALS):",
   "  Step 1: Call plan_storyboard once with the user's brief.",
@@ -1166,6 +1167,38 @@ Deno.serve(async (req) => {
   const docId = effectiveDocUrl ? extractDocId(effectiveDocUrl) : null;
   const sheetId = sheetUrl ? extractSheetId(sheetUrl) : null;
 
+  // ---- Doc precheck (run once per request, cached) ----
+  // Verifies the tied Google Doc is reachable before any read/append/replace runs.
+  let docPrecheckCache: { ok: boolean; error?: string; title?: string | null; latency_ms?: number } | null = null;
+  const precheckDoc = async () => {
+    if (docPrecheckCache) return docPrecheckCache;
+    if (!effectiveDocUrl) {
+      docPrecheckCache = { ok: false, error: "No Google Doc is tied to this client. Ask the user to paste a Google Doc URL and click 'Tie to client' in AI Studio settings before retrying." };
+      return docPrecheckCache;
+    }
+    if (!docId) {
+      docPrecheckCache = { ok: false, error: `The doc URL '${effectiveDocUrl}' is not a valid Google Doc link (missing /document/d/<id>). Ask the user for a valid Google Doc URL.` };
+      return docPrecheckCache;
+    }
+    if (!GOOGLE_DOCS_API_KEY) {
+      docPrecheckCache = { ok: false, error: "Google Docs connector is not linked to this project. Ask the user to enable the Google Docs connector before retrying." };
+      return docPrecheckCache;
+    }
+    try {
+      const t0 = Date.now();
+      const doc = await gFetch(`/google_docs/v1/documents/${docId}`, GOOGLE_DOCS_API_KEY, { method: "GET" });
+      docPrecheckCache = { ok: true, title: doc.title || null, latency_ms: Date.now() - t0 };
+      return docPrecheckCache;
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      const reason = /\[401\]|\[403\]/.test(msg) ? "the Google account authorized for the Docs connector does not have access to this document"
+        : /\[404\]/.test(msg) ? "the document was not found (it may be deleted, or the URL is wrong)"
+        : `the Docs API returned an error: ${msg.slice(0, 200)}`;
+      docPrecheckCache = { ok: false, error: `Cannot reach the tied Google Doc — ${reason}. Ask the user to re-share the doc with the connector account or tie a different doc.` };
+      return docPrecheckCache;
+    }
+  };
+
   const convo: any[] = [
     { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary }) },
     ...priorMessages,
@@ -1318,24 +1351,35 @@ Deno.serve(async (req) => {
             let result: any;
             try {
               if (name === "read_doc") {
-                if (!docId) throw new Error("No active Google Doc URL provided.");
-                result = await readDoc(docId);
+                const pc = await precheckDoc();
+                if (!pc.ok) { result = { error: pc.error, precheck_failed: true, action_blocked: "read_doc" }; }
+                else { result = await readDoc(docId!); result.precheck = { title: pc.title, latency_ms: pc.latency_ms }; }
               } else if (name === "append_to_doc") {
-                if (!docId) throw new Error("No active Google Doc URL provided.");
-                result = await appendToDoc(docId, args.content);
-                const ci = await supa.from("ai_studio_canvas_items").insert({
-                  conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: effectiveDocUrl },
-                }).select("id, payload, kind, created_at").single();
-                if (ci.data) send({ type: "canvas_item", item: ci.data });
+                const pc = await precheckDoc();
+                if (!pc.ok) {
+                  result = { error: pc.error, precheck_failed: true, action_blocked: "append_to_doc" };
+                } else {
+                  result = await appendToDoc(docId!, args.content);
+                  result.precheck = { title: pc.title, latency_ms: pc.latency_ms };
+                  const ci = await supa.from("ai_studio_canvas_items").insert({
+                    conversation_id: conversationId, user_id: userId, kind: "doc_edit",
+                    payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: effectiveDocUrl },
+                  }).select("id, payload, kind, created_at").single();
+                  if (ci.data) send({ type: "canvas_item", item: ci.data });
+                }
               } else if (name === "replace_doc_text") {
-                if (!docId) throw new Error("No active Google Doc URL provided.");
-                result = await replaceDocText(docId, args.find, args.replace);
-                const ci = await supa.from("ai_studio_canvas_items").insert({
-                  conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "replace", find: args.find, replace: args.replace, doc_url: effectiveDocUrl },
-                }).select("id, payload, kind, created_at").single();
-                if (ci.data) send({ type: "canvas_item", item: ci.data });
+                const pc = await precheckDoc();
+                if (!pc.ok) {
+                  result = { error: pc.error, precheck_failed: true, action_blocked: "replace_doc_text" };
+                } else {
+                  result = await replaceDocText(docId!, args.find, args.replace);
+                  result.precheck = { title: pc.title, latency_ms: pc.latency_ms };
+                  const ci = await supa.from("ai_studio_canvas_items").insert({
+                    conversation_id: conversationId, user_id: userId, kind: "doc_edit",
+                    payload: { action: "replace", find: args.find, replace: args.replace, doc_url: effectiveDocUrl },
+                  }).select("id, payload, kind, created_at").single();
+                  if (ci.data) send({ type: "canvas_item", item: ci.data });
+                }
               } else if (name === "read_sheet") {
                 if (!sheetId) throw new Error("No active Google Sheet URL provided.");
                 result = await readSheet(sheetId, args.range);
@@ -1489,12 +1533,17 @@ Deno.serve(async (req) => {
                 const notes = args.notes ? String(args.notes).slice(0, 500) : null;
                 let appendedToDoc = false;
                 let appendError: string | null = null;
-                if (args.append_to_doc && docId) {
-                  try {
-                    await appendToDoc(docId, `\n\n## ${title}\n\n${content}\n`);
-                    appendedToDoc = true;
-                  } catch (e: any) {
-                    appendError = e?.message || String(e);
+                if (args.append_to_doc) {
+                  const pc = await precheckDoc();
+                  if (!pc.ok) {
+                    appendError = pc.error || "Doc precheck failed";
+                  } else {
+                    try {
+                      await appendToDoc(docId!, `\n\n## ${title}\n\n${content}\n`);
+                      appendedToDoc = true;
+                    } catch (e: any) {
+                      appendError = e?.message || String(e);
+                    }
                   }
                 }
                 const ci = await supa.from("ai_studio_canvas_items").insert({
