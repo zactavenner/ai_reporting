@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2 } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
@@ -24,6 +24,7 @@ type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: a
 const SUGGESTIONS = [
   { icon: <ImageIcon className="h-4 w-4" />, label: "Generate a 1:1 ad creative for our offer" },
   { icon: <Wand2 className="h-4 w-4" />, label: "Generate 4 Instagram 1:1 variations of our offer" },
+  { icon: <Film className="h-4 w-4" />, label: "Build a 4-scene 9:16 video reel for our offer (storyboard → keyframes → Veo 3.1 videos, fully auto)" },
   { icon: <FileText className="h-4 w-4" />, label: "Summarize the master doc" },
   { icon: <TableIcon className="h-4 w-4" />, label: "Read the first 20 rows of the sheet" },
 ];
