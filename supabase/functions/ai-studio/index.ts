@@ -594,6 +594,60 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "plan_storyboard",
+      description: "Manus-style: break a video brief into N scenes (3–8). Returns a structured storyboard with per-scene image prompt and video animation prompt. ALWAYS call this FIRST when the user asks for a video, ad video, reel, scene set, or storyboard.",
+      parameters: {
+        type: "object",
+        properties: {
+          brief: { type: "string", description: "What the video should communicate — offer, hook, mood, CTA." },
+          scene_count: { type: "integer", minimum: 3, maximum: 8, description: "How many scenes. Default 4." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"], description: "Default 9:16 (reels)." },
+          style_notes: { type: "string", description: "Optional cinematography / look notes." },
+        },
+        required: ["brief"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_scene_image",
+      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel.",
+      parameters: {
+        type: "object",
+        properties: {
+          storyboard_id: { type: "string", description: "ID returned by plan_storyboard." },
+          scene_id: { type: "string", description: "scene.id from the storyboard." },
+          scene_order: { type: "integer" },
+          prompt: { type: "string", description: "Scene image prompt." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+        },
+        required: ["storyboard_id", "scene_id", "scene_order", "prompt", "aspect_ratio"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_scene_video",
+      description: "Animate a scene keyframe image into a video clip (5s, Veo 3.1). Call after generate_scene_image succeeded for the scene. This tool waits for Veo to finish (up to ~3 min) and returns the final mp4 URL.",
+      parameters: {
+        type: "object",
+        properties: {
+          storyboard_id: { type: "string" },
+          scene_id: { type: "string" },
+          scene_order: { type: "integer" },
+          image_url: { type: "string", description: "Keyframe image URL from generate_scene_image." },
+          video_prompt: { type: "string", description: "Animation/motion description for Veo." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+        },
+        required: ["storyboard_id", "scene_id", "scene_order", "image_url", "video_prompt", "aspect_ratio"],
+      },
+    },
+  },
 ];
 
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
