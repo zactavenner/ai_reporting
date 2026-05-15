@@ -1350,24 +1350,35 @@ Deno.serve(async (req) => {
             let result: any;
             try {
               if (name === "read_doc") {
-                if (!docId) throw new Error("No active Google Doc URL provided.");
-                result = await readDoc(docId);
+                const pc = await precheckDoc();
+                if (!pc.ok) { result = { error: pc.error, precheck_failed: true, action_blocked: "read_doc" }; }
+                else { result = await readDoc(docId!); result.precheck = { title: pc.title, latency_ms: pc.latency_ms }; }
               } else if (name === "append_to_doc") {
-                if (!docId) throw new Error("No active Google Doc URL provided.");
-                result = await appendToDoc(docId, args.content);
-                const ci = await supa.from("ai_studio_canvas_items").insert({
-                  conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: effectiveDocUrl },
-                }).select("id, payload, kind, created_at").single();
-                if (ci.data) send({ type: "canvas_item", item: ci.data });
+                const pc = await precheckDoc();
+                if (!pc.ok) {
+                  result = { error: pc.error, precheck_failed: true, action_blocked: "append_to_doc" };
+                } else {
+                  result = await appendToDoc(docId!, args.content);
+                  result.precheck = { title: pc.title, latency_ms: pc.latency_ms };
+                  const ci = await supa.from("ai_studio_canvas_items").insert({
+                    conversation_id: conversationId, user_id: userId, kind: "doc_edit",
+                    payload: { action: "append", chars: args.content?.length || 0, preview: (args.content || "").slice(0, 200), doc_url: effectiveDocUrl },
+                  }).select("id, payload, kind, created_at").single();
+                  if (ci.data) send({ type: "canvas_item", item: ci.data });
+                }
               } else if (name === "replace_doc_text") {
-                if (!docId) throw new Error("No active Google Doc URL provided.");
-                result = await replaceDocText(docId, args.find, args.replace);
-                const ci = await supa.from("ai_studio_canvas_items").insert({
-                  conversation_id: conversationId, user_id: userId, kind: "doc_edit",
-                  payload: { action: "replace", find: args.find, replace: args.replace, doc_url: effectiveDocUrl },
-                }).select("id, payload, kind, created_at").single();
-                if (ci.data) send({ type: "canvas_item", item: ci.data });
+                const pc = await precheckDoc();
+                if (!pc.ok) {
+                  result = { error: pc.error, precheck_failed: true, action_blocked: "replace_doc_text" };
+                } else {
+                  result = await replaceDocText(docId!, args.find, args.replace);
+                  result.precheck = { title: pc.title, latency_ms: pc.latency_ms };
+                  const ci = await supa.from("ai_studio_canvas_items").insert({
+                    conversation_id: conversationId, user_id: userId, kind: "doc_edit",
+                    payload: { action: "replace", find: args.find, replace: args.replace, doc_url: effectiveDocUrl },
+                  }).select("id, payload, kind, created_at").single();
+                  if (ci.data) send({ type: "canvas_item", item: ci.data });
+                }
               } else if (name === "read_sheet") {
                 if (!sheetId) throw new Error("No active Google Sheet URL provided.");
                 result = await readSheet(sheetId, args.range);
