@@ -26,8 +26,11 @@ function PasswordGateContent({ children }: PasswordGateProps) {
   useEffect(() => {
     // Check if already authenticated in this session
     const storedAuth = localStorage.getItem(SESSION_KEY);
-    if (storedAuth === 'true') {
+    const dashboardToken = localStorage.getItem('dashboard_session_token');
+    if (storedAuth === 'true' && dashboardToken) {
       setIsAuthenticated(true);
+    } else if (storedAuth === 'true' && !dashboardToken) {
+      localStorage.removeItem(SESSION_KEY);
     }
     setIsLoading(false);
   }, []);
