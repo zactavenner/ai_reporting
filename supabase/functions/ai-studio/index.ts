@@ -950,7 +950,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId } = body as {
     action?: "history" | "clear" | "settings";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
   };
@@ -983,13 +983,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  if (action === "clear" && conversationId) {
-    await supa.from("ai_studio_conversations").update({ cleared_at: new Date().toISOString() }).eq("id", conversationId).eq("user_id", userId);
+  if (action === "clear" && requestedConversationId) {
+    await supa.from("ai_studio_conversations").update({ cleared_at: new Date().toISOString() }).eq("id", requestedConversationId).eq("user_id", userId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  if (action === "settings" && conversationId) {
-    await supa.from("ai_studio_conversations").update({ doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality }).eq("id", conversationId).eq("user_id", userId);
+  if (action === "settings" && requestedConversationId) {
+    await supa.from("ai_studio_conversations").update({ doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality }).eq("id", requestedConversationId).eq("user_id", userId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
