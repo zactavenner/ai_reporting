@@ -11,7 +11,6 @@ import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loade
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
-import { useTeamMember } from "@/contexts/TeamMemberContext";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 
@@ -43,7 +42,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: agencySettings } = useAgencySettings();
   const { data: clientSettings } = useClientSettings(clientId);
   const updateClientSettings = useUpdateClientSettings();
-  const { currentMember } = useTeamMember();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
