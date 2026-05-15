@@ -1166,6 +1166,38 @@ Deno.serve(async (req) => {
   const docId = effectiveDocUrl ? extractDocId(effectiveDocUrl) : null;
   const sheetId = sheetUrl ? extractSheetId(sheetUrl) : null;
 
+  // ---- Doc precheck (run once per request, cached) ----
+  // Verifies the tied Google Doc is reachable before any read/append/replace runs.
+  let docPrecheckCache: { ok: boolean; error?: string; title?: string | null; latency_ms?: number } | null = null;
+  const precheckDoc = async () => {
+    if (docPrecheckCache) return docPrecheckCache;
+    if (!effectiveDocUrl) {
+      docPrecheckCache = { ok: false, error: "No Google Doc is tied to this client. Ask the user to paste a Google Doc URL and click 'Tie to client' in AI Studio settings before retrying." };
+      return docPrecheckCache;
+    }
+    if (!docId) {
+      docPrecheckCache = { ok: false, error: `The doc URL '${effectiveDocUrl}' is not a valid Google Doc link (missing /document/d/<id>). Ask the user for a valid Google Doc URL.` };
+      return docPrecheckCache;
+    }
+    if (!GOOGLE_DOCS_API_KEY) {
+      docPrecheckCache = { ok: false, error: "Google Docs connector is not linked to this project. Ask the user to enable the Google Docs connector before retrying." };
+      return docPrecheckCache;
+    }
+    try {
+      const t0 = Date.now();
+      const doc = await gFetch(`/google_docs/v1/documents/${docId}`, GOOGLE_DOCS_API_KEY, { method: "GET" });
+      docPrecheckCache = { ok: true, title: doc.title || null, latency_ms: Date.now() - t0 };
+      return docPrecheckCache;
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      const reason = /\[401\]|\[403\]/.test(msg) ? "the Google account authorized for the Docs connector does not have access to this document"
+        : /\[404\]/.test(msg) ? "the document was not found (it may be deleted, or the URL is wrong)"
+        : `the Docs API returned an error: ${msg.slice(0, 200)}`;
+      docPrecheckCache = { ok: false, error: `Cannot reach the tied Google Doc — ${reason}. Ask the user to re-share the doc with the connector account or tie a different doc.` };
+      return docPrecheckCache;
+    }
+  };
+
   const convo: any[] = [
     { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary }) },
     ...priorMessages,
