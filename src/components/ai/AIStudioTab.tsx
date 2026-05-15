@@ -60,15 +60,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const getStudioAuth = useCallback(async (requireIdentity = false) => {
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token || null;
-    const dashboardMemberId = currentMember?.id || localStorage.getItem("team_member_id") || null;
-    if (!token && !dashboardMemberId && requireIdentity) {
+    const dashboardToken = localStorage.getItem("dashboard_session_token") || null;
+    if (!token && !dashboardToken && requireIdentity) {
       throw new Error("Your dashboard session expired. Please sign in again.");
     }
-    return { token, dashboardMemberId };
-  }, [currentMember?.id]);
+    return { token, dashboardToken };
+  }, []);
 
   const studioFetch = useCallback(async (body: Record<string, any>, signal?: AbortSignal) => {
-    const { token, dashboardMemberId } = await getStudioAuth(true);
+    const { token, dashboardToken } = await getStudioAuth(true);
     return fetch(aiStudioUrl, {
       method: "POST",
       headers: {
@@ -76,7 +76,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
       },
-      body: JSON.stringify({ ...body, dashboardMemberId }),
+      body: JSON.stringify({ ...body, dashboardToken }),
       signal,
     });
   }, [aiStudioUrl, getStudioAuth]);
@@ -85,8 +85,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const loadHistory = useCallback(async () => {
     setHydrated(false);
     try {
-      const { token, dashboardMemberId } = await getStudioAuth(false);
-      if (!token && !dashboardMemberId) {
+      const { token, dashboardToken } = await getStudioAuth(false);
+      if (!token && !dashboardToken) {
         setMessages([]);
         setCanvas([]);
         setHydrated(true);
