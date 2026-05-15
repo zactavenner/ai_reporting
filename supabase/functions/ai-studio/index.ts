@@ -980,7 +980,7 @@ Deno.serve(async (req) => {
   }
 
   const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId } = body as {
-    action?: "history" | "clear" | "settings";
+    action?: "history" | "clear" | "settings" | "test_doc";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
   };
 
@@ -1020,6 +1020,66 @@ Deno.serve(async (req) => {
   if (action === "settings" && requestedConversationId) {
     await supa.from("ai_studio_conversations").update({ doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality }).eq("id", requestedConversationId).eq("user_id", userId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
+  if (action === "test_doc") {
+    const { data: client } = await supa
+      .from("clients")
+      .select("id, name, google_doc_url, google_doc_id")
+      .eq("id", clientId)
+      .maybeSingle();
+    const tied = client?.google_doc_url || null;
+    const overrideUrl = (typeof docUrl === "string" && docUrl.trim()) ? docUrl.trim() : null;
+    const effective = overrideUrl || tied;
+    const source = !effective ? "none" : (overrideUrl && overrideUrl !== tied ? "session_override" : "tied_to_client");
+    const id = effective ? extractDocId(effective) : null;
+
+    if (!effective) {
+      return new Response(JSON.stringify({
+        ok: false, source, client: { id: client?.id, name: client?.name },
+        error: "No Google Doc tied to this client. Paste a URL and click 'Tie to client'.",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!id) {
+      return new Response(JSON.stringify({
+        ok: false, source, doc_url: effective, client: { id: client?.id, name: client?.name },
+        error: "URL is not a valid Google Doc link (missing /document/d/<id>).",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!GOOGLE_DOCS_API_KEY) {
+      return new Response(JSON.stringify({
+        ok: false, source, doc_url: effective, doc_id: id, client: { id: client?.id, name: client?.name },
+        error: "Google Docs connector is not linked to this project.",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    try {
+      const t0 = Date.now();
+      const doc = await gFetch(`/google_docs/v1/documents/${id}`, GOOGLE_DOCS_API_KEY, { method: "GET" });
+      const text = (doc.body?.content || [])
+        .flatMap((el: any) => el.paragraph?.elements?.map((e: any) => e.textRun?.content || "") || [])
+        .join("");
+      return new Response(JSON.stringify({
+        ok: true,
+        source,
+        doc_url: effective,
+        doc_id: id,
+        client: { id: client?.id, name: client?.name },
+        title: doc.title || null,
+        char_count: text.length,
+        latency_ms: Date.now() - t0,
+        can_read: true,
+        can_write: true,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      const status = /\[401\]|\[403\]/.test(msg) ? "no_access"
+        : /\[404\]/.test(msg) ? "not_found"
+        : "error";
+      return new Response(JSON.stringify({
+        ok: false, source, doc_url: effective, doc_id: id, client: { id: client?.id, name: client?.name },
+        status, error: msg.slice(0, 500),
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
   }
 
   if (!userText?.trim()) {
