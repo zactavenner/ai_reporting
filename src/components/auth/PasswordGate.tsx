@@ -70,6 +70,10 @@ function PasswordGateContent({ children }: PasswordGateProps) {
         return;
       }
 
+      if (data.dashboardToken) {
+        localStorage.setItem('dashboard_session_token', data.dashboardToken);
+      }
+
       // Login successful - store member in context
       await login({
         id: data.member.id,
