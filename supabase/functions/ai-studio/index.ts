@@ -531,6 +531,235 @@ async function generateAdVariations(opts: {
   return { variants, aspect_ratio: aspect, errors };
 }
 
+// ---------- Storyboard / Scene tools ----------
+async function planStoryboard(opts: {
+  brief: string;
+  sceneCount: number;
+  aspectRatio: string;
+  styleNotes?: string;
+  brandContext: any;
+  conversationId: string;
+  userId: string;
+}) {
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (5 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~5s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-pro",
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: opts.brief },
+      ],
+      response_format: { type: "json_object" },
+    }),
+  });
+  if (!res.ok) throw new Error(`plan_storyboard [${res.status}]: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  let parsed: any = {};
+  try { parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}"); } catch {}
+  const rawScenes: any[] = Array.isArray(parsed.scenes) ? parsed.scenes.slice(0, 8) : [];
+  if (rawScenes.length === 0) throw new Error("Storyboard produced no scenes");
+  const storyboardId = crypto.randomUUID();
+  const scenes = rawScenes.map((s, i) => ({
+    id: `${storyboardId}-s${i + 1}`,
+    order: i + 1,
+    title: String(s.title || `Scene ${i + 1}`).slice(0, 120),
+    image_prompt: String(s.image_prompt || "").slice(0, 1200),
+    video_prompt: String(s.video_prompt || "").slice(0, 800),
+    duration: 5,
+  }));
+  const ci = await supa.from("ai_studio_canvas_items").insert({
+    conversation_id: opts.conversationId,
+    user_id: opts.userId,
+    kind: "storyboard",
+    payload: {
+      storyboard_id: storyboardId,
+      brief: opts.brief.slice(0, 1000),
+      aspect_ratio: opts.aspectRatio,
+      style_notes: opts.styleNotes || "",
+      scenes,
+    },
+  }).select("id, kind, payload, created_at").single();
+  return { storyboardItem: ci.data, storyboardId, scenes, aspect_ratio: opts.aspectRatio };
+}
+
+async function generateSceneImage(opts: {
+  storyboardId: string;
+  sceneId: string;
+  sceneOrder: number;
+  prompt: string;
+  aspectRatio: string;
+  clientId: string | null;
+  conversationId: string;
+  userId: string;
+}) {
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+  const fullPrompt = `Create a single cinematic keyframe image for a video scene.\n\n${opts.prompt}\n\nAspect ratio: ${opts.aspectRatio}. Photoreal cinematic look. No text overlays or watermarks.`;
+
+  let base64Image = "", mime = "image/png", modelUsed = "";
+  if (GEMINI_API_KEY) {
+    modelUsed = "gemini-3-pro-image-preview";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+      },
+    );
+    if (!res.ok) throw new Error(`Scene image [${res.status}]: ${(await res.text()).slice(0, 300)}`);
+    const data = await res.json();
+    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+    if (!imagePart?.inlineData?.data) throw new Error("No image in scene response");
+    base64Image = imagePart.inlineData.data;
+    mime = imagePart.inlineData.mimeType || "image/png";
+  } else {
+    modelUsed = "google/gemini-3.1-flash-image-preview";
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: modelUsed, messages: [{ role: "user", content: fullPrompt }], modalities: ["image", "text"] }),
+    });
+    if (!res.ok) throw new Error(`Scene image [${res.status}]: ${(await res.text()).slice(0, 300)}`);
+    const data = await res.json();
+    const imgUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imgUrl?.startsWith("data:")) throw new Error("Scene image: no inline image");
+    const m = imgUrl.match(/^data:(.+?);base64,(.+)$/)!;
+    mime = m[1]; base64Image = m[2];
+  }
+
+  const bytes = Uint8Array.from(atob(base64Image), c => c.charCodeAt(0));
+  const ext = (mime.split("/")[1] || "png").split("+")[0];
+  const path = `ai-studio/${opts.clientId || "shared"}/storyboards/${opts.storyboardId}/scene-${opts.sceneOrder}-${Date.now()}.${ext}`;
+  const { error } = await supa.storage.from("creatives").upload(path, bytes, { contentType: mime, upsert: false });
+  if (error) throw new Error(`Storage upload: ${error.message}`);
+  const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+
+  const ci = await supa.from("ai_studio_canvas_items").insert({
+    conversation_id: opts.conversationId,
+    user_id: opts.userId,
+    kind: "scene_image",
+    payload: {
+      storyboard_id: opts.storyboardId,
+      scene_id: opts.sceneId,
+      scene_order: opts.sceneOrder,
+      image_url: pub.publicUrl,
+      storage_path: path,
+      mime,
+      model: modelUsed,
+      aspect_ratio: opts.aspectRatio,
+      prompt: opts.prompt,
+    },
+  }).select("id, kind, payload, created_at").single();
+  return { item: ci.data, image_url: pub.publicUrl, storage_path: path, model: modelUsed, mime };
+}
+
+async function generateSceneVideo(opts: {
+  storyboardId: string;
+  sceneId: string;
+  sceneOrder: number;
+  imageUrl: string;
+  videoPrompt: string;
+  aspectRatio: string;
+  clientId: string | null;
+  conversationId: string;
+  userId: string;
+}) {
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY required for video generation");
+
+  const imgRes = await fetch(opts.imageUrl);
+  if (!imgRes.ok) throw new Error(`Could not fetch keyframe (${imgRes.status})`);
+  const imgB64 = arrayBufferToBase64(await imgRes.arrayBuffer());
+  const imgMime = imgRes.headers.get("content-type") || "image/png";
+
+  const veoUrl = `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning?key=${GEMINI_API_KEY}`;
+  const startRes = await fetch(veoUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      instances: [{ prompt: opts.videoPrompt, image: { bytesBase64Encoded: imgB64, mimeType: imgMime } }],
+      parameters: { aspectRatio: opts.aspectRatio, durationSeconds: 5, sampleCount: 1 },
+    }),
+  });
+  if (!startRes.ok) {
+    const t = await startRes.text();
+    throw new Error(`Veo start [${startRes.status}]: ${t.slice(0, 300)}`);
+  }
+  const startData = await startRes.json();
+  const opName: string | undefined = startData.name;
+  if (!opName) throw new Error("Veo did not return operation name");
+
+  let videoUri: string | null = null;
+  const maxAttempts = 36;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${opName}?key=${GEMINI_API_KEY}`);
+    if (!pollRes.ok) continue;
+    const poll = await pollRes.json();
+    if (poll.done) {
+      const uri = poll.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+      if (uri) { videoUri = uri; break; }
+      if (poll.error) throw new Error(`Veo failed: ${poll.error.message || "unknown"}`);
+      throw new Error("Veo finished with no video");
+    }
+  }
+  if (!videoUri) throw new Error("Veo timed out after 3 minutes");
+
+  const sep = videoUri.includes("?") ? "&" : "?";
+  const dlRes = await fetch(`${videoUri}${sep}key=${GEMINI_API_KEY}`);
+  if (!dlRes.ok) throw new Error(`Veo download [${dlRes.status}]`);
+  const videoBytes = new Uint8Array(await dlRes.arrayBuffer());
+  const path = `ai-studio/${opts.clientId || "shared"}/storyboards/${opts.storyboardId}/scene-${opts.sceneOrder}-${Date.now()}.mp4`;
+  const { error } = await supa.storage.from("creatives").upload(path, videoBytes, { contentType: "video/mp4", upsert: false });
+  if (error) throw new Error(`Storage upload: ${error.message}`);
+  const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+
+  const ci = await supa.from("ai_studio_canvas_items").insert({
+    conversation_id: opts.conversationId,
+    user_id: opts.userId,
+    kind: "scene_video",
+    payload: {
+      storyboard_id: opts.storyboardId,
+      scene_id: opts.sceneId,
+      scene_order: opts.sceneOrder,
+      video_url: pub.publicUrl,
+      storage_path: path,
+      keyframe_url: opts.imageUrl,
+      aspect_ratio: opts.aspectRatio,
+      video_prompt: opts.videoPrompt,
+      model: "veo-3.1-generate-preview",
+      duration: 5,
+    },
+  }).select("id, kind, payload, created_at").single();
+
+  if (opts.clientId) {
+    await supa.from("client_assets").insert({
+      client_id: opts.clientId,
+      asset_type: "scene_video",
+      title: `Scene ${opts.sceneOrder}`,
+      status: "completed",
+      content: {
+        video_url: pub.publicUrl,
+        storage_path: path,
+        keyframe_url: opts.imageUrl,
+        aspect_ratio: opts.aspectRatio,
+        prompt: opts.videoPrompt,
+        source: "ai_studio",
+        storyboard_id: opts.storyboardId,
+        scene_order: opts.sceneOrder,
+      },
+    });
+  }
+
+  return { item: ci.data, video_url: pub.publicUrl, storage_path: path };
+}
+
 // ---------- Tool schema ----------
 const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
@@ -594,6 +823,60 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "plan_storyboard",
+      description: "Manus-style: break a video brief into N scenes (3–8). Returns a structured storyboard with per-scene image prompt and video animation prompt. ALWAYS call this FIRST when the user asks for a video, ad video, reel, scene set, or storyboard.",
+      parameters: {
+        type: "object",
+        properties: {
+          brief: { type: "string", description: "What the video should communicate — offer, hook, mood, CTA." },
+          scene_count: { type: "integer", minimum: 3, maximum: 8, description: "How many scenes. Default 4." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"], description: "Default 9:16 (reels)." },
+          style_notes: { type: "string", description: "Optional cinematography / look notes." },
+        },
+        required: ["brief"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_scene_image",
+      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel.",
+      parameters: {
+        type: "object",
+        properties: {
+          storyboard_id: { type: "string", description: "ID returned by plan_storyboard." },
+          scene_id: { type: "string", description: "scene.id from the storyboard." },
+          scene_order: { type: "integer" },
+          prompt: { type: "string", description: "Scene image prompt." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+        },
+        required: ["storyboard_id", "scene_id", "scene_order", "prompt", "aspect_ratio"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_scene_video",
+      description: "Animate a scene keyframe image into a video clip (5s, Veo 3.1). Call after generate_scene_image succeeded for the scene. This tool waits for Veo to finish (up to ~3 min) and returns the final mp4 URL.",
+      parameters: {
+        type: "object",
+        properties: {
+          storyboard_id: { type: "string" },
+          scene_id: { type: "string" },
+          scene_order: { type: "integer" },
+          image_url: { type: "string", description: "Keyframe image URL from generate_scene_image." },
+          video_prompt: { type: "string", description: "Animation/motion description for Veo." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+        },
+        required: ["storyboard_id", "scene_id", "scene_order", "image_url", "video_prompt", "aspect_ratio"],
+      },
+    },
+  },
 ];
 
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
@@ -610,6 +893,11 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
+  "- VIDEO / REEL / SCENE WORKFLOW (Manus-style, FULLY AUTOMATIC, NO APPROVALS):",
+  "  Step 1: Call plan_storyboard once with the user's brief.",
+  "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene in the storyboard (parallel calls).",
+  "  Step 3: Once all images return, in ONE assistant turn emit ONE generate_scene_video tool_call FOR EVERY scene using its returned image_url (parallel calls).",
+  "  Step 4: Write a 1-2 line completion summary. NEVER ask the user before generating videos. NEVER do scenes one at a time.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
   "",
   "COMPLIANCE:",
@@ -727,7 +1015,7 @@ Deno.serve(async (req) => {
       const finalToolEvents: any[] = [];
 
       try {
-        for (let step = 0; step < 8; step++) {
+        for (let step = 0; step < 25; step++) {
           if (aborted.v) break;
           send({ type: "step", step });
 
@@ -802,9 +1090,10 @@ Deno.serve(async (req) => {
             break;
           }
 
-          // Execute tools
-          for (const tc of toolCallsAcc) {
-            if (aborted.v) break;
+          // Execute tools (in parallel for fan-out workflows like storyboard scenes)
+          const toolMessages: { call_id: string; content: string }[] = new Array(toolCallsAcc.length);
+          await Promise.all(toolCallsAcc.map(async (tc, tcIdx) => {
+            if (aborted.v) return;
             const name = tc.name;
             let args: any = {}; try { args = JSON.parse(tc.args || "{}"); } catch {}
 
@@ -841,6 +1130,17 @@ Deno.serve(async (req) => {
                 prompt: `Generating ${Math.max(2, Math.min(5, args.count || 4))} variations: ${args.prompt || ""}`,
                 aspect_ratio: args.aspect_ratio || "1:1",
                 quality: "fast",
+              });
+            }
+            if (name === "generate_scene_image" || name === "generate_scene_video") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `${name === "generate_scene_video" ? "Animating" : "Rendering"} scene ${args.scene_order || "?"}`,
+                aspect_ratio: args.aspect_ratio || "9:16",
+                quality: name === "generate_scene_video" ? "veo" : "pro",
               });
             }
 
@@ -973,6 +1273,45 @@ Deno.serve(async (req) => {
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "plan_storyboard") {
+                const sb = await planStoryboard({
+                  brief: args.brief,
+                  sceneCount: Math.max(3, Math.min(8, args.scene_count || 4)),
+                  aspectRatio: args.aspect_ratio || "9:16",
+                  styleNotes: args.style_notes,
+                  brandContext,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, storyboard_id: sb.storyboardId, aspect_ratio: sb.aspect_ratio, scenes: sb.scenes };
+                if (sb.storyboardItem) send({ type: "canvas_item", item: sb.storyboardItem });
+              } else if (name === "generate_scene_image") {
+                const r = await generateSceneImage({
+                  storyboardId: args.storyboard_id,
+                  sceneId: args.scene_id,
+                  sceneOrder: args.scene_order,
+                  prompt: args.prompt,
+                  aspectRatio: args.aspect_ratio,
+                  clientId: clientId || null,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, image_url: r.image_url, model: r.model };
+                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "generate_scene_video") {
+                const r = await generateSceneVideo({
+                  storyboardId: args.storyboard_id,
+                  sceneId: args.scene_id,
+                  sceneOrder: args.scene_order,
+                  imageUrl: args.image_url,
+                  videoPrompt: args.video_prompt,
+                  aspectRatio: args.aspect_ratio,
+                  clientId: clientId || null,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
+                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else {
                 result = { error: `Unknown tool: ${name}` };
               }
@@ -982,11 +1321,14 @@ Deno.serve(async (req) => {
             }
             finalToolEvents.push({ name, args, result });
             send({ type: "tool_end", id: tc.id, name, args, result });
-            convo.push({
-              role: "tool",
-              tool_call_id: tc.id,
+            toolMessages[tcIdx] = {
+              call_id: tc.id,
               content: JSON.stringify(result).slice(0, 8000),
-            });
+            };
+          }));
+          for (const tm of toolMessages) {
+            if (!tm) continue;
+            convo.push({ role: "tool", tool_call_id: tm.call_id, content: tm.content });
           }
         }
       } catch (e: any) {

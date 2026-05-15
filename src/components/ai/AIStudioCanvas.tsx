@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,7 +17,7 @@ export type CanvasPlaceholder = {
 };
 export type CanvasItem = {
   id: string;
-  kind: "image" | "doc_edit" | "sheet_edit" | "variation_set";
+  kind: "image" | "doc_edit" | "sheet_edit" | "variation_set" | "storyboard" | "scene_image" | "scene_video";
   payload: any;
   created_at: string;
 };
@@ -150,6 +150,75 @@ export function AIStudioCanvas({
         }
         if (e.kind === "variation_set") {
           return <VariationSetCard key={e.id} item={e} clientId={clientId} onUpdated={onCanvasItemUpdated} />;
+        }
+        if (e.kind === "storyboard") {
+          const p = e.payload || {};
+          const scenes: any[] = Array.isArray(p.scenes) ? p.scenes : [];
+          return (
+            <Card key={e.id} className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Clapperboard className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Storyboard</span>
+                <Badge variant="outline" className="text-[10px]">{p.aspect_ratio || "9:16"}</Badge>
+                <Badge variant="secondary" className="text-[10px]">{scenes.length} scenes</Badge>
+                <span className="text-xs text-muted-foreground ml-auto">{new Date(e.created_at).toLocaleTimeString()}</span>
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{p.brief}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {scenes.map((s: any) => (
+                  <div key={s.id} className="rounded-md border p-2 text-xs">
+                    <div className="font-medium text-[11px] mb-1">#{s.order} {s.title}</div>
+                    <div className="text-muted-foreground line-clamp-3 text-[10px]">{s.image_prompt}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          );
+        }
+        if (e.kind === "scene_image") {
+          const p = e.payload || {};
+          return (
+            <Card key={e.id} className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <ImageIcon className="h-4 w-4 text-primary" />
+                <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>
+                <Badge variant="secondary" className="text-[10px]">{p.aspect_ratio}</Badge>
+                <span className="text-xs text-muted-foreground ml-auto">keyframe</span>
+              </div>
+              {p.image_url && (
+                <a href={p.image_url} target="_blank" rel="noopener noreferrer">
+                  <img src={p.image_url} alt={`scene ${p.scene_order}`} className="w-full rounded-md border" loading="lazy" />
+                </a>
+              )}
+              <p className="text-[10px] text-muted-foreground line-clamp-2 mt-2">{p.prompt}</p>
+            </Card>
+          );
+        }
+        if (e.kind === "scene_video") {
+          const p = e.payload || {};
+          return (
+            <Card key={e.id} className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Film className="h-4 w-4 text-primary" />
+                <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>
+                <Badge variant="secondary" className="text-[10px]">{p.aspect_ratio}</Badge>
+                <Badge variant="secondary" className="text-[10px]">Veo 3.1</Badge>
+                <span className="text-xs text-muted-foreground ml-auto">{p.duration || 5}s</span>
+              </div>
+              {p.video_url && (
+                <video src={p.video_url} controls playsInline className="w-full rounded-md border bg-black" />
+              )}
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-[10px] text-muted-foreground line-clamp-2 flex-1">{p.video_prompt}</p>
+                {p.video_url && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
+                    onClick={() => { navigator.clipboard.writeText(p.video_url); toast.success("URL copied"); }}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </Card>
+          );
         }
         return null;
       })}
