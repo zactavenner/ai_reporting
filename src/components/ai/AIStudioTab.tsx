@@ -161,26 +161,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     };
 
     try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess.session?.access_token;
-      if (!token) throw new Error("You must be signed in.");
-
-      const url = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-        },
-        body: JSON.stringify({
-          clientId,
-          userText: text,
-          docUrl: docUrl || undefined,
-          sheetUrl: sheetUrl || undefined,
-          quality,
-        }),
-        signal: ctrl.signal,
+      const res = await studioFetch({
+        clientId,
+        userText: text,
+        docUrl: docUrl || undefined,
+        sheetUrl: sheetUrl || undefined,
+        quality,
+      }, ctrl.signal);
       });
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
@@ -260,11 +247,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   async function clearConversation() {
     if (!conversationId) { setMessages([]); setCanvas([]); return; }
     if (!confirm("Clear this AI Studio conversation? Past messages and canvas items will be hidden.")) return;
-    const { error } = await supabase
-      .from("ai_studio_conversations")
-      .update({ cleared_at: new Date().toISOString() })
-      .eq("id", conversationId);
-    if (error) { toast.error("Failed to clear"); return; }
+    const res = await studioFetch({ action: "clear", clientId, conversationId });
+    if (!res.ok) { toast.error("Failed to clear"); return; }
     setMessages([]);
     setCanvas([]);
     toast.success("Conversation cleared");
@@ -274,13 +258,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     if (!hydrated || !conversationId) return;
     const t = setTimeout(() => {
-      supabase
-        .from("ai_studio_conversations")
-        .update({ doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality })
-        .eq("id", conversationId);
+      studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality })
+        .catch((e) => console.error("AI Studio settings save failed", e));
     }, 500);
     return () => clearTimeout(t);
-  }, [docUrl, sheetUrl, quality, conversationId, hydrated]);
+  }, [docUrl, sheetUrl, quality, conversationId, hydrated, clientId, studioFetch]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr,1.1fr] gap-4 h-[calc(100vh-220px)] min-h-[600px]">
