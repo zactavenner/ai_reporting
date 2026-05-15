@@ -959,7 +959,7 @@ Deno.serve(async (req) => {
     userId = data.user?.id ?? null;
   } catch {}
   const body = await req.json();
-  const dashboardMemberId = typeof body.dashboardMemberId === "string" ? body.dashboardMemberId : null;
+  const dashboardMemberId = await verifyDashboardToken(typeof body.dashboardToken === "string" ? body.dashboardToken : null);
   if (!userId && dashboardMemberId) {
     const { data: member } = await supa
       .from("agency_members")
