@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,7 +17,7 @@ export type CanvasPlaceholder = {
 };
 export type CanvasItem = {
   id: string;
-  kind: "image" | "doc_edit" | "sheet_edit" | "variation_set" | "storyboard" | "scene_image" | "scene_video";
+  kind: "image" | "doc_edit" | "sheet_edit" | "variation_set" | "storyboard" | "scene_image" | "scene_video" | "text_artifact";
   payload: any;
   created_at: string;
 };
@@ -215,6 +215,35 @@ export function AIStudioCanvas({
                     onClick={() => { navigator.clipboard.writeText(p.video_url); toast.success("URL copied"); }}>
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
+                )}
+              </div>
+            </Card>
+          );
+        }
+        if (e.kind === "text_artifact") {
+          const p = e.payload || {};
+          const typeLabel = String(p.artifact_type || "text").replace(/_/g, " ");
+          return (
+            <Card key={e.id} className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <ScrollText className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium truncate flex-1" title={p.title}>{p.title || "Untitled"}</span>
+                <Badge variant="outline" className="text-[10px] capitalize">{typeLabel}</Badge>
+                <Badge variant="secondary" className="text-[10px]">{p.chars || (p.content?.length ?? 0)} chars</Badge>
+                <span className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleTimeString()}</span>
+              </div>
+              {p.notes && <p className="text-xs text-muted-foreground italic mb-2">{p.notes}</p>}
+              <div className="text-xs whitespace-pre-wrap font-mono bg-muted/40 rounded p-3 max-h-96 overflow-auto leading-relaxed">
+                {p.content}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <Button size="sm" variant="ghost" className="h-7" onClick={() => { navigator.clipboard.writeText(p.content || ""); toast.success("Copied"); }}>
+                  <Copy className="h-3.5 w-3.5 mr-1" /> Copy
+                </Button>
+                {p.appended_to_doc && p.doc_url && (
+                  <a href={p.doc_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary inline-flex items-center gap-1 ml-auto">
+                    <ExternalLink className="h-3 w-3" /> Appended to doc
+                  </a>
                 )}
               </div>
             </Card>

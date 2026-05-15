@@ -906,6 +906,28 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "create_text_artifact",
+      description: "Manus-style: write a long-form text deliverable (ad copy, video script, VSL script, caller script, email, landing-page copy, captions, outline, plan, brief, etc.) and drop it on the canvas as its own card. ALWAYS use this tool when the user asks you to WRITE, DRAFT, GENERATE, or CREATE any kind of script, copy, email, post, caption, outline, plan, or document body — instead of putting that text in your chat reply. The chat reply must only be a 1–2 sentence status (e.g. 'Drafted the 60s VSL script on the canvas.'). Render the body as Markdown.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short title for the artifact (e.g. 'Hero VSL — 60s', 'Meta ad copy v1')." },
+          artifact_type: {
+            type: "string",
+            enum: ["ad_copy", "video_script", "vsl_script", "caller_script", "email", "landing_copy", "caption", "outline", "plan", "brief", "other"],
+            description: "Kind of deliverable.",
+          },
+          content: { type: "string", description: "Full body in Markdown. Use headings, bullets, numbered hooks/variations as appropriate. No image embeds." },
+          notes: { type: "string", description: "Optional one-line subhead / context (e.g. 'CTA: Book a call', 'Targets: 45–65 accredited investors')." },
+          append_to_doc: { type: "boolean", description: "If true and a Google Doc is tied to this client, also append this artifact to that doc." },
+        },
+        required: ["title", "artifact_type", "content"],
+      },
+    },
+  },
 ];
 
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
@@ -922,6 +944,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
+  "- COPYWRITING / SCRIPTS: ALWAYS call create_text_artifact when the user asks you to write, draft, or generate ANY kind of script (VSL, caller, video script), ad copy, email, caption, landing page copy, outline, plan, or brief. Put the full body in the artifact (Markdown), not in your chat reply. Your chat reply must only be a 1–2 sentence summary like 'Drafted the 60s VSL script on the canvas.' Pass append_to_doc:true if the user said to put it in the doc.",
   "- VIDEO / REEL / SCENE WORKFLOW (Manus-style, FULLY AUTOMATIC, NO APPROVALS):",
   "  Step 1: Call plan_storyboard once with the user's brief.",
   "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene in the storyboard (parallel calls).",
@@ -1459,6 +1482,35 @@ Deno.serve(async (req) => {
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "create_text_artifact") {
+                const title = String(args.title || "Untitled").slice(0, 200);
+                const artifactType = String(args.artifact_type || "other");
+                const content = String(args.content || "");
+                const notes = args.notes ? String(args.notes).slice(0, 500) : null;
+                let appendedToDoc = false;
+                let appendError: string | null = null;
+                if (args.append_to_doc && docId) {
+                  try {
+                    await appendToDoc(docId, `\n\n## ${title}\n\n${content}\n`);
+                    appendedToDoc = true;
+                  } catch (e: any) {
+                    appendError = e?.message || String(e);
+                  }
+                }
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "text_artifact",
+                  payload: {
+                    title,
+                    artifact_type: artifactType,
+                    content,
+                    notes,
+                    chars: content.length,
+                    appended_to_doc: appendedToDoc,
+                    doc_url: appendedToDoc ? effectiveDocUrl : null,
+                  },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data });
+                result = { ok: true, title, artifact_type: artifactType, chars: content.length, appended_to_doc: appendedToDoc, append_error: appendError };
               } else {
                 result = { error: `Unknown tool: ${name}` };
               }
