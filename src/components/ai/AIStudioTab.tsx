@@ -454,20 +454,29 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </SelectContent>
             </Select>
           </div>
-        </div>
+          </div>
+        </details>
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
-          <div className="p-4 space-y-4">
+          <div className="px-4 sm:px-6 py-6 space-y-5 max-w-3xl mx-auto w-full">
             {messages.length === 0 && hydrated && (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Ask anything about this client's doc, sheet, or generate an ad. Built creatives appear on the Canvas →
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="py-8 space-y-6">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-semibold tracking-tight">What can I build for {clientName.split(" ")[0]}?</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Ask for ad creatives, scripts, copy, doc edits, or sheet queries. Visual results appear on the Canvas →
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   {SUGGESTIONS.map(s => (
-                    <Button key={s.label} variant="outline" size="sm" className="justify-start h-auto py-2" onClick={() => send(s.label)}>
-                      {s.icon}<span className="ml-2 text-xs text-left">{s.label}</span>
-                    </Button>
+                    <button
+                      key={s.label}
+                      onClick={() => send(s.label)}
+                      className="group flex items-center gap-2 rounded-full border border-border/60 bg-background hover:bg-muted/60 hover:border-border transition px-3 py-1.5 text-xs text-left"
+                    >
+                      <span className="text-primary/80 group-hover:text-primary">{s.icon}</span>
+                      <span className="line-clamp-1">{s.label}</span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -487,24 +496,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </ScrollArea>
 
-        <div className="p-3 border-t flex gap-2">
-          <Textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-            placeholder="Build an ad, edit the doc, query the sheet…"
-            className="resize-none min-h-[44px] max-h-32"
-            rows={1}
-          />
-          {loading ? (
-            <Button onClick={stop} size="icon" variant="destructive" title="Stop">
-              <Square className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button onClick={() => send(input)} disabled={!input.trim()} size="icon">
-              <Send className="h-4 w-4" />
-            </Button>
-          )}
+        <div className="px-4 sm:px-6 pb-4 pt-2">
+          <div className="max-w-3xl mx-auto w-full">
+            <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
+              <Textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+                placeholder="Ask AI Studio to build, write, or edit anything…"
+                className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 py-4 text-sm"
+                rows={1}
+              />
+              <div className="absolute bottom-2 right-2">
+                {loading ? (
+                  <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
+                    <Square className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
+                    <Send className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline</p>
+          </div>
         </div>
       </Card>
 
