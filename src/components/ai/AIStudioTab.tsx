@@ -52,6 +52,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [clientDocUrl, setClientDocUrl] = useState<string>("");
+  const [docTest, setDocTest] = useState<null | { ok: boolean; source?: string; title?: string; char_count?: number; doc_id?: string; latency_ms?: number; error?: string; client?: { name?: string } }>(null);
+  const [testingDoc, setTestingDoc] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
@@ -317,6 +319,25 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 toast.success("Linked Google Doc to this client");
               } catch (e: any) { toast.error(e?.message || "Failed to save"); }
             };
+            const testDoc = async () => {
+              setTestingDoc(true);
+              setDocTest(null);
+              try {
+                const res = await studioFetch({ action: "test_doc", clientId, docUrl: docUrl || null });
+                const json = await res.json();
+                setDocTest(json);
+                if (json.ok) {
+                  toast.success(`Connected: "${json.title || "Untitled"}" (${json.char_count?.toLocaleString() || 0} chars, ${json.source})`);
+                } else {
+                  toast.error(json.error || "Doc test failed");
+                }
+              } catch (e: any) {
+                setDocTest({ ok: false, error: e?.message || "Test failed" });
+                toast.error(e?.message || "Doc test failed");
+              } finally {
+                setTestingDoc(false);
+              }
+            };
             const saveSheet = async () => {
               if (!sheetUrl.trim()) return;
               try {
@@ -332,8 +353,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0"
                       disabled={!docUrl.trim() || docUrl === clientDocUrl}
                       onClick={saveDoc}>Tie to client</Button>
+                    <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0"
+                      disabled={testingDoc}
+                      onClick={testDoc} title="Verify the tied Google Doc is reachable">
+                      {testingDoc ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
+                    </Button>
                   </div>
-                  {docSource && <Badge variant="secondary" className="text-[9px]">{docSource}</Badge>}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {docSource && <Badge variant="secondary" className="text-[9px]">{docSource}</Badge>}
+                    {docTest && (
+                      <Badge
+                        variant={docTest.ok ? "default" : "destructive"}
+                        className="text-[9px] max-w-full truncate"
+                        title={docTest.ok
+                          ? `${docTest.title || "Untitled"} · ${docTest.char_count?.toLocaleString() || 0} chars · ${docTest.latency_ms}ms · source=${docTest.source} · client=${docTest.client?.name || "?"}`
+                          : docTest.error}
+                      >
+                        {docTest.ok
+                          ? `OK · ${docTest.title?.slice(0, 30) || "Untitled"} · ${docTest.source}`
+                          : `Fail · ${(docTest.error || "").slice(0, 60)}`}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <div className="flex gap-1">
