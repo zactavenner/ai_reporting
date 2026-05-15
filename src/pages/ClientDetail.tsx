@@ -387,7 +387,7 @@ export default function ClientDetail() {
               <h2 className="text-lg font-bold mb-3">Master Doc</h2>
               <InlineUrlEmbed
                 label="Master Doc"
-                url={agencySettings?.kpi_google_doc_url || ''}
+                url=""
                 fieldKey="kpi_google_doc_url"
                 clientId={clientId}
               />
@@ -400,7 +400,7 @@ export default function ClientDetail() {
               <h2 className="text-lg font-bold mb-3">Reporting Sheet</h2>
               <InlineUrlEmbed
                 label="Reporting Sheet"
-                url={agencySettings?.kpi_google_sheet_url || ''}
+                url=""
                 fieldKey="kpi_google_sheet_url"
                 clientId={clientId}
               />
