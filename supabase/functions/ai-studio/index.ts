@@ -1482,6 +1482,35 @@ Deno.serve(async (req) => {
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "create_text_artifact") {
+                const title = String(args.title || "Untitled").slice(0, 200);
+                const artifactType = String(args.artifact_type || "other");
+                const content = String(args.content || "");
+                const notes = args.notes ? String(args.notes).slice(0, 500) : null;
+                let appendedToDoc = false;
+                let appendError: string | null = null;
+                if (args.append_to_doc && docId) {
+                  try {
+                    await appendToDoc(docId, `\n\n## ${title}\n\n${content}\n`);
+                    appendedToDoc = true;
+                  } catch (e: any) {
+                    appendError = e?.message || String(e);
+                  }
+                }
+                const ci = await supa.from("ai_studio_canvas_items").insert({
+                  conversation_id: conversationId, user_id: userId, kind: "text_artifact",
+                  payload: {
+                    title,
+                    artifact_type: artifactType,
+                    content,
+                    notes,
+                    chars: content.length,
+                    appended_to_doc: appendedToDoc,
+                    doc_url: appendedToDoc ? effectiveDocUrl : null,
+                  },
+                }).select("id, payload, kind, created_at").single();
+                if (ci.data) send({ type: "canvas_item", item: ci.data });
+                result = { ok: true, title, artifact_type: artifactType, chars: content.length, appended_to_doc: appendedToDoc, append_error: appendError };
               } else {
                 result = { error: `Unknown tool: ${name}` };
               }
