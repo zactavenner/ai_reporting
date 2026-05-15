@@ -16,6 +16,30 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+function base64UrlEncode(value: ArrayBuffer): string {
+  const bytes = new Uint8Array(value);
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function verifyDashboardToken(token: string | null): Promise<string | null> {
+  if (!token || !token.includes(".")) return null;
+  const [payload, signature] = token.split(".");
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(SERVICE_KEY),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const expected = base64UrlEncode(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  if (signature !== expected) return null;
+  const parsed = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+  if (!parsed?.memberId || typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
+  return parsed.memberId;
+}
+
 // ---------- helpers ----------
 const extractDocId = (u: string) => u.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
 const extractSheetId = (u: string) => u.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
