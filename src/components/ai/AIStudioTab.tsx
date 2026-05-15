@@ -11,6 +11,7 @@ import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loade
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
+import { useTeamMember } from "@/contexts/TeamMemberContext";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 
@@ -42,6 +43,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: agencySettings } = useAgencySettings();
   const { data: clientSettings } = useClientSettings(clientId);
   const updateClientSettings = useUpdateClientSettings();
+  const { currentMember } = useTeamMember();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
@@ -53,53 +55,72 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
+
+  const getStudioAuth = useCallback(async (requireIdentity = false) => {
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token || null;
+    const dashboardMemberId = currentMember?.id || localStorage.getItem("team_member_id") || null;
+    if (!token && !dashboardMemberId && requireIdentity) {
+      throw new Error("Your dashboard session expired. Please sign in again.");
+    }
+    return { token, dashboardMemberId };
+  }, [currentMember?.id]);
+
+  const studioFetch = useCallback(async (body: Record<string, any>, signal?: AbortSignal) => {
+    const { token, dashboardMemberId } = await getStudioAuth(true);
+    return fetch(aiStudioUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+      },
+      body: JSON.stringify({ ...body, dashboardMemberId }),
+      signal,
+    });
+  }, [aiStudioUrl, getStudioAuth]);
 
   // Load conversation + history + canvas items from DB
   const loadHistory = useCallback(async () => {
     setHydrated(false);
-    const { data: convo } = await supabase
-      .from("ai_studio_conversations")
-      .select("*")
-      .eq("client_id", clientId)
-      .maybeSingle();
+    try {
+      const { token, dashboardMemberId } = await getStudioAuth(false);
+      if (!token && !dashboardMemberId) {
+        setMessages([]);
+        setCanvas([]);
+        setHydrated(true);
+        return;
+      }
+      const res = await studioFetch({ action: "history", clientId });
+      if (!res.ok) throw new Error(await res.text().catch(() => "Failed to load AI Studio history"));
+      const { conversation: convo, messages: msgs = [], canvasItems: items = [] } = await res.json();
 
-    if (convo) {
-      setConversationId(convo.id);
-      if (convo.doc_url) setDocUrl(convo.doc_url);
-      if (convo.sheet_url) setSheetUrl(convo.sheet_url);
-      if (convo.image_quality === "fast" || convo.image_quality === "pro") setQuality(convo.image_quality);
-
-      const sinceClause = convo.cleared_at || "1970-01-01T00:00:00Z";
-      const [{ data: msgs }, { data: items }] = await Promise.all([
-        supabase
-          .from("ai_studio_messages")
-          .select("id, role, content, tools, created_at")
-          .eq("conversation_id", convo.id)
-          .gte("created_at", sinceClause)
-          .order("created_at", { ascending: true })
-          .limit(200),
-        supabase
-          .from("ai_studio_canvas_items")
-          .select("id, kind, payload, created_at")
-          .eq("conversation_id", convo.id)
-          .gte("created_at", sinceClause)
-          .order("created_at", { ascending: false })
-          .limit(50),
-      ]);
-      setMessages((msgs || []).map(m => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        content: m.content || "",
-        tools: Array.isArray(m.tools) ? m.tools : [],
-      })));
-      setCanvas((items || []) as CanvasItem[]);
-    } else {
+      if (convo) {
+        setConversationId(convo.id);
+        if (convo.doc_url) setDocUrl(convo.doc_url);
+        if (convo.sheet_url) setSheetUrl(convo.sheet_url);
+        if (convo.image_quality === "fast" || convo.image_quality === "pro") setQuality(convo.image_quality);
+        setMessages((msgs || []).map((m: any) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content || "",
+          tools: Array.isArray(m.tools) ? m.tools : [],
+        })));
+        setCanvas((items || []) as CanvasItem[]);
+      } else {
+        setConversationId(null);
+        setMessages([]);
+        setCanvas([]);
+      }
+    } catch (e) {
+      console.error("AI Studio history load failed", e);
       setConversationId(null);
       setMessages([]);
       setCanvas([]);
     }
     setHydrated(true);
-  }, [clientId]);
+  }, [clientId, getStudioAuth, studioFetch]);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
