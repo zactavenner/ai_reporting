@@ -350,19 +350,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <div className="px-5 pb-3 pt-1 space-y-2">
           {(() => {
             const clientDoc = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url || "";
-            const agencyDoc = agencySettings?.kpi_google_doc_url || "";
             const clientSheet = (clientSettings as any)?.kpi_google_sheet_url || "";
-            const agencySheet = agencySettings?.kpi_google_sheet_url || "";
             const docSource = !docUrl
               ? ""
               : docUrl === clientDocUrl
                 ? "tied to client"
                 : docUrl === (clientSettings as any)?.kpi_google_doc_url
                   ? "client KPI default"
-                  : docUrl === agencyDoc
-                    ? "agency default"
-                    : "override";
-            const sheetSource = !sheetUrl ? "" : sheetUrl === clientSheet ? "client default" : sheetUrl === agencySheet ? "agency default" : "override";
+                  : "session override";
+            const sheetSource = !sheetUrl ? "" : sheetUrl === clientSheet ? "client default" : "session override";
             const saveDoc = async () => {
               if (!docUrl.trim()) return;
               try {
