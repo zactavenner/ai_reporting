@@ -35,7 +35,8 @@ async function verifyDashboardToken(token: string | null): Promise<string | null
   );
   const expected = base64UrlEncode(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
   if (signature !== expected) return null;
-  const parsed = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const parsed = JSON.parse(atob(base64 + "=".repeat((4 - base64.length % 4) % 4)));
   if (!parsed?.memberId || typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
   return parsed.memberId;
 }
