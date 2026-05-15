@@ -21,9 +21,10 @@ export function InlineUrlEmbed({ label, url, fieldKey, clientId }: InlineUrlEmbe
   const updateClient = useUpdateClientSettings();
   const { data: clientSettings } = useClientSettings(clientId);
 
-  // Per-client URL takes precedence; fall back to provided (agency) URL.
+  // When bound to a client, ONLY use that client's saved URL — never fall back
+  // to an agency-wide URL. Each client must have their own Doc / Sheet.
   const effectiveUrl = clientId
-    ? ((clientSettings as any)?.[fieldKey] as string | null | undefined) ?? url
+    ? (((clientSettings as any)?.[fieldKey] as string | null | undefined) ?? '')
     : url;
 
   const [editing, setEditing] = useState(!effectiveUrl);

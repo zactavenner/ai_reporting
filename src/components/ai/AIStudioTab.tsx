@@ -184,15 +184,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Default URLs from agency settings (only if conversation has none)
   useEffect(() => {
     if (!hydrated) return;
+    // Per-client only — never fall back to agency-wide URLs so each client's
+    // AI Studio is strictly tied to that client's own Doc/Sheet.
     if (!docUrl) {
-      const fallback = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url || agencySettings?.kpi_google_doc_url;
+      const fallback = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url;
       if (fallback) setDocUrl(fallback);
     }
     if (!sheetUrl) {
-      const fallback = (clientSettings as any)?.kpi_google_sheet_url || agencySettings?.kpi_google_sheet_url;
+      const fallback = (clientSettings as any)?.kpi_google_sheet_url;
       if (fallback) setSheetUrl(fallback);
     }
-  }, [agencySettings, clientSettings, hydrated, docUrl, sheetUrl, clientDocUrl]);
+  }, [clientSettings, hydrated, docUrl, sheetUrl, clientDocUrl]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -348,19 +350,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <div className="px-5 pb-3 pt-1 space-y-2">
           {(() => {
             const clientDoc = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url || "";
-            const agencyDoc = agencySettings?.kpi_google_doc_url || "";
             const clientSheet = (clientSettings as any)?.kpi_google_sheet_url || "";
-            const agencySheet = agencySettings?.kpi_google_sheet_url || "";
             const docSource = !docUrl
               ? ""
               : docUrl === clientDocUrl
                 ? "tied to client"
                 : docUrl === (clientSettings as any)?.kpi_google_doc_url
                   ? "client KPI default"
-                  : docUrl === agencyDoc
-                    ? "agency default"
-                    : "override";
-            const sheetSource = !sheetUrl ? "" : sheetUrl === clientSheet ? "client default" : sheetUrl === agencySheet ? "agency default" : "override";
+                  : "session override";
+            const sheetSource = !sheetUrl ? "" : sheetUrl === clientSheet ? "client default" : "session override";
             const saveDoc = async () => {
               if (!docUrl.trim()) return;
               try {
