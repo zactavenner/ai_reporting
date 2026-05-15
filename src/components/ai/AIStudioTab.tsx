@@ -168,7 +168,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         sheetUrl: sheetUrl || undefined,
         quality,
       }, ctrl.signal);
-      });
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
       const reader = res.body.getReader();
