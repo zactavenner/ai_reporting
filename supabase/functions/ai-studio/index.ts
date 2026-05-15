@@ -1015,7 +1015,7 @@ Deno.serve(async (req) => {
       const finalToolEvents: any[] = [];
 
       try {
-        for (let step = 0; step < 8; step++) {
+        for (let step = 0; step < 25; step++) {
           if (aborted.v) break;
           send({ type: "step", step });
 
@@ -1090,9 +1090,10 @@ Deno.serve(async (req) => {
             break;
           }
 
-          // Execute tools
-          for (const tc of toolCallsAcc) {
-            if (aborted.v) break;
+          // Execute tools (in parallel for fan-out workflows like storyboard scenes)
+          const toolMessages: { call_id: string; content: string }[] = new Array(toolCallsAcc.length);
+          await Promise.all(toolCallsAcc.map(async (tc, tcIdx) => {
+            if (aborted.v) return;
             const name = tc.name;
             let args: any = {}; try { args = JSON.parse(tc.args || "{}"); } catch {}
 
@@ -1129,6 +1130,17 @@ Deno.serve(async (req) => {
                 prompt: `Generating ${Math.max(2, Math.min(5, args.count || 4))} variations: ${args.prompt || ""}`,
                 aspect_ratio: args.aspect_ratio || "1:1",
                 quality: "fast",
+              });
+            }
+            if (name === "generate_scene_image" || name === "generate_scene_video") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `${name === "generate_scene_video" ? "Animating" : "Rendering"} scene ${args.scene_order || "?"}`,
+                aspect_ratio: args.aspect_ratio || "9:16",
+                quality: name === "generate_scene_video" ? "veo" : "pro",
               });
             }
 
@@ -1261,6 +1273,45 @@ Deno.serve(async (req) => {
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "plan_storyboard") {
+                const sb = await planStoryboard({
+                  brief: args.brief,
+                  sceneCount: Math.max(3, Math.min(8, args.scene_count || 4)),
+                  aspectRatio: args.aspect_ratio || "9:16",
+                  styleNotes: args.style_notes,
+                  brandContext,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, storyboard_id: sb.storyboardId, aspect_ratio: sb.aspect_ratio, scenes: sb.scenes };
+                if (sb.storyboardItem) send({ type: "canvas_item", item: sb.storyboardItem });
+              } else if (name === "generate_scene_image") {
+                const r = await generateSceneImage({
+                  storyboardId: args.storyboard_id,
+                  sceneId: args.scene_id,
+                  sceneOrder: args.scene_order,
+                  prompt: args.prompt,
+                  aspectRatio: args.aspect_ratio,
+                  clientId: clientId || null,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, image_url: r.image_url, model: r.model };
+                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "generate_scene_video") {
+                const r = await generateSceneVideo({
+                  storyboardId: args.storyboard_id,
+                  sceneId: args.scene_id,
+                  sceneOrder: args.scene_order,
+                  imageUrl: args.image_url,
+                  videoPrompt: args.video_prompt,
+                  aspectRatio: args.aspect_ratio,
+                  clientId: clientId || null,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
+                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else {
                 result = { error: `Unknown tool: ${name}` };
               }
@@ -1270,11 +1321,14 @@ Deno.serve(async (req) => {
             }
             finalToolEvents.push({ name, args, result });
             send({ type: "tool_end", id: tc.id, name, args, result });
-            convo.push({
-              role: "tool",
-              tool_call_id: tc.id,
+            toolMessages[tcIdx] = {
+              call_id: tc.id,
               content: JSON.stringify(result).slice(0, 8000),
-            });
+            };
+          }));
+          for (const tm of toolMessages) {
+            if (!tm) continue;
+            convo.push({ role: "tool", tool_call_id: tm.call_id, content: tm.content });
           }
         }
       } catch (e: any) {
