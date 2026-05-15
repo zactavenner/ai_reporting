@@ -2964,6 +2964,8 @@ export type Database = {
           ghl_location_id: string | null
           ghl_sync_error: string | null
           ghl_sync_status: string | null
+          google_doc_id: string | null
+          google_doc_url: string | null
           hubspot_access_token: string | null
           hubspot_portal_id: string | null
           hubspot_sync_error: string | null
@@ -3005,6 +3007,8 @@ export type Database = {
           ghl_location_id?: string | null
           ghl_sync_error?: string | null
           ghl_sync_status?: string | null
+          google_doc_id?: string | null
+          google_doc_url?: string | null
           hubspot_access_token?: string | null
           hubspot_portal_id?: string | null
           hubspot_sync_error?: string | null
@@ -3046,6 +3050,8 @@ export type Database = {
           ghl_location_id?: string | null
           ghl_sync_error?: string | null
           ghl_sync_status?: string | null
+          google_doc_id?: string | null
+          google_doc_url?: string | null
           hubspot_access_token?: string | null
           hubspot_portal_id?: string | null
           hubspot_sync_error?: string | null
