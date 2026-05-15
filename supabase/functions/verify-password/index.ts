@@ -14,6 +14,26 @@ async function hashPassword(password: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function base64UrlEncode(value: string | ArrayBuffer): string {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function createDashboardToken(memberId: string, secret: string): Promise<string> {
+  const payload = base64UrlEncode(JSON.stringify({ memberId, exp: Date.now() + 1000 * 60 * 60 * 24 * 7 }));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  return `${payload}.${base64UrlEncode(signature)}`;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -113,9 +133,12 @@ Deno.serve(async (req) => {
         },
       });
 
+    const dashboardToken = await createDashboardToken(member.id, supabaseServiceKey);
+
     return new Response(
       JSON.stringify({ 
         success: true, 
+        dashboardToken,
         member: {
           id: member.id,
           name: member.name,

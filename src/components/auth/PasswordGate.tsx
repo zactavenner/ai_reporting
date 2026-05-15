@@ -21,13 +21,16 @@ function PasswordGateContent({ children }: PasswordGateProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const { login, currentMember } = useTeamMember();
+  const { login } = useTeamMember();
 
   useEffect(() => {
     // Check if already authenticated in this session
     const storedAuth = localStorage.getItem(SESSION_KEY);
-    if (storedAuth === 'true') {
+    const dashboardToken = localStorage.getItem('dashboard_session_token');
+    if (storedAuth === 'true' && dashboardToken) {
       setIsAuthenticated(true);
+    } else if (storedAuth === 'true' && !dashboardToken) {
+      localStorage.removeItem(SESSION_KEY);
     }
     setIsLoading(false);
   }, []);
@@ -68,6 +71,10 @@ function PasswordGateContent({ children }: PasswordGateProps) {
         }
         setIsLoggingIn(false);
         return;
+      }
+
+      if (data.dashboardToken) {
+        localStorage.setItem('dashboard_session_token', data.dashboardToken);
       }
 
       // Login successful - store member in context

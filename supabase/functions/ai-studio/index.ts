@@ -16,6 +16,35 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+function base64UrlEncode(value: ArrayBuffer): string {
+  const bytes = new Uint8Array(value);
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function verifyDashboardToken(token: string | null): Promise<string | null> {
+  try {
+    if (!token || !token.includes(".")) return null;
+    const [payload, signature] = token.split(".");
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(SERVICE_KEY),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const expected = base64UrlEncode(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+    if (signature !== expected) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const parsed = JSON.parse(atob(base64 + "=".repeat((4 - base64.length % 4) % 4)));
+    if (!parsed?.memberId || typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
+    return parsed.memberId;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- helpers ----------
 const extractDocId = (u: string) => u.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
 const extractSheetId = (u: string) => u.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
@@ -934,16 +963,70 @@ Deno.serve(async (req) => {
     const { data } = await userClient.auth.getUser();
     userId = data.user?.id ?? null;
   } catch {}
+  const body = await req.json();
+  const dashboardMemberId = await verifyDashboardToken(typeof body.dashboardToken === "string" ? body.dashboardToken : null);
+  if (!userId && dashboardMemberId) {
+    const { data: member } = await supa
+      .from("agency_members")
+      .select("id")
+      .eq("id", dashboardMemberId)
+      .maybeSingle();
+    userId = member?.id ?? null;
+  }
   if (!userId) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const body = await req.json();
-  const { clientId, userText, docUrl, sheetUrl, quality = "pro" } = body as {
-    clientId: string; userText: string; docUrl?: string; sheetUrl?: string; quality?: "pro" | "fast";
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId } = body as {
+    action?: "history" | "clear" | "settings";
+    clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
   };
+
+  if (!clientId) {
+    return new Response(JSON.stringify({ error: "clientId is required" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (action === "history") {
+    const { data: convo } = await supa
+      .from("ai_studio_conversations")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!convo) {
+      return new Response(JSON.stringify({ conversation: null, messages: [], canvasItems: [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const sinceClause = convo.cleared_at || "1970-01-01T00:00:00Z";
+    const [{ data: messages }, { data: canvasItems }] = await Promise.all([
+      supa.from("ai_studio_messages").select("id, role, content, tools, created_at").eq("conversation_id", convo.id).gte("created_at", sinceClause).order("created_at", { ascending: true }).limit(200),
+      supa.from("ai_studio_canvas_items").select("id, kind, payload, created_at").eq("conversation_id", convo.id).gte("created_at", sinceClause).order("created_at", { ascending: false }).limit(50),
+    ]);
+    return new Response(JSON.stringify({ conversation: convo, messages: messages || [], canvasItems: canvasItems || [] }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (action === "clear" && requestedConversationId) {
+    await supa.from("ai_studio_conversations").update({ cleared_at: new Date().toISOString() }).eq("id", requestedConversationId).eq("user_id", userId);
+    return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
+  if (action === "settings" && requestedConversationId) {
+    await supa.from("ai_studio_conversations").update({ doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality }).eq("id", requestedConversationId).eq("user_id", userId);
+    return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
+  if (!userText?.trim()) {
+    return new Response(JSON.stringify({ error: "userText is required" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   // Upsert conversation
   const { data: convoRow } = await supa
