@@ -30,6 +30,7 @@ import {
   TrendingUp,
   ExternalLink,
   Sparkles,
+  Target,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -76,6 +77,11 @@ const navStructure = [
     title: 'Onboarding',
     value: 'onboarding',
     icon: Users,
+  },
+  {
+    title: 'Lead Manager',
+    value: 'lead-manager',
+    icon: Target,
   },
   {
     title: 'Reporting',
