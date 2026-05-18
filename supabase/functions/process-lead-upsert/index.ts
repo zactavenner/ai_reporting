@@ -190,8 +190,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 4. Auto-enrich newly inserted leads via RetargetIQ (fire-and-forget)
-    if (action === "insert" && leadId) {
+    // 4. Auto-enrich newly inserted leads via RetargetIQ (DISABLED per user request)
+    if (false && action === "insert" && leadId) {
       const enrichTask = (async () => {
         try {
           // Require a configured RetargetIQ slug for this client; otherwise skip.
