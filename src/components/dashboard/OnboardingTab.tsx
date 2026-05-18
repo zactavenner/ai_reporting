@@ -9,13 +9,14 @@ import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AssetInlineChat } from '@/components/onboarding/AssetInlineChat';
+import { OnboardingAutomationPanel } from '@/components/onboarding/OnboardingAutomationPanel';
 import {
   CheckCircle2, Clock, XCircle, Loader2, ChevronDown, ChevronRight,
   Eye, Play, Pause, FileText, Image, Video, MessageSquare, Mail,
   Bot, RefreshCw, Rocket, BarChart3, Target, Megaphone, Globe,
   Sparkles, AlertCircle, Upload, Trash2, Download, ClipboardList,
   Building2, DollarSign, Users, Phone, Calendar, Link, Shield,
-  FileDown,
+  FileDown, Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
