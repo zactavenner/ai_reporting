@@ -550,6 +550,9 @@ function ClientOnboardingCard({
               <TabsTrigger value="files" className="text-xs h-7 gap-1">
                 <Upload className="h-3 w-3" /> Files ({client.offerFiles.length})
               </TabsTrigger>
+              <TabsTrigger value="automation" className="text-xs h-7 gap-1">
+                <Zap className="h-3 w-3" /> Automation
+              </TabsTrigger>
             </TabsList>
 
             {/* Intake Tab - Full onboarding data from aicapitalraising.com */}
@@ -681,6 +684,15 @@ function ClientOnboardingCard({
                 offerId={primaryOffer?.id}
                 files={client.offerFiles}
                 onRefresh={onRefresh}
+              />
+            </TabsContent>
+
+            {/* Automation Tab — 5-phase end-to-end onboarding tracker */}
+            <TabsContent value="automation" className="mt-3">
+              <OnboardingAutomationPanel
+                clientId={client.clientId}
+                clientName={client.clientName}
+                onMarkActive={onMarkActive}
               />
             </TabsContent>
           </Tabs>
