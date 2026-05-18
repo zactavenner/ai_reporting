@@ -2952,6 +2952,7 @@ export type Database = {
       clients: {
         Row: {
           account_manager: string | null
+          automation_checklist: Json
           brand_colors: Json | null
           brand_fonts: Json | null
           business_manager_url: string | null
@@ -2995,6 +2996,7 @@ export type Database = {
         }
         Insert: {
           account_manager?: string | null
+          automation_checklist?: Json
           brand_colors?: Json | null
           brand_fonts?: Json | null
           business_manager_url?: string | null
@@ -3038,6 +3040,7 @@ export type Database = {
         }
         Update: {
           account_manager?: string | null
+          automation_checklist?: Json
           brand_colors?: Json | null
           brand_fonts?: Json | null
           business_manager_url?: string | null
