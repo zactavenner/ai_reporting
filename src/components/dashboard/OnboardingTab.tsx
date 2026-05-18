@@ -9,13 +9,14 @@ import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AssetInlineChat } from '@/components/onboarding/AssetInlineChat';
+import { OnboardingAutomationPanel } from '@/components/onboarding/OnboardingAutomationPanel';
 import {
   CheckCircle2, Clock, XCircle, Loader2, ChevronDown, ChevronRight,
   Eye, Play, Pause, FileText, Image, Video, MessageSquare, Mail,
   Bot, RefreshCw, Rocket, BarChart3, Target, Megaphone, Globe,
   Sparkles, AlertCircle, Upload, Trash2, Download, ClipboardList,
   Building2, DollarSign, Users, Phone, Calendar, Link, Shield,
-  FileDown,
+  FileDown, Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -549,6 +550,9 @@ function ClientOnboardingCard({
               <TabsTrigger value="files" className="text-xs h-7 gap-1">
                 <Upload className="h-3 w-3" /> Files ({client.offerFiles.length})
               </TabsTrigger>
+              <TabsTrigger value="automation" className="text-xs h-7 gap-1">
+                <Zap className="h-3 w-3" /> Automation
+              </TabsTrigger>
             </TabsList>
 
             {/* Intake Tab - Full onboarding data from aicapitalraising.com */}
@@ -680,6 +684,15 @@ function ClientOnboardingCard({
                 offerId={primaryOffer?.id}
                 files={client.offerFiles}
                 onRefresh={onRefresh}
+              />
+            </TabsContent>
+
+            {/* Automation Tab — 5-phase end-to-end onboarding tracker */}
+            <TabsContent value="automation" className="mt-3">
+              <OnboardingAutomationPanel
+                clientId={client.clientId}
+                clientName={client.clientName}
+                onMarkActive={onMarkActive}
               />
             </TabsContent>
           </Tabs>

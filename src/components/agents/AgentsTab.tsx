@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { CronSchedulePicker } from './CronSchedulePicker';
 import { ClientScopePicker } from './ClientScopePicker';
 import { AIAgentGenerator } from './AIAgentGenerator';
+import { WeeklyReportingAgent } from './WeeklyReportingAgent';
 
 interface Props { clients: Client[]; }
 
@@ -186,6 +187,9 @@ export function AgentsTab({ clients }: Props) {
           </Card>
         ))}
       </div>
+
+      {/* Specialized: Weekly Reporting Agent */}
+      <WeeklyReportingAgent clients={clients} />
 
       {/* Active Agents Grid */}
       {activeAgents.length > 0 && (
