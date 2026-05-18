@@ -42,6 +42,7 @@ import { Sliders, CheckCircle, RefreshCw, Wifi, Smartphone } from 'lucide-react'
 import { MasterMetaTokenCard } from '@/components/dashboard/MasterMetaTokenCard';
 import { OutreachTab } from '@/components/outreach/OutreachTab';
 import { OnboardingTab } from '@/components/dashboard/OnboardingTab';
+import { LeadQualityManager } from '@/components/onboarding/LeadQualityManager';
 import { useClients, Client } from '@/hooks/useClients';
 import { useAllDailyMetrics, useFundedInvestors, AggregatedMetrics } from '@/hooks/useMetrics';
 import { aggregateFromSourceData, SourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
@@ -302,6 +303,13 @@ const Index = () => {
 
             {/* Onboarding */}
             {activeTab === 'onboarding' && <OnboardingTab />}
+
+            {/* Lead Manager */}
+            {activeTab === 'lead-manager' && (
+              <SectionErrorBoundary sectionName="Lead Manager">
+                <LeadQualityManager />
+              </SectionErrorBoundary>
+            )}
 
             {/* Ads Manager */}
             {activeTab === 'ads-manager' && <AdminAdsManagerTab platform="all" />}
