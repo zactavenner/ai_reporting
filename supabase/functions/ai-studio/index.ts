@@ -1003,11 +1003,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, activeReferenceIds } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, activeReferenceIds, canvasView, focusedCanvasItemId } = body as {
     action?: "history" | "clear" | "settings" | "test_doc";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     activeReferenceIds?: string[] | null;
+    canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
+    focusedCanvasItemId?: string | null;
   };
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
@@ -1049,6 +1051,14 @@ Deno.serve(async (req) => {
     const settingsUpdate: Record<string, any> = { doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality };
     if (typeof chatModel === "string" || chatModel === null) settingsUpdate.chat_model = chatModel || null;
     if (Array.isArray(activeReferenceIds)) settingsUpdate.active_reference_ids = activeReferenceIds;
+    if (canvasView && typeof canvasView === "object") {
+      if (typeof canvasView.zoom === "number" && isFinite(canvasView.zoom)) settingsUpdate.canvas_zoom = canvasView.zoom;
+      if (typeof canvasView.panX === "number" && isFinite(canvasView.panX)) settingsUpdate.canvas_pan_x = canvasView.panX;
+      if (typeof canvasView.panY === "number" && isFinite(canvasView.panY)) settingsUpdate.canvas_pan_y = canvasView.panY;
+    }
+    if (typeof focusedCanvasItemId === "string" || focusedCanvasItemId === null) {
+      settingsUpdate.focused_canvas_item_id = focusedCanvasItemId || null;
+    }
     await supa.from("ai_studio_conversations").update(settingsUpdate).eq("id", requestedConversationId).eq("user_id", userId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
