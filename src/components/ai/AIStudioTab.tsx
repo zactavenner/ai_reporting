@@ -270,6 +270,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel,
         activeReferenceIds,
+        autoDocContext,
       }, ctrl.signal);
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
@@ -290,6 +291,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
           if (evt.type === "conversation") {
             setConversationId(evt.conversationId);
+          } else if (evt.type === "context_usage") {
+            setContextUsage({ chars: evt.chars, tokens: evt.estimated_tokens, auto_doc: evt.auto_doc });
           } else if (evt.type === "text") {
             updateAssistant(m => ({ ...m, content: stripImageMarkup((m.content || "") + evt.delta) }));
           } else if (evt.type === "tool_start") {
