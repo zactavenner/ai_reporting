@@ -6543,6 +6543,57 @@ export type Database = {
           },
         ]
       }
+      onboarding_notifications: {
+        Row: {
+          channel: string
+          client_id: string | null
+          created_at: string
+          id: string
+          message: string
+          metadata: Json | null
+          phase: string | null
+          recipient: string | null
+          status: string
+        }
+        Insert: {
+          channel: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          metadata?: Json | null
+          phase?: string | null
+          recipient?: string | null
+          status?: string
+        }
+        Update: {
+          channel?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          metadata?: Json | null
+          phase?: string | null
+          recipient?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_notifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "onboarding_notifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pagespeed_cache: {
         Row: {
           fetched_at: string

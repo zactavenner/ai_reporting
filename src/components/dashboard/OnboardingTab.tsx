@@ -692,6 +692,7 @@ function ClientOnboardingCard({
               <OnboardingAutomationPanel
                 clientId={client.clientId}
                 clientName={client.clientName}
+                primaryOffer={primaryOffer}
                 onMarkActive={onMarkActive}
               />
             </TabsContent>
