@@ -102,6 +102,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [canvas, setCanvas] = useState<CanvasEntry[]>([]);
+  const [canvasView, setCanvasView] = useState<{ zoom: number; panX: number; panY: number } | null>(null);
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -158,6 +160,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         if (convo.image_quality === "fast" || convo.image_quality === "pro") setQuality(convo.image_quality);
         if (typeof (convo as any).chat_model === "string" && (convo as any).chat_model) setChatModel((convo as any).chat_model);
         if (Array.isArray((convo as any).active_reference_ids)) setActiveReferenceIds((convo as any).active_reference_ids as string[]);
+        setCanvasView({
+          zoom: Number((convo as any).canvas_zoom ?? 1) || 1,
+          panX: Number((convo as any).canvas_pan_x ?? 0) || 0,
+          panY: Number((convo as any).canvas_pan_y ?? 0) || 0,
+        });
+        setFocusedItemId(((convo as any).focused_canvas_item_id as string) || null);
         setMessages((msgs || []).map((m: any) => ({
           id: m.id,
           role: m.role as "user" | "assistant",
