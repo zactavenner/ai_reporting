@@ -42,7 +42,7 @@ import { Sliders, CheckCircle, RefreshCw, Wifi, Smartphone } from 'lucide-react'
 import { MasterMetaTokenCard } from '@/components/dashboard/MasterMetaTokenCard';
 import { OutreachTab } from '@/components/outreach/OutreachTab';
 import { OnboardingTab } from '@/components/dashboard/OnboardingTab';
-import { LeadQualityManager } from '@/components/onboarding/LeadQualityManager';
+
 import { AccountManagerPage } from '@/pages/AccountManagerPage';
 import { useClients, Client } from '@/hooks/useClients';
 import { useAllDailyMetrics, useFundedInvestors, AggregatedMetrics } from '@/hooks/useMetrics';
@@ -304,13 +304,6 @@ const Index = () => {
 
             {/* Onboarding */}
             {activeTab === 'onboarding' && <OnboardingTab />}
-
-            {/* Lead Manager */}
-            {activeTab === 'lead-manager' && (
-              <SectionErrorBoundary sectionName="Lead Manager">
-                <LeadQualityManager />
-              </SectionErrorBoundary>
-            )}
 
             {/* AM Workspace */}
             {activeTab === 'am-workspace' && (

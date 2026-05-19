@@ -79,11 +79,6 @@ const navStructure = [
     icon: Users,
   },
   {
-    title: 'Lead Manager',
-    value: 'lead-manager',
-    icon: Target,
-  },
-  {
     title: 'AM Workspace',
     value: 'am-workspace',
     icon: Sparkles,
