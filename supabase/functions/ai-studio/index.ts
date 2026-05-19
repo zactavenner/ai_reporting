@@ -1203,7 +1203,9 @@ Deno.serve(async (req) => {
     .single();
   const conversationId = convoRow!.id;
 
-  // Resolve default reference image from library (first active reference for this conversation)
+  // Resolve default reference image. Priority:
+  // 1. First explicitly-active reference from the conversation
+  // 2. Most recent approved-creative auto-reference for THIS client
   let defaultReferenceImageUrl: string | null = null;
   const refIds: string[] = Array.isArray(activeReferenceIds) && activeReferenceIds.length
     ? activeReferenceIds
@@ -1215,6 +1217,17 @@ Deno.serve(async (req) => {
       .in("id", refIds)
       .limit(1);
     if (refs && refs[0]?.image_url) defaultReferenceImageUrl = refs[0].image_url as string;
+  }
+  if (!defaultReferenceImageUrl && clientId) {
+    const { data: approvedRef } = await supa
+      .from("ai_studio_reference_images")
+      .select("image_url")
+      .eq("client_id", clientId)
+      .eq("source", "approved_creative")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (approvedRef?.image_url) defaultReferenceImageUrl = approvedRef.image_url as string;
   }
 
   // Load history (since cleared_at, or all)
