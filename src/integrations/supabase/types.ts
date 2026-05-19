@@ -949,6 +949,8 @@ export type Database = {
       }
       ai_studio_conversations: {
         Row: {
+          active_reference_ids: Json
+          chat_model: string | null
           cleared_at: string | null
           client_id: string
           created_at: string
@@ -961,6 +963,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active_reference_ids?: Json
+          chat_model?: string | null
           cleared_at?: string | null
           client_id: string
           created_at?: string
@@ -973,6 +977,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active_reference_ids?: Json
+          chat_model?: string | null
           cleared_at?: string | null
           client_id?: string
           created_at?: string
@@ -1023,6 +1029,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_studio_reference_images: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          image_url: string
+          name: string
+          storage_path: string | null
+          tags: string[] | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_url: string
+          name: string
+          storage_path?: string | null
+          tags?: string[] | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_url?: string
+          name?: string
+          storage_path?: string | null
+          tags?: string[] | null
+        }
+        Relationships: []
       }
       alert_configs: {
         Row: {
