@@ -834,14 +834,36 @@ const tools = [
     type: "function",
     function: {
       name: "generate_static_ad",
-      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Use 'pro' (Gemini 3 Pro Image, default) for finals; 'fast' (Nano Banana 2) for quick iteration. Optionally pass a reference_image_url to clone an existing ad's layout.",
+      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Pick a model: 'gemini-pro' (Gemini 3 Pro Image, default finals), 'nano-banana' (Nano Banana 2, fast iteration), or 'openai' (GPT Image 1, distinct art direction). Optionally pass reference_image_url to clone an existing ad's layout. This client's approved creatives are automatically used as visual references if no explicit reference is given.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What the ad should communicate, headline ideas, key visuals." },
           aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "1:1 feed, 4:5 IG feed tall, 9:16 stories/reels, 16:9 landscape." },
           quality: { type: "string", enum: ["pro", "fast"], description: "pro = highest quality (default), fast = quick iteration" },
+          model: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"], description: "Which image model to use. If omitted, derived from quality." },
           reference_image_url: { type: "string", description: "Optional URL of a reference ad to clone the layout/style from." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "compare_image_models",
+      description: "Generate the SAME ad prompt across multiple image models in parallel so the user can compare and pick a favorite. Use when the user asks to 'compare models', 'try both', 'see Gemini vs OpenAI', or wants different angles from each model. Each result lands on the canvas tagged with its model.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What the ad should communicate." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"] },
+          models: {
+            type: "array",
+            items: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"] },
+            description: "Which models to compare. Default: ['gemini-pro', 'nano-banana', 'openai'].",
+          },
+          reference_image_url: { type: "string", description: "Optional reference to clone layout from." },
         },
         required: ["prompt"],
       },
