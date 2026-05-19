@@ -985,7 +985,7 @@ const tools = [
   },
 ];
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[] }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
@@ -1014,6 +1014,12 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Never use the word 'guaranteed' for investments. Use 'targeted returns' and include risk disclaimers when writing investor copy.",
   "",
   `User's quality preference: ${ctx.quality}.`,
+  (ctx.imageModels && ctx.imageModels.length === 1)
+    ? `IMAGE MODEL PREFERENCE: The user selected a single image model "${ctx.imageModels[0]}". ALWAYS pass model: "${ctx.imageModels[0]}" to generate_static_ad (and edit_static_ad where applicable). Do NOT call compare_image_models unless the user explicitly asks.`
+    : null,
+  (ctx.imageModels && ctx.imageModels.length > 1)
+    ? `IMAGE MODEL PREFERENCE: The user selected MULTIPLE image models [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] for side-by-side outputs. For ANY new ad generation request, call compare_image_models with models: [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] so the user gets one variant per selected model on the canvas.`
+    : null,
   ctx.brandSummary,
   ctx.docId ? `Active Google Doc: ${ctx.docUrl} (id ${ctx.docId})` : "No active Google Doc.",
   ctx.sheetId ? `Active Google Sheet: ${ctx.sheetUrl} (id ${ctx.sheetId})` : "No active Google Sheet.",
