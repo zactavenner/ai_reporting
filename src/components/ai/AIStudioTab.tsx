@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
@@ -28,7 +30,23 @@ const CHAT_MODELS = [
   { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (fastest)" },
   { value: "openai/gpt-5", label: "GPT-5 (multimodal)" },
   { value: "openai/gpt-5-mini", label: "GPT-5 Mini (cheap)" },
+  // OpenRouter — server routes any model id prefixed with "openrouter/"
+  // through the OpenRouter API using OPENROUTER_API_KEY.
+  { value: "openrouter/anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet (via OpenRouter)" },
+  { value: "openrouter/openai/gpt-5", label: "GPT-5 via OpenRouter" },
+  { value: "openrouter/deepseek/deepseek-chat", label: "DeepSeek Chat (via OpenRouter)" },
+  { value: "openrouter/meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B (via OpenRouter)" },
 ];
+
+// Approximate context window per model family (in tokens) for the usage meter.
+function contextLimitFor(model: string): number {
+  if (/gemini-2\.5-pro|gemini-3|gemini-2\.5-flash/i.test(model)) return 1_000_000;
+  if (/gpt-5/i.test(model)) return 400_000;
+  if (/claude/i.test(model)) return 200_000;
+  if (/deepseek/i.test(model)) return 128_000;
+  if (/llama/i.test(model)) return 128_000;
+  return 200_000;
+}
 
 function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: boolean }) {
   if (m.role === "user") {
