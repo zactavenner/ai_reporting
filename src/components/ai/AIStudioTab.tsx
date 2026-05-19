@@ -487,7 +487,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Select>
           </div>
           <div className="pt-2 border-t">
-            <AIStudioReferenceLibrary activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
+            <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
           </div>
           </div>
         </details>
