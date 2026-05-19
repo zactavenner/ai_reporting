@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
@@ -28,7 +30,23 @@ const CHAT_MODELS = [
   { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (fastest)" },
   { value: "openai/gpt-5", label: "GPT-5 (multimodal)" },
   { value: "openai/gpt-5-mini", label: "GPT-5 Mini (cheap)" },
+  // OpenRouter — server routes any model id prefixed with "openrouter/"
+  // through the OpenRouter API using OPENROUTER_API_KEY.
+  { value: "openrouter/anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet (via OpenRouter)" },
+  { value: "openrouter/openai/gpt-5", label: "GPT-5 via OpenRouter" },
+  { value: "openrouter/deepseek/deepseek-chat", label: "DeepSeek Chat (via OpenRouter)" },
+  { value: "openrouter/meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B (via OpenRouter)" },
 ];
+
+// Approximate context window per model family (in tokens) for the usage meter.
+function contextLimitFor(model: string): number {
+  if (/gemini-2\.5-pro|gemini-3|gemini-2\.5-flash/i.test(model)) return 1_000_000;
+  if (/gpt-5/i.test(model)) return 400_000;
+  if (/claude/i.test(model)) return 200_000;
+  if (/deepseek/i.test(model)) return 128_000;
+  if (/llama/i.test(model)) return 128_000;
+  return 200_000;
+}
 
 function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: boolean }) {
   if (m.role === "user") {
@@ -97,6 +115,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
+  const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
+  const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number; auto_doc?: { enabled: boolean; chars: number; title?: string | null } } | null>(null);
   const [autoConnectedDoc, setAutoConnectedDoc] = useState(false);
   const [autoConnectedSheet, setAutoConnectedSheet] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -250,6 +270,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel,
         activeReferenceIds,
+        autoDocContext,
       }, ctrl.signal);
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
@@ -270,6 +291,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
           if (evt.type === "conversation") {
             setConversationId(evt.conversationId);
+          } else if (evt.type === "context_usage") {
+            setContextUsage({ chars: evt.chars, tokens: evt.estimated_tokens, auto_doc: evt.auto_doc });
           } else if (evt.type === "text") {
             updateAssistant(m => ({ ...m, content: stripImageMarkup((m.content || "") + evt.delta) }));
           } else if (evt.type === "tool_start") {
@@ -533,6 +556,35 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
         <div className="px-4 sm:px-6 pb-4 pt-2">
           <div className="max-w-3xl mx-auto w-full">
+            {/* Context usage + auto doc toggle */}
+            {(() => {
+              const limit = contextLimitFor(chatModel);
+              const used = contextUsage?.tokens ?? 0;
+              const pct = Math.min(100, Math.round((used / limit) * 100));
+              const barColor = pct > 85 ? "bg-destructive" : pct > 60 ? "bg-amber-500" : "bg-primary";
+              return (
+                <div className="mb-2 flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <div className="flex-1 flex items-center gap-2">
+                    <BookOpenCheck className="h-3 w-3" />
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="tabular-nums">
+                      {used.toLocaleString()} / {limit.toLocaleString()} tok ({pct}%)
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0" title="Auto-load the tied Google Doc into context on every turn">
+                    <Switch checked={autoDocContext} onCheckedChange={setAutoDocContext} className="scale-75" />
+                    Auto Doc context
+                    {contextUsage?.auto_doc?.enabled && contextUsage.auto_doc.chars > 0 && (
+                      <Badge variant="secondary" className="text-[9px] ml-1">
+                        {(contextUsage.auto_doc.chars / 1000).toFixed(1)}k chars
+                      </Badge>
+                    )}
+                  </label>
+                </div>
+              );
+            })()}
             <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
               <Textarea
                 value={input}
@@ -578,6 +630,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
             <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
             <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
+            <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
           </TabsList>
 
           <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden">
@@ -639,6 +692,19 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             ) : (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Add a Google Sheet URL above.</div>
             )}
+          </TabsContent>
+
+          <TabsContent value="references" className="flex-1 m-0 overflow-auto p-4">
+            <div className="max-w-3xl mx-auto space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold flex items-center gap-1.5"><Library className="h-4 w-4" /> Reference Library</h3>
+                <p className="text-xs text-muted-foreground">
+                  Toggle references on to have the AI use them as visual inspiration for new generations.
+                  Auto-approved client creatives also appear here.
+                </p>
+              </div>
+              <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
+            </div>
           </TabsContent>
         </Tabs>
       </Card>
