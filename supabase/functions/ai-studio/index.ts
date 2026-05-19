@@ -1327,6 +1327,28 @@ Deno.serve(async (req) => {
     { role: "user", content: userText },
   ];
 
+  // ── Auto Doc context ──────────────────────────────────────────────
+  // When the client opts in, prefetch the tied Google Doc once and
+  // inject its text as an extra system message so the model has full
+  // context without needing to call the read_doc tool first.
+  let autoDocChars = 0;
+  let autoDocTitle: string | null = null;
+  if (autoDocContext && effectiveDocUrl && docId && GOOGLE_DOCS_API_KEY) {
+    try {
+      const d = await readDoc(docId);
+      autoDocTitle = d.title || null;
+      autoDocChars = (d.text || "").length;
+      if (autoDocChars > 0) {
+        convo.splice(1, 0, {
+          role: "system",
+          content: `[Auto-loaded Google Doc context]\nTitle: ${autoDocTitle || "Untitled"}\n--- BEGIN DOC ---\n${d.text}\n--- END DOC ---`,
+        });
+      }
+    } catch (e) {
+      // Non-fatal — the model can still call read_doc on demand.
+    }
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
@@ -1335,6 +1357,15 @@ Deno.serve(async (req) => {
       req.signal.addEventListener("abort", () => { aborted.v = true; });
 
       send({ type: "conversation", conversationId });
+      // Tell the client roughly how much context is being shipped so it can
+      // render a usage meter. ~4 chars ≈ 1 token (rough heuristic).
+      const ctxChars = convo.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
+      send({
+        type: "context_usage",
+        chars: ctxChars,
+        estimated_tokens: Math.ceil(ctxChars / 4),
+        auto_doc: { enabled: !!autoDocContext, chars: autoDocChars, title: autoDocTitle },
+      });
 
       let finalAssistantText = "";
       const finalToolEvents: any[] = [];
@@ -1344,11 +1375,15 @@ Deno.serve(async (req) => {
           if (aborted.v) break;
           send({ type: "step", step });
 
-          const llm = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const llm = await fetch(CHAT_API_URL, {
             method: "POST",
-            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+            headers: {
+              Authorization: `Bearer ${CHAT_API_KEY}`,
+              "Content-Type": "application/json",
+              ...(USE_OPENROUTER ? { "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" } : {}),
+            },
             body: JSON.stringify({
-              model: CHAT_MODEL,
+              model: CHAT_MODEL_ID,
               messages: convo,
               tools,
               tool_choice: "auto",
