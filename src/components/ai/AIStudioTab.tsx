@@ -584,6 +584,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <AIStudioCanvas
               entries={canvas}
               clientId={clientId}
+              initialView={canvasView}
+              focusedItemId={focusedItemId}
+              onViewChange={(v) => {
+                setCanvasView(v);
+                if (conversationId) {
+                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, canvasView: v }).catch(() => {});
+                }
+              }}
+              onFocusItem={(id) => {
+                setFocusedItemId(id);
+                if (conversationId) {
+                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, focusedCanvasItemId: id }).catch(() => {});
+                }
+              }}
               onCanvasItemUpdated={(updated) => {
                 setCanvas(curr => curr.map(c => ("__placeholder" in c) ? c : (c.id === updated.id ? updated : c)));
               }}
