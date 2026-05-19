@@ -1060,16 +1060,31 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, activeReferenceIds, canvasView, focusedCanvasItemId } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext } = body as {
     action?: "history" | "clear" | "settings" | "test_doc";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     activeReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
+    autoDocContext?: boolean;
   };
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
+
+  // Route chat completions through OpenRouter when the model id is prefixed
+  // with "openrouter/" (e.g. "openrouter/anthropic/claude-3.5-sonnet").
+  const USE_OPENROUTER = CHAT_MODEL.startsWith("openrouter/");
+  const CHAT_API_URL = USE_OPENROUTER
+    ? "https://openrouter.ai/api/v1/chat/completions"
+    : "https://ai.gateway.lovable.dev/v1/chat/completions";
+  const CHAT_API_KEY = USE_OPENROUTER ? (OPENROUTER_API_KEY || "") : LOVABLE_API_KEY;
+  const CHAT_MODEL_ID = USE_OPENROUTER ? CHAT_MODEL.replace(/^openrouter\//, "") : CHAT_MODEL;
+  if (USE_OPENROUTER && !OPENROUTER_API_KEY) {
+    return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY is not configured on the server." }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   if (!clientId) {
     return new Response(JSON.stringify({ error: "clientId is required" }), {
