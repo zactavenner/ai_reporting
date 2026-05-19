@@ -38,6 +38,14 @@ const CHAT_MODELS = [
   { value: "openrouter/meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B (via OpenRouter)" },
 ];
 
+// Image models the AI can use when generating ad creatives.
+// Multi-select: pick 1 = AI uses that model. Pick 2+ = AI runs a side-by-side comparison.
+const IMAGE_MODELS: { value: "gemini-pro" | "nano-banana" | "openai"; label: string; hint: string }[] = [
+  { value: "gemini-pro", label: "Gemini 3 Pro", hint: "Best finals" },
+  { value: "nano-banana", label: "Nano Banana 2", hint: "Fast iteration" },
+  { value: "openai", label: "GPT Image 1", hint: "Distinct style" },
+];
+
 // Approximate context window per model family (in tokens) for the usage meter.
 function contextLimitFor(model: string): number {
   if (/gemini-2\.5-pro|gemini-3|gemini-2\.5-flash/i.test(model)) return 1_000_000;
@@ -114,6 +122,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
+  const [imageModels, setImageModels] = useState<Array<"gemini-pro" | "nano-banana" | "openai">>(["gemini-pro"]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
   const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number; auto_doc?: { enabled: boolean; chars: number; title?: string | null } } | null>(null);
@@ -269,6 +278,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         sheetUrl: sheetUrl || undefined,
         quality,
         chatModel,
+        imageModels,
         activeReferenceIds,
         autoDocContext,
       }, ctrl.signal);
@@ -594,7 +604,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-12 py-4 text-sm"
                 rows={1}
               />
-              <div className="absolute bottom-2 left-2">
+              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 flex-wrap max-w-[calc(100%-4rem)]">
                 <Select value={chatModel} onValueChange={setChatModel}>
                   <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
                     <SelectValue />
@@ -605,6 +615,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image:</span>
+                  {IMAGE_MODELS.map(m => {
+                    const active = imageModels.includes(m.value);
+                    return (
+                      <button
+                        key={m.value}
+                        type="button"
+                        onClick={() => {
+                          setImageModels(curr => {
+                            const next = curr.includes(m.value) ? curr.filter(v => v !== m.value) : [...curr, m.value];
+                            return next.length === 0 ? [m.value] : next;
+                          });
+                        }}
+                        title={`${m.label} — ${m.hint}${active && imageModels.length > 1 ? " (in comparison)" : ""}`}
+                        className={`h-7 px-2 rounded-lg text-[10px] border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                  {imageModels.length > 1 && (
+                    <Badge variant="secondary" className="text-[9px] h-5">compare ×{imageModels.length}</Badge>
+                  )}
+                </div>
               </div>
               <div className="absolute bottom-2 right-2">
                 {loading ? (
