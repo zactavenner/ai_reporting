@@ -1066,15 +1066,20 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext } = body as {
     action?: "history" | "clear" | "settings" | "test_doc";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
+    imageModels?: Array<"gemini-pro" | "nano-banana" | "openai"> | null;
     activeReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
     autoDocContext?: boolean;
   };
+
+  const selectedImageModels = Array.isArray(imageModels)
+    ? imageModels.filter((m) => m === "gemini-pro" || m === "nano-banana" || m === "openai")
+    : [];
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
 
@@ -1328,7 +1333,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels }) },
     ...priorMessages,
     { role: "user", content: userText },
   ];
