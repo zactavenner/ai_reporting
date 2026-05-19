@@ -531,9 +531,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
-                className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 py-4 text-sm"
+                className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-12 py-4 text-sm"
                 rows={1}
               />
+              <div className="absolute bottom-2 left-2">
+                <Select value={chatModel} onValueChange={setChatModel}>
+                  <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHAT_MODELS.map(m => (
+                      <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="absolute bottom-2 right-2">
                 {loading ? (
                   <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
@@ -546,7 +558,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 )}
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline</p>
+            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline · Model + image quality apply to this turn</p>
           </div>
         </div>
       </Card>
