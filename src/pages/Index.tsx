@@ -43,6 +43,7 @@ import { MasterMetaTokenCard } from '@/components/dashboard/MasterMetaTokenCard'
 import { OutreachTab } from '@/components/outreach/OutreachTab';
 import { OnboardingTab } from '@/components/dashboard/OnboardingTab';
 import { LeadQualityManager } from '@/components/onboarding/LeadQualityManager';
+import { AccountManagerPage } from '@/pages/AccountManagerPage';
 import { useClients, Client } from '@/hooks/useClients';
 import { useAllDailyMetrics, useFundedInvestors, AggregatedMetrics } from '@/hooks/useMetrics';
 import { aggregateFromSourceData, SourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
@@ -308,6 +309,13 @@ const Index = () => {
             {activeTab === 'lead-manager' && (
               <SectionErrorBoundary sectionName="Lead Manager">
                 <LeadQualityManager />
+              </SectionErrorBoundary>
+            )}
+
+            {/* AM Workspace */}
+            {activeTab === 'am-workspace' && (
+              <SectionErrorBoundary sectionName="AM Workspace">
+                <AccountManagerPage />
               </SectionErrorBoundary>
             )}
 

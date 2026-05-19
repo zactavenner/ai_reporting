@@ -84,6 +84,11 @@ const navStructure = [
     icon: Target,
   },
   {
+    title: 'AM Workspace',
+    value: 'am-workspace',
+    icon: Sparkles,
+  },
+  {
     title: 'Reporting',
     value: 'reporting',
     icon: BarChart3,

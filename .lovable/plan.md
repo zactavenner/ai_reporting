@@ -1,79 +1,134 @@
+
 ## Goal
 
-Turn the existing AI Studio tab into a Manus-style autonomous agent. The user types one brief ("make me a 30s ad about X"), the agent plans a storyboard, generates a keyframe image per scene, animates each into video, and streams everything onto a redesigned canvas — fully automatic, no checkpoints. Final scenes land separately on the canvas (no auto-stitch).
-
-Building on what already exists: `ai-studio` edge fn (SSE streaming + tool loop), `generate_static_ad` tool, `generate-broll` (Veo3 text→video), `generate-video-from-image` (image→video), `poll-video-status`, `ai_studio_canvas_items` table, and `AIStudioCanvas` component.
+Operationalize the "Fulfillment AI Capital Raising — Master Doc" inside the platform so Account Managers run the entire playbook (onboarding → kick-off → weekly reporting → constraint diagnosis → SOP checklists) without leaving the app. We already have onboarding pipeline, automation panel, lead manager, and weekly reporting agent — this layers the missing AM tooling on top.
 
 ---
 
-## 1. New agent tools (server)
+## What the doc adds (mapped to features)
 
-Add to `supabase/functions/ai-studio/index.ts` tool registry:
+1. **Account Manager role + scorecard** → AM dashboard with portfolio KPIs, retention, CPL/CoC targets.
+2. **Onboarding tasks + welcome message + access links** → structured client task list (CR Task List from doc).
+3. **Kick-off meeting agenda + capital calculator** → guided kick-off flow.
+4. **Weekly Performance Report template** → already partially built — extend with doc's exact prompt + section structure.
+5. **Constraints & SOP playbook** (CPBC / Show rate / Close rate checklists) → interactive Constraint Diagnosis engine driven by funnel metrics we already have.
+6. **Veo3 reusable video prompt templates** → template library wired into existing video generator.
+7. **Decision log + Team directory + Project assignments** → lightweight collab tables per client.
 
-- **`plan_storyboard`** — input: `{ brief, scene_count?, aspect_ratio, style_notes? }`. Calls Gemini for structured JSON: `{ scenes: [{ order, title, image_prompt, video_prompt, duration }] }`. Streams a `storyboard` SSE event so the canvas can render skeleton scene cards immediately.
-- **`generate_scene_image`** — input: `{ scene_id, prompt, aspect_ratio, reference_image_url? }`. Uses Gemini 3 Pro Image (same path as `generate_static_ad`), saves to `creatives/ai-studio/{clientId}/scene-{id}.jpg`, inserts `client_assets` row, emits `canvas_item` (kind: `scene_image`, scene_id).
-- **`animate_scene`** — input: `{ scene_id, image_url, video_prompt, aspect_ratio }`. Invokes `generate-video-from-image`, returns `{ operationId }`. Emits `canvas_placeholder` (kind: `scene_video`, scene_id) so a loading tile appears.
-- **`poll_scene_video`** — input: `{ scene_id, operation_id }`. Wraps `poll-video-status`. The agent loop calls this in a small `await` cycle (sleep 5s, max 60 attempts). On success: upload MP4 to `creatives` bucket, insert `client_assets` (asset_type=`scene_video`), emit `canvas_item`.
+---
 
-Tool-loop limits: bump max steps to 50 (`stepCountIs(50)` equivalent). System prompt updated to: "You are an autonomous creative agent. When asked to make a video/ad/scene, ALWAYS run plan_storyboard first, then for each scene in parallel call generate_scene_image → animate_scene → poll_scene_video. Stream a one-line status between batches. Never ask the user for approval."
+## Modules to build
 
-Parallelism: agent fans out scenes via parallel tool calls (OpenAI tool-calling already supports multi-call per turn). The edge fn already iterates `toolCallsAcc` — wrap the body in `Promise.all` for parallelism.
+### 1. AM Workspace (new page `/account-manager`)
+- Portfolio view: every client assigned to me, status, current CPL / CPLC / Cash ROAS / Revenue ROAS pulled from `v_client_performance_*`.
+- Color-coded against doc thresholds: CPBC > $250 red, Show rate < 60% red, Close rate < 25% red.
+- Filter: "Clients in constraint" surfaces only off-KPI clients.
+- Sidebar entry in `AppSidebar.tsx`.
 
-## 2. Schema additions
+### 2. Constraint Diagnosis Engine (new component `ConstraintDiagnostics.tsx`)
+- Per-client panel under the existing client detail page (new tab "Diagnostics").
+- Pulls leading indicators (CPM, CTR, CPC, CPL, optin %, VSL view %, booking page view %, CPBC, show rate, close rate, CPA, Cash ROAS, Rev ROAS) from existing metrics views.
+- Auto-classifies the constraint: `high_cpbc` | `low_show_rate` | `low_close_rate` | `low_quality`.
+- Renders the matching checklist from the doc (CPBC, Funnel, Audience, Offer, Pre-Booking, Post-Booking) as toggleable items persisted to a new `client_constraint_checklists` table.
+- AI assist button → invokes Lovable AI Gateway (gemini-2.5-flash) with the funnel snapshot + doc rules to suggest the top 3 fixes.
 
-Migration:
-- Add columns to `ai_studio_canvas_items`: `kind text` (`static_ad` | `scene_image` | `scene_video` | `storyboard`), `scene_id text` nullable, `scene_order int` nullable, `parent_storyboard_id uuid` nullable, `metadata jsonb`.
-- New table `ai_studio_storyboards`: `id`, `conversation_id`, `client_id`, `user_id`, `brief`, `aspect_ratio`, `scenes jsonb`, `status` (`planning`|`generating`|`complete`|`failed`), timestamps. RLS scoped to `auth.uid() = user_id`.
+### 3. Weekly Report Builder (extend existing `WeeklyReportingAgent`)
+- New "Generate Report" view per client using doc's exact prompt structure:
+  - Progress Report (in progress / completed / review)
+  - New Ads Pending Approval (link list)
+  - Campaign Performance Overview (per-campaign: Spend / Leads / CPL / Calls / Showed)
+  - Performance Summary & Insights
+  - Specific Campaign Updates
+  - Adjustments & Expected Outcomes
+- Pre-fills metrics from DB; AI fills narrative sections. Output as polished email (copy-to-clipboard + Slack push).
 
-## 3. Canvas redesign (`AIStudioCanvas.tsx`)
+### 4. Kick-Off Meeting Module (extend OnboardingTab — 6th sub-tab "Kick-Off")
+- Agenda timer (Welcome 3m / Status 5m / Scorecard 3m / Assets 7m / Access 5m / Calculator 5m / Q&A 2m / Close 2m).
+- Inline embeds for the doc's external links (deck, projects, calculator, scorecard).
+- "Schedule weekly call" CTA → writes to existing meetings table.
 
-Restructure into a Manus-style 3-pane layout inside the existing AI Studio tab:
+### 5. Onboarding Task List (extend Automation panel)
+- Seed every new `onboarding` client with the doc's 2-section task list:
+  - "From Client: Access / Assets" (10 items)
+  - "Account Set-Up" (~30 items grouped: NK Account, Assets, Funnel, Automations, Conversation AI, Launch)
+- Uses existing `tasks` table with `client_id` + `category='onboarding_master'` + `phase`.
+- Checklist UI inside Automation tab with phase grouping + progress bar.
+- Templates stored in `src/lib/onboardingTaskTemplates.ts` (already exists — extend with doc content).
+
+### 6. Veo3 Prompt Templates Library
+- New file `src/lib/veo3PromptTemplates.ts` with the doc's reusable character / scene / 3-segment / 24-second Sora templates + placeholder map ([[SPOKESPERSON_DESC]], [[MARKET_CITY]], [[ASSET_CLASS]], [[PRIMARY_ASSET_DESC]], [[TARGET_RETURN]], [[TOTAL_DEALS_COMPLETED]], [[TOTAL_DISTRIBUTED]]).
+- Wired into existing `BrollPage` / `BatchVideoPage` as "Capital Raising Templates" picker — fills placeholders from selected client's offer.
+
+### 7. Welcome Message + Onboarding Links Snippet
+- New "Send Welcome" action on a new client: generates the doc's welcome WhatsApp/Slack message with placeholders auto-filled (`{{contact.first_name}}`, `{{user.name}}`) and links to:
+  - aicapitalraising.com/onboarding, /access, /review
+- Pushes via existing Slack integration.
+
+### 8. Decision Log + Team Directory (per-client lightweight)
+- New `client_decisions` table (topic, decision, owner, status, notes, file_url).
+- Renders inside existing client detail under "Notes" tab.
+- Team directory pulls from existing team members context.
+
+---
+
+## Database changes
+
+- `client_constraint_checklists` (id, client_id, checklist_type, item_key, checked, checked_by, checked_at) + RLS.
+- `client_decisions` (id, client_id, topic, decision, owner_id, status, notes, file_url, updated_at) + RLS.
+- Extend `clients.automation_checklist` jsonb to also store kick-off agenda completion + welcome-sent timestamp.
+
+No destructive changes; all additive.
+
+---
+
+## Files to touch
 
 ```text
-┌────────────┬───────────────────────────┬──────────────┐
-│ Chat (left)│ Canvas (center)           │ Task panel   │
-│            │                           │ (right)      │
-│ messages   │ Storyboard strip          │              │
-│ + input    │ ┌──┬──┬──┬──┐             │ ▸ Plan       │
-│            │ │S1│S2│S3│S4│ scenes      │ ▸ Scene 1    │
-│            │ └──┴──┴──┴──┘             │   img ✓ vid⏳│
-│            │ Selected scene: image+vid │ ▸ Scene 2 …  │
-│            │ + prompts (read-only)     │              │
-└────────────┴───────────────────────────┴──────────────┘
+NEW:
+  src/pages/AccountManagerPage.tsx
+  src/components/account-manager/PortfolioKpiGrid.tsx
+  src/components/diagnostics/ConstraintDiagnostics.tsx
+  src/components/diagnostics/ChecklistRenderer.tsx
+  src/components/onboarding/KickOffMeetingPanel.tsx
+  src/components/onboarding/WelcomeMessageDialog.tsx
+  src/components/reports/WeeklyReportBuilder.tsx
+  src/components/clients/DecisionLog.tsx
+  src/lib/constraintRules.ts          // doc thresholds + checklist data
+  src/lib/veo3PromptTemplates.ts
+  supabase/migrations/<ts>_am_workspace.sql
+
+EXTEND:
+  src/components/dashboard/OnboardingTab.tsx       // + Kick-Off tab + task seeding
+  src/components/agents/WeeklyReportingAgent.tsx   // + builder modal
+  src/components/layout/AppSidebar.tsx             // + Account Manager link
+  src/pages/Index.tsx                              // route
+  src/pages/ClientDetail.tsx                       // + Diagnostics & Decisions tabs
+  src/lib/onboardingTaskTemplates.ts               // add doc's CR task list
 ```
 
-Components:
-- `StoryboardStrip` — horizontal scroll of scene cards. Each card shows status badges (planned / image-ready / rendering / done) and click-to-select.
-- `SceneDetail` — selected scene shows keyframe image + video player + the prompts used.
-- `AgentTaskPanel` — live tree of agent steps (driven by SSE `tool_start`/`tool_end` events), collapsible per scene. Mirrors Manus's "step list".
-- Existing chat composer stays; remove the standalone "Generate ad" affordances since the agent now handles intent.
+---
 
-Realtime: subscribe to `ai_studio_canvas_items` via Supabase realtime (already partially wired) and group by `parent_storyboard_id`/`scene_id`.
+## Sequencing (recommended ship order)
 
-## 4. SSE event additions
+1. DB migration + checklist/decision tables.
+2. Constraint Diagnostics engine (highest AM ROI).
+3. Weekly Report Builder.
+4. Onboarding task list seeding + Welcome Message.
+5. Kick-Off Meeting panel.
+6. AM Workspace portfolio page.
+7. Veo3 template library.
 
-New event types streamed from edge fn → consumed by the client:
-- `storyboard` — `{ id, scenes: [...] }` rendered as initial skeletons.
-- `scene_status` — `{ scene_id, phase: 'image'|'video', state: 'started'|'ready'|'failed' }` drives task panel + card badges.
-- (existing) `canvas_item` reused for scene assets, with new `kind` field.
+---
 
-## 5. Out of scope (per user answers)
+## Out of scope
 
-- No checkpoint/approval gates (fully auto).
-- No stitched final MP4 (scenes stay separate; user can use existing video editor).
-- No new top-level page (lives inside AI Studio tab).
-- No MCP/Higgsfield wiring (separate request).
+- Native phone-number purchase / A2P 10DLC submission (still happens in GHL/Nurture King; we link out).
+- Calendar building inside the app (Calendly/native calendar stays external).
+- Rebuilding the public marketing pages (aicapitalraising.com/*).
+- Replacing existing fulfillment pipeline — this layers on top.
 
-## 6. Files to touch
+---
 
-- `supabase/migrations/<new>.sql` — canvas_items columns + storyboards table.
-- `supabase/functions/ai-studio/index.ts` — 4 new tools, parallel tool execution, system prompt, new SSE events.
-- `src/components/ai/AIStudioCanvas.tsx` — split into `StoryboardStrip`, `SceneDetail`, `AgentTaskPanel` subcomponents.
-- `src/components/ai/AIStudioTab.tsx` — 3-pane layout wiring + new SSE event handlers.
-- `src/types/ai-studio.ts` (new) — shared types for storyboard / scene events.
+## Compliance reminder
 
-## 7. Risks
-
-- Veo3 video gen takes ~30–90s/scene; for a 5-scene ad that's parallel ~90s wall time. Need progress UI to keep user engaged — task panel handles this.
-- Edge function CPU time: keep `poll_scene_video` inside the tool loop bounded; if Veo job exceeds 5min, mark scene `failed` and continue (don't block other scenes).
-- Cost per run is non-trivial (5 Pro Image calls + 5 Veo3 calls). No throttle in scope; rely on existing rate limiter table if needed later.
+All AI-generated copy (welcome messages, weekly reports, constraint suggestions, Veo3 scripts) must pass the existing capital-raising compliance rules — use "targeted returns" not "guaranteed", include SEC/FINRA disclaimers on emails. This is enforced via the existing `refine-asset` / `generate-asset` system prompts; no new compliance logic needed.

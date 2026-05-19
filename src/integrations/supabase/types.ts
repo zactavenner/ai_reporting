@@ -2066,6 +2066,45 @@ export type Database = {
         }
         Relationships: []
       }
+      client_constraint_checklists: {
+        Row: {
+          checked: boolean
+          checked_at: string | null
+          checked_by: string | null
+          checklist_type: string
+          client_id: string
+          created_at: string
+          id: string
+          item_key: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          checked?: boolean
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_type: string
+          client_id: string
+          created_at?: string
+          id?: string
+          item_key: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          checked?: boolean
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_type?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          item_key?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       client_custom_tabs: {
         Row: {
           client_id: string
@@ -2110,6 +2149,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      client_decisions: {
+        Row: {
+          client_id: string
+          created_at: string
+          decision: string | null
+          file_url: string | null
+          id: string
+          notes: string | null
+          owner_id: string | null
+          owner_name: string | null
+          status: string
+          topic: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          decision?: string | null
+          file_url?: string | null
+          id?: string
+          notes?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          status?: string
+          topic: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          decision?: string | null
+          file_url?: string | null
+          id?: string
+          notes?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          status?: string
+          topic?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       client_file_uploads: {
         Row: {
