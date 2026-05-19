@@ -2272,6 +2272,7 @@ export type Database = {
           file_size_bytes: number | null
           file_type: string | null
           file_url: string
+          folder_id: string | null
           id: string
           notes: string | null
           storage_path: string | null
@@ -2284,6 +2285,7 @@ export type Database = {
           file_size_bytes?: number | null
           file_type?: string | null
           file_url: string
+          folder_id?: string | null
           id?: string
           notes?: string | null
           storage_path?: string | null
@@ -2296,6 +2298,7 @@ export type Database = {
           file_size_bytes?: number | null
           file_type?: string | null
           file_url?: string
+          folder_id?: string | null
           id?: string
           notes?: string | null
           storage_path?: string | null
@@ -2314,6 +2317,51 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_file_uploads_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "client_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_folders: {
+        Row: {
+          client_id: string
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          parent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "client_folders"
             referencedColumns: ["id"]
           },
         ]
