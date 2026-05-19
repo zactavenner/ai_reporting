@@ -1514,6 +1514,7 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   brandContext,
                   quality: (args.quality === "fast" ? "fast" : "pro"),
+                  model: (args.model === "openai" || args.model === "nano-banana" || args.model === "gemini-pro") ? args.model : null,
                 });
                 result = { ok: true, model: img.model, aspect_ratio: img.aspect_ratio, url_for_internal_use_only: img.url };
                 const ci = await supa.from("ai_studio_canvas_items").insert({
@@ -1528,6 +1529,37 @@ Deno.serve(async (req) => {
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "compare_image_models") {
+                const models: Array<"gemini-pro" | "nano-banana" | "openai"> = Array.isArray(args.models) && args.models.length
+                  ? args.models.filter((m: any) => ["gemini-pro", "nano-banana", "openai"].includes(m))
+                  : ["gemini-pro", "nano-banana", "openai"];
+                const results = await Promise.all(models.map(async (mdl) => {
+                  try {
+                    const img = await generateStaticAd({
+                      prompt: args.prompt,
+                      aspectRatio: args.aspect_ratio || "1:1",
+                      referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
+                      clientId: clientId || null,
+                      brandContext,
+                      quality: mdl === "nano-banana" ? "fast" : "pro",
+                      model: mdl,
+                    });
+                    const ci = await supa.from("ai_studio_canvas_items").insert({
+                      conversation_id: conversationId, user_id: userId, kind: "image",
+                      payload: {
+                        image_url: img.url, storage_path: img.storage_path, mime: img.mime,
+                        model: img.model, aspect_ratio: img.aspect_ratio,
+                        prompt: `[${mdl}] ${args.prompt}`,
+                        comparison_model: mdl,
+                      },
+                    }).select("id, payload, kind, created_at").single();
+                    if (ci.data) send({ type: "canvas_item", item: ci.data });
+                    return { model: mdl, ok: true };
+                  } catch (e: any) {
+                    return { model: mdl, ok: false, error: e?.message || String(e) };
+                  }
+                }));
+                result = { ok: true, comparison: results };
               } else if (name === "edit_static_ad") {
                 const img = await editStaticAd({
                   sourceImageUrl: args.source_image_url,
