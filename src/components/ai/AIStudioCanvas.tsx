@@ -1,9 +1,10 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export type CanvasPlaceholder = {
@@ -24,26 +25,91 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, clientId, onCanvasItemUpdated,
+  entries, onEditImage, onInlineEdit, clientId, onCanvasItemUpdated,
 }: {
   entries: CanvasEntry[];
   onEditImage?: (imageUrl: string, aspectRatio: string) => void;
+  onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
 }) {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const draggingRef = useRef<{ x: number; y: number } | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  const onWheel = useCallback((e: React.WheelEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    setZoom(z => Math.max(0.25, Math.min(3, z * (e.deltaY < 0 ? 1.1 : 0.9))));
+  }, []);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      setZoom(z => Math.max(0.25, Math.min(3, z * (e.deltaY < 0 ? 1.1 : 0.9))));
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler as any);
+  }, []);
+
   if (entries.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8 text-center">
-        The AI builds here. Ask it to generate an ad creative or edit your doc/sheet — results appear as cards on this canvas.
+        The AI builds here. Ask it to generate an ad creative or edit your doc/sheet — results appear as cards on this canvas. Click any image to edit it inline.
       </div>
     );
   }
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    // Only pan when clicking the empty background, not a card
+    if ((e.target as HTMLElement).closest("[data-canvas-card]")) return;
+    draggingRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!draggingRef.current) return;
+    setPan({ x: e.clientX - draggingRef.current.x, y: e.clientY - draggingRef.current.y });
+  };
+  const stopDrag = () => { draggingRef.current = null; };
+
   return (
-    <div className="p-4 space-y-3 overflow-auto h-full">
+    <div className="h-full flex flex-col">
+      <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/30">
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom(z => Math.max(0.25, z * 0.9))} title="Zoom out">
+          <Minus className="h-3.5 w-3.5" />
+        </Button>
+        <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="text-xs tabular-nums w-14 text-center hover:bg-muted rounded px-1 py-0.5" title="Reset">
+          {Math.round(zoom * 100)}%
+        </button>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom(z => Math.min(3, z * 1.1))} title="Zoom in">
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Fit">
+          <Maximize2 className="h-3.5 w-3.5" />
+        </Button>
+        <span className="text-[10px] text-muted-foreground ml-2">Ctrl/⌘+wheel to zoom · drag empty area to pan · click image to edit</span>
+      </div>
+      <div
+        ref={viewportRef}
+        className="flex-1 overflow-auto bg-muted/10 cursor-grab active:cursor-grabbing"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={stopDrag}
+        onMouseLeave={stopDrag}
+        onWheel={onWheel}
+      >
+        <div
+          className="p-4 space-y-3 origin-top-left transition-transform duration-75"
+          style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
+        >
       {entries.map((e, i) => {
         if ("__placeholder" in e) {
           return (
-            <Card key={`ph-${e.placeholder_id}`} className="p-4 border-dashed">
+            <Card key={`ph-${e.placeholder_id}`} data-canvas-card className="p-4 border-dashed">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded bg-muted flex items-center justify-center">
                   {e.failed ? <AlertCircle className="h-5 w-5 text-destructive" /> : <Loader2 className="h-5 w-5 animate-spin text-primary" />}
@@ -63,8 +129,9 @@ export function AIStudioCanvas({
         }
         if (e.kind === "image") {
           const p = e.payload || {};
+          const isEditing = editingId === e.id;
           return (
-            <Card key={e.id} className="p-3 overflow-hidden">
+            <Card key={e.id} data-canvas-card className="p-3 overflow-hidden">
               <div className="flex items-center gap-2 mb-2">
                 <ImageIcon className="h-4 w-4 text-primary" />
                 <Badge variant="outline" className="text-[10px]">{p.aspect_ratio || "1:1"}</Badge>
@@ -74,9 +141,29 @@ export function AIStudioCanvas({
                 <span className="text-xs text-muted-foreground ml-auto">{new Date(e.created_at).toLocaleTimeString()}</span>
               </div>
               {p.image_url && (
-                <a href={p.image_url} target="_blank" rel="noopener noreferrer" className="block">
+                <div
+                  className="relative group cursor-pointer"
+                  onClick={(ev) => { ev.stopPropagation(); if (onInlineEdit) setEditingId(prev => prev === e.id ? null : e.id); }}
+                  title={onInlineEdit ? "Click to edit this image" : ""}
+                >
                   <img src={p.image_url} alt={p.prompt || "ad creative"} className="w-full rounded-md border" loading="lazy" />
-                </a>
+                  {onInlineEdit && !isEditing && (
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <div className="bg-background/90 backdrop-blur-sm rounded-full px-3 py-1.5 text-xs flex items-center gap-1.5 shadow-lg">
+                        <Wand2 className="h-3.5 w-3.5 text-primary" /> Click to edit
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {isEditing && p.image_url && onInlineEdit && (
+                <InlineEditBar
+                  onSubmit={async (instr) => {
+                    await onInlineEdit(p.image_url, p.aspect_ratio || "1:1", instr);
+                    setEditingId(null);
+                  }}
+                  onCancel={() => setEditingId(null)}
+                />
               )}
               <div className="flex items-start gap-2 mt-2">
                 <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{p.prompt}</p>
@@ -84,16 +171,16 @@ export function AIStudioCanvas({
                   <>
                     {onEditImage && (
                       <Button size="icon" variant="ghost" className="h-7 w-7" title="Edit (offer / hook / colors / disclaimer)"
-                        onClick={() => onEditImage(p.image_url, p.aspect_ratio || "1:1")}>
+                        onClick={(ev) => { ev.stopPropagation(); onEditImage(p.image_url, p.aspect_ratio || "1:1"); }}>
                         <Wand2 className="h-3.5 w-3.5" />
                       </Button>
                     )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
-                      onClick={() => { navigator.clipboard.writeText(p.image_url); toast.success("URL copied"); }}>
+                      onClick={(ev) => { ev.stopPropagation(); navigator.clipboard.writeText(p.image_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Open" asChild>
-                      <a href={p.image_url} target="_blank" rel="noopener noreferrer">
+                      <a href={p.image_url} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}>
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     </Button>
@@ -109,7 +196,7 @@ export function AIStudioCanvas({
         if (e.kind === "doc_edit") {
           const p = e.payload || {};
           return (
-            <Card key={e.id} className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-1">
                 <FileText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Doc {p.action === "replace" ? "find & replace" : "append"}</span>
@@ -131,7 +218,7 @@ export function AIStudioCanvas({
         if (e.kind === "sheet_edit") {
           const p = e.payload || {};
           return (
-            <Card key={e.id} className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-1">
                 <TableIcon className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Sheet {p.action === "append" ? "row append" : "range update"}</span>
@@ -155,7 +242,7 @@ export function AIStudioCanvas({
           const p = e.payload || {};
           const scenes: any[] = Array.isArray(p.scenes) ? p.scenes : [];
           return (
-            <Card key={e.id} className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Clapperboard className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Storyboard</span>
@@ -178,7 +265,7 @@ export function AIStudioCanvas({
         if (e.kind === "scene_image") {
           const p = e.payload || {};
           return (
-            <Card key={e.id} className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-2">
                 <ImageIcon className="h-4 w-4 text-primary" />
                 <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>
@@ -197,7 +284,7 @@ export function AIStudioCanvas({
         if (e.kind === "scene_video") {
           const p = e.payload || {};
           return (
-            <Card key={e.id} className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Film className="h-4 w-4 text-primary" />
                 <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>
@@ -224,7 +311,7 @@ export function AIStudioCanvas({
           const p = e.payload || {};
           const typeLabel = String(p.artifact_type || "text").replace(/_/g, " ");
           return (
-            <Card key={e.id} className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-2">
                 <ScrollText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium truncate flex-1" title={p.title}>{p.title || "Untitled"}</span>
@@ -251,6 +338,38 @@ export function AIStudioCanvas({
         }
         return null;
       })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InlineEditBar({ onSubmit, onCancel }: { onSubmit: (instr: string) => Promise<void> | void; onCancel: () => void }) {
+  const [val, setVal] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!val.trim() || busy) return;
+    setBusy(true);
+    try { await onSubmit(val.trim()); } finally { setBusy(false); setVal(""); }
+  };
+  return (
+    <div className="mt-2 flex items-center gap-1.5 bg-muted/40 rounded-lg p-1.5 border" onClick={(e) => e.stopPropagation()}>
+      <Wand2 className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+      <Input
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } if (e.key === "Escape") onCancel(); }}
+        placeholder="Describe the change… (new offer, swap hook, brand green, etc.)"
+        className="h-7 text-xs border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+        disabled={busy}
+      />
+      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={onCancel} disabled={busy} title="Cancel">
+        <X className="h-3.5 w-3.5" />
+      </Button>
+      <Button size="icon" className="h-7 w-7 shrink-0" onClick={submit} disabled={!val.trim() || busy} title="Send edit">
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+      </Button>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
+import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import ReactMarkdown from "react-markdown";
 
 interface Props {
@@ -21,6 +22,13 @@ interface Props {
 }
 
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
+
+const CHAT_MODELS = [
+  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (reasoning)" },
+  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (fastest)" },
+  { value: "openai/gpt-5", label: "GPT-5 (multimodal)" },
+  { value: "openai/gpt-5-mini", label: "GPT-5 Mini (cheap)" },
+];
 
 function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: boolean }) {
   if (m.role === "user") {
@@ -87,6 +95,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
+  const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
+  const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
+  const [autoConnectedDoc, setAutoConnectedDoc] = useState(false);
+  const [autoConnectedSheet, setAutoConnectedSheet] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [canvas, setCanvas] = useState<CanvasEntry[]>([]);
@@ -144,6 +156,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         if (convo.doc_url) setDocUrl(convo.doc_url);
         if (convo.sheet_url) setSheetUrl(convo.sheet_url);
         if (convo.image_quality === "fast" || convo.image_quality === "pro") setQuality(convo.image_quality);
+        if (typeof (convo as any).chat_model === "string" && (convo as any).chat_model) setChatModel((convo as any).chat_model);
+        if (Array.isArray((convo as any).active_reference_ids)) setActiveReferenceIds((convo as any).active_reference_ids as string[]);
         setMessages((msgs || []).map((m: any) => ({
           id: m.id,
           role: m.role as "user" | "assistant",
@@ -188,11 +202,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     // AI Studio is strictly tied to that client's own Doc/Sheet.
     if (!docUrl) {
       const fallback = clientDocUrl || (clientSettings as any)?.kpi_google_doc_url;
-      if (fallback) setDocUrl(fallback);
+      if (fallback) { setDocUrl(fallback); setAutoConnectedDoc(true); }
     }
     if (!sheetUrl) {
       const fallback = (clientSettings as any)?.kpi_google_sheet_url;
-      if (fallback) setSheetUrl(fallback);
+      if (fallback) { setSheetUrl(fallback); setAutoConnectedSheet(true); }
     }
   }, [clientSettings, hydrated, docUrl, sheetUrl, clientDocUrl]);
 
@@ -226,6 +240,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
         quality,
+        chatModel,
+        activeReferenceIds,
       }, ctrl.signal);
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
@@ -316,11 +332,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     if (!hydrated || !conversationId) return;
     const t = setTimeout(() => {
-      studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality })
+      studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds })
         .catch((e) => console.error("AI Studio settings save failed", e));
     }, 500);
     return () => clearTimeout(t);
-  }, [docUrl, sheetUrl, quality, conversationId, hydrated, clientId, studioFetch]);
+  }, [docUrl, sheetUrl, quality, chatModel, activeReferenceIds, conversationId, hydrated, clientId, studioFetch]);
+
+  // Inline edit from canvas — fire a hidden edit prompt that targets edit_static_ad
+  const inlineEdit = useCallback(async (imageUrl: string, aspectRatio: string, instruction: string) => {
+    const text = `Edit the canvas ad (source_image_url: ${imageUrl}, aspect_ratio: ${aspectRatio}). ${instruction}. Use the edit_static_ad tool.`;
+    await send(text);
+  }, [/* send is stable enough via closure; no deps to avoid loop */]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr,1.1fr] gap-4 h-[calc(100vh-220px)] min-h-[600px]">
@@ -415,6 +437,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
                     {docSource && <Badge variant="secondary" className="text-[9px]">{docSource}</Badge>}
+                    {autoConnectedDoc && <Badge variant="default" className="text-[9px] bg-emerald-600 hover:bg-emerald-600">Auto-connected</Badge>}
                     {docTest && (
                       <Badge
                         variant={docTest.ok ? "default" : "destructive"}
@@ -437,7 +460,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       disabled={!sheetUrl.trim() || sheetUrl === clientSheet || updateClientSettings.isPending}
                       onClick={saveSheet}>Save</Button>
                   </div>
-                  {sheetSource && <Badge variant="secondary" className="text-[9px]">{sheetSource}</Badge>}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {sheetSource && <Badge variant="secondary" className="text-[9px]">{sheetSource}</Badge>}
+                    {autoConnectedSheet && <Badge variant="default" className="text-[9px] bg-emerald-600 hover:bg-emerald-600">Auto-connected</Badge>}
+                  </div>
                 </div>
               </div>
             );
@@ -451,6 +477,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 <SelectItem value="fast">Fast — Nano Banana 2 (iterate)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="pt-2 border-t">
+            <AIStudioReferenceLibrary activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
           </div>
           </div>
         </details>
@@ -502,9 +531,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
-                className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 py-4 text-sm"
+                className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-12 py-4 text-sm"
                 rows={1}
               />
+              <div className="absolute bottom-2 left-2">
+                <Select value={chatModel} onValueChange={setChatModel}>
+                  <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHAT_MODELS.map(m => (
+                      <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="absolute bottom-2 right-2">
                 {loading ? (
                   <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
@@ -517,7 +558,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 )}
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline</p>
+            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline · Model + image quality apply to this turn</p>
           </div>
         </div>
       </Card>
@@ -538,6 +579,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               onCanvasItemUpdated={(updated) => {
                 setCanvas(curr => curr.map(c => ("__placeholder" in c) ? c : (c.id === updated.id ? updated : c)));
               }}
+              onInlineEdit={inlineEdit}
               onEditImage={(imageUrl, aspectRatio) => {
                 setInput(
                   `Edit this ad on the canvas (source_image_url: ${imageUrl}, aspect_ratio: ${aspectRatio}).\n` +
