@@ -44,6 +44,7 @@ import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { AIStudioTab } from '@/components/ai/AIStudioTab';
 import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
+import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { useClient } from '@/hooks/useClients';
 import { useDailyMetrics, useFundedInvestors } from '@/hooks/useMetrics';
 import { useSourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
@@ -336,6 +337,10 @@ export default function ClientDetail() {
               <CheckSquare className="h-4 w-4" />
               Onboarding Info
             </TabsTrigger>
+            <TabsTrigger value="company-info" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              Company Info
+            </TabsTrigger>
             <TabsTrigger value="pipeline" className="gap-2">
               <Layers className="h-4 w-4" />
               Funnel
@@ -423,6 +428,21 @@ export default function ClientDetail() {
           <TabsContent value="onboarding-info" className="space-y-6">
             <SectionErrorBoundary sectionName="Onboarding Info">
               <OnboardingChecklist clientId={clientId} clientType={client?.description} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── COMPANY INFO TAB ─── */}
+          <TabsContent value="company-info" className="space-y-6">
+            <SectionErrorBoundary sectionName="Company Info">
+              <div className="max-w-3xl">
+                <div className="mb-4">
+                  <h2 className="text-lg font-bold">Company Info</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Description, brand colors, fonts and product images used by the AI when generating ads and creatives.
+                  </p>
+                </div>
+                <BrandGuideSection client={client} />
+              </div>
             </SectionErrorBoundary>
           </TabsContent>
 
