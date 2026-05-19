@@ -437,6 +437,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
                     {docSource && <Badge variant="secondary" className="text-[9px]">{docSource}</Badge>}
+                    {autoConnectedDoc && <Badge variant="default" className="text-[9px] bg-emerald-600 hover:bg-emerald-600">Auto-connected</Badge>}
                     {docTest && (
                       <Badge
                         variant={docTest.ok ? "default" : "destructive"}
@@ -459,7 +460,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       disabled={!sheetUrl.trim() || sheetUrl === clientSheet || updateClientSettings.isPending}
                       onClick={saveSheet}>Save</Button>
                   </div>
-                  {sheetSource && <Badge variant="secondary" className="text-[9px]">{sheetSource}</Badge>}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {sheetSource && <Badge variant="secondary" className="text-[9px]">{sheetSource}</Badge>}
+                    {autoConnectedSheet && <Badge variant="default" className="text-[9px] bg-emerald-600 hover:bg-emerald-600">Auto-connected</Badge>}
+                  </div>
                 </div>
               </div>
             );
