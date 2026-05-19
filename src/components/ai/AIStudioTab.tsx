@@ -278,6 +278,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         sheetUrl: sheetUrl || undefined,
         quality,
         chatModel,
+        imageModels,
         activeReferenceIds,
         autoDocContext,
       }, ctrl.signal);
