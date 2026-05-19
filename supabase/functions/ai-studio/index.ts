@@ -1442,6 +1442,19 @@ Deno.serve(async (req) => {
                 quality: "fast",
               });
             }
+            if (name === "compare_image_models") {
+              const ms = Array.isArray(args.models) && args.models.length ? args.models : ["gemini-pro", "nano-banana", "openai"];
+              for (const m of ms) {
+                send({
+                  type: "canvas_placeholder",
+                  placeholder_id: crypto.randomUUID(),
+                  kind: "image",
+                  prompt: `[${m}] ${args.prompt || ""}`,
+                  aspect_ratio: args.aspect_ratio || "1:1",
+                  quality: m === "nano-banana" ? "fast" : "pro",
+                });
+              }
+            }
             if (name === "generate_scene_image" || name === "generate_scene_video") {
               canvasPlaceholderId = crypto.randomUUID();
               send({
