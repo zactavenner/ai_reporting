@@ -115,6 +115,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
+  const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
+  const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number; auto_doc?: { enabled: boolean; chars: number; title?: string | null } } | null>(null);
   const [autoConnectedDoc, setAutoConnectedDoc] = useState(false);
   const [autoConnectedSheet, setAutoConnectedSheet] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
