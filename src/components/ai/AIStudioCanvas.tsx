@@ -26,18 +26,51 @@ export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
   entries, onEditImage, onInlineEdit, clientId, onCanvasItemUpdated,
+  initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
   onEditImage?: (imageUrl: string, aspectRatio: string) => void;
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
+  initialView?: { zoom?: number; panX?: number; panY?: number } | null;
+  focusedItemId?: string | null;
+  onViewChange?: (view: { zoom: number; panX: number; panY: number }) => void;
+  onFocusItem?: (itemId: string | null) => void;
 }) {
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(initialView?.zoom ?? 1);
+  const [pan, setPan] = useState({ x: initialView?.panX ?? 0, y: initialView?.panY ?? 0 });
   const [editingId, setEditingId] = useState<string | null>(null);
   const draggingRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const focusScrolledRef = useRef<string | null>(null);
+
+  // Hydrate when initialView arrives (after async load)
+  useEffect(() => {
+    if (!initialView) return;
+    if (typeof initialView.zoom === "number") setZoom(initialView.zoom);
+    if (typeof initialView.panX === "number" || typeof initialView.panY === "number") {
+      setPan({ x: initialView.panX ?? 0, y: initialView.panY ?? 0 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialView?.zoom, initialView?.panX, initialView?.panY]);
+
+  // Debounced persistence of zoom + pan
+  useEffect(() => {
+    if (!onViewChange) return;
+    const t = setTimeout(() => onViewChange({ zoom, panX: pan.x, panY: pan.y }), 400);
+    return () => clearTimeout(t);
+  }, [zoom, pan.x, pan.y, onViewChange]);
+
+  // Scroll to focused item once on load
+  useEffect(() => {
+    if (!focusedItemId || focusScrolledRef.current === focusedItemId) return;
+    const el = viewportRef.current?.querySelector<HTMLElement>(`[data-canvas-item-id="${focusedItemId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      focusScrolledRef.current = focusedItemId;
+    }
+  }, [focusedItemId, entries.length]);
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     if (!(e.ctrlKey || e.metaKey)) return;
