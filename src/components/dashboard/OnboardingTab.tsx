@@ -536,32 +536,40 @@ function ClientOnboardingCard({
 
       {isExpanded && (
         <CardContent className="pt-0 border-t">
-          <Tabs defaultValue="intake" className="mt-3">
+          <Tabs defaultValue="setup" className="mt-3">
             <TabsList className="bg-muted/50 h-8">
-              <TabsTrigger value="intake" className="text-xs h-7 gap-1">
-                <ClipboardList className="h-3 w-3" /> Intake
+              <TabsTrigger value="setup" className="text-xs h-7 gap-1">
+                <ClipboardList className="h-3 w-3" /> Setup
               </TabsTrigger>
               <TabsTrigger value="assets" className="text-xs h-7 gap-1">
                 <FileText className="h-3 w-3" /> Assets ({client.assets.length})
               </TabsTrigger>
-              <TabsTrigger value="pipeline" className="text-xs h-7 gap-1">
-                <Sparkles className="h-3 w-3" /> Pipeline
-              </TabsTrigger>
-              <TabsTrigger value="files" className="text-xs h-7 gap-1">
-                <Upload className="h-3 w-3" /> Files ({client.offerFiles.length})
-              </TabsTrigger>
-              <TabsTrigger value="automation" className="text-xs h-7 gap-1">
-                <Zap className="h-3 w-3" /> Automation
+              <TabsTrigger value="review" className="text-xs h-7 gap-1">
+                <Rocket className="h-3 w-3" /> Review & Launch
               </TabsTrigger>
             </TabsList>
 
-            {/* Intake Tab - Full onboarding data from aicapitalraising.com */}
-            <TabsContent value="intake" className="mt-3">
+            {/* Setup Tab — intake summary + setup checklist */}
+            <TabsContent value="setup" className="mt-3 space-y-4">
+              <OnboardingAutomationPanel
+                clientId={client.clientId}
+                clientName={client.clientName}
+                primaryOffer={primaryOffer}
+                section="setup"
+                onMarkActive={onMarkActive}
+              />
               <IntakeDataView offer={primaryOffer} clientName={client.clientName} />
             </TabsContent>
 
-            {/* Assets Tab */}
+            {/* Assets Tab — Generate All button + assets list */}
             <TabsContent value="assets" className="mt-3 space-y-3">
+              <OnboardingAutomationPanel
+                clientId={client.clientId}
+                clientName={client.clientName}
+                primaryOffer={primaryOffer}
+                section="assets"
+                onMarkActive={onMarkActive}
+              />
               {client.assets.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -611,8 +619,15 @@ function ClientOnboardingCard({
               )}
             </TabsContent>
 
-            {/* Pipeline Tab */}
-            <TabsContent value="pipeline" className="mt-3 space-y-2">
+            {/* Review & Launch — checklist + pipeline + files */}
+            <TabsContent value="review" className="mt-3 space-y-4">
+              <OnboardingAutomationPanel
+                clientId={client.clientId}
+                clientName={client.clientName}
+                primaryOffer={primaryOffer}
+                section="review"
+                onMarkActive={onMarkActive}
+              />
               {!latestRun ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <Rocket className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -675,25 +690,11 @@ function ClientOnboardingCard({
                   );
                 })
               )}
-            </TabsContent>
-
-            {/* Files Tab - Upload & manage context files */}
-            <TabsContent value="files" className="mt-3">
               <FilesManager
                 clientId={client.clientId}
                 offerId={primaryOffer?.id}
                 files={client.offerFiles}
                 onRefresh={onRefresh}
-              />
-            </TabsContent>
-
-            {/* Automation Tab — 5-phase end-to-end onboarding tracker */}
-            <TabsContent value="automation" className="mt-3">
-              <OnboardingAutomationPanel
-                clientId={client.clientId}
-                clientName={client.clientName}
-                primaryOffer={primaryOffer}
-                onMarkActive={onMarkActive}
               />
             </TabsContent>
           </Tabs>
