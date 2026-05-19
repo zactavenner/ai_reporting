@@ -601,6 +601,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
             <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
             <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
+            <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
           </TabsList>
 
           <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden">
@@ -662,6 +663,19 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             ) : (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Add a Google Sheet URL above.</div>
             )}
+          </TabsContent>
+
+          <TabsContent value="references" className="flex-1 m-0 overflow-auto p-4">
+            <div className="max-w-3xl mx-auto space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold flex items-center gap-1.5"><Library className="h-4 w-4" /> Reference Library</h3>
+                <p className="text-xs text-muted-foreground">
+                  Toggle references on to have the AI use them as visual inspiration for new generations.
+                  Auto-approved client creatives also appear here.
+                </p>
+              </div>
+              <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
+            </div>
           </TabsContent>
         </Tabs>
       </Card>
