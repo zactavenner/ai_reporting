@@ -1003,10 +1003,14 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, activeReferenceIds } = body as {
     action?: "history" | "clear" | "settings" | "test_doc";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
+    chatModel?: string | null;
+    activeReferenceIds?: string[] | null;
   };
+
+  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
 
   if (!clientId) {
     return new Response(JSON.stringify({ error: "clientId is required" }), {
@@ -1042,7 +1046,10 @@ Deno.serve(async (req) => {
   }
 
   if (action === "settings" && requestedConversationId) {
-    await supa.from("ai_studio_conversations").update({ doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality }).eq("id", requestedConversationId).eq("user_id", userId);
+    const settingsUpdate: Record<string, any> = { doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality };
+    if (typeof chatModel === "string" || chatModel === null) settingsUpdate.chat_model = chatModel || null;
+    if (Array.isArray(activeReferenceIds)) settingsUpdate.active_reference_ids = activeReferenceIds;
+    await supa.from("ai_studio_conversations").update(settingsUpdate).eq("id", requestedConversationId).eq("user_id", userId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
@@ -1113,15 +1120,35 @@ Deno.serve(async (req) => {
   }
 
   // Upsert conversation
+  const upsertPayload: Record<string, any> = {
+    user_id: userId, client_id: clientId,
+    doc_url: docUrl || null, sheet_url: sheetUrl || null,
+    image_quality: quality,
+    last_active_at: new Date().toISOString(),
+    cleared_at: null,
+  };
+  if (typeof chatModel === "string") upsertPayload.chat_model = chatModel;
+  if (Array.isArray(activeReferenceIds)) upsertPayload.active_reference_ids = activeReferenceIds;
   const { data: convoRow } = await supa
     .from("ai_studio_conversations")
-    .upsert(
-      { user_id: userId, client_id: clientId, doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality, last_active_at: new Date().toISOString(), cleared_at: null },
-      { onConflict: "user_id,client_id" },
-    )
-    .select("id, cleared_at")
+    .upsert(upsertPayload, { onConflict: "user_id,client_id" })
+    .select("id, cleared_at, active_reference_ids")
     .single();
   const conversationId = convoRow!.id;
+
+  // Resolve default reference image from library (first active reference for this conversation)
+  let defaultReferenceImageUrl: string | null = null;
+  const refIds: string[] = Array.isArray(activeReferenceIds) && activeReferenceIds.length
+    ? activeReferenceIds
+    : (Array.isArray((convoRow as any)?.active_reference_ids) ? (convoRow as any).active_reference_ids as string[] : []);
+  if (refIds.length) {
+    const { data: refs } = await supa
+      .from("ai_studio_reference_images")
+      .select("id, image_url")
+      .in("id", refIds)
+      .limit(1);
+    if (refs && refs[0]?.image_url) defaultReferenceImageUrl = refs[0].image_url as string;
+  }
 
   // Load history (since cleared_at, or all)
   const { data: history } = await supa
@@ -1226,7 +1253,7 @@ Deno.serve(async (req) => {
             method: "POST",
             headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "google/gemini-2.5-pro",
+              model: CHAT_MODEL,
               messages: convo,
               tools,
               tool_choice: "auto",
@@ -1403,7 +1430,7 @@ Deno.serve(async (req) => {
                 const img = await generateStaticAd({
                   prompt: args.prompt,
                   aspectRatio: args.aspect_ratio || "1:1",
-                  referenceImageUrl: args.reference_image_url,
+                  referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
                   clientId: clientId || null,
                   brandContext,
                   quality: (args.quality === "fast" ? "fast" : "pro"),
