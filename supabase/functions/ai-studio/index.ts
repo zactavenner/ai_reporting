@@ -209,6 +209,7 @@ async function generateStaticAd(opts: {
   clientId: string | null;
   brandContext: any;
   quality: "pro" | "fast";
+  model?: "gemini-pro" | "nano-banana" | "openai" | null;
 }): Promise<ImageResult> {
   const aspect = opts.aspectRatio || "1:1";
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -230,7 +231,38 @@ async function generateStaticAd(opts: {
   let mime = "image/png";
   let modelUsed = "";
 
-  if (opts.quality === "pro" && GEMINI_API_KEY) {
+  // Effective model selection: explicit `model` arg wins; else quality maps to pro=gemini-pro, fast=nano-banana
+  const effectiveModel: "gemini-pro" | "nano-banana" | "openai" =
+    opts.model === "openai" || opts.model === "nano-banana" || opts.model === "gemini-pro"
+      ? opts.model
+      : (opts.quality === "pro" ? "gemini-pro" : "nano-banana");
+
+  if (effectiveModel === "openai") {
+    if (!OPENROUTER_API_KEY) throw new Error("OpenRouter API key not configured for OpenAI image model");
+    modelUsed = "openai/gpt-image-1 (via openrouter)";
+    // OpenRouter exposes OpenAI's image gen via /images/generations passthrough
+    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1792x1024", "9:16": "1024x1792", "4:5": "1024x1280" };
+    const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+      body: JSON.stringify({
+        model: "openai/gpt-image-1",
+        prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
+        size: sizeMap[aspect] || "1024x1024",
+        n: 1,
+        response_format: "b64_json",
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenRouter image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    const data = await res.json();
+    const b64 = data?.data?.[0]?.b64_json;
+    const url = data?.data?.[0]?.url;
+    if (b64) { base64Image = b64; mime = "image/png"; }
+    else if (url) {
+      const r = await fetch(url); const buf = await r.arrayBuffer();
+      base64Image = arrayBufferToBase64(buf); mime = r.headers.get("content-type") || "image/png";
+    } else throw new Error("OpenRouter returned no image data");
+  } else if (effectiveModel === "gemini-pro" && GEMINI_API_KEY) {
     // Direct Gemini 3 Pro Image Preview (Ads Generator 5.0 pipeline)
     const parts: any[] = [{ text: fullPrompt }];
     if (opts.referenceImageUrl) {
