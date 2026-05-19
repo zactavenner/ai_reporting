@@ -163,8 +163,9 @@ export function AIStudioCanvas({
         if (e.kind === "image") {
           const p = e.payload || {};
           const isEditing = editingId === e.id;
+          const isFocused = focusedItemId === e.id;
           return (
-            <Card key={e.id} data-canvas-card className="p-3 overflow-hidden">
+            <Card key={e.id} data-canvas-card data-canvas-item-id={e.id} className={`p-3 overflow-hidden transition-shadow ${isFocused ? "ring-2 ring-primary shadow-lg" : ""}`}>
               <div className="flex items-center gap-2 mb-2">
                 <ImageIcon className="h-4 w-4 text-primary" />
                 <Badge variant="outline" className="text-[10px]">{p.aspect_ratio || "1:1"}</Badge>
@@ -176,7 +177,11 @@ export function AIStudioCanvas({
               {p.image_url && (
                 <div
                   className="relative group cursor-pointer"
-                  onClick={(ev) => { ev.stopPropagation(); if (onInlineEdit) setEditingId(prev => prev === e.id ? null : e.id); }}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    onFocusItem?.(e.id);
+                    if (onInlineEdit) setEditingId(prev => prev === e.id ? null : e.id);
+                  }}
                   title={onInlineEdit ? "Click to edit this image" : ""}
                 >
                   <img src={p.image_url} alt={p.prompt || "ad creative"} className="w-full rounded-md border" loading="lazy" />
