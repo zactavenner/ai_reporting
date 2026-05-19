@@ -77,7 +77,7 @@ export const VEO3_TEMPLATES: Veo3Template[] = [
 
 export function fillPlaceholders(text: string, values: Veo3Placeholders): string {
   return Object.entries(values).reduce(
-    (acc, [k, v]) => (v ? acc.replaceAll(`[[${k}]]`, v) : acc),
+    (acc, [k, v]) => (v ? acc.split(`[[${k}]]`).join(v) : acc),
     text,
   );
 }
