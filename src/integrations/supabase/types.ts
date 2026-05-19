@@ -1044,33 +1044,57 @@ export type Database = {
       }
       ai_studio_reference_images: {
         Row: {
+          client_id: string | null
           created_at: string
           created_by: string | null
           id: string
           image_url: string
           name: string
+          source: string
+          source_creative_id: string | null
           storage_path: string | null
           tags: string[] | null
         }
         Insert: {
+          client_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           image_url: string
           name: string
+          source?: string
+          source_creative_id?: string | null
           storage_path?: string | null
           tags?: string[] | null
         }
         Update: {
+          client_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           image_url?: string
           name?: string
+          source?: string
+          source_creative_id?: string | null
           storage_path?: string | null
           tags?: string[] | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ai_studio_reference_images_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ai_studio_reference_images_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       alert_configs: {
         Row: {

@@ -259,6 +259,34 @@ export function useUpdateCreativeStatus() {
           body: { creativeId: variables.id },
         }).catch((e) => console.warn('Slack notify failed:', e));
       }
+      // Auto-add approved creatives to this client's AI Studio reference library
+      if (variables.status === 'approved') {
+        (async () => {
+          try {
+            const { data: c } = await supabase
+              .from('creatives')
+              .select('id, title, file_url, file_type, client_id')
+              .eq('id', variables.id)
+              .maybeSingle();
+            const fileUrl = (c as any)?.file_url;
+            const isImage = (c as any)?.file_type?.startsWith('image') || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(fileUrl || '');
+            if (!fileUrl || !isImage) return;
+            const { data: sess } = await supabase.auth.getUser();
+            await supabase.from('ai_studio_reference_images' as any).insert({
+              name: ((c as any)?.title || variables.creativeTitle || 'Approved creative').slice(0, 80),
+              tags: ['approved'],
+              image_url: fileUrl,
+              storage_path: null,
+              created_by: sess.user?.id || null,
+              client_id: variables.clientId,
+              source: 'approved_creative',
+              source_creative_id: variables.id,
+            });
+          } catch (e) {
+            console.warn('AI Studio auto-reference failed:', e);
+          }
+        })();
+      }
     },
     onError: (error: Error) => {
       toast.error('Failed to update status: ' + error.message);

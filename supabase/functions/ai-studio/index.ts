@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
 const GOOGLE_DOCS_API_KEY = Deno.env.get("GOOGLE_DOCS_API_KEY");
 const GOOGLE_SHEETS_API_KEY = Deno.env.get("GOOGLE_SHEETS_API_KEY");
 const GATEWAY = "https://connector-gateway.lovable.dev";
@@ -208,6 +209,7 @@ async function generateStaticAd(opts: {
   clientId: string | null;
   brandContext: any;
   quality: "pro" | "fast";
+  model?: "gemini-pro" | "nano-banana" | "openai" | null;
 }): Promise<ImageResult> {
   const aspect = opts.aspectRatio || "1:1";
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -229,7 +231,38 @@ async function generateStaticAd(opts: {
   let mime = "image/png";
   let modelUsed = "";
 
-  if (opts.quality === "pro" && GEMINI_API_KEY) {
+  // Effective model selection: explicit `model` arg wins; else quality maps to pro=gemini-pro, fast=nano-banana
+  const effectiveModel: "gemini-pro" | "nano-banana" | "openai" =
+    opts.model === "openai" || opts.model === "nano-banana" || opts.model === "gemini-pro"
+      ? opts.model
+      : (opts.quality === "pro" ? "gemini-pro" : "nano-banana");
+
+  if (effectiveModel === "openai") {
+    if (!OPENROUTER_API_KEY) throw new Error("OpenRouter API key not configured for OpenAI image model");
+    modelUsed = "openai/gpt-image-1 (via openrouter)";
+    // OpenRouter exposes OpenAI's image gen via /images/generations passthrough
+    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1792x1024", "9:16": "1024x1792", "4:5": "1024x1280" };
+    const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+      body: JSON.stringify({
+        model: "openai/gpt-image-1",
+        prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
+        size: sizeMap[aspect] || "1024x1024",
+        n: 1,
+        response_format: "b64_json",
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenRouter image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    const data = await res.json();
+    const b64 = data?.data?.[0]?.b64_json;
+    const url = data?.data?.[0]?.url;
+    if (b64) { base64Image = b64; mime = "image/png"; }
+    else if (url) {
+      const r = await fetch(url); const buf = await r.arrayBuffer();
+      base64Image = arrayBufferToBase64(buf); mime = r.headers.get("content-type") || "image/png";
+    } else throw new Error("OpenRouter returned no image data");
+  } else if (effectiveModel === "gemini-pro" && GEMINI_API_KEY) {
     // Direct Gemini 3 Pro Image Preview (Ads Generator 5.0 pipeline)
     const parts: any[] = [{ text: fullPrompt }];
     if (opts.referenceImageUrl) {
@@ -801,14 +834,36 @@ const tools = [
     type: "function",
     function: {
       name: "generate_static_ad",
-      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Use 'pro' (Gemini 3 Pro Image, default) for finals; 'fast' (Nano Banana 2) for quick iteration. Optionally pass a reference_image_url to clone an existing ad's layout.",
+      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Pick a model: 'gemini-pro' (Gemini 3 Pro Image, default finals), 'nano-banana' (Nano Banana 2, fast iteration), or 'openai' (GPT Image 1, distinct art direction). Optionally pass reference_image_url to clone an existing ad's layout. This client's approved creatives are automatically used as visual references if no explicit reference is given.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What the ad should communicate, headline ideas, key visuals." },
           aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "1:1 feed, 4:5 IG feed tall, 9:16 stories/reels, 16:9 landscape." },
           quality: { type: "string", enum: ["pro", "fast"], description: "pro = highest quality (default), fast = quick iteration" },
+          model: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"], description: "Which image model to use. If omitted, derived from quality." },
           reference_image_url: { type: "string", description: "Optional URL of a reference ad to clone the layout/style from." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "compare_image_models",
+      description: "Generate the SAME ad prompt across multiple image models in parallel so the user can compare and pick a favorite. Use when the user asks to 'compare models', 'try both', 'see Gemini vs OpenAI', or wants different angles from each model. Each result lands on the canvas tagged with its model.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What the ad should communicate." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"] },
+          models: {
+            type: "array",
+            items: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"] },
+            description: "Which models to compare. Default: ['gemini-pro', 'nano-banana', 'openai'].",
+          },
+          reference_image_url: { type: "string", description: "Optional reference to clone layout from." },
         },
         required: ["prompt"],
       },
@@ -940,7 +995,9 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Example BAD reply: 'Here is the ad: ![ad](https://...)'",
   "",
   "TOOL USE:",
-  "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro'.",
+  "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro' (Gemini 3 Pro Image). Pass `model: 'openai'` if the user explicitly asks for GPT/ChatGPT Image, or `model: 'nano-banana'` for quick iteration.",
+  "- Use compare_image_models when the user asks to 'compare', 'try both', 'see all models', or wants the same prompt across multiple image models side-by-side. Default models = all three.",
+  "- APPROVED REFERENCES: This client's approved creatives are auto-loaded as visual references for new generations. You can mention this if helpful (e.g. 'Riffed on the approved ad style from earlier this week').",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
@@ -1146,7 +1203,9 @@ Deno.serve(async (req) => {
     .single();
   const conversationId = convoRow!.id;
 
-  // Resolve default reference image from library (first active reference for this conversation)
+  // Resolve default reference image. Priority:
+  // 1. First explicitly-active reference from the conversation
+  // 2. Most recent approved-creative auto-reference for THIS client
   let defaultReferenceImageUrl: string | null = null;
   const refIds: string[] = Array.isArray(activeReferenceIds) && activeReferenceIds.length
     ? activeReferenceIds
@@ -1158,6 +1217,17 @@ Deno.serve(async (req) => {
       .in("id", refIds)
       .limit(1);
     if (refs && refs[0]?.image_url) defaultReferenceImageUrl = refs[0].image_url as string;
+  }
+  if (!defaultReferenceImageUrl && clientId) {
+    const { data: approvedRef } = await supa
+      .from("ai_studio_reference_images")
+      .select("image_url")
+      .eq("client_id", clientId)
+      .eq("source", "approved_creative")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (approvedRef?.image_url) defaultReferenceImageUrl = approvedRef.image_url as string;
   }
 
   // Load history (since cleared_at, or all)
@@ -1372,6 +1442,19 @@ Deno.serve(async (req) => {
                 quality: "fast",
               });
             }
+            if (name === "compare_image_models") {
+              const ms = Array.isArray(args.models) && args.models.length ? args.models : ["gemini-pro", "nano-banana", "openai"];
+              for (const m of ms) {
+                send({
+                  type: "canvas_placeholder",
+                  placeholder_id: crypto.randomUUID(),
+                  kind: "image",
+                  prompt: `[${m}] ${args.prompt || ""}`,
+                  aspect_ratio: args.aspect_ratio || "1:1",
+                  quality: m === "nano-banana" ? "fast" : "pro",
+                });
+              }
+            }
             if (name === "generate_scene_image" || name === "generate_scene_video") {
               canvasPlaceholderId = crypto.randomUUID();
               send({
@@ -1444,6 +1527,7 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   brandContext,
                   quality: (args.quality === "fast" ? "fast" : "pro"),
+                  model: (args.model === "openai" || args.model === "nano-banana" || args.model === "gemini-pro") ? args.model : null,
                 });
                 result = { ok: true, model: img.model, aspect_ratio: img.aspect_ratio, url_for_internal_use_only: img.url };
                 const ci = await supa.from("ai_studio_canvas_items").insert({
@@ -1458,6 +1542,37 @@ Deno.serve(async (req) => {
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "compare_image_models") {
+                const models: Array<"gemini-pro" | "nano-banana" | "openai"> = Array.isArray(args.models) && args.models.length
+                  ? args.models.filter((m: any) => ["gemini-pro", "nano-banana", "openai"].includes(m))
+                  : ["gemini-pro", "nano-banana", "openai"];
+                const results = await Promise.all(models.map(async (mdl) => {
+                  try {
+                    const img = await generateStaticAd({
+                      prompt: args.prompt,
+                      aspectRatio: args.aspect_ratio || "1:1",
+                      referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
+                      clientId: clientId || null,
+                      brandContext,
+                      quality: mdl === "nano-banana" ? "fast" : "pro",
+                      model: mdl,
+                    });
+                    const ci = await supa.from("ai_studio_canvas_items").insert({
+                      conversation_id: conversationId, user_id: userId, kind: "image",
+                      payload: {
+                        image_url: img.url, storage_path: img.storage_path, mime: img.mime,
+                        model: img.model, aspect_ratio: img.aspect_ratio,
+                        prompt: `[${mdl}] ${args.prompt}`,
+                        comparison_model: mdl,
+                      },
+                    }).select("id, payload, kind, created_at").single();
+                    if (ci.data) send({ type: "canvas_item", item: ci.data });
+                    return { model: mdl, ok: true };
+                  } catch (e: any) {
+                    return { model: mdl, ok: false, error: e?.message || String(e) };
+                  }
+                }));
+                result = { ok: true, comparison: results };
               } else if (name === "edit_static_ad") {
                 const img = await editStaticAd({
                   sourceImageUrl: args.source_image_url,
