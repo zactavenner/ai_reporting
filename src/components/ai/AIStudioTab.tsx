@@ -601,10 +601,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
-                className="resize-none min-h-[56px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-12 py-4 text-sm"
+                className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-14 pt-3 text-sm"
                 rows={1}
               />
-              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 flex-wrap max-w-[calc(100%-4rem)]">
+              <div className="absolute bottom-2 left-2 right-14 flex items-center gap-1.5 flex-wrap">
                 <Select value={chatModel} onValueChange={setChatModel}>
                   <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
                     <SelectValue />
