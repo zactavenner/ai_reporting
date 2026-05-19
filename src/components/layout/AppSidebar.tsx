@@ -30,7 +30,6 @@ import {
   TrendingUp,
   ExternalLink,
   Sparkles,
-  Target,
 } from 'lucide-react';
 import {
   Sidebar,
