@@ -21,6 +21,7 @@ import { formatDistanceToNow, addBusinessDays } from 'date-fns';
 import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
 import { AdsConnectionHealthPanel } from './shared/AdsConnectionHealthPanel';
+import { AgentMcpPanel } from './shared/AgentMcpPanel';
 
 interface AdsManagerTabProps {
   clientId: string;
@@ -430,6 +431,7 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
 
         <div className="mt-3 space-y-3">
           <AdsConnectionHealthPanel clientId={clientId} />
+          <AgentMcpPanel clientId={clientId} />
           <InsightsPanel ads={ads} campaigns={activeCampaigns} />
         </div>
 
