@@ -142,6 +142,146 @@ const TOOLS = [
       required: ['client_id', 'title'],
     },
   },
+  // ============ Meta Ads Tools ============
+  {
+    name: 'meta_list_campaigns',
+    description: 'List Meta ad campaigns for a client. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        status: { type: 'string', description: 'Optional ACTIVE|PAUSED|ARCHIVED filter' },
+        limit: { type: 'number', description: 'Default 50' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_list_adsets',
+    description: 'List Meta ad sets, optionally scoped to a campaign. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        campaign_id: { type: 'string', description: 'Optional meta_campaign_id or internal id' },
+        status: { type: 'string' },
+        limit: { type: 'number' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_list_ads',
+    description: 'List Meta ads, optionally scoped to an ad set or campaign. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        adset_id: { type: 'string' },
+        campaign_id: { type: 'string' },
+        status: { type: 'string' },
+        limit: { type: 'number' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_get_ad_performance',
+    description: 'Get aggregate performance (spend, impressions, clicks, CTR, CPC, conversions) for an ad/adset/campaign. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        ad_id: { type: 'string', description: 'Internal meta_ads.id' },
+        campaign_id: { type: 'string', description: 'Internal meta_campaigns.id' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_toggle_status',
+    description: 'WRITE: Pause or activate a campaign, ad set, or ad. Requires user confirmation before calling.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        level: { type: 'string', enum: ['campaign', 'adset', 'ad'] },
+        row_id: { type: 'string', description: 'Internal UUID of the object' },
+        status: { type: 'string', enum: ['ACTIVE', 'PAUSED'] },
+      },
+      required: ['client_id', 'level', 'row_id', 'status'],
+    },
+  },
+  {
+    name: 'meta_update_budget',
+    description: 'WRITE: Update daily or lifetime budget on a campaign or ad set. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        level: { type: 'string', enum: ['campaign', 'adset'] },
+        row_id: { type: 'string' },
+        daily_budget: { type: 'number', description: 'Daily budget in dollars' },
+        lifetime_budget: { type: 'number', description: 'Lifetime budget in dollars' },
+      },
+      required: ['client_id', 'level', 'row_id'],
+    },
+  },
+  {
+    name: 'meta_duplicate',
+    description: 'WRITE: Duplicate a campaign, ad set, or ad. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        level: { type: 'string', enum: ['campaign', 'adset', 'ad'] },
+        row_id: { type: 'string' },
+      },
+      required: ['client_id', 'level', 'row_id'],
+    },
+  },
+  {
+    name: 'meta_create_campaign',
+    description: 'WRITE: Create a new Meta campaign. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        name: { type: 'string' },
+        objective: { type: 'string', description: 'e.g. OUTCOME_LEADS, OUTCOME_TRAFFIC' },
+        status: { type: 'string', enum: ['ACTIVE', 'PAUSED'], description: 'Default PAUSED' },
+        daily_budget: { type: 'number' },
+      },
+      required: ['client_id', 'name', 'objective'],
+    },
+  },
+  {
+    name: 'meta_create_ad',
+    description: 'WRITE: Create a new ad inside an ad set with a creative. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        adset_id: { type: 'string' },
+        name: { type: 'string' },
+        creative_id: { type: 'string' },
+        status: { type: 'string', enum: ['ACTIVE', 'PAUSED'] },
+      },
+      required: ['client_id', 'adset_id', 'name', 'creative_id'],
+    },
+  },
+  {
+    name: 'meta_sync_account',
+    description: 'Trigger a Meta Ads sync for a client (campaigns + insights). Heavy operation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        days: { type: 'number', description: 'Lookback window, default 7' },
+      },
+      required: ['client_id'],
+    },
+  },
 ];
 
 async function handleToolCall(name: string, args: Record<string, any>): Promise<any> {
@@ -258,9 +398,110 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
       return data;
     }
 
+    // ============ Meta Ads handlers ============
+    case 'meta_list_campaigns': {
+      let q = prodDb.from('meta_campaigns').select('id, meta_campaign_id, name, status, effective_status, objective, daily_budget, lifetime_budget, spend, impressions, clicks, ctr, cpc, synced_at').eq('client_id', args.client_id);
+      if (args.status) q = q.eq('effective_status', String(args.status).toUpperCase());
+      const { data, error } = await q.order('spend', { ascending: false }).limit(args.limit || 50);
+      if (error) return { error: error.message };
+      return { campaigns: data || [] };
+    }
+    case 'meta_list_adsets': {
+      let q = prodDb.from('meta_ad_sets').select('id, meta_adset_id, meta_campaign_id, name, status, effective_status, daily_budget, spend, impressions, clicks, ctr, synced_at').eq('client_id', args.client_id);
+      if (args.campaign_id) q = q.or(`meta_campaign_id.eq.${args.campaign_id},id.eq.${args.campaign_id}`);
+      if (args.status) q = q.eq('effective_status', String(args.status).toUpperCase());
+      const { data, error } = await q.order('spend', { ascending: false }).limit(args.limit || 100);
+      if (error) return { error: error.message };
+      return { adsets: data || [] };
+    }
+    case 'meta_list_ads': {
+      let q = prodDb.from('meta_ads').select('id, meta_ad_id, meta_adset_id, meta_campaign_id, name, status, effective_status, headline, body, link_url, thumbnail_url, spend, impressions, clicks, ctr, cpc, conversions, cost_per_conversion, synced_at').eq('client_id', args.client_id);
+      if (args.adset_id) q = q.or(`meta_adset_id.eq.${args.adset_id},ad_set_id.eq.${args.adset_id}`);
+      if (args.campaign_id) q = q.eq('meta_campaign_id', args.campaign_id);
+      if (args.status) q = q.eq('effective_status', String(args.status).toUpperCase());
+      const { data, error } = await q.order('spend', { ascending: false }).limit(args.limit || 100);
+      if (error) return { error: error.message };
+      return { ads: data || [] };
+    }
+    case 'meta_get_ad_performance': {
+      if (args.ad_id) {
+        const { data, error } = await prodDb.from('meta_ads').select('name, spend, impressions, clicks, ctr, cpc, cpm, reach, conversions, cost_per_conversion').eq('id', args.ad_id).maybeSingle();
+        if (error) return { error: error.message };
+        return data || { error: 'Ad not found' };
+      }
+      if (args.campaign_id) {
+        const { data, error } = await prodDb.from('meta_campaigns').select('name, spend, impressions, clicks, ctr, cpc').eq('id', args.campaign_id).maybeSingle();
+        if (error) return { error: error.message };
+        return data || { error: 'Campaign not found' };
+      }
+      return { error: 'Provide ad_id or campaign_id' };
+    }
+    case 'meta_toggle_status': {
+      return await invokeEdge('toggle-meta-status', {
+        clientId: args.client_id,
+        level: args.level,
+        rowId: args.row_id,
+        status: args.status,
+      });
+    }
+    case 'meta_update_budget': {
+      return await invokeEdge('update-meta-budget', {
+        clientId: args.client_id,
+        level: args.level,
+        rowId: args.row_id,
+        daily_budget: args.daily_budget,
+        lifetime_budget: args.lifetime_budget,
+      });
+    }
+    case 'meta_duplicate': {
+      return await invokeEdge('duplicate-meta-object', {
+        clientId: args.client_id,
+        level: args.level,
+        rowId: args.row_id,
+      });
+    }
+    case 'meta_create_campaign': {
+      return await invokeEdge('create-meta-campaign', {
+        clientId: args.client_id,
+        name: args.name,
+        objective: args.objective,
+        status: args.status || 'PAUSED',
+        daily_budget: args.daily_budget,
+      });
+    }
+    case 'meta_create_ad': {
+      return await invokeEdge('create-meta-ad', {
+        clientId: args.client_id,
+        adsetId: args.adset_id,
+        name: args.name,
+        creativeId: args.creative_id,
+        status: args.status || 'PAUSED',
+      });
+    }
+    case 'meta_sync_account': {
+      return await invokeEdge('sync-meta-ads', {
+        clientId: args.client_id,
+        days: args.days || 7,
+      });
+    }
+
     default:
       return { error: `Unknown tool: ${name}` };
   }
+}
+
+async function invokeEdge(fnName: string, payload: Record<string, any>): Promise<any> {
+  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/${fnName}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+    },
+    body: JSON.stringify({ ...payload, password: 'HPA1234$' }),
+  });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { status: res.status, body: text }; }
 }
 
 // JSON-RPC handler for MCP protocol
