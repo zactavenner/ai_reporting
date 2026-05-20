@@ -398,9 +398,110 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
       return data;
     }
 
+    // ============ Meta Ads handlers ============
+    case 'meta_list_campaigns': {
+      let q = prodDb.from('meta_campaigns').select('id, meta_campaign_id, name, status, effective_status, objective, daily_budget, lifetime_budget, spend, impressions, clicks, ctr, cpc, synced_at').eq('client_id', args.client_id);
+      if (args.status) q = q.eq('effective_status', String(args.status).toUpperCase());
+      const { data, error } = await q.order('spend', { ascending: false }).limit(args.limit || 50);
+      if (error) return { error: error.message };
+      return { campaigns: data || [] };
+    }
+    case 'meta_list_adsets': {
+      let q = prodDb.from('meta_ad_sets').select('id, meta_adset_id, meta_campaign_id, name, status, effective_status, daily_budget, spend, impressions, clicks, ctr, synced_at').eq('client_id', args.client_id);
+      if (args.campaign_id) q = q.or(`meta_campaign_id.eq.${args.campaign_id},id.eq.${args.campaign_id}`);
+      if (args.status) q = q.eq('effective_status', String(args.status).toUpperCase());
+      const { data, error } = await q.order('spend', { ascending: false }).limit(args.limit || 100);
+      if (error) return { error: error.message };
+      return { adsets: data || [] };
+    }
+    case 'meta_list_ads': {
+      let q = prodDb.from('meta_ads').select('id, meta_ad_id, meta_adset_id, meta_campaign_id, name, status, effective_status, headline, body, link_url, thumbnail_url, spend, impressions, clicks, ctr, cpc, conversions, cost_per_conversion, synced_at').eq('client_id', args.client_id);
+      if (args.adset_id) q = q.or(`meta_adset_id.eq.${args.adset_id},ad_set_id.eq.${args.adset_id}`);
+      if (args.campaign_id) q = q.eq('meta_campaign_id', args.campaign_id);
+      if (args.status) q = q.eq('effective_status', String(args.status).toUpperCase());
+      const { data, error } = await q.order('spend', { ascending: false }).limit(args.limit || 100);
+      if (error) return { error: error.message };
+      return { ads: data || [] };
+    }
+    case 'meta_get_ad_performance': {
+      if (args.ad_id) {
+        const { data, error } = await prodDb.from('meta_ads').select('name, spend, impressions, clicks, ctr, cpc, cpm, reach, conversions, cost_per_conversion').eq('id', args.ad_id).maybeSingle();
+        if (error) return { error: error.message };
+        return data || { error: 'Ad not found' };
+      }
+      if (args.campaign_id) {
+        const { data, error } = await prodDb.from('meta_campaigns').select('name, spend, impressions, clicks, ctr, cpc').eq('id', args.campaign_id).maybeSingle();
+        if (error) return { error: error.message };
+        return data || { error: 'Campaign not found' };
+      }
+      return { error: 'Provide ad_id or campaign_id' };
+    }
+    case 'meta_toggle_status': {
+      return await invokeEdge('toggle-meta-status', {
+        clientId: args.client_id,
+        level: args.level,
+        rowId: args.row_id,
+        status: args.status,
+      });
+    }
+    case 'meta_update_budget': {
+      return await invokeEdge('update-meta-budget', {
+        clientId: args.client_id,
+        level: args.level,
+        rowId: args.row_id,
+        daily_budget: args.daily_budget,
+        lifetime_budget: args.lifetime_budget,
+      });
+    }
+    case 'meta_duplicate': {
+      return await invokeEdge('duplicate-meta-object', {
+        clientId: args.client_id,
+        level: args.level,
+        rowId: args.row_id,
+      });
+    }
+    case 'meta_create_campaign': {
+      return await invokeEdge('create-meta-campaign', {
+        clientId: args.client_id,
+        name: args.name,
+        objective: args.objective,
+        status: args.status || 'PAUSED',
+        daily_budget: args.daily_budget,
+      });
+    }
+    case 'meta_create_ad': {
+      return await invokeEdge('create-meta-ad', {
+        clientId: args.client_id,
+        adsetId: args.adset_id,
+        name: args.name,
+        creativeId: args.creative_id,
+        status: args.status || 'PAUSED',
+      });
+    }
+    case 'meta_sync_account': {
+      return await invokeEdge('sync-meta-ads', {
+        clientId: args.client_id,
+        days: args.days || 7,
+      });
+    }
+
     default:
       return { error: `Unknown tool: ${name}` };
   }
+}
+
+async function invokeEdge(fnName: string, payload: Record<string, any>): Promise<any> {
+  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/${fnName}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+    },
+    body: JSON.stringify({ ...payload, password: 'HPA1234$' }),
+  });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { status: res.status, body: text }; }
 }
 
 // JSON-RPC handler for MCP protocol
