@@ -142,6 +142,146 @@ const TOOLS = [
       required: ['client_id', 'title'],
     },
   },
+  // ============ Meta Ads Tools ============
+  {
+    name: 'meta_list_campaigns',
+    description: 'List Meta ad campaigns for a client. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        status: { type: 'string', description: 'Optional ACTIVE|PAUSED|ARCHIVED filter' },
+        limit: { type: 'number', description: 'Default 50' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_list_adsets',
+    description: 'List Meta ad sets, optionally scoped to a campaign. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        campaign_id: { type: 'string', description: 'Optional meta_campaign_id or internal id' },
+        status: { type: 'string' },
+        limit: { type: 'number' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_list_ads',
+    description: 'List Meta ads, optionally scoped to an ad set or campaign. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        adset_id: { type: 'string' },
+        campaign_id: { type: 'string' },
+        status: { type: 'string' },
+        limit: { type: 'number' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_get_ad_performance',
+    description: 'Get aggregate performance (spend, impressions, clicks, CTR, CPC, conversions) for an ad/adset/campaign. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        ad_id: { type: 'string', description: 'Internal meta_ads.id' },
+        campaign_id: { type: 'string', description: 'Internal meta_campaigns.id' },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'meta_toggle_status',
+    description: 'WRITE: Pause or activate a campaign, ad set, or ad. Requires user confirmation before calling.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        level: { type: 'string', enum: ['campaign', 'adset', 'ad'] },
+        row_id: { type: 'string', description: 'Internal UUID of the object' },
+        status: { type: 'string', enum: ['ACTIVE', 'PAUSED'] },
+      },
+      required: ['client_id', 'level', 'row_id', 'status'],
+    },
+  },
+  {
+    name: 'meta_update_budget',
+    description: 'WRITE: Update daily or lifetime budget on a campaign or ad set. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        level: { type: 'string', enum: ['campaign', 'adset'] },
+        row_id: { type: 'string' },
+        daily_budget: { type: 'number', description: 'Daily budget in dollars' },
+        lifetime_budget: { type: 'number', description: 'Lifetime budget in dollars' },
+      },
+      required: ['client_id', 'level', 'row_id'],
+    },
+  },
+  {
+    name: 'meta_duplicate',
+    description: 'WRITE: Duplicate a campaign, ad set, or ad. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        level: { type: 'string', enum: ['campaign', 'adset', 'ad'] },
+        row_id: { type: 'string' },
+      },
+      required: ['client_id', 'level', 'row_id'],
+    },
+  },
+  {
+    name: 'meta_create_campaign',
+    description: 'WRITE: Create a new Meta campaign. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        name: { type: 'string' },
+        objective: { type: 'string', description: 'e.g. OUTCOME_LEADS, OUTCOME_TRAFFIC' },
+        status: { type: 'string', enum: ['ACTIVE', 'PAUSED'], description: 'Default PAUSED' },
+        daily_budget: { type: 'number' },
+      },
+      required: ['client_id', 'name', 'objective'],
+    },
+  },
+  {
+    name: 'meta_create_ad',
+    description: 'WRITE: Create a new ad inside an ad set with a creative. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        adset_id: { type: 'string' },
+        name: { type: 'string' },
+        creative_id: { type: 'string' },
+        status: { type: 'string', enum: ['ACTIVE', 'PAUSED'] },
+      },
+      required: ['client_id', 'adset_id', 'name', 'creative_id'],
+    },
+  },
+  {
+    name: 'meta_sync_account',
+    description: 'Trigger a Meta Ads sync for a client (campaigns + insights). Heavy operation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        days: { type: 'number', description: 'Lookback window, default 7' },
+      },
+      required: ['client_id'],
+    },
+  },
 ];
 
 async function handleToolCall(name: string, args: Record<string, any>): Promise<any> {
