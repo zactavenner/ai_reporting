@@ -14,6 +14,7 @@ import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { ActivityTabView } from '@/components/activity/ActivityTabView';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
+import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
 import { PublicLinkPasswordGate } from '@/components/auth/PublicLinkPasswordGate';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { SectionErrorBoundary } from '@/components/ui/SectionErrorBoundary';
@@ -27,6 +28,7 @@ import {
   Palette,
   FileText,
   CheckSquare,
+  Upload as UploadIcon,
   Activity as ActivityIcon,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -150,6 +152,10 @@ function PublicReportContent() {
               <ActivityIcon className="h-4 w-4" />
               Activity
             </TabsTrigger>
+            <TabsTrigger value="upload" className="gap-2">
+              <UploadIcon className="h-4 w-4" />
+              Upload
+            </TabsTrigger>
             {customTabs.map((tab: any) => (
               <TabsTrigger key={tab.id} value={`custom-${tab.id}`} className="gap-2">
                 <ExternalLink className="h-3 w-3" />
@@ -211,6 +217,12 @@ function PublicReportContent() {
                 meetings={meetings}
                 creatives={creatives}
               />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          <TabsContent value="upload" className="space-y-6">
+            <SectionErrorBoundary sectionName="Upload">
+              <ClientFolderTab clientId={client.id} clientName={client.name} />
             </SectionErrorBoundary>
           </TabsContent>
 
