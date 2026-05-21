@@ -40,7 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet } from 'lucide-react';
+import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet, FileText, Palette, Layers, Activity as ActivityIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -460,7 +460,7 @@ export function DraggableClientTable({
         </div>
       )}
       <div className="border border-border bg-card overflow-x-auto scrollbar-thin">
-        <Table className="min-w-[1600px]">
+        <Table className="min-w-[1100px]">
           <TableHeader>
             <TableRow className="border-b h-7">
               <TableHead className="w-7 sticky left-0 bg-card z-10 py-0 px-1"></TableHead>
@@ -470,16 +470,7 @@ export function DraggableClientTable({
               <TableHead className="font-bold text-[11px] py-0 px-1 text-center min-w-[80px]">AM</TableHead>
               <SortableHeader column="adSpend" label="Spend" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="metaLeads" label="Meta Leads" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="crmLeads" label="CRM Leads" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="cpl" label="CPL" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="calls" label="Booked" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="costPerCall" label="$/Call" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="showed" label="Shows" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="showRate" label="Show%" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="funded" label="Funded" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="fundedDollars" label="Funded $" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="costOfCapital" label="CoC%" sortConfig={sortConfig} onSort={handleSort} />
+              <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[180px]">Quick Links</TableHead>
               <TableHead className="font-bold text-[11px] text-center py-0 px-1">BM</TableHead>
               <TableHead className="font-bold text-[11px] text-center py-0 px-1">Meta</TableHead>
               <TableHead className="font-bold text-[11px] text-center py-0 px-1">CRM</TableHead>
@@ -657,81 +648,16 @@ export function DraggableClientTable({
                       {computed.dailyTarget > 0 ? formatCurrency(computed.dailyTarget * numberOfDays) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
 
-                    {/* Meta Leads (valid non-spam with email+phone) */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
-                      {m.totalLeads || 0}
-                    </TableCell>
-
-                    {/* CRM Leads (all leads including spam — should be ≥ Meta Leads) */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      (() => {
-                        const crmTotal = (m.totalLeads || 0) + (m.spamLeads || 0);
-                        const metaLeads = m.totalLeads || 0;
-                        if (crmTotal === 0 && metaLeads === 0) return 'text-muted-foreground';
-                        if (crmTotal >= metaLeads) return 'text-chart-2';
-                        return 'text-destructive font-semibold';
-                      })()
-                    )}>
-                      {(m.totalLeads || 0) + (m.spamLeads || 0)}
-                    </TableCell>
-
-                    {/* CPL */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getThresholdColor(m.costPerLead || 0, t.costPerLead)
-                    )}>
-                      {formatCurrency(m.costPerLead || 0)}
-                    </TableCell>
-
-                    {/* Booked Calls */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
-                      {m.totalCalls || 0}
-                    </TableCell>
-
-                    {/* Cost per Call */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getThresholdColor(m.costPerCall || 0, t.costPerCall)
-                    )}>
-                      {(m.costPerCall || 0) > 0 ? formatCurrency(m.costPerCall) : <span className="text-muted-foreground">-</span>}
-                    </TableCell>
-
-                    {/* Shows */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
-                      {m.showedCalls || 0}
-                    </TableCell>
-
-                    {/* Show Rate % */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getConversionColor(m.showedPercent || 0)
-                    )}>
-                      {(m.showedPercent || 0) > 0 ? `${Math.round(m.showedPercent)}%` : <span className="text-muted-foreground">-</span>}
-                    </TableCell>
-
-                    {/* Funded */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      (m.fundedInvestors || 0) > 0 && 'text-chart-2 font-semibold'
-                    )}>
-                      {m.fundedInvestors || 0}
-                    </TableCell>
-
-                    {/* Funded $ */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      (m.fundedDollars || 0) > 0 && 'text-chart-2 font-semibold'
-                    )}>
-                      {(m.fundedDollars || 0) > 0 ? `$${Math.round(m.fundedDollars).toLocaleString()}` : <span className="text-muted-foreground">-</span>}
-                    </TableCell>
-
-                    {/* Cost of Capital % */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getThresholdColor(m.costOfCapital || 0, t.costOfCapital)
-                    )}>
-                      {(m.costOfCapital || 0) > 0 ? `${m.costOfCapital.toFixed(1)}%` : <span className="text-muted-foreground">-</span>}
+                    {/* Quick Links — Sheet, Doc, Creatives, Funnel, Activity */}
+                    <TableCell className="py-0 px-1" onClick={(e) => e.stopPropagation()}>
+                      <QuickLinksCell
+                        client={client}
+                        settings={fullSettings[client.id]}
+                        onConfigureSheet={() =>
+                          onOpenSheetSettings ? onOpenSheetSettings(client) : onOpenSettings(client)
+                        }
+                        onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
+                      />
                     </TableCell>
 
                     {/* BM URL */}
@@ -800,45 +726,6 @@ export function DraggableClientTable({
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-[10px]">Enrich Contacts</TooltipContent>
                         </Tooltip>
-                        {(() => {
-                          const s: any = fullSettings[client.id];
-                          const hasSheet = !!s?.metrics_sheet_id;
-                          const isPrimary = hasSheet && s?.metrics_source_default === 'sheet';
-                          return (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-5 w-5"
-                                  onClick={() =>
-                                    onOpenSheetSettings
-                                      ? onOpenSheetSettings(client)
-                                      : onOpenSettings(client)
-                                  }
-                                >
-                                  <FileSpreadsheet
-                                    className={cn(
-                                      'h-2.5 w-2.5',
-                                      isPrimary
-                                        ? 'text-emerald-600'
-                                        : hasSheet
-                                          ? 'text-amber-600'
-                                          : 'text-muted-foreground'
-                                    )}
-                                  />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="text-[10px]">
-                                {isPrimary
-                                  ? 'Google Sheet — primary source'
-                                  : hasSheet
-                                    ? 'Sheet bound — not primary'
-                                    : 'Configure Google Sheet'}
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })()}
                         <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onOpenSettings(client)}>
                           <Settings className="h-2.5 w-2.5" />
                         </Button>
@@ -1124,6 +1011,167 @@ function MetaStatusCell({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// Quick Links cell: Google Sheet, Google Doc, Creatives, Funnel, Activity
+function QuickLinksCell({
+  client,
+  settings,
+  onConfigureSheet,
+  onNavigate,
+}: {
+  client: Client;
+  settings: ClientSettings | undefined;
+  onConfigureSheet: () => void;
+  onNavigate: (tab: string) => void;
+}) {
+  const s: any = settings;
+  const sheetId = s?.metrics_sheet_id || null;
+  const sheetGid = s?.metrics_sheet_gid || null;
+  const sheetUrl: string | null =
+    s?.kpi_google_sheet_url ||
+    (sheetId
+      ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit${sheetGid ? `?gid=${sheetGid}` : ''}`
+      : null);
+  const docUrl: string | null = (client as any).google_doc_url || s?.kpi_google_doc_url || null;
+
+  const updateClient = useUpdateClient();
+  const [docOpen, setDocOpen] = useState(false);
+  const [docInput, setDocInput] = useState(docUrl || '');
+
+  const saveDoc = async () => {
+    try {
+      await updateClient.mutateAsync({ id: client.id, google_doc_url: docInput || null } as any);
+      toast.success('Google Doc URL saved');
+      setDocOpen(false);
+    } catch {
+      toast.error('Failed to save Google Doc URL');
+    }
+  };
+
+  const openExternal = (e: React.MouseEvent, url: string | null) => {
+    e.stopPropagation();
+    if (url) window.open(url, '_blank');
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="flex items-center justify-center gap-0.5">
+        {/* Google Sheet — click to open, pencil to edit */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => (sheetUrl ? openExternal(e, sheetUrl) : onConfigureSheet())}
+            >
+              <FileSpreadsheet
+                className={cn('h-3 w-3', sheetUrl ? 'text-emerald-600' : 'text-muted-foreground')}
+              />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">
+            {sheetUrl ? 'Open Google Sheet' : 'Configure Google Sheet'}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-4 w-4 -ml-1"
+              onClick={(e) => { e.stopPropagation(); onConfigureSheet(); }}
+            >
+              <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Edit Sheet settings</TooltipContent>
+        </Tooltip>
+
+        {/* Google Doc — popover to view/edit */}
+        <Popover open={docOpen} onOpenChange={(o) => { setDocOpen(o); if (o) setDocInput(docUrl || ''); }}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => e.stopPropagation()}
+              title="Google Doc"
+            >
+              <FileText
+                className={cn('h-3 w-3', docUrl ? 'text-blue-600' : 'text-muted-foreground')}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3" side="bottom" align="start" onClick={(e) => e.stopPropagation()}>
+            <div className="space-y-2">
+              <h4 className="font-medium text-xs">Google Doc — {client.name}</h4>
+              <Input
+                value={docInput}
+                onChange={(e) => setDocInput(e.target.value)}
+                placeholder="https://docs.google.com/document/d/..."
+                className="h-7 text-xs"
+              />
+              <div className="flex items-center gap-1 justify-end">
+                {docUrl && (
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => openExternal(e, docUrl)}>
+                    <ExternalLink className="h-3 w-3 mr-1" /> Open
+                  </Button>
+                )}
+                <Button size="sm" className="h-7 text-xs" onClick={saveDoc}>Save</Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Creatives */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('creatives'); }}
+            >
+              <Palette className="h-3 w-3 text-purple-600" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Creatives</TooltipContent>
+        </Tooltip>
+
+        {/* Funnel */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('pipeline'); }}
+            >
+              <Layers className="h-3 w-3 text-amber-600" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Funnel</TooltipContent>
+        </Tooltip>
+
+        {/* Activity */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('activity'); }}
+            >
+              <ActivityIcon className="h-3 w-3 text-chart-2" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Activity</TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
   );
 }
 

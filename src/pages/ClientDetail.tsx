@@ -108,6 +108,10 @@ export default function ClientDetail() {
   // Deep-link: if ?task= is present, auto-switch to tasks tab
   useEffect(() => {
     const taskId = searchParams.get('task');
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
     if (taskId) {
       setActiveTab('tasks');
     }
