@@ -8,7 +8,7 @@ import { differenceInDays, subDays, format } from 'date-fns';
 import { Client, useUpdateClient } from '@/hooks/useClients';
 import { useClientAssignments, useUpdateClientAssignment } from '@/hooks/useClientAssignments';
 import { AggregatedMetrics } from '@/hooks/useMetrics';
-import { KPIThresholds, ClientSettings } from '@/hooks/useClientSettings';
+import { KPIThresholds, ClientSettings, useUpdateClientSettings } from '@/hooks/useClientSettings';
 import { getEffectiveMonthlyTarget } from '@/hooks/useClientSettings';
 import { calculateClientRevenue } from '@/hooks/useClientMRR';
 import { Badge } from '@/components/ui/badge';
@@ -988,14 +988,20 @@ function MetaStatusCell({
             );
           })}
           <div className="space-y-1.5">
-            <label className="text-[11px] text-muted-foreground font-medium">Access Token <span className="text-muted-foreground">(optional override)</span></label>
+            <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between">
+              <span>Meta System User Token <span className="text-muted-foreground">(per-client sync)</span></span>
+              {accessToken && <span className="text-emerald-600 text-[10px]">●&nbsp;set</span>}
+            </label>
             <Input
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
-              placeholder="Uses master token if empty"
-              className="h-7 text-xs"
+              placeholder="Paste Meta system user token (overrides master)"
+              className="h-7 text-xs font-mono"
               type="password"
             />
+            <p className="text-[10px] text-muted-foreground">
+              Used to sync this client's ad accounts. Leave blank to fall back to the master token.
+            </p>
           </div>
           {isDuplicate && (
             <div className="text-[10px] text-destructive bg-destructive/10 rounded p-1.5">
@@ -1037,8 +1043,41 @@ function QuickLinksCell({
   const docUrl: string | null = (client as any).google_doc_url || s?.kpi_google_doc_url || null;
 
   const updateClient = useUpdateClient();
+  const updateSettings = useUpdateClientSettings();
   const [docOpen, setDocOpen] = useState(false);
   const [docInput, setDocInput] = useState(docUrl || '');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetUrlInput, setSheetUrlInput] = useState(s?.kpi_google_sheet_url || sheetUrl || '');
+  const [sheetIdInput, setSheetIdInput] = useState(sheetId || '');
+  const [sheetGidInput, setSheetGidInput] = useState(sheetGid || '');
+
+  const parseSheetFromUrl = (url: string) => {
+    const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const gidMatch = url.match(/[#?&]gid=(\d+)/);
+    return { id: idMatch?.[1] || '', gid: gidMatch?.[1] || '' };
+  };
+
+  const saveSheet = async () => {
+    try {
+      let finalId = sheetIdInput.trim();
+      let finalGid = sheetGidInput.trim();
+      if (sheetUrlInput && (!finalId || !finalGid)) {
+        const parsed = parseSheetFromUrl(sheetUrlInput);
+        if (!finalId) finalId = parsed.id;
+        if (!finalGid) finalGid = parsed.gid;
+      }
+      await updateSettings.mutateAsync({
+        client_id: client.id,
+        kpi_google_sheet_url: sheetUrlInput.trim() || null,
+        metrics_sheet_id: finalId || null,
+        metrics_sheet_gid: finalGid || null,
+      } as any);
+      toast.success('Google Sheet settings saved');
+      setSheetOpen(false);
+    } catch {
+      toast.error('Failed to save sheet settings');
+    }
+  };
 
   const saveDoc = async () => {
     try {
@@ -1058,14 +1097,14 @@ function QuickLinksCell({
   return (
     <TooltipProvider>
       <div className="flex items-center justify-center gap-0.5">
-        {/* Google Sheet — click to open, pencil to edit */}
+        {/* Google Sheet — click icon opens sheet; pencil opens inline editor popover */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               className="h-5 w-5"
-              onClick={(e) => (sheetUrl ? openExternal(e, sheetUrl) : onConfigureSheet())}
+              onClick={(e) => (sheetUrl ? openExternal(e, sheetUrl) : (e.stopPropagation(), setSheetOpen(true)))}
             >
               <FileSpreadsheet
                 className={cn('h-3 w-3', sheetUrl ? 'text-emerald-600' : 'text-muted-foreground')}
@@ -1076,19 +1115,83 @@ function QuickLinksCell({
             {sheetUrl ? 'Open Google Sheet' : 'Configure Google Sheet'}
           </TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
+        <Popover
+          open={sheetOpen}
+          onOpenChange={(o) => {
+            setSheetOpen(o);
+            if (o) {
+              setSheetUrlInput(s?.kpi_google_sheet_url || sheetUrl || '');
+              setSheetIdInput(sheetId || '');
+              setSheetGidInput(sheetGid || '');
+            }
+          }}
+        >
+          <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               className="h-4 w-4 -ml-1"
-              onClick={(e) => { e.stopPropagation(); onConfigureSheet(); }}
+              onClick={(e) => e.stopPropagation()}
+              title="Edit Sheet settings"
             >
               <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
             </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-[10px]">Edit Sheet settings</TooltipContent>
-        </Tooltip>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-3" side="bottom" align="start" onClick={(e) => e.stopPropagation()}>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-xs">Google Sheet — {client.name}</h4>
+                {sheetUrl && (
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => openExternal(e, sheetUrl)} title="Open Sheet">
+                    <ExternalLink className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] text-muted-foreground font-medium">Full Sheet URL</label>
+                <Input
+                  value={sheetUrlInput}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSheetUrlInput(v);
+                    const parsed = parseSheetFromUrl(v);
+                    if (parsed.id) setSheetIdInput(parsed.id);
+                    if (parsed.gid) setSheetGidInput(parsed.gid);
+                  }}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  className="h-7 text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground font-medium">Sheet ID</label>
+                  <Input
+                    value={sheetIdInput}
+                    onChange={(e) => setSheetIdInput(e.target.value)}
+                    placeholder="Auto-filled from URL"
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground font-medium">Tab GID</label>
+                  <Input
+                    value={sheetGidInput}
+                    onChange={(e) => setSheetGidInput(e.target.value)}
+                    placeholder="0"
+                    className="h-7 text-xs"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Pasting the full URL auto-extracts the ID & tab GID.</p>
+              <div className="flex items-center gap-1 justify-end pt-1">
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setSheetOpen(false)}>Cancel</Button>
+                <Button size="sm" className="h-7 text-xs" onClick={saveSheet} disabled={updateSettings.isPending}>
+                  {updateSettings.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Google Doc — popover to view/edit */}
         <Popover open={docOpen} onOpenChange={(o) => { setDocOpen(o); if (o) setDocInput(docUrl || ''); }}>
