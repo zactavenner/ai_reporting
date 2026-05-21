@@ -35,6 +35,7 @@ import {
   Instagram,
   Palette,
   Globe,
+  Plug,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -381,6 +382,16 @@ export default function SettingsPage() {
           <p className="text-muted-foreground">
             Manage API keys, integrations, and creative brand settings
           </p>
+        </div>
+
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 flex items-start gap-3">
+          <Plug className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-medium">Looking for per-client integrations (Meta, GHL, HubSpot, etc.)?</p>
+            <p className="text-muted-foreground mt-0.5">
+              Those moved to each client's <strong>Connections</strong> tab — one place per client, one set of fields. This page is now for <strong>agency-wide defaults</strong> only (API key pools, brand refs, scraping).
+            </p>
+          </div>
         </div>
 
         <Tabs defaultValue="api-keys" className="space-y-6">
