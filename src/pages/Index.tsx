@@ -334,6 +334,9 @@ const Index = () => {
                   onAddClient={() => setAddClientOpen(true)}
                   onRefresh={handleRefresh}
                 />
+                <div className="flex justify-end -mt-2">
+                  <AISheetSummaryButton />
+                </div>
 
                 <SectionErrorBoundary sectionName="Master Spreadsheet">
                   <MasterSheetPanel />
