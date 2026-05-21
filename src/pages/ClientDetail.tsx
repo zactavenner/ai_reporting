@@ -472,6 +472,13 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
+          {/* ─── CONNECTIONS TAB ─── */}
+          <TabsContent value="connections" className="space-y-6">
+            <SectionErrorBoundary sectionName="Connections">
+              <ConnectionsTab clientId={client.id} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
           {/* ─── SETTINGS TAB ─── */}
           <TabsContent value="client-settings" className="space-y-6">
             {/* Quick Actions */}
