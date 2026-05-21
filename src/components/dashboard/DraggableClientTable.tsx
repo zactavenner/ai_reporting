@@ -648,81 +648,16 @@ export function DraggableClientTable({
                       {computed.dailyTarget > 0 ? formatCurrency(computed.dailyTarget * numberOfDays) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
 
-                    {/* Meta Leads (valid non-spam with email+phone) */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
-                      {m.totalLeads || 0}
-                    </TableCell>
-
-                    {/* CRM Leads (all leads including spam — should be ≥ Meta Leads) */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      (() => {
-                        const crmTotal = (m.totalLeads || 0) + (m.spamLeads || 0);
-                        const metaLeads = m.totalLeads || 0;
-                        if (crmTotal === 0 && metaLeads === 0) return 'text-muted-foreground';
-                        if (crmTotal >= metaLeads) return 'text-chart-2';
-                        return 'text-destructive font-semibold';
-                      })()
-                    )}>
-                      {(m.totalLeads || 0) + (m.spamLeads || 0)}
-                    </TableCell>
-
-                    {/* CPL */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getThresholdColor(m.costPerLead || 0, t.costPerLead)
-                    )}>
-                      {formatCurrency(m.costPerLead || 0)}
-                    </TableCell>
-
-                    {/* Booked Calls */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
-                      {m.totalCalls || 0}
-                    </TableCell>
-
-                    {/* Cost per Call */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getThresholdColor(m.costPerCall || 0, t.costPerCall)
-                    )}>
-                      {(m.costPerCall || 0) > 0 ? formatCurrency(m.costPerCall) : <span className="text-muted-foreground">-</span>}
-                    </TableCell>
-
-                    {/* Shows */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
-                      {m.showedCalls || 0}
-                    </TableCell>
-
-                    {/* Show Rate % */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getConversionColor(m.showedPercent || 0)
-                    )}>
-                      {(m.showedPercent || 0) > 0 ? `${Math.round(m.showedPercent)}%` : <span className="text-muted-foreground">-</span>}
-                    </TableCell>
-
-                    {/* Funded */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      (m.fundedInvestors || 0) > 0 && 'text-chart-2 font-semibold'
-                    )}>
-                      {m.fundedInvestors || 0}
-                    </TableCell>
-
-                    {/* Funded $ */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      (m.fundedDollars || 0) > 0 && 'text-chart-2 font-semibold'
-                    )}>
-                      {(m.fundedDollars || 0) > 0 ? `$${Math.round(m.fundedDollars).toLocaleString()}` : <span className="text-muted-foreground">-</span>}
-                    </TableCell>
-
-                    {/* Cost of Capital % */}
-                    <TableCell className={cn(
-                      "text-right font-mono tabular-nums text-[11px] py-0 px-1",
-                      getThresholdColor(m.costOfCapital || 0, t.costOfCapital)
-                    )}>
-                      {(m.costOfCapital || 0) > 0 ? `${m.costOfCapital.toFixed(1)}%` : <span className="text-muted-foreground">-</span>}
+                    {/* Quick Links — Sheet, Doc, Creatives, Funnel, Activity */}
+                    <TableCell className="py-0 px-1" onClick={(e) => e.stopPropagation()}>
+                      <QuickLinksCell
+                        client={client}
+                        settings={fullSettings[client.id]}
+                        onConfigureSheet={() =>
+                          onOpenSheetSettings ? onOpenSheetSettings(client) : onOpenSettings(client)
+                        }
+                        onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
+                      />
                     </TableCell>
 
                     {/* BM URL */}
