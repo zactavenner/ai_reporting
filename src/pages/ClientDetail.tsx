@@ -296,6 +296,7 @@ export default function ClientDetail() {
                 View Public Link
               </Button>
             )}
+            <AISheetSummaryButton clientId={client.id} clientName={client.name} />
             <VoiceRecordButton clientId={client.id} clientName={client.name} isPublicView={false} />
             <ThemeToggle />
           </div>
