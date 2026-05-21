@@ -1014,6 +1014,167 @@ function MetaStatusCell({
   );
 }
 
+// Quick Links cell: Google Sheet, Google Doc, Creatives, Funnel, Activity
+function QuickLinksCell({
+  client,
+  settings,
+  onConfigureSheet,
+  onNavigate,
+}: {
+  client: Client;
+  settings: ClientSettings | undefined;
+  onConfigureSheet: () => void;
+  onNavigate: (tab: string) => void;
+}) {
+  const s: any = settings;
+  const sheetId = s?.metrics_sheet_id || null;
+  const sheetGid = s?.metrics_sheet_gid || null;
+  const sheetUrl: string | null =
+    s?.kpi_google_sheet_url ||
+    (sheetId
+      ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit${sheetGid ? `?gid=${sheetGid}` : ''}`
+      : null);
+  const docUrl: string | null = (client as any).google_doc_url || s?.kpi_google_doc_url || null;
+
+  const updateClient = useUpdateClient();
+  const [docOpen, setDocOpen] = useState(false);
+  const [docInput, setDocInput] = useState(docUrl || '');
+
+  const saveDoc = async () => {
+    try {
+      await updateClient.mutateAsync({ id: client.id, google_doc_url: docInput || null } as any);
+      toast.success('Google Doc URL saved');
+      setDocOpen(false);
+    } catch {
+      toast.error('Failed to save Google Doc URL');
+    }
+  };
+
+  const openExternal = (e: React.MouseEvent, url: string | null) => {
+    e.stopPropagation();
+    if (url) window.open(url, '_blank');
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="flex items-center justify-center gap-0.5">
+        {/* Google Sheet — click to open, pencil to edit */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => (sheetUrl ? openExternal(e, sheetUrl) : onConfigureSheet())}
+            >
+              <FileSpreadsheet
+                className={cn('h-3 w-3', sheetUrl ? 'text-emerald-600' : 'text-muted-foreground')}
+              />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">
+            {sheetUrl ? 'Open Google Sheet' : 'Configure Google Sheet'}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-4 w-4 -ml-1"
+              onClick={(e) => { e.stopPropagation(); onConfigureSheet(); }}
+            >
+              <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Edit Sheet settings</TooltipContent>
+        </Tooltip>
+
+        {/* Google Doc — popover to view/edit */}
+        <Popover open={docOpen} onOpenChange={(o) => { setDocOpen(o); if (o) setDocInput(docUrl || ''); }}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => e.stopPropagation()}
+              title="Google Doc"
+            >
+              <FileText
+                className={cn('h-3 w-3', docUrl ? 'text-blue-600' : 'text-muted-foreground')}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3" side="bottom" align="start" onClick={(e) => e.stopPropagation()}>
+            <div className="space-y-2">
+              <h4 className="font-medium text-xs">Google Doc — {client.name}</h4>
+              <Input
+                value={docInput}
+                onChange={(e) => setDocInput(e.target.value)}
+                placeholder="https://docs.google.com/document/d/..."
+                className="h-7 text-xs"
+              />
+              <div className="flex items-center gap-1 justify-end">
+                {docUrl && (
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => openExternal(e, docUrl)}>
+                    <ExternalLink className="h-3 w-3 mr-1" /> Open
+                  </Button>
+                )}
+                <Button size="sm" className="h-7 text-xs" onClick={saveDoc}>Save</Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Creatives */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('creatives'); }}
+            >
+              <Palette className="h-3 w-3 text-purple-600" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Creatives</TooltipContent>
+        </Tooltip>
+
+        {/* Funnel */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('pipeline'); }}
+            >
+              <Layers className="h-3 w-3 text-amber-600" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Funnel</TooltipContent>
+        </Tooltip>
+
+        {/* Activity */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('activity'); }}
+            >
+              <ActivityIcon className="h-3 w-3 text-chart-2" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">Activity</TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
+  );
+}
+
 // CRM (GHL/HubSpot) status cell with quick-edit popover — mirrors MetaStatusCell
 function CrmStatusCell({
   client,
