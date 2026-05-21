@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug } from 'lucide-react';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
 import { AdSpendDrillDownModal } from '@/components/drilldown/AdSpendDrillDownModal';
@@ -44,6 +44,7 @@ import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { AIStudioTab } from '@/components/ai/AIStudioTab';
 import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
+import ConnectionsTab from '@/components/client/ConnectionsTab';
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { useClient } from '@/hooks/useClients';
 import { useDailyMetrics, useFundedInvestors } from '@/hooks/useMetrics';
@@ -349,6 +350,10 @@ export default function ClientDetail() {
               <ActivityIcon className="h-4 w-4" />
               Activity
             </TabsTrigger>
+            <TabsTrigger value="connections" className="gap-2">
+              <Plug className="h-4 w-4" />
+              Connections
+            </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2">
               <Cog className="h-4 w-4" />
               Settings
@@ -464,6 +469,13 @@ export default function ClientDetail() {
                 creatives={creatives}
                 onActivityClick={handleActivityClick}
               />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── CONNECTIONS TAB ─── */}
+          <TabsContent value="connections" className="space-y-6">
+            <SectionErrorBoundary sectionName="Connections">
+              <ConnectionsTab clientId={client.id} />
             </SectionErrorBoundary>
           </TabsContent>
 

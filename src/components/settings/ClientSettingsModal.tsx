@@ -1031,6 +1031,15 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
 
             {/* Meta Ads Integration Section */}
             <div className="border-t-2 border-border pt-6 mt-6">
+              <div className="mb-3 p-3 rounded-md border border-primary/40 bg-primary/5 text-sm flex items-start gap-2">
+                <Plug className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Meta Ads is now managed in the <span className="text-primary">Connections</span> tab.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Open this client and switch to the <strong>Connections</strong> tab for the simplified, single-source-of-truth view. The fields below still work but are duplicates.
+                  </p>
+                </div>
+              </div>
               <div className="border-2 border-border p-4 space-y-4">
                 <div>
                   <h4 className="font-medium mb-1 flex items-center gap-2">
