@@ -40,7 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet } from 'lucide-react';
+import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet, FileText, Palette, Layers, Activity as ActivityIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -460,7 +460,7 @@ export function DraggableClientTable({
         </div>
       )}
       <div className="border border-border bg-card overflow-x-auto scrollbar-thin">
-        <Table className="min-w-[1600px]">
+        <Table className="min-w-[1100px]">
           <TableHeader>
             <TableRow className="border-b h-7">
               <TableHead className="w-7 sticky left-0 bg-card z-10 py-0 px-1"></TableHead>
@@ -470,16 +470,7 @@ export function DraggableClientTable({
               <TableHead className="font-bold text-[11px] py-0 px-1 text-center min-w-[80px]">AM</TableHead>
               <SortableHeader column="adSpend" label="Spend" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="metaLeads" label="Meta Leads" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="crmLeads" label="CRM Leads" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="cpl" label="CPL" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="calls" label="Booked" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="costPerCall" label="$/Call" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="showed" label="Shows" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="showRate" label="Show%" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="funded" label="Funded" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="fundedDollars" label="Funded $" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader column="costOfCapital" label="CoC%" sortConfig={sortConfig} onSort={handleSort} />
+              <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[180px]">Quick Links</TableHead>
               <TableHead className="font-bold text-[11px] text-center py-0 px-1">BM</TableHead>
               <TableHead className="font-bold text-[11px] text-center py-0 px-1">Meta</TableHead>
               <TableHead className="font-bold text-[11px] text-center py-0 px-1">CRM</TableHead>
