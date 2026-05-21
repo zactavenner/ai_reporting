@@ -726,45 +726,6 @@ export function DraggableClientTable({
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-[10px]">Enrich Contacts</TooltipContent>
                         </Tooltip>
-                        {(() => {
-                          const s: any = fullSettings[client.id];
-                          const hasSheet = !!s?.metrics_sheet_id;
-                          const isPrimary = hasSheet && s?.metrics_source_default === 'sheet';
-                          return (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-5 w-5"
-                                  onClick={() =>
-                                    onOpenSheetSettings
-                                      ? onOpenSheetSettings(client)
-                                      : onOpenSettings(client)
-                                  }
-                                >
-                                  <FileSpreadsheet
-                                    className={cn(
-                                      'h-2.5 w-2.5',
-                                      isPrimary
-                                        ? 'text-emerald-600'
-                                        : hasSheet
-                                          ? 'text-amber-600'
-                                          : 'text-muted-foreground'
-                                    )}
-                                  />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="text-[10px]">
-                                {isPrimary
-                                  ? 'Google Sheet — primary source'
-                                  : hasSheet
-                                    ? 'Sheet bound — not primary'
-                                    : 'Configure Google Sheet'}
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })()}
                         <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onOpenSettings(client)}>
                           <Settings className="h-2.5 w-2.5" />
                         </Button>
