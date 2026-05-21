@@ -13,6 +13,7 @@ import { Activity as ActivityIcon } from 'lucide-react';
 import { ClientMeetingsSection } from '@/components/meetings/ClientMeetingsSection';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AISheetSummaryButton } from '@/components/ai/AISheetSummaryButton';
 import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { SectionErrorBoundary } from '@/components/ui/SectionErrorBoundary';
@@ -296,6 +297,7 @@ export default function ClientDetail() {
                 View Public Link
               </Button>
             )}
+            <AISheetSummaryButton clientId={client.id} clientName={client.name} />
             <VoiceRecordButton clientId={client.id} clientName={client.name} isPublicView={false} />
             <ThemeToggle />
           </div>
