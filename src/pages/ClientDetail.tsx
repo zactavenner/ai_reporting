@@ -350,6 +350,10 @@ export default function ClientDetail() {
               <ActivityIcon className="h-4 w-4" />
               Activity
             </TabsTrigger>
+            <TabsTrigger value="connections" className="gap-2">
+              <Plug className="h-4 w-4" />
+              Connections
+            </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2">
               <Cog className="h-4 w-4" />
               Settings
