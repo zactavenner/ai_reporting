@@ -988,14 +988,20 @@ function MetaStatusCell({
             );
           })}
           <div className="space-y-1.5">
-            <label className="text-[11px] text-muted-foreground font-medium">Access Token <span className="text-muted-foreground">(optional override)</span></label>
+            <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between">
+              <span>Meta System User Token <span className="text-muted-foreground">(per-client sync)</span></span>
+              {accessToken && <span className="text-emerald-600 text-[10px]">●&nbsp;set</span>}
+            </label>
             <Input
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
-              placeholder="Uses master token if empty"
-              className="h-7 text-xs"
+              placeholder="Paste Meta system user token (overrides master)"
+              className="h-7 text-xs font-mono"
               type="password"
             />
+            <p className="text-[10px] text-muted-foreground">
+              Used to sync this client's ad accounts. Leave blank to fall back to the master token.
+            </p>
           </div>
           {isDuplicate && (
             <div className="text-[10px] text-destructive bg-destructive/10 rounded p-1.5">
