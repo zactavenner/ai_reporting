@@ -13,6 +13,7 @@ import { Activity as ActivityIcon } from 'lucide-react';
 import { ClientMeetingsSection } from '@/components/meetings/ClientMeetingsSection';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AISheetSummaryButton } from '@/components/ai/AISheetSummaryButton';
 import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { SectionErrorBoundary } from '@/components/ui/SectionErrorBoundary';
