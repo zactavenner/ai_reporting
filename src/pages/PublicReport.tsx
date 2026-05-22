@@ -170,6 +170,12 @@ function PublicReportContent() {
             ))}
           </TabsList>
 
+          <TabsContent value="sheet-stats" className="space-y-4">
+            <SectionErrorBoundary sectionName="Reporting">
+              <SheetStatsTab clientId={client.id} isPublicView />
+            </SectionErrorBoundary>
+          </TabsContent>
+
           <TabsContent value="tasks" className="space-y-6">
             <SectionErrorBoundary sectionName="Task Board">
               <h2 className="text-lg font-bold mb-3">Tasks</h2>
@@ -199,13 +205,6 @@ function PublicReportContent() {
             <SectionErrorBoundary sectionName="Reporting Sheet">
               <h2 className="text-lg font-bold mb-3">Reporting Sheet</h2>
               {renderEmbed('Reporting Sheet', reportingSheetUrl)}
-            </SectionErrorBoundary>
-          </TabsContent>
-
-          <TabsContent value="sheet-stats" className="space-y-4">
-            <SectionErrorBoundary sectionName="Sheet Stats">
-              <h2 className="text-lg font-bold mb-3">Sheet Stats</h2>
-              <SheetStatsTab clientId={client.id} isPublicView />
             </SectionErrorBoundary>
           </TabsContent>
 
