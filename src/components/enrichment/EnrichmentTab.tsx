@@ -29,6 +29,7 @@ export function EnrichmentTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [slugDraft, setSlugDraft] = useState('');
   const [bulkRunning, setBulkRunning] = useState<string | null>(null);
+  const [runAllLoading, setRunAllLoading] = useState(false);
 
   const { data: rows, isLoading, refetch } = useQuery({
     queryKey: ['enrichment-overview'],
@@ -43,21 +44,26 @@ export function EnrichmentTab() {
       const ids = (clients || []).map(c => c.id);
       if (ids.length === 0) return [] as ClientEnrichmentRow[];
 
-      const [{ data: settings }, { data: leads }, { data: enrichments }] = await Promise.all([
-        supabase.from('client_settings').select('client_id, retargetiq_website_slug, retargetiq_auto_enrich').in('client_id', ids),
-        supabase.from('leads').select('client_id').in('client_id', ids),
-        supabase.from('lead_enrichment').select('client_id, enriched_at').in('client_id', ids).order('enriched_at', { ascending: false }),
-      ]);
-
+      const { data: settings } = await supabase
+        .from('client_settings')
+        .select('client_id, retargetiq_website_slug, retargetiq_auto_enrich')
+        .in('client_id', ids);
       const settingsMap = new Map((settings || []).map(s => [s.client_id, s]));
+
+      // Accurate per-client counts (avoids Supabase 1000-row default cap)
       const leadCount = new Map<string, number>();
-      (leads || []).forEach(l => leadCount.set(l.client_id, (leadCount.get(l.client_id) || 0) + 1));
       const enrichCount = new Map<string, number>();
       const lastEnrich = new Map<string, string>();
-      (enrichments || []).forEach(e => {
-        enrichCount.set(e.client_id, (enrichCount.get(e.client_id) || 0) + 1);
-        if (!lastEnrich.has(e.client_id) && e.enriched_at) lastEnrich.set(e.client_id, e.enriched_at);
-      });
+      await Promise.all(ids.map(async (cid) => {
+        const [{ count: lc }, { count: ec }, { data: last }] = await Promise.all([
+          supabase.from('leads').select('*', { count: 'exact', head: true }).eq('client_id', cid),
+          supabase.from('lead_enrichment').select('*', { count: 'exact', head: true }).eq('client_id', cid),
+          supabase.from('lead_enrichment').select('enriched_at').eq('client_id', cid).order('enriched_at', { ascending: false }).limit(1),
+        ]);
+        leadCount.set(cid, lc || 0);
+        enrichCount.set(cid, ec || 0);
+        if (last && last[0]?.enriched_at) lastEnrich.set(cid, last[0].enriched_at);
+      }));
 
       return (clients || []).map<ClientEnrichmentRow>(c => {
         const s = settingsMap.get(c.id) as any;
@@ -67,7 +73,7 @@ export function EnrichmentTab() {
           ghl_api_key: c.ghl_api_key,
           ghl_location_id: c.ghl_location_id,
           retargetiq_website_slug: s?.retargetiq_website_slug ?? null,
-          retargetiq_auto_enrich: s?.retargetiq_auto_enrich ?? true,
+          retargetiq_auto_enrich: s?.retargetiq_auto_enrich ?? false,
           total_leads: leadCount.get(c.id) || 0,
           enriched_leads: enrichCount.get(c.id) || 0,
           last_enriched_at: lastEnrich.get(c.id) ?? null,
@@ -117,16 +123,39 @@ export function EnrichmentTab() {
     }
   }
 
+  async function runAutoEnrichAll() {
+    setRunAllLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('auto-enrich-all', {
+        body: { per_client: 50 },
+      });
+      if (error) throw error;
+      const t = data?.totals || { succeeded: 0, failed: 0, processed: 0 };
+      toast.success(`Auto-enrich sweep: ${t.succeeded} enriched / ${t.failed} failed across ${data?.clients ?? 0} clients`);
+      refetch();
+    } catch (e: any) {
+      toast.error(`Auto-enrich all failed: ${e.message}`);
+    } finally {
+      setRunAllLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-primary" /> Lead Enrichment (RetargetIQ)
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Every new lead is automatically enriched with financial data and a clean summary note is pushed to the GHL contact.
-          Configure each client's RetargetIQ slug below.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-primary" /> Lead Enrichment (RetargetIQ)
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Every new lead is automatically enriched with financial data and a clean summary note is pushed to the GHL contact.
+            A background sweep runs every 15 minutes for every client with Auto-Enrich ON.
+          </p>
+        </div>
+        <Button onClick={runAutoEnrichAll} disabled={runAllLoading}>
+          {runAllLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+          Run Auto-Enrich Now
+        </Button>
       </div>
 
       {/* Summary cards */}
