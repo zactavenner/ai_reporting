@@ -259,6 +259,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       }
     } catch (e) {
       console.error("AI Studio history load failed", e);
+      const msg = String((e as any)?.message || "");
+      if (msg.includes("Not authenticated") || msg.includes("401")) {
+        // Dashboard session token is missing/expired/invalid — force re-login
+        try {
+          localStorage.removeItem("dashboard_session_token");
+          localStorage.removeItem("dashboard_auth");
+        } catch {}
+        if (typeof window !== "undefined") window.location.reload();
+      }
       setConversationId(null);
       setMessages([]);
       setCanvas([]);
