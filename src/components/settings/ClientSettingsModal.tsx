@@ -345,7 +345,16 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
 
       // Save business manager URL, GHL credentials, and Meta Ad Account to client
       const clientUpdates: Record<string, string | null> = {};
-      
+
+      const trimmedName = clientName.trim();
+      if (trimmedName && trimmedName !== (client.name || '')) {
+        clientUpdates.name = trimmedName;
+      }
+      const trimmedSlug = clientSlug.trim();
+      if (trimmedSlug !== ((client as any).slug || '')) {
+        clientUpdates.slug = trimmedSlug || null;
+      }
+
       if (businessManagerUrl !== (client.business_manager_url || '')) {
         clientUpdates.business_manager_url = businessManagerUrl || null;
       }
