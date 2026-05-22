@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ExternalLink, Save, Pencil } from 'lucide-react';
+import { ExternalLink, Save, Pencil, Sparkles, Loader2 } from 'lucide-react';
 import { useAgencySettings, useUpdateAgencySettings } from '@/hooks/useAgencySettings';
 import { useClientSettings, useUpdateClientSettings } from '@/hooks/useClientSettings';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 type FieldKey = 'kpi_google_doc_url' | 'kpi_google_sheet_url';
 
@@ -29,6 +37,9 @@ export function InlineUrlEmbed({ label, url, fieldKey, clientId }: InlineUrlEmbe
 
   const [editing, setEditing] = useState(!effectiveUrl);
   const [value, setValue] = useState(effectiveUrl || '');
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<string | null>(null);
 
   useEffect(() => {
     setValue(effectiveUrl || '');
@@ -56,6 +67,38 @@ export function InlineUrlEmbed({ label, url, fieldKey, clientId }: InlineUrlEmbe
   };
 
   const isPending = clientId ? updateClient.isPending : updateAgency.isPending;
+
+  const isSheet = fieldKey === 'kpi_google_sheet_url';
+
+  // Use Google's "edit" view inside the iframe so the user can actually write
+  // (preview was read-only). Anyone signed in to the right Google account
+  // will be able to edit directly in-place.
+  const embedSrc = effectiveUrl
+    ? effectiveUrl.replace('/preview', '/edit') + (effectiveUrl.includes('?') ? '&' : '?') + 'rm=embedded'
+    : '';
+
+  const handleAiReview = async () => {
+    if (!effectiveUrl) return;
+    setAiOpen(true);
+    setAiLoading(true);
+    setAiResult(null);
+    try {
+      const fn = isSheet ? 'ai-sheet-summary' : 'ai-sheet-summary';
+      const { data, error } = await supabase.functions.invoke(fn, {
+        body: clientId ? { client_id: clientId, doc_url: effectiveUrl } : { doc_url: effectiveUrl },
+      });
+      if (error) throw error;
+      const text =
+        (data as any)?.summary ||
+        (data as any)?.text ||
+        (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+      setAiResult(text || 'No insights returned.');
+    } catch (e: any) {
+      setAiResult('Failed to run AI review: ' + (e?.message || 'Unknown error'));
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   if (editing) {
     return (
@@ -98,12 +141,46 @@ export function InlineUrlEmbed({ label, url, fieldKey, clientId }: InlineUrlEmbe
           <Pencil className="h-4 w-4 mr-2" />
           Edit URL
         </Button>
+        <Button variant="secondary" size="sm" onClick={handleAiReview} disabled={aiLoading}>
+          {aiLoading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-2" />
+          )}
+          AI Review & Improve
+        </Button>
+        <span className="ml-auto text-xs text-muted-foreground">
+          Write directly in the embed — signed-in editors can save changes inline.
+        </span>
       </div>
       <iframe
-        src={effectiveUrl.replace('/edit', '/preview')}
+        src={embedSrc}
         className="w-full h-[80vh] border border-border rounded-lg"
         title={label}
       />
+
+      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              AI Review — {label}
+            </DialogTitle>
+            <DialogDescription>
+              Suggested improvements and quality findings based on the current document content.
+            </DialogDescription>
+          </DialogHeader>
+          {aiLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+              <Loader2 className="h-4 w-4 animate-spin" /> Analyzing…
+            </div>
+          ) : (
+            <pre className="whitespace-pre-wrap text-sm leading-relaxed max-h-[60vh] overflow-auto bg-muted/40 rounded-md p-4">
+              {aiResult}
+            </pre>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
