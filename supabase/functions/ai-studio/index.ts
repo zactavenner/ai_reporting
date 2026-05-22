@@ -118,6 +118,36 @@ async function readSheet(sheetId: string, range: string) {
   const data = await gFetch(`/google_sheets/v4/spreadsheets/${sheetId}/values/${range}`, GOOGLE_SHEETS_API_KEY, { method: "GET" });
   return { range: data.range, values: (data.values || []).slice(0, 200) };
 }
+async function listSheetTabs(sheetId: string) {
+  if (!GOOGLE_SHEETS_API_KEY) throw new Error("Google Sheets not connected");
+  const data = await gFetch(
+    `/google_sheets/v4/spreadsheets/${sheetId}?fields=sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))`,
+    GOOGLE_SHEETS_API_KEY,
+    { method: "GET" },
+  );
+  const tabs = (data.sheets || []).map((s: any) => ({
+    gid: s.properties?.sheetId,
+    title: s.properties?.title,
+    index: s.properties?.index,
+    rows: s.properties?.gridProperties?.rowCount,
+    cols: s.properties?.gridProperties?.columnCount,
+  }));
+  return { spreadsheet_id: sheetId, tab_count: tabs.length, tabs };
+}
+async function batchGetSheet(sheetId: string, ranges: string[]) {
+  if (!GOOGLE_SHEETS_API_KEY) throw new Error("Google Sheets not connected");
+  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
+  const data = await gFetch(
+    `/google_sheets/v4/spreadsheets/${sheetId}/values:batchGet?${qs}&valueRenderOption=FORMATTED_VALUE`,
+    GOOGLE_SHEETS_API_KEY,
+    { method: "GET" },
+  );
+  const valueRanges = (data.valueRanges || []).map((vr: any) => ({
+    range: vr.range,
+    values: (vr.values || []).slice(0, 200),
+  }));
+  return { value_ranges: valueRanges };
+}
 async function updateSheetRange(sheetId: string, range: string, values: any[][]) {
   if (!GOOGLE_SHEETS_API_KEY) throw new Error("Google Sheets not connected");
   await gFetch(`/google_sheets/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`, GOOGLE_SHEETS_API_KEY, {
