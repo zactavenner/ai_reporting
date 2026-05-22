@@ -46,11 +46,12 @@ function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } 
   return { sheet_id: idMatch[1], gid: gidMatch?.[1] };
 }
 
-type Preset = '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'ly' | 'custom';
+type Preset = 'y' | '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'ly' | 'custom';
 
 function presetRange(p: Preset): { from: Date; to: Date } {
   const today = new Date();
   switch (p) {
+    case 'y': { const y = subDays(today, 1); return { from: y, to: y }; }
     case '7d': return { from: subDays(today, 6), to: today };
     case '30d': return { from: subDays(today, 29), to: today };
     case '90d': return { from: subDays(today, 89), to: today };
@@ -128,8 +129,8 @@ function KpiTile({ label, value, sub, delta, invert, icon: Icon, hero, accent = 
           <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{label}</p>
           <p
             className={cn(
-              'mt-2 font-semibold tracking-tight text-foreground tabular-nums',
-              hero ? 'text-4xl' : 'text-2xl',
+              'mt-2 font-semibold tracking-tight text-foreground tabular-nums break-words leading-tight',
+              hero ? 'text-2xl xl:text-3xl' : 'text-2xl',
             )}
             style={hero ? { fontFamily: 'Playfair Display, Georgia, serif' } : undefined}
           >
@@ -183,7 +184,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   const sheetUrl = (settings as any)?.kpi_google_sheet_url as string | undefined;
   const parsed = parseSheetUrl(sheetUrl);
 
-  const [preset, setPreset] = useState<Preset>('30d');
+  const [preset, setPreset] = useState<Preset>('y');
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
   const range = preset === 'custom'
@@ -253,6 +254,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   }
 
   const presets: { id: Preset; label: string }[] = [
+    { id: 'y', label: 'Yesterday' },
     { id: '7d', label: 'Last 7d' },
     { id: '30d', label: 'Last 30d' },
     { id: '90d', label: 'Last 90d' },
@@ -324,7 +326,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <Button size="sm" variant="ghost" onClick={() => { current.refetch(); prior.refetch(); }} disabled={current.isFetching}>
             <RefreshCw className={cn('h-3 w-3', current.isFetching && 'animate-spin')} />
           </Button>
-          {!isPublicView && sheetUrl && (
+          {sheetUrl && (
             <a href={sheetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">
               <ExternalLink className="h-3 w-3" /> Open sheet
             </a>
