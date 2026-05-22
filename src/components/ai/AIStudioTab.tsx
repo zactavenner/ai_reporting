@@ -40,10 +40,9 @@ const CHAT_MODELS = [
 
 // Image models the AI can use when generating ad creatives.
 // Multi-select: pick 1 = AI uses that model. Pick 2+ = AI runs a side-by-side comparison.
-const IMAGE_MODELS: { value: "gemini-pro" | "nano-banana" | "openai"; label: string; hint: string }[] = [
-  { value: "gemini-pro", label: "Gemini 3 Pro", hint: "Best finals" },
+const IMAGE_MODELS: { value: "nano-banana" | "openai"; label: string; hint: string }[] = [
   { value: "nano-banana", label: "Nano Banana 2", hint: "Fast iteration" },
-  { value: "openai", label: "GPT Image 1", hint: "Distinct style" },
+  { value: "openai", label: "GPT Image 2", hint: "Highest quality finals" },
 ];
 
 // Approximate context window per model family (in tokens) for the usage meter.
@@ -169,7 +168,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
-  const [imageModels, setImageModels] = useState<Array<"gemini-pro" | "nano-banana" | "openai">>(["gemini-pro"]);
+  const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
   const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number; auto_doc?: { enabled: boolean; chars: number; title?: string | null } } | null>(null);
