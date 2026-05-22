@@ -90,6 +90,16 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
   useEffect(() => {
     if (open && initialTab) setActiveTab(initialTab);
   }, [open, initialTab]);
+
+  // General client fields (name, slug)
+  const [clientName, setClientName] = useState('');
+  const [clientSlug, setClientSlug] = useState('');
+  useEffect(() => {
+    if (client) {
+      setClientName(client.name || '');
+      setClientSlug((client as any).slug || '');
+    }
+  }, [client]);
   
   // Alert settings
   const [cplAlert, setCplAlert] = useState(false);
