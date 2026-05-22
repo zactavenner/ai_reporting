@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { format, subDays, startOfMonth, endOfMonth, subMonths, differenceInDays, parseISO } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, subYears, differenceInDays, parseISO } from 'date-fns';
 import {
   Calendar as CalendarIcon,
   ExternalLink,
@@ -43,7 +43,7 @@ function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } 
   return { sheet_id: idMatch[1], gid: gidMatch?.[1] };
 }
 
-type Preset = '7d' | '30d' | '90d' | 'tm' | 'lm' | 'custom';
+type Preset = '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'ly' | 'custom';
 
 function presetRange(p: Preset): { from: Date; to: Date } {
   const today = new Date();
@@ -55,6 +55,11 @@ function presetRange(p: Preset): { from: Date; to: Date } {
     case 'lm': {
       const prev = subMonths(today, 1);
       return { from: startOfMonth(prev), to: endOfMonth(prev) };
+    }
+    case 'ty': return { from: startOfYear(today), to: today };
+    case 'ly': {
+      const prev = subYears(today, 1);
+      return { from: startOfYear(prev), to: endOfYear(prev) };
     }
     default: return { from: subDays(today, 29), to: today };
   }
@@ -249,6 +254,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     { id: '90d', label: 'Last 90d' },
     { id: 'tm', label: 'This month' },
     { id: 'lm', label: 'Last month' },
+    { id: 'ty', label: 'This year' },
+    { id: 'ly', label: 'Last year' },
   ];
 
   return (
