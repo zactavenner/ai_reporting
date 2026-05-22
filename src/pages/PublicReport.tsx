@@ -46,7 +46,7 @@ function PublicReportContent() {
   const { data: creatives = [] } = useCreatives(client?.id);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'tasks');
+  const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'sheet-stats');
 
   useEffect(() => {
     setSearchParams((prev) => {
