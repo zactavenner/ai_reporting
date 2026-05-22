@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sparkles, Users } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useClients } from "@/hooks/useClients";
 import { AIStudioTab } from "./AIStudioTab";
+import { TaskBoardView } from "@/components/tasks/TaskBoardView";
 
 /**
  * Agency-level AI Studio. Same agentic capabilities as the per-client
@@ -32,6 +34,8 @@ export function AgencyAIStudioTab() {
     localStorage.setItem("agency-ai-studio:last-client", id);
   };
 
+  const [mode, setMode] = useState<"studio" | "tasks">("studio");
+
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-9rem)]">
       {/* Header */}
@@ -43,11 +47,17 @@ export function AgencyAIStudioTab() {
           <div>
             <h2 className="text-base font-semibold leading-tight">AI Studio</h2>
             <p className="text-xs text-muted-foreground">
-              Agentic workspace across all clients — chat, audit sheets, generate brand-locked ads, manage tasks & feedback.
+              Agentic workspace across all clients — chat, audit sheets, generate brand-locked ads, trigger & track agent tasks.
             </p>
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="ml-auto">
+          <TabsList className="h-9 rounded-xl">
+            <TabsTrigger value="studio" className="rounded-lg text-xs">Studio</TabsTrigger>
+            <TabsTrigger value="tasks" className="rounded-lg text-xs">Task Board</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Client:</span>
           <Select value={activeId} onValueChange={handleChange}>
@@ -63,10 +73,14 @@ export function AgencyAIStudioTab() {
         </div>
       </Card>
 
-      {/* Studio — reuses the same agentic component the client detail page uses */}
-      <div className="flex-1 min-h-0">
+      {/* Studio + Task Board — both reuse the same components the client detail page uses */}
+      <div className="flex-1 min-h-0 overflow-auto">
         {activeId ? (
-          <AIStudioTab key={activeId} clientId={activeId} clientName={selected?.name || ""} />
+          mode === "studio" ? (
+            <AIStudioTab key={activeId} clientId={activeId} clientName={selected?.name || ""} />
+          ) : (
+            <TaskBoardView key={activeId} clientId={activeId} />
+          )
         ) : (
           <Card className="h-full grid place-items-center text-sm text-muted-foreground">
             Add a client to start using AI Studio.
