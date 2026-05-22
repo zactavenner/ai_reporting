@@ -667,12 +667,27 @@ export default function ClientDetail() {
                       <ExternalLink className="h-4 w-4 mr-2" />
                       {tab.name}
                     </Button>
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTab(tab);
+                          setAddTabOpen(true);
+                        }}
+                        title="Edit link"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-7 w-7"
+                          title="Remove link"
                         >
                           <X className="h-3 w-3" />
                         </Button>
@@ -692,6 +707,7 @@ export default function ClientDetail() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    </div>
                   </div>
                 ))}
               </div>
