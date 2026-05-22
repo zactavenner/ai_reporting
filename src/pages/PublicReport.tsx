@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
 import {
   ExternalLink,
-  ClipboardList,
+  BarChart3,
   Layers,
   AlertCircle,
   Palette,
@@ -46,7 +46,7 @@ function PublicReportContent() {
   const { data: creatives = [] } = useCreatives(client?.id);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'tasks');
+  const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'sheet-stats');
 
   useEffect(() => {
     setSearchParams((prev) => {
@@ -126,6 +126,10 @@ function PublicReportContent() {
       <main className="p-6 max-w-7xl mx-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-muted/50 flex-wrap">
+            <TabsTrigger value="sheet-stats" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Reporting
+            </TabsTrigger>
             <TabsTrigger value="tasks" className="gap-2">
               <CheckSquare className="h-4 w-4" />
               Tasks
@@ -139,12 +143,8 @@ function PublicReportContent() {
               Master Doc
             </TabsTrigger>
             <TabsTrigger value="reporting-sheet" className="gap-2">
-              <ClipboardList className="h-4 w-4" />
+              <FileText className="h-4 w-4" />
               Reporting Sheet
-            </TabsTrigger>
-            <TabsTrigger value="sheet-stats" className="gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Sheet Stats
             </TabsTrigger>
             <TabsTrigger value="onboarding-info" className="gap-2">
               <CheckSquare className="h-4 w-4" />
@@ -169,6 +169,12 @@ function PublicReportContent() {
               </TabsTrigger>
             ))}
           </TabsList>
+
+          <TabsContent value="sheet-stats" className="space-y-4">
+            <SectionErrorBoundary sectionName="Reporting">
+              <SheetStatsTab clientId={client.id} isPublicView />
+            </SectionErrorBoundary>
+          </TabsContent>
 
           <TabsContent value="tasks" className="space-y-6">
             <SectionErrorBoundary sectionName="Task Board">
@@ -199,13 +205,6 @@ function PublicReportContent() {
             <SectionErrorBoundary sectionName="Reporting Sheet">
               <h2 className="text-lg font-bold mb-3">Reporting Sheet</h2>
               {renderEmbed('Reporting Sheet', reportingSheetUrl)}
-            </SectionErrorBoundary>
-          </TabsContent>
-
-          <TabsContent value="sheet-stats" className="space-y-4">
-            <SectionErrorBoundary sectionName="Sheet Stats">
-              <h2 className="text-lg font-bold mb-3">Sheet Stats</h2>
-              <SheetStatsTab clientId={client.id} isPublicView />
             </SectionErrorBoundary>
           </TabsContent>
 
