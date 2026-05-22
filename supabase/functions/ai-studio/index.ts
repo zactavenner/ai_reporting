@@ -240,7 +240,7 @@ async function generateStaticAd(opts: {
   clientId: string | null;
   brandContext: any;
   quality: "pro" | "fast";
-  model?: "gemini-pro" | "nano-banana" | "openai" | null;
+  model?: "nano-banana" | "openai" | null;
 }): Promise<ImageResult> {
   const aspect = opts.aspectRatio || "1:1";
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -262,11 +262,11 @@ async function generateStaticAd(opts: {
   let mime = "image/png";
   let modelUsed = "";
 
-  // Effective model selection: explicit `model` arg wins; else quality maps to pro=gemini-pro, fast=nano-banana
-  const effectiveModel: "gemini-pro" | "nano-banana" | "openai" =
-    opts.model === "openai" || opts.model === "nano-banana" || opts.model === "gemini-pro"
+  // Effective model selection: explicit `model` arg wins; else quality maps to pro=openai (gpt-image-2), fast=nano-banana
+  const effectiveModel: "nano-banana" | "openai" =
+    opts.model === "openai" || opts.model === "nano-banana"
       ? opts.model
-      : (opts.quality === "pro" ? "gemini-pro" : "nano-banana");
+      : (opts.quality === "pro" ? "openai" : "nano-banana");
 
   if (effectiveModel === "openai") {
     // Prefer the agency-stored OpenAI API key (set in Agency Settings → API Keys).
@@ -282,24 +282,24 @@ async function generateStaticAd(opts: {
     const sz = sizeMap[aspect] || "1024x1024";
     let res: Response;
     if (openaiKey) {
-      modelUsed = "openai/gpt-image-1 (direct)";
+      modelUsed = "openai/gpt-image-2 (direct)";
       res = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gpt-image-1",
+          model: "gpt-image-2",
           prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
           size: sz,
           n: 1,
         }),
       });
     } else if (OPENROUTER_API_KEY) {
-      modelUsed = "openai/gpt-image-1 (via openrouter)";
+      modelUsed = "openai/gpt-image-2 (via openrouter)";
       res = await fetch("https://openrouter.ai/api/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
         body: JSON.stringify({
-          model: "openai/gpt-image-1",
+          model: "openai/gpt-image-2",
           prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
           size: sz,
           n: 1,
@@ -307,7 +307,7 @@ async function generateStaticAd(opts: {
         }),
       });
     } else {
-      throw new Error("No OpenAI API key configured. Add one in Agency Settings → API Keys to enable GPT Image.");
+      throw new Error("No OpenAI API key configured. Add one in Agency Settings → API Keys to enable GPT Image 2.");
     }
     if (!res.ok) throw new Error(`OpenAI image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
     const data = await res.json();
@@ -318,45 +318,8 @@ async function generateStaticAd(opts: {
       const r = await fetch(url); const buf = await r.arrayBuffer();
       base64Image = arrayBufferToBase64(buf); mime = r.headers.get("content-type") || "image/png";
     } else throw new Error("OpenAI returned no image data");
-  } else if (effectiveModel === "gemini-pro" && GEMINI_API_KEY) {
-    // Direct Gemini 3 Pro Image Preview (Ads Generator 5.0 pipeline)
-    const parts: any[] = [{ text: fullPrompt }];
-    if (opts.referenceImageUrl) {
-      try {
-        const r = await fetch(opts.referenceImageUrl);
-        if (r.ok) {
-          const buf = await r.arrayBuffer();
-          parts.push({
-            inlineData: {
-              mimeType: r.headers.get("content-type") || "image/png",
-              data: arrayBufferToBase64(buf),
-            },
-          });
-        }
-      } catch (e) { console.warn("ref image fetch failed", e); }
-    }
-    modelUsed = "gemini-3-pro-image-preview";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-        }),
-      },
-    );
-    if (!res.ok) throw new Error(`Gemini image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
-    const data = await res.json();
-    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) =>
-      p.inlineData?.mimeType?.startsWith("image/"),
-    );
-    if (!imagePart?.inlineData?.data) throw new Error("No image in Gemini response");
-    base64Image = imagePart.inlineData.data;
-    mime = imagePart.inlineData.mimeType || "image/png";
   } else {
-    // Fast path via AI Gateway (Nano Banana 2)
+    // Nano Banana 2 via AI Gateway
     modelUsed = "google/gemini-3.1-flash-image-preview";
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
