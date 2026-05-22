@@ -39,6 +39,7 @@ import { PipelineTab } from '@/components/pipeline/PipelineTab';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
 import { Input } from '@/components/ui/input';
 import { InlineUrlEmbed } from '@/components/settings/InlineUrlEmbed';
+import { SheetStatsTab } from '@/components/sheet-stats/SheetStatsTab';
 import { PropertyManagerTab } from '@/components/properties/PropertyManagerTab';
 import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMappingSection';
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
@@ -343,6 +344,10 @@ export default function ClientDetail() {
               <ClipboardList className="h-4 w-4" />
               Reporting Sheet
             </TabsTrigger>
+            <TabsTrigger value="sheet-stats" className="gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Sheet Stats
+            </TabsTrigger>
             <TabsTrigger value="company-info" className="gap-2">
               <Building2 className="h-4 w-4" />
               Company Info
@@ -427,6 +432,14 @@ export default function ClientDetail() {
                 fieldKey="kpi_google_sheet_url"
                 clientId={clientId}
               />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── SHEET STATS TAB ─── */}
+          <TabsContent value="sheet-stats" className="space-y-4">
+            <SectionErrorBoundary sectionName="Sheet Stats">
+              <h2 className="text-lg font-bold mb-3">Sheet Stats</h2>
+              <SheetStatsTab clientId={client.id} />
             </SectionErrorBoundary>
           </TabsContent>
 

@@ -15,6 +15,7 @@ import { ActivityTabView } from '@/components/activity/ActivityTabView';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
 import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
+import { SheetStatsTab } from '@/components/sheet-stats/SheetStatsTab';
 import { PublicLinkPasswordGate } from '@/components/auth/PublicLinkPasswordGate';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { SectionErrorBoundary } from '@/components/ui/SectionErrorBoundary';
@@ -140,6 +141,10 @@ function PublicReportContent() {
               <ClipboardList className="h-4 w-4" />
               Reporting Sheet
             </TabsTrigger>
+            <TabsTrigger value="sheet-stats" className="gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Sheet Stats
+            </TabsTrigger>
             <TabsTrigger value="onboarding-info" className="gap-2">
               <CheckSquare className="h-4 w-4" />
               Onboarding Info
@@ -193,6 +198,13 @@ function PublicReportContent() {
             <SectionErrorBoundary sectionName="Reporting Sheet">
               <h2 className="text-lg font-bold mb-3">Reporting Sheet</h2>
               {renderEmbed('Reporting Sheet', reportingSheetUrl)}
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          <TabsContent value="sheet-stats" className="space-y-4">
+            <SectionErrorBoundary sectionName="Sheet Stats">
+              <h2 className="text-lg font-bold mb-3">Sheet Stats</h2>
+              <SheetStatsTab clientId={client.id} isPublicView />
             </SectionErrorBoundary>
           </TabsContent>
 
