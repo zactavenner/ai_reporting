@@ -721,7 +721,16 @@ export default function ClientDetail() {
       <ClientSettingsModal client={client} open={settingsOpen} onOpenChange={setSettingsOpen} />
       <CSVImportModal clientId={clientId || ''} importType={csvImportType} open={csvImportOpen} onOpenChange={setCsvImportOpen} />
       <ImportHistoryModal clientId={clientId || ''} open={importHistoryOpen} onOpenChange={setImportHistoryOpen} />
-      <AddCustomTabModal clientId={clientId || ''} open={addTabOpen} onOpenChange={setAddTabOpen} />
+      <AddCustomTabModal
+        clientId={clientId || ''}
+        open={addTabOpen}
+        onOpenChange={(o) => {
+          setAddTabOpen(o);
+          if (!o) setEditingTab(null);
+        }}
+        editTab={editingTab}
+      />
+      <AgencySettingsModal open={agencyOpen} onOpenChange={setAgencyOpen} />
       <AIAnalysisChat context={aiContext} />
 
       {/* Drill-Down Modals */}
