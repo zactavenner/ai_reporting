@@ -185,6 +185,30 @@ export function DraggableClientTable({
   const updateAssignment = useUpdateClientAssignment();
   const { data: agencyMembers = [] } = useAgencyMembers();
 
+  // Quick-links presence counts (creatives + funnel campaigns) per client
+  const { data: creativeCounts = {} } = useQuery({
+    queryKey: ['quicklinks-creative-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('creatives').select('client_id');
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => { if (r.client_id) map[r.client_id] = (map[r.client_id] || 0) + 1; });
+      return map;
+    },
+    staleTime: 60_000,
+  });
+  const { data: funnelCounts = {} } = useQuery({
+    queryKey: ['quicklinks-funnel-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('funnel_campaigns').select('client_id');
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => { if (r.client_id) map[r.client_id] = (map[r.client_id] || 0) + 1; });
+      return map;
+    },
+    staleTime: 60_000,
+  });
+
   const handleSyncGhlClient = async (e: React.MouseEvent, clientId: string, clientName: string) => {
     e.stopPropagation();
     setSyncingGhl(prev => ({ ...prev, [clientId]: true }));
