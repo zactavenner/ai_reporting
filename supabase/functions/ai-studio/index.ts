@@ -854,14 +854,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_static_ad",
-      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Pick a model: 'gemini-pro' (Gemini 3 Pro Image, default finals), 'nano-banana' (Nano Banana 2, fast iteration), or 'openai' (GPT Image 1, distinct art direction). Optionally pass reference_image_url to clone an existing ad's layout. This client's approved creatives are automatically used as visual references if no explicit reference is given.",
+      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Pick a model: 'openai' (GPT Image 2, highest-quality finals, default for quality=pro) or 'nano-banana' (Nano Banana 2, fast iteration, default for quality=fast). Optionally pass reference_image_url to clone an existing ad's layout. This client's approved creatives are automatically used as visual references if no explicit reference is given.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What the ad should communicate, headline ideas, key visuals." },
           aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "1:1 feed, 4:5 IG feed tall, 9:16 stories/reels, 16:9 landscape." },
           quality: { type: "string", enum: ["pro", "fast"], description: "pro = highest quality (default), fast = quick iteration" },
-          model: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"], description: "Which image model to use. If omitted, derived from quality." },
+          model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use. 'openai' = GPT Image 2, 'nano-banana' = Nano Banana 2. If omitted, derived from quality." },
           reference_image_url: { type: "string", description: "Optional URL of a reference ad to clone the layout/style from." },
         },
         required: ["prompt"],
@@ -872,7 +872,7 @@ const tools = [
     type: "function",
     function: {
       name: "compare_image_models",
-      description: "Generate the SAME ad prompt across multiple image models in parallel so the user can compare and pick a favorite. Use when the user asks to 'compare models', 'try both', 'see Gemini vs OpenAI', or wants different angles from each model. Each result lands on the canvas tagged with its model.",
+      description: "Generate the SAME ad prompt across multiple image models in parallel so the user can compare and pick a favorite. Use when the user asks to 'compare models', 'try both', 'see Nano Banana vs GPT Image 2', or wants different angles from each model. Each result lands on the canvas tagged with its model.",
       parameters: {
         type: "object",
         properties: {
@@ -880,8 +880,8 @@ const tools = [
           aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"] },
           models: {
             type: "array",
-            items: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"] },
-            description: "Which models to compare. Default: ['gemini-pro', 'nano-banana', 'openai'].",
+            items: { type: "string", enum: ["nano-banana", "openai"] },
+            description: "Which models to compare. Default: ['nano-banana', 'openai'].",
           },
           reference_image_url: { type: "string", description: "Optional reference to clone layout from." },
         },
@@ -948,7 +948,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_scene_image",
-      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel.",
+      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel. Pick a model: 'openai' (GPT Image 2) or 'nano-banana' (Nano Banana 2). If the user selected MULTIPLE image models, emit one generate_scene_image call PER model PER scene so the user can compare keyframes side-by-side before videos render.",
       parameters: {
         type: "object",
         properties: {
@@ -957,6 +957,7 @@ const tools = [
           scene_order: { type: "integer" },
           prompt: { type: "string", description: "Scene image prompt." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+          model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use for this keyframe. Default = nano-banana (fast). Use openai for highest quality." },
         },
         required: ["storyboard_id", "scene_id", "scene_order", "prompt", "aspect_ratio"],
       },
