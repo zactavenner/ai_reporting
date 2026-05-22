@@ -1,6 +1,19 @@
 import { useMemo, useState } from 'react';
 import { format, subDays, startOfMonth, endOfMonth, subMonths, differenceInDays, parseISO } from 'date-fns';
-import { Calendar as CalendarIcon, ExternalLink, RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import {
+  Calendar as CalendarIcon,
+  ExternalLink,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Users,
+  PhoneCall,
+  CalendarCheck,
+  DollarSign,
+  Target,
+  Activity,
+} from 'lucide-react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -48,12 +61,22 @@ function presetRange(p: Preset): { from: Date; to: Date } {
 }
 
 function fmtMoney(n: number) {
-  if (!isFinite(n)) return '—';
-  return n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`;
+  if (!isFinite(n) || isNaN(n)) return '—';
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
+}
+function fmtMoneyFull(n: number) {
+  if (!isFinite(n) || isNaN(n)) return '—';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 function fmtInt(n: number) {
-  if (!isFinite(n)) return '—';
+  if (!isFinite(n) || isNaN(n)) return '—';
   return new Intl.NumberFormat().format(Math.round(n));
+}
+function fmtPct(n: number, digits = 1) {
+  if (!isFinite(n) || isNaN(n)) return '—';
+  return `${n.toFixed(digits)}%`;
 }
 function pctDelta(curr: number, prev: number): number | null {
   if (!prev) return null;
@@ -63,32 +86,82 @@ function pctDelta(curr: number, prev: number): number | null {
 interface KpiTileProps {
   label: string;
   value: string;
+  sub?: string;
   delta: number | null;
   /** if true, decreased value (negative delta) is good (green) */
   invert?: boolean;
+  icon?: React.ComponentType<{ className?: string }>;
+  hero?: boolean;
+  accent?: 'default' | 'gold' | 'emerald';
 }
-function KpiTile({ label, value, delta, invert }: KpiTileProps) {
+function KpiTile({ label, value, sub, delta, invert, icon: Icon, hero, accent = 'default' }: KpiTileProps) {
   const isPositive = delta !== null && delta > 0;
   const isNegative = delta !== null && delta < 0;
   const isGood = (invert ? isNegative : isPositive);
   const isBad = (invert ? isPositive : isNegative);
-  const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
+  const TrendIcon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
+  const accentRing =
+    accent === 'gold' ? 'ring-1 ring-[hsl(40_45%_55%/0.35)]'
+    : accent === 'emerald' ? 'ring-1 ring-emerald-500/25'
+    : 'ring-1 ring-border/60';
+  const accentText =
+    accent === 'gold' ? 'text-[hsl(40_45%_55%)]'
+    : accent === 'emerald' ? 'text-emerald-600'
+    : 'text-primary';
   return (
-    <Card className="p-4 bg-card/60 backdrop-blur border-border rounded-2xl">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">{label}</p>
-      <p className="text-2xl font-bold mt-1 text-foreground">{value}</p>
+    <Card
+      className={cn(
+        'relative overflow-hidden rounded-2xl border-border/60 bg-gradient-to-b from-card to-card/40 backdrop-blur p-5 transition-shadow hover:shadow-lg',
+        accentRing,
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{label}</p>
+          <p
+            className={cn(
+              'mt-2 font-semibold tracking-tight text-foreground tabular-nums',
+              hero ? 'text-4xl' : 'text-2xl',
+            )}
+            style={hero ? { fontFamily: 'Playfair Display, Georgia, serif' } : undefined}
+          >
+            {value}
+          </p>
+          {sub && <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>}
+        </div>
+        {Icon && (
+          <div className={cn('shrink-0 rounded-xl p-2 bg-muted/60', accentText)}>
+            <Icon className="h-4 w-4" />
+          </div>
+        )}
+      </div>
       {delta !== null && (
-        <div className={cn(
-          'mt-2 inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full',
-          isGood && 'bg-emerald-500/10 text-emerald-600',
-          isBad && 'bg-destructive/10 text-destructive',
-          !isGood && !isBad && 'bg-muted text-muted-foreground'
-        )}>
-          <Icon className="h-3 w-3" />
-          {Math.abs(delta).toFixed(1)}% vs prior
+        <div className="mt-3 flex items-center gap-2">
+          <div className={cn(
+            'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full',
+            isGood && 'bg-emerald-500/10 text-emerald-600',
+            isBad && 'bg-destructive/10 text-destructive',
+            !isGood && !isBad && 'bg-muted text-muted-foreground'
+          )}>
+            <TrendIcon className="h-3 w-3" />
+            {Math.abs(delta).toFixed(1)}%
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">vs prior period</span>
         </div>
       )}
+      {/* subtle corner shine */}
+      <div className="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
     </Card>
+  );
+}
+
+function RatioPill({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="flex-1 min-w-[140px] px-4 py-3 rounded-xl bg-muted/40 border border-border/50">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{label}</p>
+      <p className="text-xl font-semibold tabular-nums mt-0.5">{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
   );
 }
 
@@ -145,6 +218,16 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     ];
   }, [agg]);
 
+  // Conversion ratios
+  const ratios = useMemo(() => {
+    if (!agg) return null;
+    const leadToBook = agg.totalLeads ? (agg.totalCalls / agg.totalLeads) * 100 : 0;
+    const bookToShow = agg.totalCalls ? (agg.showedCalls / agg.totalCalls) * 100 : 0;
+    const showToFund = agg.showedCalls ? (agg.fundedInvestors / agg.showedCalls) * 100 : 0;
+    const leadToFund = agg.totalLeads ? (agg.fundedInvestors / agg.totalLeads) * 100 : 0;
+    return { leadToBook, bookToShow, showToFund, leadToFund };
+  }, [agg]);
+
   if (!parsed) {
     return (
       <div className="border-2 border-dashed border-border bg-card rounded-2xl p-12 text-center">
@@ -170,8 +253,23 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Executive header */}
+      <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-primary/[0.06] via-card to-card p-6">
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{
+          backgroundImage: 'radial-gradient(circle at 20% 20%, hsl(var(--primary)) 0%, transparent 40%), radial-gradient(circle at 80% 0%, hsl(40 45% 55%) 0%, transparent 40%)'
+        }} />
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">Performance Overview</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+              Executive Scorecard
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              {format(range.from, 'MMM d, yyyy')} – {format(range.to, 'MMM d, yyyy')} · {days} day{days === 1 ? '' : 's'}
+            </p>
+          </div>
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-1 p-1 rounded-full bg-muted">
           {presets.map((p) => (
             <button
@@ -211,9 +309,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
             </PopoverContent>
           </Popover>
         </div>
-
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{format(range.from, 'MMM d')} – {format(range.to, 'MMM d, yyyy')}</span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Button size="sm" variant="ghost" onClick={() => { current.refetch(); prior.refetch(); }} disabled={current.isFetching}>
             <RefreshCw className={cn('h-3 w-3', current.isFetching && 'animate-spin')} />
           </Button>
@@ -224,8 +320,10 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           )}
         </div>
       </div>
+        </div>
+      </div>
 
-      {/* KPI grid */}
+      {/* Hero KPIs */}
       {current.isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
@@ -236,16 +334,64 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <p className="text-xs text-muted-foreground mt-1">{(current.error as any)?.message}</p>
         </Card>
       ) : agg ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiTile label="Leads" value={fmtInt(agg.totalLeads)} delta={pctDelta(agg.totalLeads, aggPrior?.totalLeads ?? 0)} />
-          <KpiTile label="Calls Booked" value={fmtInt(agg.totalCalls)} delta={pctDelta(agg.totalCalls, aggPrior?.totalCalls ?? 0)} />
-          <KpiTile label="Shows" value={fmtInt(agg.showedCalls)} delta={pctDelta(agg.showedCalls, aggPrior?.showedCalls ?? 0)} />
-          <KpiTile label="Funded" value={fmtInt(agg.fundedInvestors)} delta={pctDelta(agg.fundedInvestors, aggPrior?.fundedInvestors ?? 0)} />
-          <KpiTile label="Ad Spend" value={fmtMoney(agg.totalAdSpend)} delta={pctDelta(agg.totalAdSpend, aggPrior?.totalAdSpend ?? 0)} invert />
-          <KpiTile label="Cost / Lead" value={fmtMoney(agg.costPerLead)} delta={pctDelta(agg.costPerLead, aggPrior?.costPerLead ?? 0)} invert />
-          <KpiTile label="Cost / Booked" value={fmtMoney(agg.costPerCall)} delta={pctDelta(agg.costPerCall, aggPrior?.costPerCall ?? 0)} invert />
-          <KpiTile label="Cost / Funded" value={fmtMoney(agg.costPerInvestor)} delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)} invert />
-        </div>
+        <>
+          {/* Hero row — what a CEO cares about */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <KpiTile
+              label="Funded Investors"
+              value={fmtInt(agg.fundedInvestors)}
+              sub={ratios ? `${fmtPct(ratios.leadToFund)} of leads` : undefined}
+              delta={pctDelta(agg.fundedInvestors, aggPrior?.fundedInvestors ?? 0)}
+              icon={Target}
+              hero
+              accent="gold"
+            />
+            <KpiTile
+              label="Cost per Funded"
+              value={fmtMoneyFull(agg.costPerInvestor)}
+              sub="Blended acquisition cost"
+              delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)}
+              icon={DollarSign}
+              hero
+              accent="emerald"
+              invert
+            />
+            <KpiTile
+              label="Total Ad Spend"
+              value={fmtMoneyFull(agg.totalAdSpend)}
+              sub={`${days}-day investment`}
+              delta={pctDelta(agg.totalAdSpend, aggPrior?.totalAdSpend ?? 0)}
+              icon={Activity}
+              hero
+              invert
+            />
+          </div>
+
+          {/* Conversion ribbon */}
+          {ratios && (
+            <Card className="p-4 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Conversion Funnel Rates</p>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Stage → Stage</p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <RatioPill label="Lead → Booked" value={fmtPct(ratios.leadToBook)} sub={`${fmtInt(agg.totalCalls)} of ${fmtInt(agg.totalLeads)}`} />
+                <RatioPill label="Booked → Showed" value={fmtPct(ratios.bookToShow)} sub={`${fmtInt(agg.showedCalls)} of ${fmtInt(agg.totalCalls)}`} />
+                <RatioPill label="Showed → Funded" value={fmtPct(ratios.showToFund)} sub={`${fmtInt(agg.fundedInvestors)} of ${fmtInt(agg.showedCalls)}`} />
+                <RatioPill label="Lead → Funded" value={fmtPct(ratios.leadToFund, 2)} sub="End-to-end conversion" />
+              </div>
+            </Card>
+          )}
+
+          {/* Secondary KPI grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <KpiTile label="Leads" value={fmtInt(agg.totalLeads)} delta={pctDelta(agg.totalLeads, aggPrior?.totalLeads ?? 0)} icon={Users} />
+            <KpiTile label="Calls Booked" value={fmtInt(agg.totalCalls)} delta={pctDelta(agg.totalCalls, aggPrior?.totalCalls ?? 0)} icon={PhoneCall} />
+            <KpiTile label="Shows" value={fmtInt(agg.showedCalls)} delta={pctDelta(agg.showedCalls, aggPrior?.showedCalls ?? 0)} icon={CalendarCheck} />
+            <KpiTile label="Cost / Lead" value={fmtMoney(agg.costPerLead)} delta={pctDelta(agg.costPerLead, aggPrior?.costPerLead ?? 0)} invert />
+            <KpiTile label="Cost / Booked" value={fmtMoney(agg.costPerCall)} delta={pctDelta(agg.costPerCall, aggPrior?.costPerCall ?? 0)} invert />
+          </div>
+        </>
       ) : (
         <Card className="p-6 rounded-2xl">
           <p className="text-sm text-muted-foreground">No data in the selected range.</p>
@@ -254,52 +400,65 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="p-4 lg:col-span-2 rounded-2xl">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold">Trend</h3>
-            <span className="text-xs text-muted-foreground">Leads · Spend · Funded</span>
+        <Card className="p-5 lg:col-span-2 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Daily Performance</p>
+              <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Trend Analysis</h3>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" />Leads</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: 'hsl(40 45% 55%)' }} />Spend</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />Funded</span>
+            </div>
           </div>
-          <div className="h-72">
+          <div className="h-80">
             {chartData.length === 0 ? (
               <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No daily rows</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
                       <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gradSpend" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0} />
+                      <stop offset="5%" stopColor="hsl(40 45% 55%)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(40 45% 55%)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" />
-                  <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-                  <Area type="monotone" dataKey="leads" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#gradLeads)" />
-                  <Area type="monotone" dataKey="spend" stroke="hsl(var(--muted-foreground))" strokeWidth={2} fill="url(#gradSpend)" />
-                  <Area type="monotone" dataKey="funded" stroke="hsl(var(--accent-foreground))" strokeWidth={2} fill="transparent" />
+                  <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" tickLine={false} axisLine={false} width={40} />
+                  <Tooltip
+                    contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12, boxShadow: '0 8px 24px hsl(0 0% 0% / 0.08)' }}
+                    cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+                  />
+                  <Area type="monotone" dataKey="leads" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#gradLeads)" />
+                  <Area type="monotone" dataKey="spend" stroke="hsl(40 45% 55%)" strokeWidth={2} fill="url(#gradSpend)" />
+                  <Area type="monotone" dataKey="funded" stroke="hsl(142 71% 45%)" strokeWidth={2.5} fill="transparent" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
           </div>
         </Card>
 
-        <Card className="p-4 rounded-2xl">
-          <h3 className="text-sm font-bold mb-3">Funnel</h3>
-          <div className="h-72">
+        <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+          <div className="mb-4">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Pipeline</p>
+            <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Conversion Funnel</h3>
+          </div>
+          <div className="h-80">
             {funnelData.length === 0 || funnelData.every((f) => !f.value) ? (
               <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={funnelData} layout="vertical" margin={{ top: 5, right: 24, left: 0, bottom: 0 }}>
+                <BarChart data={funnelData} layout="vertical" margin={{ top: 5, right: 40, left: 0, bottom: 0 }}>
                   <XAxis type="number" hide />
-                  <YAxis dataKey="stage" type="category" width={70} tick={{ fontSize: 12, fill: 'hsl(var(--foreground))' }} stroke="hsl(var(--border))" />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                  <YAxis dataKey="stage" type="category" width={70} tick={{ fontSize: 12, fill: 'hsl(var(--foreground))', fontWeight: 500 }} stroke="hsl(var(--border))" tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }} cursor={{ fill: 'hsl(var(--muted) / 0.4)' }} />
+                  <Bar dataKey="value" radius={[0, 8, 8, 0]} label={{ position: 'right', fill: 'hsl(var(--foreground))', fontSize: 11, fontWeight: 600 }}>
                     {funnelData.map((_, i) => (
                       <Cell key={i} fill={`hsl(var(--primary) / ${1 - i * 0.18})`} />
                     ))}
@@ -313,7 +472,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
       {/* Footer meta */}
       {(current.data?.sheetTitle || current.data?.fetchedAt) && (
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pt-2 border-t border-border/40">
           <span>
             {current.data?.sheetTitle ? `Source: ${current.data.sheetTitle}` : ''}
             {current.data?.rowCount ? ` · ${current.data.rowCount} days` : ''}
