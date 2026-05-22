@@ -7,6 +7,7 @@ import { useClients } from "@/hooks/useClients";
 import { AIStudioTab } from "./AIStudioTab";
 import { TaskBoardView } from "@/components/tasks/TaskBoardView";
 import { AgencyFeedbackPanel } from "./AgencyFeedbackPanel";
+import { AgencyActivityLog } from "./AgencyActivityLog";
 
 /**
  * Agency-level AI Studio. Same agentic capabilities as the per-client
@@ -35,7 +36,7 @@ export function AgencyAIStudioTab() {
     localStorage.setItem("agency-ai-studio:last-client", id);
   };
 
-  const [mode, setMode] = useState<"studio" | "tasks" | "feedback">("studio");
+  const [mode, setMode] = useState<"studio" | "tasks" | "feedback" | "activity">("studio");
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-9rem)]">
@@ -57,6 +58,7 @@ export function AgencyAIStudioTab() {
             <TabsTrigger value="studio" className="rounded-lg text-xs">Studio</TabsTrigger>
             <TabsTrigger value="tasks" className="rounded-lg text-xs">Task Board</TabsTrigger>
             <TabsTrigger value="feedback" className="rounded-lg text-xs">Feedback</TabsTrigger>
+            <TabsTrigger value="activity" className="rounded-lg text-xs">Activity</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="flex items-center gap-2">
@@ -82,8 +84,10 @@ export function AgencyAIStudioTab() {
             <AIStudioTab key={activeId} clientId={activeId} clientName={selected?.name || ""} />
           ) : mode === "tasks" ? (
             <TaskBoardView key={activeId} clientId={activeId} />
-          ) : (
+          ) : mode === "feedback" ? (
             <AgencyFeedbackPanel key={activeId} clientId={activeId} />
+          ) : (
+            <AgencyActivityLog key={activeId} clientId={activeId} />
           )
         ) : (
           <Card className="h-full grid place-items-center text-sm text-muted-foreground">
