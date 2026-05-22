@@ -118,6 +118,36 @@ async function readSheet(sheetId: string, range: string) {
   const data = await gFetch(`/google_sheets/v4/spreadsheets/${sheetId}/values/${range}`, GOOGLE_SHEETS_API_KEY, { method: "GET" });
   return { range: data.range, values: (data.values || []).slice(0, 200) };
 }
+async function listSheetTabs(sheetId: string) {
+  if (!GOOGLE_SHEETS_API_KEY) throw new Error("Google Sheets not connected");
+  const data = await gFetch(
+    `/google_sheets/v4/spreadsheets/${sheetId}?fields=sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))`,
+    GOOGLE_SHEETS_API_KEY,
+    { method: "GET" },
+  );
+  const tabs = (data.sheets || []).map((s: any) => ({
+    gid: s.properties?.sheetId,
+    title: s.properties?.title,
+    index: s.properties?.index,
+    rows: s.properties?.gridProperties?.rowCount,
+    cols: s.properties?.gridProperties?.columnCount,
+  }));
+  return { spreadsheet_id: sheetId, tab_count: tabs.length, tabs };
+}
+async function batchGetSheet(sheetId: string, ranges: string[]) {
+  if (!GOOGLE_SHEETS_API_KEY) throw new Error("Google Sheets not connected");
+  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
+  const data = await gFetch(
+    `/google_sheets/v4/spreadsheets/${sheetId}/values:batchGet?${qs}&valueRenderOption=FORMATTED_VALUE`,
+    GOOGLE_SHEETS_API_KEY,
+    { method: "GET" },
+  );
+  const valueRanges = (data.valueRanges || []).map((vr: any) => ({
+    range: vr.range,
+    values: (vr.values || []).slice(0, 200),
+  }));
+  return { value_ranges: valueRanges };
+}
 async function updateSheetRange(sheetId: string, range: string, values: any[][]) {
   if (!GOOGLE_SHEETS_API_KEY) throw new Error("Google Sheets not connected");
   await gFetch(`/google_sheets/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`, GOOGLE_SHEETS_API_KEY, {
@@ -604,7 +634,7 @@ async function planStoryboard(opts: {
   userId: string;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (5 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~5s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
+  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (8 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~8s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -630,7 +660,7 @@ async function planStoryboard(opts: {
     title: String(s.title || `Scene ${i + 1}`).slice(0, 120),
     image_prompt: String(s.image_prompt || "").slice(0, 1200),
     video_prompt: String(s.video_prompt || "").slice(0, 800),
-    duration: 5,
+    duration: 8,
   }));
   const ci = await supa.from("ai_studio_canvas_items").insert({
     conversation_id: opts.conversationId,
@@ -746,7 +776,7 @@ async function generateSceneVideo(opts: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       instances: [{ prompt: opts.videoPrompt, image: { bytesBase64Encoded: imgB64, mimeType: imgMime } }],
-      parameters: { aspectRatio: opts.aspectRatio, durationSeconds: 5, sampleCount: 1 },
+      parameters: { aspectRatio: opts.aspectRatio, durationSeconds: 8, sampleCount: 1 },
     }),
   });
   if (!startRes.ok) {
@@ -827,7 +857,9 @@ const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
   { type: "function", function: { name: "append_to_doc", description: "Append paragraphs to the end of the active Google Doc.", parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] } } },
   { type: "function", function: { name: "replace_doc_text", description: "Find and replace text in the active Google Doc.", parameters: { type: "object", properties: { find: { type: "string" }, replace: { type: "string" } }, required: ["find", "replace"] } } },
-  { type: "function", function: { name: "read_sheet", description: "Read a range from the active Google Sheet (e.g. 'Sheet1!A1:Z100').", parameters: { type: "object", properties: { range: { type: "string" } }, required: ["range"] } } },
+  { type: "function", function: { name: "list_sheet_tabs", description: "List every tab (worksheet) in the active Google Sheet with its title, gid, and size. ALWAYS call this FIRST when the user asks to audit, summarize, or analyze the sheet so you can iterate across every tab.", parameters: { type: "object", properties: {}, required: [] } } },
+  { type: "function", function: { name: "read_sheet", description: "Read a range from the active Google Sheet (e.g. 'Sheet1!A1:Z100'). Use the tab title from list_sheet_tabs. Wrap tab names with spaces in single quotes (e.g. 'My Tab'!A1:Z200).", parameters: { type: "object", properties: { range: { type: "string" } }, required: ["range"] } } },
+  { type: "function", function: { name: "batch_read_sheet", description: "Read multiple ranges across multiple tabs in one call. Pass an array of A1 ranges like ['Tab1!A1:Z200', 'Tab2!A1:Z200']. Use this to audit every tab efficiently after list_sheet_tabs.", parameters: { type: "object", properties: { ranges: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 25 } }, required: ["ranges"] } } },
   { type: "function", function: { name: "update_sheet_range", description: "Overwrite cells in the active Google Sheet at the given A1 range.", parameters: { type: "object", properties: { range: { type: "string" }, values: { type: "array", items: { type: "array", items: {} } } }, required: ["range", "values"] } } },
   { type: "function", function: { name: "append_sheet_row", description: "Append rows to the bottom of the active Google Sheet at the given A1 range.", parameters: { type: "object", properties: { range: { type: "string" }, values: { type: "array", items: { type: "array", items: {} } } }, required: ["range", "values"] } } },
   {
@@ -946,7 +978,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_scene_video",
-      description: "Animate a scene keyframe image into a video clip (5s, Veo 3.1). Call after generate_scene_image succeeded for the scene. This tool waits for Veo to finish (up to ~3 min) and returns the final mp4 URL.",
+      description: "Animate a scene keyframe image into an 8-SECOND video clip (Veo 3.1). Call only AFTER the user has approved the keyframes. This tool waits for Veo to finish (up to ~3 min) and returns the final mp4 URL.",
       parameters: {
         type: "object",
         properties: {
@@ -1001,13 +1033,19 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
+  "- SHEET AUDITING (agentic, Manus-style): When the user asks to audit, summarize, review, or analyze the Google Sheet, you MUST cover EVERY tab — never stop after one. Step 1: call list_sheet_tabs. Step 2: call batch_read_sheet with one range per tab (e.g. 'TabTitle!A1:Z200'). Step 3: if any tab returned data that needs deeper inspection, call read_sheet again on a wider range for that tab. Step 4: write a clear markdown report covering EVERY tab found (per-tab section + cross-tab insights, trends, anomalies, recommendations). Keep iterating tool calls until the audit is complete — don't ask the user to confirm mid-audit. Long-form findings (>400 words) should go in a create_text_artifact card; short summaries can stay in chat.",
+  "- DOC AUDITING: Same pattern for Google Docs — call read_doc, then produce a structured summary (key sections, action items, gaps) and drop any long-form deliverable on the canvas via create_text_artifact.",
   "- DOC PRECHECK: Every doc tool (read_doc, append_to_doc, replace_doc_text) auto-runs a connection test before executing. If a tool result contains `precheck_failed: true`, the operation was BLOCKED — do NOT retry the same tool. Instead, write a chat reply that surfaces the `error` field verbatim and asks the user how to proceed (e.g. tie a different doc, share the doc with the connector account, paste a session-override URL). Never silently ignore a precheck failure.",
   "- COPYWRITING / SCRIPTS: ALWAYS call create_text_artifact when the user asks you to write, draft, or generate ANY kind of script (VSL, caller, video script), ad copy, email, caption, landing page copy, outline, plan, or brief. Put the full body in the artifact (Markdown), not in your chat reply. Your chat reply must only be a 1–2 sentence summary like 'Drafted the 60s VSL script on the canvas.' Pass append_to_doc:true if the user said to put it in the doc.",
-  "- VIDEO / REEL / SCENE WORKFLOW (Manus-style, FULLY AUTOMATIC, NO APPROVALS):",
-  "  Step 1: Call plan_storyboard once with the user's brief.",
-  "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene in the storyboard (parallel calls).",
-  "  Step 3: Once all images return, in ONE assistant turn emit ONE generate_scene_video tool_call FOR EVERY scene using its returned image_url (parallel calls).",
-  "  Step 4: Write a 1-2 line completion summary. NEVER ask the user before generating videos. NEVER do scenes one at a time.",
+  "- VIDEO / REEL / SCENE WORKFLOW (Manus-style, APPROVAL GATE BEFORE VIDEO):",
+  "  • Each scene = ONE keyframe image animated into an 8-SECOND Veo 3.1 clip. Total video length = scene_count × 8s.",
+  "  • Map the user's target duration to scene_count: 8s→1, 16s→2, 24s→3, 32s→4, 40s→5, 48s→6, 56s→7, 64s→8. If the user doesn't specify a duration, default to 4 scenes (~32s). The user can override by saying 'one image only', 'three scenes', etc.",
+  "  Step 1: Call plan_storyboard with the computed scene_count.",
+  "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene (parallel). Use gpt-image or nano-banana-style cinematic keyframes via generate_scene_image (the tool already picks the right model).",
+  "  Step 3: STOP. Write a short reply asking the user to review the keyframes on the canvas and reply 'approved' (or request edits). Do NOT call generate_scene_video yet.",
+  "  Step 4: ONLY after the user explicitly approves (or says 'go', 'ship it', 'make the videos', etc.), emit ONE generate_scene_video tool_call FOR EVERY scene in parallel using each scene's image_url.",
+  "  Step 5: Write a 1–2 line completion summary.",
+  "  If the user edits a keyframe via edit_static_ad before approval, use the edited image_url when generating that scene's video.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
   "",
   "COMPLIANCE:",
@@ -1561,6 +1599,14 @@ Deno.serve(async (req) => {
                   }).select("id, payload, kind, created_at").single();
                   if (ci.data) send({ type: "canvas_item", item: ci.data });
                 }
+              } else if (name === "list_sheet_tabs") {
+                if (!sheetId) throw new Error("No active Google Sheet URL provided.");
+                result = await listSheetTabs(sheetId);
+              } else if (name === "batch_read_sheet") {
+                if (!sheetId) throw new Error("No active Google Sheet URL provided.");
+                const ranges = Array.isArray(args.ranges) ? args.ranges.slice(0, 25) : [];
+                if (!ranges.length) throw new Error("batch_read_sheet requires non-empty ranges array.");
+                result = await batchGetSheet(sheetId, ranges);
               } else if (name === "read_sheet") {
                 if (!sheetId) throw new Error("No active Google Sheet URL provided.");
                 result = await readSheet(sheetId, args.range);

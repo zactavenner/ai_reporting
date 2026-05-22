@@ -100,9 +100,9 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
 const SUGGESTIONS = [
   { icon: <ImageIcon className="h-4 w-4" />, label: "Generate a 1:1 ad creative for our offer" },
   { icon: <Wand2 className="h-4 w-4" />, label: "Generate 4 Instagram 1:1 variations of our offer" },
-  { icon: <Film className="h-4 w-4" />, label: "Build a 4-scene 9:16 video reel for our offer (storyboard → keyframes → Veo 3.1 videos, fully auto)" },
+  { icon: <Film className="h-4 w-4" />, label: "Build a 32s 9:16 reel (4 keyframes → wait for my approval → Veo 3.1, 8s each)" },
   { icon: <FileText className="h-4 w-4" />, label: "Summarize the master doc" },
-  { icon: <TableIcon className="h-4 w-4" />, label: "Read the first 20 rows of the sheet" },
+  { icon: <TableIcon className="h-4 w-4" />, label: "Audit EVERY tab in the sheet and give me a performance report" },
 ];
 
 // Defensive: strip any image markdown / image URLs from streamed assistant text
