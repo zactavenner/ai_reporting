@@ -655,30 +655,48 @@ async function generateSceneImage(opts: {
   clientId: string | null;
   conversationId: string;
   userId: string;
+  model?: "nano-banana" | "openai" | null;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
   const fullPrompt = `Create a single cinematic keyframe image for a video scene.\n\n${opts.prompt}\n\nAspect ratio: ${opts.aspectRatio}. Photoreal cinematic look. No text overlays or watermarks.`;
 
   let base64Image = "", mime = "image/png", modelUsed = "";
-  if (GEMINI_API_KEY) {
-    modelUsed = "gemini-3-pro-image-preview";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-        }),
-      },
-    );
+  const useOpenAI = opts.model === "openai";
+
+  if (useOpenAI) {
+    let agencyOpenAi: string | null = null;
+    try {
+      const { data: a } = await supa.from("agency_settings").select("openai_api_key").limit(1).maybeSingle();
+      const v = (a as any)?.openai_api_key;
+      if (typeof v === "string" && v.trim()) agencyOpenAi = v.trim();
+    } catch (_) { /* ignore */ }
+    const openaiKey = agencyOpenAi || OPENAI_API_KEY_ENV || null;
+    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1536x1024", "9:16": "1024x1536" };
+    const sz = sizeMap[opts.aspectRatio] || "1024x1024";
+    if (!openaiKey && !OPENROUTER_API_KEY) {
+      throw new Error("GPT Image 2 requires an OpenAI API key (Agency Settings → API Keys).");
+    }
+    modelUsed = openaiKey ? "openai/gpt-image-2 (direct)" : "openai/gpt-image-2 (via openrouter)";
+    const res = openaiKey
+      ? await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-image-2", prompt: fullPrompt, size: sz, n: 1 }),
+        })
+      : await fetch("https://openrouter.ai/api/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+          body: JSON.stringify({ model: "openai/gpt-image-2", prompt: fullPrompt, size: sz, n: 1, response_format: "b64_json" }),
+        });
     if (!res.ok) throw new Error(`Scene image [${res.status}]: ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();
-    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
-    if (!imagePart?.inlineData?.data) throw new Error("No image in scene response");
-    base64Image = imagePart.inlineData.data;
-    mime = imagePart.inlineData.mimeType || "image/png";
+    const b64 = data?.data?.[0]?.b64_json;
+    const url = data?.data?.[0]?.url;
+    if (b64) { base64Image = b64; mime = "image/png"; }
+    else if (url) {
+      const r = await fetch(url); base64Image = arrayBufferToBase64(await r.arrayBuffer());
+      mime = r.headers.get("content-type") || "image/png";
+    } else throw new Error("OpenAI returned no scene image data");
   } else {
     modelUsed = "google/gemini-3.1-flash-image-preview";
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
