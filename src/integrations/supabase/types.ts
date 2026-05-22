@@ -916,25 +916,37 @@ export type Database = {
         Row: {
           conversation_id: string
           created_at: string
+          feedback_notes: string | null
+          feedback_status: string
           id: string
           kind: string
           payload: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
           user_id: string
         }
         Insert: {
           conversation_id: string
           created_at?: string
+          feedback_notes?: string | null
+          feedback_status?: string
           id?: string
           kind: string
           payload?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id: string
         }
         Update: {
           conversation_id?: string
           created_at?: string
+          feedback_notes?: string | null
+          feedback_status?: string
           id?: string
           kind?: string
           payload?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id?: string
         }
         Relationships: [
