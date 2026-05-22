@@ -129,8 +129,8 @@ function KpiTile({ label, value, sub, delta, invert, icon: Icon, hero, accent = 
           <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{label}</p>
           <p
             className={cn(
-              'mt-2 font-semibold tracking-tight text-foreground tabular-nums',
-              hero ? 'text-4xl' : 'text-2xl',
+              'mt-2 font-semibold tracking-tight text-foreground tabular-nums break-words leading-tight',
+              hero ? 'text-2xl xl:text-3xl' : 'text-2xl',
             )}
             style={hero ? { fontFamily: 'Playfair Display, Georgia, serif' } : undefined}
           >
@@ -326,7 +326,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <Button size="sm" variant="ghost" onClick={() => { current.refetch(); prior.refetch(); }} disabled={current.isFetching}>
             <RefreshCw className={cn('h-3 w-3', current.isFetching && 'animate-spin')} />
           </Button>
-          {!isPublicView && sheetUrl && (
+          {sheetUrl && (
             <a href={sheetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">
               <ExternalLink className="h-3 w-3" /> Open sheet
             </a>
