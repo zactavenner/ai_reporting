@@ -164,6 +164,9 @@ function stripImageMarkup(t: string) {
 export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: agencySettings } = useAgencySettings();
   const { data: clientSettings } = useClientSettings(clientId);
+  const { data: client } = useClient(clientId);
+  const brandColors: string[] = Array.isArray(client?.brand_colors) ? (client!.brand_colors as string[]) : [];
+  const brandFonts: string[] = Array.isArray(client?.brand_fonts) ? (client!.brand_fonts as string[]) : [];
   const updateClientSettings = useUpdateClientSettings();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
