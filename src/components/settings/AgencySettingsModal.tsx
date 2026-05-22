@@ -321,7 +321,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
                   OpenAI API Key
                 </h4>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Your OpenAI API key for GPT-4 and other models. Get one at{' '}
+                  Your OpenAI API key — used for <strong>GPT Image generation</strong> (gpt-image-1) inside AI Studio and other OpenAI features. Get one at{' '}
                   <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-primary underline">
                     platform.openai.com
                   </a>

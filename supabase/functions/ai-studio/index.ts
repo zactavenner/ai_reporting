@@ -10,6 +10,7 @@ const corsHeaders = {
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+const OPENAI_API_KEY_ENV = Deno.env.get("OPENAI_API_KEY");
 const GOOGLE_DOCS_API_KEY = Deno.env.get("GOOGLE_DOCS_API_KEY");
 const GOOGLE_SHEETS_API_KEY = Deno.env.get("GOOGLE_SHEETS_API_KEY");
 const GATEWAY = "https://connector-gateway.lovable.dev";
@@ -268,22 +269,47 @@ async function generateStaticAd(opts: {
       : (opts.quality === "pro" ? "gemini-pro" : "nano-banana");
 
   if (effectiveModel === "openai") {
-    if (!OPENROUTER_API_KEY) throw new Error("OpenRouter API key not configured for OpenAI image model");
-    modelUsed = "openai/gpt-image-1 (via openrouter)";
-    // OpenRouter exposes OpenAI's image gen via /images/generations passthrough
-    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1792x1024", "9:16": "1024x1792", "4:5": "1024x1280" };
-    const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
-      body: JSON.stringify({
-        model: "openai/gpt-image-1",
-        prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
-        size: sizeMap[aspect] || "1024x1024",
-        n: 1,
-        response_format: "b64_json",
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenRouter image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    // Prefer the agency-stored OpenAI API key (set in Agency Settings → API Keys).
+    // Fall back to env, then OpenRouter passthrough.
+    let agencyOpenAi: string | null = null;
+    try {
+      const { data: a } = await supa.from("agency_settings").select("openai_api_key").limit(1).maybeSingle();
+      const v = (a as any)?.openai_api_key;
+      if (typeof v === "string" && v.trim()) agencyOpenAi = v.trim();
+    } catch (_) { /* ignore */ }
+    const openaiKey = agencyOpenAi || OPENAI_API_KEY_ENV || null;
+    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1536x1024", "9:16": "1024x1536", "4:5": "1024x1280", "3:2": "1536x1024", "2:3": "1024x1536" };
+    const sz = sizeMap[aspect] || "1024x1024";
+    let res: Response;
+    if (openaiKey) {
+      modelUsed = "openai/gpt-image-1 (direct)";
+      res = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-image-1",
+          prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
+          size: sz,
+          n: 1,
+        }),
+      });
+    } else if (OPENROUTER_API_KEY) {
+      modelUsed = "openai/gpt-image-1 (via openrouter)";
+      res = await fetch("https://openrouter.ai/api/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+        body: JSON.stringify({
+          model: "openai/gpt-image-1",
+          prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
+          size: sz,
+          n: 1,
+          response_format: "b64_json",
+        }),
+      });
+    } else {
+      throw new Error("No OpenAI API key configured. Add one in Agency Settings → API Keys to enable GPT Image.");
+    }
+    if (!res.ok) throw new Error(`OpenAI image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
     const data = await res.json();
     const b64 = data?.data?.[0]?.b64_json;
     const url = data?.data?.[0]?.url;
@@ -291,7 +317,7 @@ async function generateStaticAd(opts: {
     else if (url) {
       const r = await fetch(url); const buf = await r.arrayBuffer();
       base64Image = arrayBufferToBase64(buf); mime = r.headers.get("content-type") || "image/png";
-    } else throw new Error("OpenRouter returned no image data");
+    } else throw new Error("OpenAI returned no image data");
   } else if (effectiveModel === "gemini-pro" && GEMINI_API_KEY) {
     // Direct Gemini 3 Pro Image Preview (Ads Generator 5.0 pipeline)
     const parts: any[] = [{ text: fullPrompt }];
@@ -862,6 +888,7 @@ const tools = [
   { type: "function", function: { name: "batch_read_sheet", description: "Read multiple ranges across multiple tabs in one call. Pass an array of A1 ranges like ['Tab1!A1:Z200', 'Tab2!A1:Z200']. Use this to audit every tab efficiently after list_sheet_tabs.", parameters: { type: "object", properties: { ranges: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 25 } }, required: ["ranges"] } } },
   { type: "function", function: { name: "update_sheet_range", description: "Overwrite cells in the active Google Sheet at the given A1 range.", parameters: { type: "object", properties: { range: { type: "string" }, values: { type: "array", items: { type: "array", items: {} } } }, required: ["range", "values"] } } },
   { type: "function", function: { name: "append_sheet_row", description: "Append rows to the bottom of the active Google Sheet at the given A1 range.", parameters: { type: "object", properties: { range: { type: "string" }, values: { type: "array", items: { type: "array", items: {} } } }, required: ["range", "values"] } } },
+  { type: "function", function: { name: "check_lead_quality", description: "Scan this client's recent leads for spam patterns and name/email mismatches. Returns counts and flagged samples. Spam heuristics: emails on disposable domains (armyspy, teleworm, mailinator, dayrep, einrot, jourrapide, fleckens, rhyta, cuvox, gustr, superrito, etc), random-looking emails (long runs of consonants or digits), name/email mismatch (name tokens absent from local part of email). Call this whenever the user asks about lead quality, spam, fake leads, or wants to audit leads. Always pass results back to the user with the counts in the chat reply.", parameters: { type: "object", properties: { window_days: { type: "number", description: "Days back to scan (default 30, max 365)." } }, required: [] } } },
   {
     type: "function",
     function: {
@@ -1041,6 +1068,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
   "- SHEET AUDITING (agentic, Manus-style): When the user asks to audit, summarize, review, or analyze the Google Sheet, you MUST cover EVERY tab — never stop after one. Step 1: call list_sheet_tabs. Step 2: call batch_read_sheet with one range per tab (e.g. 'TabTitle!A1:Z200'). Step 3: if any tab returned data that needs deeper inspection, call read_sheet again on a wider range for that tab. Step 4: write a clear markdown report covering EVERY tab found (per-tab section + cross-tab insights, trends, anomalies, recommendations). Keep iterating tool calls until the audit is complete — don't ask the user to confirm mid-audit. Long-form findings (>400 words) should go in a create_text_artifact card; short summaries can stay in chat.",
   "- DOC AUDITING: Same pattern for Google Docs — call read_doc, then produce a structured summary (key sections, action items, gaps) and drop any long-form deliverable on the canvas via create_text_artifact.",
+  "- LEAD QUALITY: When the user asks anything about lead quality, spam leads, fake leads, bad data, name/email mismatches, or wants an audit of leads — call check_lead_quality (default 30 days). In your chat reply, state the spam count and mismatch count clearly. If spam_count > 0, flag it in red language: 'Detected N spam leads (armyspy/teleworm/random emails) in the last X days — review the flagged samples in the inline card.' Always be explicit about the numbers.",
   "- DOC PRECHECK: Every doc tool (read_doc, append_to_doc, replace_doc_text) auto-runs a connection test before executing. If a tool result contains `precheck_failed: true`, the operation was BLOCKED — do NOT retry the same tool. Instead, write a chat reply that surfaces the `error` field verbatim and asks the user how to proceed (e.g. tie a different doc, share the doc with the connector account, paste a session-override URL). Never silently ignore a precheck failure.",
   "- COPYWRITING / SCRIPTS: ALWAYS call create_text_artifact when the user asks you to write, draft, or generate ANY kind of script (VSL, caller, video script), ad copy, email, caption, landing page copy, outline, plan, or brief. Put the full body in the artifact (Markdown), not in your chat reply. Your chat reply must only be a 1–2 sentence summary like 'Drafted the 60s VSL script on the canvas.' Pass append_to_doc:true if the user said to put it in the doc.",
   "- VIDEO / REEL / SCENE WORKFLOW (fully agentic, NO approval gate):",
@@ -1631,6 +1659,58 @@ Deno.serve(async (req) => {
                   payload: { action: "append", range: args.range, rows: (args.values || []).length, sheet_url: sheetUrl },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
+              } else if (name === "check_lead_quality") {
+                const windowDays = Math.min(365, Math.max(1, Number(args.window_days) || 30));
+                const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
+                const { data: leads, error: lqErr } = await supa
+                  .from("leads")
+                  .select("name, email, phone, is_spam, created_at")
+                  .eq("client_id", clientId)
+                  .gte("created_at", since)
+                  .limit(5000);
+                if (lqErr) throw new Error(`leads query failed: ${lqErr.message}`);
+                const SPAM_DOMAINS = ["armyspy.com","teleworm.us","mailinator.com","dayrep.com","einrot.com","jourrapide.com","fleckens.hu","rhyta.com","cuvox.de","gustr.com","superrito.com","guerrillamail.com","10minutemail.com","tempmail","trashmail","yopmail.com"];
+                const isRandomLocal = (local: string) => {
+                  if (!local) return false;
+                  if (local.length >= 14 && /^[a-z0-9]+$/i.test(local) && !/[aeiou]{1}/i.test(local)) return true;
+                  if (/\d{6,}/.test(local)) return true;
+                  if (/([bcdfghjklmnpqrstvwxz]{6,})/i.test(local)) return true;
+                  return false;
+                };
+                let spamCount = 0;
+                let mismatchCount = 0;
+                const samples: any[] = [];
+                for (const l of leads || []) {
+                  const email = String((l as any).email || "").toLowerCase().trim();
+                  const name = String((l as any).name || "").trim();
+                  if (!email) continue;
+                  const [local, domain] = email.split("@");
+                  let reason: string | null = null;
+                  if (domain && SPAM_DOMAINS.some(d => domain.includes(d))) reason = "spam_domain";
+                  else if (local && isRandomLocal(local)) reason = "random_email";
+                  if (reason) {
+                    spamCount++;
+                    if (samples.length < 25) samples.push({ name, email, reason });
+                    continue;
+                  }
+                  if (name && local) {
+                    const tokens = name.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
+                    const lp = local.toLowerCase();
+                    const matched = tokens.some(t => lp.includes(t.slice(0, Math.min(4, t.length))));
+                    if (tokens.length > 0 && !matched) {
+                      mismatchCount++;
+                      if (samples.length < 25) samples.push({ name, email, reason: "name_email_mismatch" });
+                    }
+                  }
+                }
+                result = {
+                  ok: true,
+                  window_days: windowDays,
+                  total_leads: (leads || []).length,
+                  spam_count: spamCount,
+                  email_name_mismatch: mismatchCount,
+                  samples,
+                };
               } else if (name === "generate_static_ad") {
                 const img = await generateStaticAd({
                   prompt: args.prompt,

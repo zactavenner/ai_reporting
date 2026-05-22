@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,6 +66,9 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
       </div>
     );
   }
+  // Surface lead-quality tool results as a prominent inline alert
+  const lqTool = (m.tools || []).find((t: any) => t.name === "check_lead_quality" && t.result && !t.result.error);
+  const lq = lqTool?.result;
   return (
     <div className="text-sm text-foreground leading-relaxed">
       {m.tools && m.tools.length > 0 && (
@@ -84,9 +87,52 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
           ))}
         </div>
       )}
+      {lq && (
+        <div className="mb-3 rounded-xl border border-border/60 bg-background/60 backdrop-blur p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <ShieldAlert className="h-3.5 w-3.5 text-rose-500" />
+            Lead quality scan · last {lq.window_days || 30}d
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            <Badge variant="secondary">Total: {lq.total_leads}</Badge>
+            {lq.spam_count > 0 && (
+              <Badge className="bg-rose-500/15 text-rose-600 border border-rose-500/30 animate-pulse">
+                Spam patterns: {lq.spam_count}
+              </Badge>
+            )}
+            {lq.email_name_mismatch > 0 && (
+              <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30">
+                Name⇆email mismatch: {lq.email_name_mismatch}
+              </Badge>
+            )}
+            {lq.spam_count === 0 && lq.email_name_mismatch === 0 && (
+              <Badge className="bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">All clean</Badge>
+            )}
+          </div>
+          {Array.isArray(lq.samples) && lq.samples.length > 0 && (
+            <details className="text-[11px] text-muted-foreground">
+              <summary className="cursor-pointer hover:text-foreground">View {lq.samples.length} flagged samples</summary>
+              <ul className="mt-1 space-y-0.5 max-h-40 overflow-y-auto pl-3">
+                {lq.samples.slice(0, 25).map((s: any, i: number) => (
+                  <li key={i} className="font-mono truncate">
+                    <span className="text-rose-500">[{s.reason}]</span> {s.name || "(no name)"} · {s.email}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
       {m.content ? (
         <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-4 prose-headings:mb-2">
           <ReactMarkdown>{m.content}</ReactMarkdown>
+          {isStreaming && (
+            <span className="inline-flex items-center gap-1 ml-1 text-muted-foreground align-middle">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse [animation-delay:120ms]" />
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/40 animate-pulse [animation-delay:240ms]" />
+            </span>
+          )}
         </div>
       ) : isStreaming ? (
         <span className="inline-flex items-center gap-1 text-muted-foreground">
@@ -103,6 +149,7 @@ const SUGGESTIONS = [
   { icon: <Film className="h-4 w-4" />, label: "Build a 32s 9:16 reel (4 keyframes → wait for my approval → Veo 3.1, 8s each)" },
   { icon: <FileText className="h-4 w-4" />, label: "Summarize the master doc" },
   { icon: <TableIcon className="h-4 w-4" />, label: "Audit EVERY tab in the sheet and give me a performance report" },
+  { icon: <ShieldAlert className="h-4 w-4" />, label: "Scan leads for spam patterns (armyspy, teleworm, name/email mismatch)" },
 ];
 
 // Defensive: strip any image markdown / image URLs from streamed assistant text
@@ -247,9 +294,35 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     }
   }, [clientSettings, hydrated, docUrl, sheetUrl, clientDocUrl]);
 
+  // Auto-scroll: instant follow during streaming so the user always sees the
+  // newest tokens. Scroll the inner Radix viewport (ScrollArea wraps a viewport).
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const root = scrollRef.current as HTMLElement | null;
+    if (!root) return;
+    const viewport = root.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]") || root;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: loading ? "auto" : "smooth" });
   }, [messages, loading]);
+
+  // Rough per-model usage estimate for this client's conversation.
+  // We approximate tokens from char counts and price using public-ish per-1M rates.
+  const usageStats = (() => {
+    const RATES: Record<string, { in: number; out: number }> = {
+      "google/gemini-2.5-pro": { in: 1.25, out: 5 },
+      "google/gemini-3-flash-preview": { in: 0.3, out: 2.5 },
+      "openai/gpt-5": { in: 1.25, out: 10 },
+      "openai/gpt-5-mini": { in: 0.25, out: 2 },
+    };
+    const r = RATES[chatModel] || { in: 1, out: 5 };
+    let inChars = 0, outChars = 0;
+    for (const m of messages) {
+      if (m.role === "user") inChars += (m.content || "").length;
+      else outChars += (m.content || "").length;
+    }
+    const inTok = Math.round(inChars / 4);
+    const outTok = Math.round(outChars / 4);
+    const cost = (inTok / 1_000_000) * r.in + (outTok / 1_000_000) * r.out;
+    return { inTok, outTok, cost, model: chatModel };
+  })();
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
@@ -595,6 +668,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
               );
             })()}
+            {/* Cost analysis based on model + usage for this client/conversation */}
+            {messages.length > 0 && (
+              <div className="mb-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                <DollarSign className="h-3 w-3" />
+                <span className="tabular-nums">
+                  ~${usageStats.cost.toFixed(4)} this convo
+                </span>
+                <span className="text-muted-foreground/60">·</span>
+                <span className="tabular-nums">
+                  in {usageStats.inTok.toLocaleString()} · out {usageStats.outTok.toLocaleString()} tok
+                </span>
+                <span className="text-muted-foreground/60">·</span>
+                <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{chatModel.split("/").pop()}</Badge>
+              </div>
+            )}
             <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
               <Textarea
                 value={input}
