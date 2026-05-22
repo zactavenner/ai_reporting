@@ -705,6 +705,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
         clients={clients}
         defaultClientId={clientId}
         isPublicView={isPublicView}
+        defaultStage={createTaskStage}
       />
  
        <BulkActionBar
