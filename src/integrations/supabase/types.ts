@@ -2756,6 +2756,57 @@ export type Database = {
           },
         ]
       }
+      client_onboarding_tasks: {
+        Row: {
+          category: string
+          client_id: string
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          client_id: string
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          client_id?: string
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_onboarding_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_onboarding_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_pipelines: {
         Row: {
           client_id: string
