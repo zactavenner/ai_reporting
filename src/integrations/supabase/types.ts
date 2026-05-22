@@ -9270,6 +9270,16 @@ export type Database = {
       }
     }
     Functions: {
+      find_unenriched_leads: {
+        Args: { p_client_id: string; p_limit?: number }
+        Returns: {
+          email: string
+          external_id: string
+          id: string
+          name: string
+          phone: string
+        }[]
+      }
       generate_client_slug: { Args: { client_name: string }; Returns: string }
       get_api_usage_counts: {
         Args: { p_key_index: number; p_service: string }
