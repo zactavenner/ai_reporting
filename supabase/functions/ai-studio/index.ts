@@ -1593,6 +1593,14 @@ Deno.serve(async (req) => {
                   }).select("id, payload, kind, created_at").single();
                   if (ci.data) send({ type: "canvas_item", item: ci.data });
                 }
+              } else if (name === "list_sheet_tabs") {
+                if (!sheetId) throw new Error("No active Google Sheet URL provided.");
+                result = await listSheetTabs(sheetId);
+              } else if (name === "batch_read_sheet") {
+                if (!sheetId) throw new Error("No active Google Sheet URL provided.");
+                const ranges = Array.isArray(args.ranges) ? args.ranges.slice(0, 25) : [];
+                if (!ranges.length) throw new Error("batch_read_sheet requires non-empty ranges array.");
+                result = await batchGetSheet(sheetId, ranges);
               } else if (name === "read_sheet") {
                 if (!sheetId) throw new Error("No active Google Sheet URL provided.");
                 result = await readSheet(sheetId, args.range);
