@@ -15,6 +15,8 @@ serve(async (req) => {
   try {
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
     const perClient: number = Math.min(Math.max(Number(body.per_client) || 50, 1), 200);
+    const newOnly: boolean = body.new_only === true;
+    const sinceHours: number = Math.max(Number(body.since_hours) || 24, 1);
 
     const supabaseUrl = Deno.env.get('ORIGINAL_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('ORIGINAL_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -47,26 +49,40 @@ serve(async (req) => {
     const results: any[] = [];
     for (const c of eligible) {
       try {
-        // Find leads missing enrichment for this client.
-        const { data: missing, error: mErr } = await supabase.rpc('find_unenriched_leads', {
-          p_client_id: c.id,
-          p_limit: perClient,
-        });
         let leads: any[] = [];
-        if (mErr) {
-          // Fallback: anti-join client-side using two queries
+        if (newOnly) {
+          // Daily mode: only consider leads created within the last `sinceHours`
+          const sinceIso = new Date(Date.now() - sinceHours * 3600_000).toISOString();
           const { data: enrichedRows } = await supabase
             .from('lead_enrichment').select('external_id').eq('client_id', c.id).limit(100000);
           const enriched = new Set((enrichedRows || []).map(e => e.external_id));
           const { data: leadRows } = await supabase
             .from('leads')
-            .select('id, external_id, name, email, phone')
+            .select('id, external_id, name, email, phone, created_at')
             .eq('client_id', c.id)
+            .gte('created_at', sinceIso)
             .order('created_at', { ascending: false })
-            .limit(perClient * 4);
+            .limit(perClient * 2);
           leads = (leadRows || []).filter(l => l.external_id && !enriched.has(l.external_id)).slice(0, perClient);
         } else {
-          leads = missing || [];
+          const { data: missing, error: mErr } = await supabase.rpc('find_unenriched_leads', {
+            p_client_id: c.id,
+            p_limit: perClient,
+          });
+          if (mErr) {
+            const { data: enrichedRows } = await supabase
+              .from('lead_enrichment').select('external_id').eq('client_id', c.id).limit(100000);
+            const enriched = new Set((enrichedRows || []).map(e => e.external_id));
+            const { data: leadRows } = await supabase
+              .from('leads')
+              .select('id, external_id, name, email, phone')
+              .eq('client_id', c.id)
+              .order('created_at', { ascending: false })
+              .limit(perClient * 4);
+            leads = (leadRows || []).filter(l => l.external_id && !enriched.has(l.external_id)).slice(0, perClient);
+          } else {
+            leads = missing || [];
+          }
         }
 
         if (leads.length === 0) {
