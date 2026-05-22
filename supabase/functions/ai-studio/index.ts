@@ -1323,6 +1323,9 @@ Deno.serve(async (req) => {
         includeDisclaimer: /invest|fund|capital|return/i.test(c.offer_description || ""),
         disclaimerText: "Investing involves risk including loss of principal. Targeted returns are not guaranteed. Past performance does not guarantee future results.",
       };
+      // Default to STRICT brand adherence whenever the client has brand colors saved.
+      // The Company Info tab is the source of truth — generations must default to it.
+      brandContext.strictBrandAdherence = (brandContext.brandColors?.length || 0) > 0;
       brandSummary = `Client: ${c.name}. Brand colors: ${(brandContext.brandColors || []).join(", ") || "n/a"}. Brand fonts: ${(brandContext.brandFonts || []).join(", ") || "n/a"}. Offer: ${(c.offer_description || "n/a").slice(0, 200)}`;
       clientDocUrl = (c as any).google_doc_url || null;
     }
