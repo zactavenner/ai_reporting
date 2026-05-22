@@ -7,6 +7,10 @@ import { AdSpendDrillDownModal } from '@/components/drilldown/AdSpendDrillDownMo
 import { FundedInvestorsDrillDownModal } from '@/components/drilldown/FundedInvestorsDrillDownModal';
 import { toast } from 'sonner';
 import { VoiceRecordButton } from '@/components/voice/VoiceRecordButton';
+import { PendingTasksReview } from '@/components/meetings/PendingTasksReview';
+import { usePendingMeetingTasks } from '@/hooks/useMeetings';
+import { useClients } from '@/hooks/useClients';
+import { ClipboardCheck } from 'lucide-react';
 import { ActivityPanel } from '@/components/activity/ActivityPanel';
 import { ActivityTabView } from '@/components/activity/ActivityTabView';
 import { Activity as ActivityIcon } from 'lucide-react';
@@ -304,6 +308,7 @@ export default function ClientDetail() {
             )}
             <AISheetSummaryButton clientId={client.id} clientName={client.name} />
             <VoiceRecordButton clientId={client.id} clientName={client.name} isPublicView={false} />
+            <PendingTasksHeaderButton clientId={client.id} />
             <ThemeToggle />
           </div>
         </div>
