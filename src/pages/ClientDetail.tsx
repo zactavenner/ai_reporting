@@ -430,13 +430,6 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
-          {/* ─── ONBOARDING INFO TAB ─── */}
-          <TabsContent value="onboarding-info" className="space-y-6">
-            <SectionErrorBoundary sectionName="Onboarding Info">
-              <OnboardingChecklist clientId={clientId} clientType={client?.description} />
-            </SectionErrorBoundary>
-          </TabsContent>
-
           {/* ─── COMPANY INFO TAB ─── */}
           <TabsContent value="company-info" className="space-y-6">
             <SectionErrorBoundary sectionName="Company Info">
@@ -448,6 +441,18 @@ export default function ClientDetail() {
                   </p>
                 </div>
                 <BrandGuideSection client={client} />
+                <div className="mt-10 pt-8 border-t border-border">
+                  <div className="mb-4">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <CheckSquare className="h-4 w-4 text-primary" />
+                      Onboarding Info
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Onboarding checklist and required intake details for this client.
+                    </p>
+                  </div>
+                  <OnboardingChecklist clientId={clientId} clientType={client?.description} />
+                </div>
               </div>
             </SectionErrorBoundary>
           </TabsContent>
