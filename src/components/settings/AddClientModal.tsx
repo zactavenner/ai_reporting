@@ -311,6 +311,57 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
               )}
             />
 
+            {/* Client Type */}
+            <FormField
+              control={form.control}
+              name="client_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-semibold">Client Type *</FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                    >
+                      <label
+                        htmlFor="client-type-standard"
+                        className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                          field.value === 'standard' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'
+                        }`}
+                      >
+                        <RadioGroupItem value="standard" id="client-type-standard" className="mt-0.5" />
+                        <div>
+                          <div className="text-sm font-medium">Standard Client</div>
+                          <div className="text-xs text-muted-foreground">
+                            General agency onboarding (intake → ads → funnel → launch)
+                          </div>
+                        </div>
+                      </label>
+                      <label
+                        htmlFor="client-type-capital"
+                        className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                          field.value === 'capital' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'
+                        }`}
+                      >
+                        <RadioGroupItem value="capital" id="client-type-capital" className="mt-0.5" />
+                        <div>
+                          <div className="text-sm font-medium">Capital Raising</div>
+                          <div className="text-xs text-muted-foreground">
+                            Accredited capital SOP — compliance, PPM, investor pipeline
+                          </div>
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormDescription>
+                    Onboarding checklist will auto-populate based on this choice.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             {/* Description */}
             <FormField
               control={form.control}
