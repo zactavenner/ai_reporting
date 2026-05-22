@@ -254,6 +254,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     { id: '90d', label: 'Last 90d' },
     { id: 'tm', label: 'This month' },
     { id: 'lm', label: 'Last month' },
+    { id: 'ty', label: 'This year' },
+    { id: 'ly', label: 'Last year' },
   ];
 
   return (
