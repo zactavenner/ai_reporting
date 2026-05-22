@@ -83,6 +83,11 @@ const navStructure = [
     icon: Sparkles,
   },
   {
+    title: 'AI Studio',
+    value: 'ai-studio',
+    icon: Bot,
+  },
+  {
     title: 'Reporting',
     value: 'reporting',
     icon: BarChart3,
