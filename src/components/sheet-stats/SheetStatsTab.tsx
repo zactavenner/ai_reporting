@@ -46,11 +46,12 @@ function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } 
   return { sheet_id: idMatch[1], gid: gidMatch?.[1] };
 }
 
-type Preset = '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'ly' | 'custom';
+type Preset = 'y' | '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'ly' | 'custom';
 
 function presetRange(p: Preset): { from: Date; to: Date } {
   const today = new Date();
   switch (p) {
+    case 'y': { const y = subDays(today, 1); return { from: y, to: y }; }
     case '7d': return { from: subDays(today, 6), to: today };
     case '30d': return { from: subDays(today, 29), to: today };
     case '90d': return { from: subDays(today, 89), to: today };
@@ -183,7 +184,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   const sheetUrl = (settings as any)?.kpi_google_sheet_url as string | undefined;
   const parsed = parseSheetUrl(sheetUrl);
 
-  const [preset, setPreset] = useState<Preset>('30d');
+  const [preset, setPreset] = useState<Preset>('y');
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
   const range = preset === 'custom'
@@ -253,6 +254,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   }
 
   const presets: { id: Preset; label: string }[] = [
+    { id: 'y', label: 'Yesterday' },
     { id: '7d', label: 'Last 7d' },
     { id: '30d', label: 'Last 30d' },
     { id: '90d', label: 'Last 90d' },
