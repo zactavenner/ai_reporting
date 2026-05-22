@@ -294,9 +294,35 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     }
   }, [clientSettings, hydrated, docUrl, sheetUrl, clientDocUrl]);
 
+  // Auto-scroll: instant follow during streaming so the user always sees the
+  // newest tokens. Scroll the inner Radix viewport (ScrollArea wraps a viewport).
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const root = scrollRef.current as HTMLElement | null;
+    if (!root) return;
+    const viewport = root.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]") || root;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: loading ? "auto" : "smooth" });
   }, [messages, loading]);
+
+  // Rough per-model usage estimate for this client's conversation.
+  // We approximate tokens from char counts and price using public-ish per-1M rates.
+  const usageStats = (() => {
+    const RATES: Record<string, { in: number; out: number }> = {
+      "google/gemini-2.5-pro": { in: 1.25, out: 5 },
+      "google/gemini-3-flash-preview": { in: 0.3, out: 2.5 },
+      "openai/gpt-5": { in: 1.25, out: 10 },
+      "openai/gpt-5-mini": { in: 0.25, out: 2 },
+    };
+    const r = RATES[chatModel] || { in: 1, out: 5 };
+    let inChars = 0, outChars = 0;
+    for (const m of messages) {
+      if (m.role === "user") inChars += (m.content || "").length;
+      else outChars += (m.content || "").length;
+    }
+    const inTok = Math.round(inChars / 4);
+    const outTok = Math.round(outChars / 4);
+    const cost = (inTok / 1_000_000) * r.in + (outTok / 1_000_000) * r.out;
+    return { inTok, outTok, cost, model: chatModel };
+  })();
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
