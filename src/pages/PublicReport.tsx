@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
 import {
   ExternalLink,
-  ClipboardList,
+  BarChart3,
   Layers,
   AlertCircle,
   Palette,
