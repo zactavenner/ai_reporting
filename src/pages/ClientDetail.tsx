@@ -478,18 +478,16 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
-          {/* ─── CONNECTIONS TAB ─── */}
-          <TabsContent value="connections" className="space-y-6">
+          {/* ─── SETTINGS TAB ─── */}
+          <TabsContent value="client-settings" className="space-y-6">
+            {/* Connections (moved from separate tab) */}
             <SectionErrorBoundary sectionName="Connections">
               <ConnectionsTab clientId={client.id} />
             </SectionErrorBoundary>
-          </TabsContent>
 
-          {/* ─── SETTINGS TAB ─── */}
-          <TabsContent value="client-settings" className="space-y-6">
             {/* Quick Actions */}
             <div className="space-y-3">
-              <h2 className="text-lg font-bold">Quick Actions</h2>
+              <h2 className="text-lg font-bold pt-4 border-t border-border">Quick Actions</h2>
               <div className="flex flex-wrap items-center gap-2">
                 <VoiceRecordButton clientId={client.id} clientName={client.name} isPublicView={false} />
                 <ActivityPanel
@@ -511,6 +509,10 @@ export default function ClientDetail() {
                 <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
                   <Settings className="h-4 w-4 mr-2" />
                   Client Settings
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setAgencyOpen(true)}>
+                  <Cog className="h-4 w-4 mr-2" />
+                  Agency Settings
                 </Button>
               </div>
             </div>
