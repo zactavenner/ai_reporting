@@ -45,6 +45,7 @@ import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMa
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
 import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
+import { OnboardingIntake } from '@/components/onboarding/OnboardingIntake';
 import { AIStudioTab } from '@/components/ai/AIStudioTab';
 import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
 import ConnectionsTab from '@/components/client/ConnectionsTab';
@@ -464,7 +465,10 @@ export default function ClientDetail() {
                       Onboarding checklist and required intake details for this client.
                     </p>
                   </div>
-                  <OnboardingChecklist clientId={clientId} clientType={client?.description} />
+                  <div className="space-y-6">
+                    <OnboardingIntake clientId={clientId} />
+                    <OnboardingChecklist clientId={clientId} clientType={client?.description} />
+                  </div>
                 </div>
               </div>
             </SectionErrorBoundary>
