@@ -435,6 +435,14 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
+          {/* ─── SHEET STATS TAB ─── */}
+          <TabsContent value="sheet-stats" className="space-y-4">
+            <SectionErrorBoundary sectionName="Sheet Stats">
+              <h2 className="text-lg font-bold mb-3">Sheet Stats</h2>
+              <SheetStatsTab clientId={client.id} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
           {/* ─── COMPANY INFO TAB ─── */}
           <TabsContent value="company-info" className="space-y-6">
             <SectionErrorBoundary sectionName="Company Info">
