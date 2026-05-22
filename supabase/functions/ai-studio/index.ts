@@ -776,7 +776,7 @@ async function generateSceneVideo(opts: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       instances: [{ prompt: opts.videoPrompt, image: { bytesBase64Encoded: imgB64, mimeType: imgMime } }],
-      parameters: { aspectRatio: opts.aspectRatio, durationSeconds: 5, sampleCount: 1 },
+      parameters: { aspectRatio: opts.aspectRatio, durationSeconds: 8, sampleCount: 1 },
     }),
   });
   if (!startRes.ok) {
