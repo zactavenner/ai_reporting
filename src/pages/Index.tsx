@@ -18,6 +18,7 @@ import { AddClientModal } from '@/components/settings/AddClientModal';
 import { DeleteClientDialog } from '@/components/settings/DeleteClientDialog';
 import { AgencyAIChat } from '@/components/ai/AgencyAIChat';
 import { AIHubTab } from '@/components/ai/AIHubTab';
+import { AgencyAIStudioTab } from '@/components/ai/AgencyAIStudioTab';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
 import { FeedbackTab } from '@/components/feedback/FeedbackTab';
@@ -310,6 +311,13 @@ const Index = () => {
             {activeTab === 'am-workspace' && (
               <SectionErrorBoundary sectionName="AM Workspace">
                 <AccountManagerPage />
+              </SectionErrorBoundary>
+            )}
+
+            {/* AI Studio — agency level */}
+            {activeTab === 'ai-studio' && (
+              <SectionErrorBoundary sectionName="AI Studio">
+                <AgencyAIStudioTab />
               </SectionErrorBoundary>
             )}
 
