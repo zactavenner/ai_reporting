@@ -634,7 +634,7 @@ async function planStoryboard(opts: {
   userId: string;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (5 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~5s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
+  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (8 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~8s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -660,7 +660,7 @@ async function planStoryboard(opts: {
     title: String(s.title || `Scene ${i + 1}`).slice(0, 120),
     image_prompt: String(s.image_prompt || "").slice(0, 1200),
     video_prompt: String(s.video_prompt || "").slice(0, 800),
-    duration: 5,
+    duration: 8,
   }));
   const ci = await supa.from("ai_studio_canvas_items").insert({
     conversation_id: opts.conversationId,
