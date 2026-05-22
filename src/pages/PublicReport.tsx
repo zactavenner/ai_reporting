@@ -126,6 +126,10 @@ function PublicReportContent() {
       <main className="p-6 max-w-7xl mx-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-muted/50 flex-wrap">
+            <TabsTrigger value="sheet-stats" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Reporting
+            </TabsTrigger>
             <TabsTrigger value="tasks" className="gap-2">
               <CheckSquare className="h-4 w-4" />
               Tasks
@@ -137,10 +141,6 @@ function PublicReportContent() {
             <TabsTrigger value="master-doc" className="gap-2">
               <FileText className="h-4 w-4" />
               Master Doc
-            </TabsTrigger>
-            <TabsTrigger value="sheet-stats" className="gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Reporting
             </TabsTrigger>
             <TabsTrigger value="reporting-sheet" className="gap-2">
               <FileText className="h-4 w-4" />
