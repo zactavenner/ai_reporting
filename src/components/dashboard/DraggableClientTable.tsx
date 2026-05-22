@@ -681,6 +681,8 @@ export function DraggableClientTable({
                           onOpenSheetSettings ? onOpenSheetSettings(client) : onOpenSettings(client)
                         }
                         onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
+                        hasCreatives={(creativeCounts[client.id] || 0) > 0}
+                        hasFunnel={(funnelCounts[client.id] || 0) > 0}
                       />
                     </TableCell>
 
