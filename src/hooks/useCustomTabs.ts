@@ -76,3 +76,28 @@ export function useDeleteCustomTab() {
     },
   });
 }
+
+export function useUpdateCustomTab() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, clientId, name, url }: { id: string; clientId: string; name: string; url: string }) => {
+      const { data, error } = await supabase
+        .from('client_custom_tabs')
+        .update({ name, url })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { ...data, clientId };
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ['custom-tabs', result.clientId] });
+      toast.success('Link updated');
+    },
+    onError: (error: any) => {
+      toast.error('Failed to update link: ' + error.message);
+    },
+  });
+}

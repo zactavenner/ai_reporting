@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug } from 'lucide-react';
+import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil } from 'lucide-react';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
 import { AdSpendDrillDownModal } from '@/components/drilldown/AdSpendDrillDownModal';
@@ -25,6 +25,7 @@ import { ShareableLinkButton } from '@/components/dashboard/ShareableLinkButton'
 import { CSVImportModal, ImportType } from '@/components/import/CSVImportModal';
 import { ImportHistoryModal } from '@/components/import/ImportHistoryModal';
 import { AddCustomTabModal } from '@/components/import/AddCustomTabModal';
+import { AgencySettingsModal } from '@/components/settings/AgencySettingsModal';
 import { CreativesSection } from '@/components/creative/CreativesSection';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { useUpdateAgencySettings } from '@/hooks/useAgencySettings';
@@ -56,7 +57,7 @@ import { useClientSettings, getThresholdsFromSettings } from '@/hooks/useClientS
 import { useSheetMetrics } from '@/hooks/useSheetMetrics';
 import { useMetricsSourcePreference } from '@/hooks/useMetricsSourcePreference';
 import { MetricsSourceToggle } from '@/components/dashboard/MetricsSourceToggle';
-import { useCustomTabs, useDeleteCustomTab } from '@/hooks/useCustomTabs';
+import { useCustomTabs, useDeleteCustomTab, type CustomTab } from '@/hooks/useCustomTabs';
 import { useAllTasks } from '@/hooks/useTasks';
 import { useVoiceNotes } from '@/hooks/useVoiceNotes';
 import { useMeetings } from '@/hooks/useMeetings';
@@ -98,6 +99,8 @@ export default function ClientDetail() {
   const [csvImportType, setCsvImportType] = useState<ImportType>('ad_spend');
   const [importHistoryOpen, setImportHistoryOpen] = useState(false);
   const [addTabOpen, setAddTabOpen] = useState(false);
+  const [editingTab, setEditingTab] = useState<CustomTab | null>(null);
+  const [agencyOpen, setAgencyOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [selectedType, setSelectedType] = useState<string>('');
@@ -340,10 +343,6 @@ export default function ClientDetail() {
               <ClipboardList className="h-4 w-4" />
               Reporting Sheet
             </TabsTrigger>
-            <TabsTrigger value="onboarding-info" className="gap-2">
-              <CheckSquare className="h-4 w-4" />
-              Onboarding Info
-            </TabsTrigger>
             <TabsTrigger value="company-info" className="gap-2">
               <Building2 className="h-4 w-4" />
               Company Info
@@ -355,10 +354,6 @@ export default function ClientDetail() {
             <TabsTrigger value="activity" className="gap-2">
               <ActivityIcon className="h-4 w-4" />
               Activity
-            </TabsTrigger>
-            <TabsTrigger value="connections" className="gap-2">
-              <Plug className="h-4 w-4" />
-              Connections
             </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2">
               <Cog className="h-4 w-4" />
@@ -435,13 +430,6 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
-          {/* ─── ONBOARDING INFO TAB ─── */}
-          <TabsContent value="onboarding-info" className="space-y-6">
-            <SectionErrorBoundary sectionName="Onboarding Info">
-              <OnboardingChecklist clientId={clientId} clientType={client?.description} />
-            </SectionErrorBoundary>
-          </TabsContent>
-
           {/* ─── COMPANY INFO TAB ─── */}
           <TabsContent value="company-info" className="space-y-6">
             <SectionErrorBoundary sectionName="Company Info">
@@ -453,6 +441,18 @@ export default function ClientDetail() {
                   </p>
                 </div>
                 <BrandGuideSection client={client} />
+                <div className="mt-10 pt-8 border-t border-border">
+                  <div className="mb-4">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <CheckSquare className="h-4 w-4 text-primary" />
+                      Onboarding Info
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Onboarding checklist and required intake details for this client.
+                    </p>
+                  </div>
+                  <OnboardingChecklist clientId={clientId} clientType={client?.description} />
+                </div>
               </div>
             </SectionErrorBoundary>
           </TabsContent>
@@ -478,18 +478,16 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
-          {/* ─── CONNECTIONS TAB ─── */}
-          <TabsContent value="connections" className="space-y-6">
+          {/* ─── SETTINGS TAB ─── */}
+          <TabsContent value="client-settings" className="space-y-6">
+            {/* Connections (moved from separate tab) */}
             <SectionErrorBoundary sectionName="Connections">
               <ConnectionsTab clientId={client.id} />
             </SectionErrorBoundary>
-          </TabsContent>
 
-          {/* ─── SETTINGS TAB ─── */}
-          <TabsContent value="client-settings" className="space-y-6">
             {/* Quick Actions */}
             <div className="space-y-3">
-              <h2 className="text-lg font-bold">Quick Actions</h2>
+              <h2 className="text-lg font-bold pt-4 border-t border-border">Quick Actions</h2>
               <div className="flex flex-wrap items-center gap-2">
                 <VoiceRecordButton clientId={client.id} clientName={client.name} isPublicView={false} />
                 <ActivityPanel
@@ -511,6 +509,10 @@ export default function ClientDetail() {
                 <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
                   <Settings className="h-4 w-4 mr-2" />
                   Client Settings
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setAgencyOpen(true)}>
+                  <Cog className="h-4 w-4 mr-2" />
+                  Agency Settings
                 </Button>
               </div>
             </div>
@@ -665,12 +667,27 @@ export default function ClientDetail() {
                       <ExternalLink className="h-4 w-4 mr-2" />
                       {tab.name}
                     </Button>
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTab(tab);
+                          setAddTabOpen(true);
+                        }}
+                        title="Edit link"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-7 w-7"
+                          title="Remove link"
                         >
                           <X className="h-3 w-3" />
                         </Button>
@@ -690,6 +707,7 @@ export default function ClientDetail() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -703,7 +721,16 @@ export default function ClientDetail() {
       <ClientSettingsModal client={client} open={settingsOpen} onOpenChange={setSettingsOpen} />
       <CSVImportModal clientId={clientId || ''} importType={csvImportType} open={csvImportOpen} onOpenChange={setCsvImportOpen} />
       <ImportHistoryModal clientId={clientId || ''} open={importHistoryOpen} onOpenChange={setImportHistoryOpen} />
-      <AddCustomTabModal clientId={clientId || ''} open={addTabOpen} onOpenChange={setAddTabOpen} />
+      <AddCustomTabModal
+        clientId={clientId || ''}
+        open={addTabOpen}
+        onOpenChange={(o) => {
+          setAddTabOpen(o);
+          if (!o) setEditingTab(null);
+        }}
+        editTab={editingTab}
+      />
+      <AgencySettingsModal open={agencyOpen} onOpenChange={setAgencyOpen} />
       <AIAnalysisChat context={aiContext} />
 
       {/* Drill-Down Modals */}
