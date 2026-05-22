@@ -436,28 +436,8 @@ async function editStaticAd(opts: {
   let mime = "image/png";
   let modelUsed = "";
 
-  if (opts.quality === "pro" && GEMINI_API_KEY) {
-    modelUsed = "gemini-3-pro-image-preview";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }, { inlineData: { mimeType: srcMime, data: srcB64 } }] }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-        }),
-      },
-    );
-    if (!res.ok) throw new Error(`Gemini edit [${res.status}]: ${(await res.text()).slice(0, 400)}`);
-    const data = await res.json();
-    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) =>
-      p.inlineData?.mimeType?.startsWith("image/"),
-    );
-    if (!imagePart?.inlineData?.data) throw new Error("No image in Gemini edit response");
-    base64Image = imagePart.inlineData.data;
-    mime = imagePart.inlineData.mimeType || "image/png";
-  } else {
+  {
+    // All edits use Nano Banana 2 (image+text) via Lovable AI Gateway.
     modelUsed = "google/gemini-3.1-flash-image-preview";
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
