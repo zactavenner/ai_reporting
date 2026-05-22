@@ -240,7 +240,7 @@ async function generateStaticAd(opts: {
   clientId: string | null;
   brandContext: any;
   quality: "pro" | "fast";
-  model?: "gemini-pro" | "nano-banana" | "openai" | null;
+  model?: "nano-banana" | "openai" | null;
 }): Promise<ImageResult> {
   const aspect = opts.aspectRatio || "1:1";
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -262,11 +262,11 @@ async function generateStaticAd(opts: {
   let mime = "image/png";
   let modelUsed = "";
 
-  // Effective model selection: explicit `model` arg wins; else quality maps to pro=gemini-pro, fast=nano-banana
-  const effectiveModel: "gemini-pro" | "nano-banana" | "openai" =
-    opts.model === "openai" || opts.model === "nano-banana" || opts.model === "gemini-pro"
+  // Effective model selection: explicit `model` arg wins; else quality maps to pro=openai (gpt-image-2), fast=nano-banana
+  const effectiveModel: "nano-banana" | "openai" =
+    opts.model === "openai" || opts.model === "nano-banana"
       ? opts.model
-      : (opts.quality === "pro" ? "gemini-pro" : "nano-banana");
+      : (opts.quality === "pro" ? "openai" : "nano-banana");
 
   if (effectiveModel === "openai") {
     // Prefer the agency-stored OpenAI API key (set in Agency Settings → API Keys).
@@ -282,24 +282,24 @@ async function generateStaticAd(opts: {
     const sz = sizeMap[aspect] || "1024x1024";
     let res: Response;
     if (openaiKey) {
-      modelUsed = "openai/gpt-image-1 (direct)";
+      modelUsed = "openai/gpt-image-2 (direct)";
       res = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gpt-image-1",
+          model: "gpt-image-2",
           prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
           size: sz,
           n: 1,
         }),
       });
     } else if (OPENROUTER_API_KEY) {
-      modelUsed = "openai/gpt-image-1 (via openrouter)";
+      modelUsed = "openai/gpt-image-2 (via openrouter)";
       res = await fetch("https://openrouter.ai/api/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
         body: JSON.stringify({
-          model: "openai/gpt-image-1",
+          model: "openai/gpt-image-2",
           prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
           size: sz,
           n: 1,
@@ -307,7 +307,7 @@ async function generateStaticAd(opts: {
         }),
       });
     } else {
-      throw new Error("No OpenAI API key configured. Add one in Agency Settings → API Keys to enable GPT Image.");
+      throw new Error("No OpenAI API key configured. Add one in Agency Settings → API Keys to enable GPT Image 2.");
     }
     if (!res.ok) throw new Error(`OpenAI image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
     const data = await res.json();
@@ -318,45 +318,8 @@ async function generateStaticAd(opts: {
       const r = await fetch(url); const buf = await r.arrayBuffer();
       base64Image = arrayBufferToBase64(buf); mime = r.headers.get("content-type") || "image/png";
     } else throw new Error("OpenAI returned no image data");
-  } else if (effectiveModel === "gemini-pro" && GEMINI_API_KEY) {
-    // Direct Gemini 3 Pro Image Preview (Ads Generator 5.0 pipeline)
-    const parts: any[] = [{ text: fullPrompt }];
-    if (opts.referenceImageUrl) {
-      try {
-        const r = await fetch(opts.referenceImageUrl);
-        if (r.ok) {
-          const buf = await r.arrayBuffer();
-          parts.push({
-            inlineData: {
-              mimeType: r.headers.get("content-type") || "image/png",
-              data: arrayBufferToBase64(buf),
-            },
-          });
-        }
-      } catch (e) { console.warn("ref image fetch failed", e); }
-    }
-    modelUsed = "gemini-3-pro-image-preview";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-        }),
-      },
-    );
-    if (!res.ok) throw new Error(`Gemini image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
-    const data = await res.json();
-    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) =>
-      p.inlineData?.mimeType?.startsWith("image/"),
-    );
-    if (!imagePart?.inlineData?.data) throw new Error("No image in Gemini response");
-    base64Image = imagePart.inlineData.data;
-    mime = imagePart.inlineData.mimeType || "image/png";
   } else {
-    // Fast path via AI Gateway (Nano Banana 2)
+    // Nano Banana 2 via AI Gateway
     modelUsed = "google/gemini-3.1-flash-image-preview";
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -473,28 +436,8 @@ async function editStaticAd(opts: {
   let mime = "image/png";
   let modelUsed = "";
 
-  if (opts.quality === "pro" && GEMINI_API_KEY) {
-    modelUsed = "gemini-3-pro-image-preview";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }, { inlineData: { mimeType: srcMime, data: srcB64 } }] }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-        }),
-      },
-    );
-    if (!res.ok) throw new Error(`Gemini edit [${res.status}]: ${(await res.text()).slice(0, 400)}`);
-    const data = await res.json();
-    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) =>
-      p.inlineData?.mimeType?.startsWith("image/"),
-    );
-    if (!imagePart?.inlineData?.data) throw new Error("No image in Gemini edit response");
-    base64Image = imagePart.inlineData.data;
-    mime = imagePart.inlineData.mimeType || "image/png";
-  } else {
+  {
+    // All edits use Nano Banana 2 (image+text) via Lovable AI Gateway.
     modelUsed = "google/gemini-3.1-flash-image-preview";
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -712,30 +655,48 @@ async function generateSceneImage(opts: {
   clientId: string | null;
   conversationId: string;
   userId: string;
+  model?: "nano-banana" | "openai" | null;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
   const fullPrompt = `Create a single cinematic keyframe image for a video scene.\n\n${opts.prompt}\n\nAspect ratio: ${opts.aspectRatio}. Photoreal cinematic look. No text overlays or watermarks.`;
 
   let base64Image = "", mime = "image/png", modelUsed = "";
-  if (GEMINI_API_KEY) {
-    modelUsed = "gemini-3-pro-image-preview";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-        }),
-      },
-    );
+  const useOpenAI = opts.model === "openai";
+
+  if (useOpenAI) {
+    let agencyOpenAi: string | null = null;
+    try {
+      const { data: a } = await supa.from("agency_settings").select("openai_api_key").limit(1).maybeSingle();
+      const v = (a as any)?.openai_api_key;
+      if (typeof v === "string" && v.trim()) agencyOpenAi = v.trim();
+    } catch (_) { /* ignore */ }
+    const openaiKey = agencyOpenAi || OPENAI_API_KEY_ENV || null;
+    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1536x1024", "9:16": "1024x1536" };
+    const sz = sizeMap[opts.aspectRatio] || "1024x1024";
+    if (!openaiKey && !OPENROUTER_API_KEY) {
+      throw new Error("GPT Image 2 requires an OpenAI API key (Agency Settings → API Keys).");
+    }
+    modelUsed = openaiKey ? "openai/gpt-image-2 (direct)" : "openai/gpt-image-2 (via openrouter)";
+    const res = openaiKey
+      ? await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-image-2", prompt: fullPrompt, size: sz, n: 1 }),
+        })
+      : await fetch("https://openrouter.ai/api/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+          body: JSON.stringify({ model: "openai/gpt-image-2", prompt: fullPrompt, size: sz, n: 1, response_format: "b64_json" }),
+        });
     if (!res.ok) throw new Error(`Scene image [${res.status}]: ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();
-    const imagePart = (data.candidates?.[0]?.content?.parts || []).find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
-    if (!imagePart?.inlineData?.data) throw new Error("No image in scene response");
-    base64Image = imagePart.inlineData.data;
-    mime = imagePart.inlineData.mimeType || "image/png";
+    const b64 = data?.data?.[0]?.b64_json;
+    const url = data?.data?.[0]?.url;
+    if (b64) { base64Image = b64; mime = "image/png"; }
+    else if (url) {
+      const r = await fetch(url); base64Image = arrayBufferToBase64(await r.arrayBuffer());
+      mime = r.headers.get("content-type") || "image/png";
+    } else throw new Error("OpenAI returned no scene image data");
   } else {
     modelUsed = "google/gemini-3.1-flash-image-preview";
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -893,14 +854,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_static_ad",
-      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Pick a model: 'gemini-pro' (Gemini 3 Pro Image, default finals), 'nano-banana' (Nano Banana 2, fast iteration), or 'openai' (GPT Image 1, distinct art direction). Optionally pass reference_image_url to clone an existing ad's layout. This client's approved creatives are automatically used as visual references if no explicit reference is given.",
+      description: "Generate a high-quality static ad creative on the canvas using the client's brand context. Default tool for any ad image request. Pick a model: 'openai' (GPT Image 2, highest-quality finals, default for quality=pro) or 'nano-banana' (Nano Banana 2, fast iteration, default for quality=fast). Optionally pass reference_image_url to clone an existing ad's layout. This client's approved creatives are automatically used as visual references if no explicit reference is given.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What the ad should communicate, headline ideas, key visuals." },
           aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "1:1 feed, 4:5 IG feed tall, 9:16 stories/reels, 16:9 landscape." },
           quality: { type: "string", enum: ["pro", "fast"], description: "pro = highest quality (default), fast = quick iteration" },
-          model: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"], description: "Which image model to use. If omitted, derived from quality." },
+          model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use. 'openai' = GPT Image 2, 'nano-banana' = Nano Banana 2. If omitted, derived from quality." },
           reference_image_url: { type: "string", description: "Optional URL of a reference ad to clone the layout/style from." },
         },
         required: ["prompt"],
@@ -911,7 +872,7 @@ const tools = [
     type: "function",
     function: {
       name: "compare_image_models",
-      description: "Generate the SAME ad prompt across multiple image models in parallel so the user can compare and pick a favorite. Use when the user asks to 'compare models', 'try both', 'see Gemini vs OpenAI', or wants different angles from each model. Each result lands on the canvas tagged with its model.",
+      description: "Generate the SAME ad prompt across multiple image models in parallel so the user can compare and pick a favorite. Use when the user asks to 'compare models', 'try both', 'see Nano Banana vs GPT Image 2', or wants different angles from each model. Each result lands on the canvas tagged with its model.",
       parameters: {
         type: "object",
         properties: {
@@ -919,8 +880,8 @@ const tools = [
           aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"] },
           models: {
             type: "array",
-            items: { type: "string", enum: ["gemini-pro", "nano-banana", "openai"] },
-            description: "Which models to compare. Default: ['gemini-pro', 'nano-banana', 'openai'].",
+            items: { type: "string", enum: ["nano-banana", "openai"] },
+            description: "Which models to compare. Default: ['nano-banana', 'openai'].",
           },
           reference_image_url: { type: "string", description: "Optional reference to clone layout from." },
         },
@@ -987,7 +948,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_scene_image",
-      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel.",
+      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel. Pick a model: 'openai' (GPT Image 2) or 'nano-banana' (Nano Banana 2). If the user selected MULTIPLE image models, emit one generate_scene_image call PER model PER scene so the user can compare keyframes side-by-side before videos render.",
       parameters: {
         type: "object",
         properties: {
@@ -996,6 +957,7 @@ const tools = [
           scene_order: { type: "integer" },
           prompt: { type: "string", description: "Scene image prompt." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+          model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use for this keyframe. Default = nano-banana (fast). Use openai for highest quality." },
         },
         required: ["storyboard_id", "scene_id", "scene_order", "prompt", "aspect_ratio"],
       },
@@ -1060,8 +1022,8 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Prefer parallel tool calls whenever steps are independent (multi-tab reads, multi-scene keyframes, multi-scene videos, variations).",
   "",
   "TOOL USE:",
-  "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro' (Gemini 3 Pro Image). Pass `model: 'openai'` if the user explicitly asks for GPT/ChatGPT Image, or `model: 'nano-banana'` for quick iteration.",
-  "- Use compare_image_models when the user asks to 'compare', 'try both', 'see all models', or wants the same prompt across multiple image models side-by-side. Default models = all three.",
+  "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro' (GPT Image 2). Pass `model: 'openai'` for GPT Image 2 (highest quality finals), or `model: 'nano-banana'` for Nano Banana 2 (quick iteration). Those are the ONLY two supported image models.",
+  "- Use compare_image_models when the user asks to 'compare', 'try both', 'see both models', or wants the same prompt across both image models side-by-side. Default models = ['nano-banana', 'openai'].",
   "- APPROVED REFERENCES: This client's approved creatives are auto-loaded as visual references for new generations. You can mention this if helpful (e.g. 'Riffed on the approved ad style from earlier this week').",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
@@ -1075,7 +1037,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "  • Each scene = ONE keyframe image animated into an 8-SECOND Veo 3.1 clip. Total video length = scene_count × 8s.",
   "  • Map the user's target duration to scene_count: 8s→1, 16s→2, 24s→3, 32s→4, 40s→5, 48s→6, 56s→7, 64s→8. If the user doesn't specify a duration, default to 4 scenes (~32s). The user can override by saying 'one image only', 'three scenes', etc.",
   "  Step 1: Call plan_storyboard with the computed scene_count.",
-  "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene (parallel). Use gpt-image or nano-banana-style cinematic keyframes via generate_scene_image (the tool already picks the right model).",
+  "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene (parallel), passing the user's selected image model. If the user selected MULTIPLE image models, emit ONE generate_scene_image call PER MODEL PER scene (so each scene shows side-by-side keyframes from both models).",
   "  Step 3: IMMEDIATELY (same agent run, no user pause) emit ONE generate_scene_video tool_call FOR EVERY scene in parallel using each scene's image_url. Do NOT ask for approval first — the user can request edits after seeing the final reel.",
   "  Step 4: Write a 1–2 line completion summary noting they can request edits to any keyframe or scene.",
   "  ONLY pause before video generation if the user explicitly said 'wait for my approval', 'show me the keyframes first', or similar.",
@@ -1141,7 +1103,7 @@ Deno.serve(async (req) => {
     action?: "history" | "clear" | "settings" | "test_doc";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
-    imageModels?: Array<"gemini-pro" | "nano-banana" | "openai"> | null;
+    imageModels?: Array<"nano-banana" | "openai"> | null;
     activeReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
@@ -1149,7 +1111,7 @@ Deno.serve(async (req) => {
   };
 
   const selectedImageModels = Array.isArray(imageModels)
-    ? imageModels.filter((m) => m === "gemini-pro" || m === "nano-banana" || m === "openai")
+    ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
     : [];
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
@@ -1575,7 +1537,7 @@ Deno.serve(async (req) => {
               });
             }
             if (name === "compare_image_models") {
-              const ms = Array.isArray(args.models) && args.models.length ? args.models : ["gemini-pro", "nano-banana", "openai"];
+              const ms = Array.isArray(args.models) && args.models.length ? args.models : ["nano-banana", "openai"];
               for (const m of ms) {
                 send({
                   type: "canvas_placeholder",
@@ -1719,7 +1681,7 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   brandContext,
                   quality: (args.quality === "fast" ? "fast" : "pro"),
-                  model: (args.model === "openai" || args.model === "nano-banana" || args.model === "gemini-pro") ? args.model : null,
+                  model: (args.model === "openai" || args.model === "nano-banana") ? args.model : null,
                 });
                 result = { ok: true, model: img.model, aspect_ratio: img.aspect_ratio, url_for_internal_use_only: img.url };
                 const ci = await supa.from("ai_studio_canvas_items").insert({
@@ -1735,9 +1697,9 @@ Deno.serve(async (req) => {
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "compare_image_models") {
-                const models: Array<"gemini-pro" | "nano-banana" | "openai"> = Array.isArray(args.models) && args.models.length
-                  ? args.models.filter((m: any) => ["gemini-pro", "nano-banana", "openai"].includes(m))
-                  : ["gemini-pro", "nano-banana", "openai"];
+                const models: Array<"nano-banana" | "openai"> = Array.isArray(args.models) && args.models.length
+                  ? args.models.filter((m: any) => ["nano-banana", "openai"].includes(m))
+                  : ["nano-banana", "openai"];
                 const results = await Promise.all(models.map(async (mdl) => {
                   try {
                     const img = await generateStaticAd({
@@ -1853,6 +1815,7 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   conversationId,
                   userId: userId!,
+                  model: (args.model === "openai" || args.model === "nano-banana") ? args.model : null,
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, image_url: r.image_url, model: r.model };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
