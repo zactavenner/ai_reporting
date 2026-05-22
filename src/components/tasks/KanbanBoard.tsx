@@ -39,6 +39,7 @@ import {
   UserCircle,
   Clock,
   AlertTriangle,
+  ClipboardPaste,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -52,6 +53,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Client } from '@/hooks/useClients';
  import { TaskDetailPanel } from './TaskDetailPanel';
 import { CreateTaskModal } from './CreateTaskModal';
+import { BulkAddTasksDialog } from './BulkAddTasksDialog';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanTaskCard } from './KanbanTaskCard';
  import { BulkActionBar } from './BulkActionBar';
@@ -85,6 +87,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
   const [pendingOpenTaskId, setPendingOpenTaskId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [createTaskStage, setCreateTaskStage] = useState('todo');
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -604,6 +607,12 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
                 </>
               )}
             </Button>
+            {!isPublicView && (
+              <Button variant="outline" size="sm" onClick={() => setShowBulkAdd(true)}>
+                <ClipboardPaste className="h-4 w-4 mr-2" />
+                Bulk add
+              </Button>
+            )}
           </div>
         </div>
 
@@ -706,6 +715,12 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
         defaultClientId={clientId}
         isPublicView={isPublicView}
         defaultStage={createTaskStage}
+      />
+
+      <BulkAddTasksDialog
+        open={showBulkAdd}
+        onOpenChange={setShowBulkAdd}
+        clientId={clientId}
       />
  
        <BulkActionBar
