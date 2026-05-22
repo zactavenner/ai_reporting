@@ -1658,6 +1658,58 @@ Deno.serve(async (req) => {
                   payload: { action: "append", range: args.range, rows: (args.values || []).length, sheet_url: sheetUrl },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
+              } else if (name === "check_lead_quality") {
+                const windowDays = Math.min(365, Math.max(1, Number(args.window_days) || 30));
+                const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
+                const { data: leads, error: lqErr } = await supa
+                  .from("leads")
+                  .select("name, email, phone, is_spam, created_at")
+                  .eq("client_id", clientId)
+                  .gte("created_at", since)
+                  .limit(5000);
+                if (lqErr) throw new Error(`leads query failed: ${lqErr.message}`);
+                const SPAM_DOMAINS = ["armyspy.com","teleworm.us","mailinator.com","dayrep.com","einrot.com","jourrapide.com","fleckens.hu","rhyta.com","cuvox.de","gustr.com","superrito.com","guerrillamail.com","10minutemail.com","tempmail","trashmail","yopmail.com"];
+                const isRandomLocal = (local: string) => {
+                  if (!local) return false;
+                  if (local.length >= 14 && /^[a-z0-9]+$/i.test(local) && !/[aeiou]{1}/i.test(local)) return true;
+                  if (/\d{6,}/.test(local)) return true;
+                  if (/([bcdfghjklmnpqrstvwxz]{6,})/i.test(local)) return true;
+                  return false;
+                };
+                let spamCount = 0;
+                let mismatchCount = 0;
+                const samples: any[] = [];
+                for (const l of leads || []) {
+                  const email = String((l as any).email || "").toLowerCase().trim();
+                  const name = String((l as any).name || "").trim();
+                  if (!email) continue;
+                  const [local, domain] = email.split("@");
+                  let reason: string | null = null;
+                  if (domain && SPAM_DOMAINS.some(d => domain.includes(d))) reason = "spam_domain";
+                  else if (local && isRandomLocal(local)) reason = "random_email";
+                  if (reason) {
+                    spamCount++;
+                    if (samples.length < 25) samples.push({ name, email, reason });
+                    continue;
+                  }
+                  if (name && local) {
+                    const tokens = name.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
+                    const lp = local.toLowerCase();
+                    const matched = tokens.some(t => lp.includes(t.slice(0, Math.min(4, t.length))));
+                    if (tokens.length > 0 && !matched) {
+                      mismatchCount++;
+                      if (samples.length < 25) samples.push({ name, email, reason: "name_email_mismatch" });
+                    }
+                  }
+                }
+                result = {
+                  ok: true,
+                  window_days: windowDays,
+                  total_leads: (leads || []).length,
+                  spam_count: spamCount,
+                  email_name_mismatch: mismatchCount,
+                  samples,
+                };
               } else if (name === "generate_static_ad") {
                 const img = await generateStaticAd({
                   prompt: args.prompt,
