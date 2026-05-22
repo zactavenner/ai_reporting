@@ -13,6 +13,7 @@ import { CreativesSection } from '@/components/creative/CreativesSection';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { ActivityTabView } from '@/components/activity/ActivityTabView';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
+import { OnboardingIntake } from '@/components/onboarding/OnboardingIntake';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
 import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
 import { SheetStatsTab } from '@/components/sheet-stats/SheetStatsTab';
@@ -210,6 +211,7 @@ function PublicReportContent() {
 
           <TabsContent value="onboarding-info" className="space-y-6">
             <SectionErrorBoundary sectionName="Onboarding Info">
+              <OnboardingIntake clientId={client.id} isPublicView />
               <OnboardingChecklist clientId={client.id} clientType={(client as any)?.description} />
             </SectionErrorBoundary>
           </TabsContent>
