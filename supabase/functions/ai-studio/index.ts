@@ -978,7 +978,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_scene_video",
-      description: "Animate a scene keyframe image into a video clip (5s, Veo 3.1). Call after generate_scene_image succeeded for the scene. This tool waits for Veo to finish (up to ~3 min) and returns the final mp4 URL.",
+      description: "Animate a scene keyframe image into an 8-SECOND video clip (Veo 3.1). Call only AFTER the user has approved the keyframes. This tool waits for Veo to finish (up to ~3 min) and returns the final mp4 URL.",
       parameters: {
         type: "object",
         properties: {
