@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
+import { useClient } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
@@ -163,6 +164,9 @@ function stripImageMarkup(t: string) {
 export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: agencySettings } = useAgencySettings();
   const { data: clientSettings } = useClientSettings(clientId);
+  const { data: client } = useClient(clientId);
+  const brandColors: string[] = Array.isArray(client?.brand_colors) ? (client!.brand_colors as string[]) : [];
+  const brandFonts: string[] = Array.isArray(client?.brand_fonts) ? (client!.brand_fonts as string[]) : [];
   const updateClientSettings = useUpdateClientSettings();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
@@ -755,7 +759,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden">
+          <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-hidden">
             <AIStudioCanvas
               entries={canvas}
               clientId={clientId}
@@ -786,6 +791,37 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 toast.success("Edit prompt loaded — refine and send");
               }}
             />
+            </div>
+            {/* Brand guardrails strip — defaults pulled from Company Info */}
+            <div className="border-t border-border/60 bg-background/60 backdrop-blur px-3 py-2 flex items-center gap-3 text-[11px]">
+              <span className="uppercase tracking-wide text-[9px] text-muted-foreground font-medium">Brand lock</span>
+              {brandColors.length > 0 ? (
+                <div className="flex items-center gap-1.5">
+                  {brandColors.slice(0, 8).map((c, i) => (
+                    <div
+                      key={i}
+                      className="h-5 w-5 rounded-md border border-border/60 shadow-sm"
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    />
+                  ))}
+                  <span className="text-muted-foreground ml-1 hidden sm:inline">
+                    {brandColors.slice(0, 4).join(" · ")}{brandColors.length > 4 ? ` +${brandColors.length - 4}` : ""}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-muted-foreground italic">No brand colors — add in Company Info</span>
+              )}
+              <div className="h-4 w-px bg-border/60" />
+              {brandFonts.length > 0 ? (
+                <span className="text-foreground/80 truncate max-w-[260px]" style={{ fontFamily: brandFonts[0] }}>
+                  {brandFonts.join(" · ")}
+                </span>
+              ) : (
+                <span className="text-muted-foreground italic">No brand fonts set</span>
+              )}
+              <span className="ml-auto text-[10px] text-muted-foreground">Generations default to these</span>
+            </div>
           </TabsContent>
 
           <TabsContent value="doc" className="flex-1 m-0 overflow-hidden">
