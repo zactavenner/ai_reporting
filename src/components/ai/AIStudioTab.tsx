@@ -668,6 +668,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
               );
             })()}
+            {/* Cost analysis based on model + usage for this client/conversation */}
+            {messages.length > 0 && (
+              <div className="mb-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                <DollarSign className="h-3 w-3" />
+                <span className="tabular-nums">
+                  ~${usageStats.cost.toFixed(4)} this convo
+                </span>
+                <span className="text-muted-foreground/60">·</span>
+                <span className="tabular-nums">
+                  in {usageStats.inTok.toLocaleString()} · out {usageStats.outTok.toLocaleString()} tok
+                </span>
+                <span className="text-muted-foreground/60">·</span>
+                <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{chatModel.split("/").pop()}</Badge>
+              </div>
+            )}
             <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
               <Textarea
                 value={input}
