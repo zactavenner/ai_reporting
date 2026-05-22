@@ -99,6 +99,8 @@ export default function ClientDetail() {
   const [csvImportType, setCsvImportType] = useState<ImportType>('ad_spend');
   const [importHistoryOpen, setImportHistoryOpen] = useState(false);
   const [addTabOpen, setAddTabOpen] = useState(false);
+  const [editingTab, setEditingTab] = useState<CustomTab | null>(null);
+  const [agencyOpen, setAgencyOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [selectedType, setSelectedType] = useState<string>('');
