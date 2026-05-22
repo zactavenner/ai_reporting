@@ -86,10 +86,20 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
   
   const [saving, setSaving] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<string>(initialTab || 'kpis');
+  const [activeTab, setActiveTab] = useState<string>(initialTab || 'general');
   useEffect(() => {
     if (open && initialTab) setActiveTab(initialTab);
   }, [open, initialTab]);
+
+  // General client fields (name, slug)
+  const [clientName, setClientName] = useState('');
+  const [clientSlug, setClientSlug] = useState('');
+  useEffect(() => {
+    if (client) {
+      setClientName(client.name || '');
+      setClientSlug((client as any).slug || '');
+    }
+  }, [client]);
   
   // Alert settings
   const [cplAlert, setCplAlert] = useState(false);
@@ -335,7 +345,16 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
 
       // Save business manager URL, GHL credentials, and Meta Ad Account to client
       const clientUpdates: Record<string, string | null> = {};
-      
+
+      const trimmedName = clientName.trim();
+      if (trimmedName && trimmedName !== (client.name || '')) {
+        clientUpdates.name = trimmedName;
+      }
+      const trimmedSlug = clientSlug.trim();
+      if (trimmedSlug !== ((client as any).slug || '')) {
+        clientUpdates.slug = trimmedSlug || null;
+      }
+
       if (businessManagerUrl !== (client.business_manager_url || '')) {
         clientUpdates.business_manager_url = businessManagerUrl || null;
       }
@@ -479,7 +498,8 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-          <TabsList className="grid w-full grid-cols-9">
+          <TabsList className="grid w-full grid-cols-10">
+            <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="data">Sheet</TabsTrigger>
             <TabsTrigger value="kpis">KPIs</TabsTrigger>
             <TabsTrigger value="teams">Teams</TabsTrigger>
@@ -490,6 +510,38 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
             <TabsTrigger value="thresholds">Thresholds</TabsTrigger>
             <TabsTrigger value="alerts">Alerts</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="general" className="space-y-4 mt-4">
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1">Client Identity</h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Update the client name and public URL slug. Changes take effect across the entire app.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="client-name-edit">Client Name</Label>
+                <Input
+                  id="client-name-edit"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  placeholder="Client name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="client-slug-edit">Public URL Slug</Label>
+                <Input
+                  id="client-slug-edit"
+                  value={clientSlug}
+                  onChange={(e) => setClientSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-'))}
+                  placeholder="e.g. acme-capital"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used in the public dashboard URL: /public/{clientSlug || '...'}
+                </p>
+              </div>
+            </div>
+          </TabsContent>
 
           <TabsContent value="data" className="space-y-4 mt-4">
             {client && <ClientSheetBindingCard clientId={client.id} clientName={client.name} />}
