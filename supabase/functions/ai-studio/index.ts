@@ -1054,6 +1054,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
     ? `IMAGE MODEL PREFERENCE: The user selected MULTIPLE image models [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] for side-by-side outputs. For ANY new ad generation request, call compare_image_models with models: [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] so the user gets one variant per selected model on the canvas.`
     : null,
   ctx.brandSummary,
+  "BRAND LOCK: Always respect the client's brand colors and fonts from Company Info. Do NOT invent new palettes or fonts. When calling generate_static_ad / edit_static_ad / generate_scene_image, the server already injects strict brand adherence from the client record — never override brand colors with arbitrary hexes unless the user explicitly says so.",
   ctx.docId ? `Active Google Doc: ${ctx.docUrl} (id ${ctx.docId})` : "No active Google Doc.",
   ctx.sheetId ? `Active Google Sheet: ${ctx.sheetUrl} (id ${ctx.sheetId})` : "No active Google Sheet.",
 ].filter(Boolean).join("\n");
