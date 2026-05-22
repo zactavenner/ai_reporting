@@ -26,9 +26,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Globe, Sparkles, Plus, X } from 'lucide-react';
+import { getOnboardingTemplate, type OnboardingTemplateKey } from '@/lib/onboardingTaskTemplates';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const addClientSchema = z.object({
   name: z.string().min(1, 'Client name is required').max(100, 'Name must be less than 100 characters'),
+  client_type: z.enum(['standard', 'capital']).default('standard'),
   website_url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   description: z.string().max(1000).optional().or(z.literal('')),
   logo_url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
@@ -59,6 +62,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
     resolver: zodResolver(addClientSchema),
     defaultValues: {
       name: '',
+      client_type: 'standard',
       website_url: '',
       description: '',
       logo_url: '',
@@ -120,6 +124,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
         .insert({
           name: values.name,
           status: 'active',
+          industry: values.client_type === 'capital' ? 'Capital Raising' : null,
           website_url: values.website_url || null,
           description: values.description || null,
           logo_url: values.logo_url || null,
@@ -130,6 +135,24 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
         .single();
 
       if (clientError) throw clientError;
+
+      // Auto-seed onboarding tasks based on selected client type
+      try {
+        const templateTasks = getOnboardingTemplate(values.client_type as OnboardingTemplateKey);
+        const rows = templateTasks.map(t => ({
+          client_id: client.id,
+          category: t.category,
+          title: t.title,
+          sort_order: t.sort_order,
+          completed: false,
+        }));
+        const { error: seedError } = await supabase
+          .from('client_onboarding_tasks' as any)
+          .insert(rows as any);
+        if (seedError) console.error('Error seeding onboarding tasks:', seedError);
+      } catch (seedErr) {
+        console.error('Error seeding onboarding tasks:', seedErr);
+      }
 
       // Create alert configs if KPI thresholds are set
       const alertConfigs = [];
