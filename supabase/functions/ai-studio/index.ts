@@ -1537,7 +1537,7 @@ Deno.serve(async (req) => {
               });
             }
             if (name === "compare_image_models") {
-              const ms = Array.isArray(args.models) && args.models.length ? args.models : ["gemini-pro", "nano-banana", "openai"];
+              const ms = Array.isArray(args.models) && args.models.length ? args.models : ["nano-banana", "openai"];
               for (const m of ms) {
                 send({
                   type: "canvas_placeholder",
@@ -1681,7 +1681,7 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   brandContext,
                   quality: (args.quality === "fast" ? "fast" : "pro"),
-                  model: (args.model === "openai" || args.model === "nano-banana" || args.model === "gemini-pro") ? args.model : null,
+                  model: (args.model === "openai" || args.model === "nano-banana") ? args.model : null,
                 });
                 result = { ok: true, model: img.model, aspect_ratio: img.aspect_ratio, url_for_internal_use_only: img.url };
                 const ci = await supa.from("ai_studio_canvas_items").insert({
@@ -1697,9 +1697,9 @@ Deno.serve(async (req) => {
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "compare_image_models") {
-                const models: Array<"gemini-pro" | "nano-banana" | "openai"> = Array.isArray(args.models) && args.models.length
-                  ? args.models.filter((m: any) => ["gemini-pro", "nano-banana", "openai"].includes(m))
-                  : ["gemini-pro", "nano-banana", "openai"];
+                const models: Array<"nano-banana" | "openai"> = Array.isArray(args.models) && args.models.length
+                  ? args.models.filter((m: any) => ["nano-banana", "openai"].includes(m))
+                  : ["nano-banana", "openai"];
                 const results = await Promise.all(models.map(async (mdl) => {
                   try {
                     const img = await generateStaticAd({
@@ -1815,6 +1815,7 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   conversationId,
                   userId: userId!,
+                  model: (args.model === "openai" || args.model === "nano-banana") ? args.model : null,
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, image_url: r.image_url, model: r.model };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
