@@ -138,13 +138,13 @@ function PublicReportContent() {
               <FileText className="h-4 w-4" />
               Master Doc
             </TabsTrigger>
-            <TabsTrigger value="reporting-sheet" className="gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Reporting Sheet
-            </TabsTrigger>
             <TabsTrigger value="sheet-stats" className="gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Sheet Stats
+              <BarChart3 className="h-4 w-4" />
+              Reporting
+            </TabsTrigger>
+            <TabsTrigger value="reporting-sheet" className="gap-2">
+              <FileText className="h-4 w-4" />
+              Reporting Sheet
             </TabsTrigger>
             <TabsTrigger value="onboarding-info" className="gap-2">
               <CheckSquare className="h-4 w-4" />
