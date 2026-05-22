@@ -343,10 +343,6 @@ export default function ClientDetail() {
               <ClipboardList className="h-4 w-4" />
               Reporting Sheet
             </TabsTrigger>
-            <TabsTrigger value="onboarding-info" className="gap-2">
-              <CheckSquare className="h-4 w-4" />
-              Onboarding Info
-            </TabsTrigger>
             <TabsTrigger value="company-info" className="gap-2">
               <Building2 className="h-4 w-4" />
               Company Info
@@ -358,10 +354,6 @@ export default function ClientDetail() {
             <TabsTrigger value="activity" className="gap-2">
               <ActivityIcon className="h-4 w-4" />
               Activity
-            </TabsTrigger>
-            <TabsTrigger value="connections" className="gap-2">
-              <Plug className="h-4 w-4" />
-              Connections
             </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2">
               <Cog className="h-4 w-4" />
