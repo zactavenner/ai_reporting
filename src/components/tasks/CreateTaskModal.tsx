@@ -42,9 +42,10 @@ interface CreateTaskModalProps {
   clients: Client[];
   defaultClientId?: string;
   isPublicView?: boolean;
+  defaultStage?: string;
 }
 
-export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, isPublicView = false }: CreateTaskModalProps) {
+export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, isPublicView = false, defaultStage }: CreateTaskModalProps) {
   const createTask = useCreateTask();
   const setTaskAssignees = useSetTaskAssignees();
   const createNotification = useCreateNotification();
@@ -71,7 +72,7 @@ export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, 
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [selectedPodId, setSelectedPodId] = useState<string>('');
   const [assignedClientName, setAssignedClientName] = useState('');
-  const [stage, setStage] = useState('todo');
+  const [stage, setStage] = useState(defaultStage || 'todo');
   const [recurrenceType, setRecurrenceType] = useState<string>('none');
   const [recurrenceInterval, setRecurrenceInterval] = useState<number>(1);
   const [initialComment, setInitialComment] = useState('');
@@ -90,8 +91,9 @@ export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, 
       tomorrow.setDate(tomorrow.getDate() + 1);
       setDueDate(tomorrow);
       setDueDateManuallySet(false);
+      setStage(defaultStage || 'todo');
     }
-  }, [open]);
+  }, [open, defaultStage]);
 
   // Get members for a specific pod
   const getMembersForPod = (podId: string) => {
