@@ -185,6 +185,30 @@ export function DraggableClientTable({
   const updateAssignment = useUpdateClientAssignment();
   const { data: agencyMembers = [] } = useAgencyMembers();
 
+  // Quick-links presence counts (creatives + funnel campaigns) per client
+  const { data: creativeCounts = {} } = useQuery({
+    queryKey: ['quicklinks-creative-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('creatives').select('client_id');
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => { if (r.client_id) map[r.client_id] = (map[r.client_id] || 0) + 1; });
+      return map;
+    },
+    staleTime: 60_000,
+  });
+  const { data: funnelCounts = {} } = useQuery({
+    queryKey: ['quicklinks-funnel-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('funnel_campaigns').select('client_id');
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => { if (r.client_id) map[r.client_id] = (map[r.client_id] || 0) + 1; });
+      return map;
+    },
+    staleTime: 60_000,
+  });
+
   const handleSyncGhlClient = async (e: React.MouseEvent, clientId: string, clientName: string) => {
     e.stopPropagation();
     setSyncingGhl(prev => ({ ...prev, [clientId]: true }));
@@ -657,6 +681,8 @@ export function DraggableClientTable({
                           onOpenSheetSettings ? onOpenSheetSettings(client) : onOpenSettings(client)
                         }
                         onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
+                        hasCreatives={(creativeCounts[client.id] || 0) > 0}
+                        hasFunnel={(funnelCounts[client.id] || 0) > 0}
                       />
                     </TableCell>
 
@@ -1026,11 +1052,15 @@ function QuickLinksCell({
   settings,
   onConfigureSheet,
   onNavigate,
+  hasCreatives,
+  hasFunnel,
 }: {
   client: Client;
   settings: ClientSettings | undefined;
   onConfigureSheet: () => void;
   onNavigate: (tab: string) => void;
+  hasCreatives: boolean;
+  hasFunnel: boolean;
 }) {
   const s: any = settings;
   const sheetId = s?.metrics_sheet_id || null;
@@ -1107,7 +1137,7 @@ function QuickLinksCell({
               onClick={(e) => (sheetUrl ? openExternal(e, sheetUrl) : (e.stopPropagation(), setSheetOpen(true)))}
             >
               <FileSpreadsheet
-                className={cn('h-3 w-3', sheetUrl ? 'text-emerald-600' : 'text-muted-foreground')}
+                className={cn('h-3 w-3', sheetUrl ? 'text-emerald-600' : 'text-red-500 animate-pulse')}
               />
             </Button>
           </TooltipTrigger>
@@ -1204,7 +1234,7 @@ function QuickLinksCell({
               title="Google Doc"
             >
               <FileText
-                className={cn('h-3 w-3', docUrl ? 'text-blue-600' : 'text-muted-foreground')}
+                className={cn('h-3 w-3', docUrl ? 'text-blue-600' : 'text-red-500 animate-pulse')}
               />
             </Button>
           </PopoverTrigger>
@@ -1238,10 +1268,10 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('creatives'); }}
             >
-              <Palette className="h-3 w-3 text-purple-600" />
+              <Palette className={cn('h-3 w-3', hasCreatives ? 'text-purple-600' : 'text-red-500 animate-pulse')} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top" className="text-[10px]">Creatives</TooltipContent>
+          <TooltipContent side="top" className="text-[10px]">{hasCreatives ? 'Creatives' : 'No creatives — add some'}</TooltipContent>
         </Tooltip>
 
         {/* Funnel */}
@@ -1253,10 +1283,10 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('pipeline'); }}
             >
-              <Layers className="h-3 w-3 text-amber-600" />
+              <Layers className={cn('h-3 w-3', hasFunnel ? 'text-amber-600' : 'text-red-500 animate-pulse')} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top" className="text-[10px]">Funnel</TooltipContent>
+          <TooltipContent side="top" className="text-[10px]">{hasFunnel ? 'Funnel' : 'No funnel/pipeline configured'}</TooltipContent>
         </Tooltip>
 
         {/* Activity */}
