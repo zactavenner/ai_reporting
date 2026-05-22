@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -9,19 +9,29 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useCreateCustomTab } from '@/hooks/useCustomTabs';
-import { Plus } from 'lucide-react';
+import { useCreateCustomTab, useUpdateCustomTab, type CustomTab } from '@/hooks/useCustomTabs';
+import { Plus, Save } from 'lucide-react';
 
 interface AddCustomTabModalProps {
   clientId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editTab?: CustomTab | null;
 }
 
-export function AddCustomTabModal({ clientId, open, onOpenChange }: AddCustomTabModalProps) {
+export function AddCustomTabModal({ clientId, open, onOpenChange, editTab }: AddCustomTabModalProps) {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const createTab = useCreateCustomTab();
+  const updateTab = useUpdateCustomTab();
+  const isEdit = !!editTab;
+
+  useEffect(() => {
+    if (open) {
+      setName(editTab?.name ?? '');
+      setUrl(editTab?.url ?? '');
+    }
+  }, [open, editTab]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,13 +43,13 @@ export function AddCustomTabModal({ clientId, open, onOpenChange }: AddCustomTab
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       validUrl = 'https://' + url;
     }
-    
-    await createTab.mutateAsync({
-      client_id: clientId,
-      name: name.trim(),
-      url: validUrl,
-    });
-    
+
+    if (isEdit && editTab) {
+      await updateTab.mutateAsync({ id: editTab.id, clientId, name: name.trim(), url: validUrl });
+    } else {
+      await createTab.mutateAsync({ client_id: clientId, name: name.trim(), url: validUrl });
+    }
+
     setName('');
     setUrl('');
     onOpenChange(false);
@@ -49,15 +59,17 @@ export function AddCustomTabModal({ clientId, open, onOpenChange }: AddCustomTab
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Custom Tab</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit Link' : 'Add Custom Tab'}</DialogTitle>
           <DialogDescription>
-            Create a new tab that will embed an external URL in the client dashboard and public report.
+            {isEdit
+              ? 'Update the title or URL for this custom link.'
+              : 'Create a new tab that will embed an external URL in the client dashboard and public report.'}
           </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
           <div className="space-y-2">
-            <Label htmlFor="tab-name">Tab Name</Label>
+            <Label htmlFor="tab-name">Title</Label>
             <Input
               id="tab-name"
               value={name}
@@ -67,7 +79,7 @@ export function AddCustomTabModal({ clientId, open, onOpenChange }: AddCustomTab
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="tab-url">URL to Embed</Label>
+            <Label htmlFor="tab-url">URL</Label>
             <Input
               id="tab-url"
               value={url}
@@ -83,9 +95,9 @@ export function AddCustomTabModal({ clientId, open, onOpenChange }: AddCustomTab
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!name.trim() || !url.trim() || createTab.isPending}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Tab
+            <Button type="submit" disabled={!name.trim() || !url.trim() || createTab.isPending || updateTab.isPending}>
+              {isEdit ? <Save className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              {isEdit ? 'Save Changes' : 'Add Tab'}
             </Button>
           </div>
         </form>
