@@ -311,53 +311,18 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         </Card>
       </div>
 
-      {/* Daily table */}
-      <Card className="rounded-2xl overflow-hidden">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-sm font-bold">Daily breakdown</h3>
-          <span className="text-xs text-muted-foreground">
-            {current.data?.sheetTitle ? `${current.data.sheetTitle} · ` : ''}
-            {current.data?.rowCount ?? daily.length} rows
+      {/* Footer meta */}
+      {(current.data?.sheetTitle || current.data?.fetchedAt) && (
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
+          <span>
+            {current.data?.sheetTitle ? `Source: ${current.data.sheetTitle}` : ''}
+            {current.data?.rowCount ? ` · ${current.data.rowCount} days` : ''}
           </span>
+          {current.data?.fetchedAt && (
+            <span>Last fetched {format(new Date(current.data.fetchedAt), 'MMM d, yyyy HH:mm')}</span>
+          )}
         </div>
-        <div className="overflow-auto max-h-96">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0">
-              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium text-right">Spend</th>
-                <th className="px-4 py-2 font-medium text-right">Leads</th>
-                <th className="px-4 py-2 font-medium text-right">Calls</th>
-                <th className="px-4 py-2 font-medium text-right">Showed</th>
-                <th className="px-4 py-2 font-medium text-right">Funded</th>
-                <th className="px-4 py-2 font-medium text-right">$ Funded</th>
-              </tr>
-            </thead>
-            <tbody>
-              {daily.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">No rows</td></tr>
-              ) : (
-                [...daily].sort((a, b) => b.date.localeCompare(a.date)).map((d) => (
-                  <tr key={d.date} className="border-t border-border hover:bg-muted/30">
-                    <td className="px-4 py-2 font-medium">{format(parseISO(d.date), 'MMM d, yyyy')}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtMoney(Number(d.ad_spend || 0))}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtInt(d.leads || 0)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtInt(d.calls || 0)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtInt(d.showed_calls || 0)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtInt(d.funded_investors || 0)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtMoney(Number(d.funded_dollars || 0))}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {current.data?.fetchedAt && (
-          <div className="px-4 py-2 border-t border-border text-[11px] text-muted-foreground">
-            Last fetched {format(new Date(current.data.fetchedAt), 'MMM d, yyyy HH:mm')}
-          </div>
-        )}
-      </Card>
+      )}
     </div>
   );
 }

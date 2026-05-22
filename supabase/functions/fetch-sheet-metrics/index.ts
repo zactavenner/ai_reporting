@@ -74,23 +74,36 @@ function parseDate(v: any): string | null {
   if (!v) return null;
   // Handle Sheets serial dates and various formats
   if (typeof v === 'number') {
+    // Real Sheets serials are roughly 1-80000 (1900-2119). Reject bare
+    // numbers like 0, 1, 100 that aren't actually dates.
+    if (v < 25569 || v > 80000) return null; // ~1970-01-01 to ~2119
     const epoch = new Date(Date.UTC(1899, 11, 30));
     const d = new Date(epoch.getTime() + v * 86400000);
     return d.toISOString().slice(0, 10);
   }
   const s = String(v).trim();
+  if (!s) return null;
   // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  // MM/DD/YYYY or M/D/YY
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  // MM/DD/YYYY or M/D/YY (anchored end so "1/1-1/7" can't slip through)
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (m) {
     let [, mm, dd, yy] = m;
     let year = parseInt(yy);
     if (year < 100) year += 2000;
     return `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
   }
+  // Fallback Date parsing: only if the string looks date-ish (has a separator
+  // AND a 4-digit year). Stops things like "0", "703", "2000" from being
+  // mis-parsed as valid years.
+  if (!/[\/\-\s]/.test(s)) return null;
+  if (!/\d{4}/.test(s)) return null;
   const d = new Date(s);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  if (!isNaN(d.getTime())) {
+    const yr = d.getUTCFullYear();
+    if (yr < 2000 || yr > 2100) return null;
+    return d.toISOString().slice(0, 10);
+  }
   return null;
 }
 
