@@ -269,22 +269,47 @@ async function generateStaticAd(opts: {
       : (opts.quality === "pro" ? "gemini-pro" : "nano-banana");
 
   if (effectiveModel === "openai") {
-    if (!OPENROUTER_API_KEY) throw new Error("OpenRouter API key not configured for OpenAI image model");
-    modelUsed = "openai/gpt-image-1 (via openrouter)";
-    // OpenRouter exposes OpenAI's image gen via /images/generations passthrough
-    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1792x1024", "9:16": "1024x1792", "4:5": "1024x1280" };
-    const res = await fetch("https://openrouter.ai/api/v1/images/generations", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
-      body: JSON.stringify({
-        model: "openai/gpt-image-1",
-        prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
-        size: sizeMap[aspect] || "1024x1024",
-        n: 1,
-        response_format: "b64_json",
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenRouter image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    // Prefer the agency-stored OpenAI API key (set in Agency Settings → API Keys).
+    // Fall back to env, then OpenRouter passthrough.
+    let agencyOpenAi: string | null = null;
+    try {
+      const { data: a } = await supa.from("agency_settings").select("openai_api_key").limit(1).maybeSingle();
+      const v = (a as any)?.openai_api_key;
+      if (typeof v === "string" && v.trim()) agencyOpenAi = v.trim();
+    } catch (_) { /* ignore */ }
+    const openaiKey = agencyOpenAi || OPENAI_API_KEY_ENV || null;
+    const sizeMap: Record<string, string> = { "1:1": "1024x1024", "16:9": "1536x1024", "9:16": "1024x1536", "4:5": "1024x1280", "3:2": "1536x1024", "2:3": "1024x1536" };
+    const sz = sizeMap[aspect] || "1024x1024";
+    let res: Response;
+    if (openaiKey) {
+      modelUsed = "openai/gpt-image-1 (direct)";
+      res = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-image-1",
+          prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
+          size: sz,
+          n: 1,
+        }),
+      });
+    } else if (OPENROUTER_API_KEY) {
+      modelUsed = "openai/gpt-image-1 (via openrouter)";
+      res = await fetch("https://openrouter.ai/api/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+        body: JSON.stringify({
+          model: "openai/gpt-image-1",
+          prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
+          size: sz,
+          n: 1,
+          response_format: "b64_json",
+        }),
+      });
+    } else {
+      throw new Error("No OpenAI API key configured. Add one in Agency Settings → API Keys to enable GPT Image.");
+    }
+    if (!res.ok) throw new Error(`OpenAI image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
     const data = await res.json();
     const b64 = data?.data?.[0]?.b64_json;
     const url = data?.data?.[0]?.url;
@@ -292,7 +317,7 @@ async function generateStaticAd(opts: {
     else if (url) {
       const r = await fetch(url); const buf = await r.arrayBuffer();
       base64Image = arrayBufferToBase64(buf); mime = r.headers.get("content-type") || "image/png";
-    } else throw new Error("OpenRouter returned no image data");
+    } else throw new Error("OpenAI returned no image data");
   } else if (effectiveModel === "gemini-pro" && GEMINI_API_KEY) {
     // Direct Gemini 3 Pro Image Preview (Ads Generator 5.0 pipeline)
     const parts: any[] = [{ text: fullPrompt }];
