@@ -13,6 +13,9 @@ import {
   DollarSign,
   Target,
   Activity,
+  Handshake,
+  Briefcase,
+  Banknote,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -219,6 +222,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       { stage: 'Leads', value: agg.totalLeads || 0 },
       { stage: 'Booked', value: agg.totalCalls || 0 },
       { stage: 'Showed', value: agg.showedCalls || 0 },
+      { stage: 'Committed', value: agg.totalCommitments || 0 },
       { stage: 'Funded', value: agg.fundedInvestors || 0 },
     ];
   }, [agg]);
@@ -343,7 +347,34 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       ) : agg ? (
         <>
           {/* Hero row — what a CEO cares about */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <KpiTile
+              label="Pipeline Value"
+              value={fmtMoneyFull((agg.totalLeads || 0) * 100_000)}
+              sub={`${fmtInt(agg.totalLeads)} leads × $100k`}
+              delta={pctDelta(agg.totalLeads, aggPrior?.totalLeads ?? 0)}
+              icon={Briefcase}
+              hero
+              accent="gold"
+            />
+            <KpiTile
+              label="Committed Investors"
+              value={fmtInt(agg.totalCommitments)}
+              sub={agg.totalLeads ? `${fmtPct((agg.totalCommitments / agg.totalLeads) * 100, 2)} of leads` : undefined}
+              delta={pctDelta(agg.totalCommitments, aggPrior?.totalCommitments ?? 0)}
+              icon={Handshake}
+              hero
+              accent="gold"
+            />
+            <KpiTile
+              label="Committed Capital"
+              value={fmtMoneyFull(agg.commitmentDollars)}
+              sub="Soft-circled commitments"
+              delta={pctDelta(agg.commitmentDollars, aggPrior?.commitmentDollars ?? 0)}
+              icon={Banknote}
+              hero
+              accent="emerald"
+            />
             <KpiTile
               label="Funded Investors"
               value={fmtInt(agg.fundedInvestors)}
@@ -351,7 +382,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               delta={pctDelta(agg.fundedInvestors, aggPrior?.fundedInvestors ?? 0)}
               icon={Target}
               hero
-              accent="gold"
+              accent="emerald"
             />
             <KpiTile
               label="Cost per Funded"
@@ -360,7 +391,6 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)}
               icon={DollarSign}
               hero
-              accent="emerald"
               invert
             />
             <KpiTile
