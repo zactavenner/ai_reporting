@@ -8,6 +8,53 @@ const SHEET_ID = '1vuD4QA45XuVgRw1SKgq2nlRWJTIjwj4X6avyED5DpKU';
 const TAB_NAME = 'CRA Onboarding';
 const RANGE = `${TAB_NAME}!A1:AN200`;
 
+// aicapitalraising.com Supabase project (read-only, RLS allows public select on clients)
+const AICR_URL = 'https://chaocdpyyeqnqqlstgzw.supabase.co';
+const AICR_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoYW9jZHB5eWVxbnFxbHN0Z3p3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNDc2NTAsImV4cCI6MjA4OTYyMzY1MH0.IsFJbSXJGX0h47Os63GYV9NltrOvmSwXrJAHdUnnS4c';
+
+// Friendly labels + grouping for AICR clients table columns
+const AICR_FIELDS: { col: string; label: string; group: string }[] = [
+  { col: 'company_name', label: 'Company Name', group: 'Company' },
+  { col: 'fund_name', label: 'Fund Name', group: 'Company' },
+  { col: 'legal_business_name', label: 'Legal Business Name', group: 'Company' },
+  { col: 'website', label: 'Website', group: 'Company' },
+  { col: 'contact_name', label: 'Primary Contact', group: 'Company' },
+  { col: 'contact_email', label: 'Contact Email', group: 'Company' },
+  { col: 'contact_phone', label: 'Contact Phone', group: 'Company' },
+  { col: 'speaker_name', label: 'On-Camera Speaker', group: 'Company' },
+  { col: 'business_address', label: 'Business Address', group: 'Company' },
+  { col: 'business_city', label: 'City', group: 'Company' },
+  { col: 'business_state', label: 'State', group: 'Company' },
+  { col: 'business_zip', label: 'ZIP', group: 'Company' },
+  { col: 'ein_number', label: 'EIN', group: 'Company' },
+  { col: 'fund_type', label: 'Fund Type', group: 'Offer & Strategy' },
+  { col: 'industry_focus', label: 'Industry Focus', group: 'Offer & Strategy' },
+  { col: 'raise_amount', label: 'Raise Amount', group: 'Offer & Strategy' },
+  { col: 'min_investment', label: 'Minimum Investment', group: 'Offer & Strategy' },
+  { col: 'investment_range', label: 'Investment Range', group: 'Offer & Strategy' },
+  { col: 'targeted_returns', label: 'Targeted Returns', group: 'Offer & Strategy' },
+  { col: 'hold_period', label: 'Hold Period', group: 'Offer & Strategy' },
+  { col: 'distribution_schedule', label: 'Distribution Schedule', group: 'Offer & Strategy' },
+  { col: 'tax_advantages', label: 'Tax Advantages', group: 'Offer & Strategy' },
+  { col: 'target_investor', label: 'Target Investor', group: 'Offer & Strategy' },
+  { col: 'timeline', label: 'Timeline', group: 'Offer & Strategy' },
+  { col: 'fund_history', label: 'Fund History', group: 'Offer & Strategy' },
+  { col: 'credibility', label: 'Credibility / Track Record', group: 'Offer & Strategy' },
+  { col: 'pitch_deck_link', label: 'Pitch Deck', group: 'Offer & Strategy' },
+  { col: 'brand_notes', label: 'Brand Notes', group: 'Offer & Strategy' },
+  { col: 'additional_notes', label: 'Additional Notes', group: 'Offer & Strategy' },
+  { col: 'budget_mode', label: 'Budget Mode', group: 'Budget' },
+  { col: 'budget_amount', label: 'Ad Budget', group: 'Budget' },
+  { col: 'has_meta_ad_account', label: 'Has Meta Ad Account', group: 'Operations & Access' },
+  { col: 'comm_preference', label: 'Communication Preference', group: 'Operations & Access' },
+  { col: 'kickoff_date', label: 'Kickoff Date', group: 'Operations & Access' },
+  { col: 'kickoff_time', label: 'Kickoff Time', group: 'Operations & Access' },
+  { col: 'drive_folder_url', label: 'Drive Folder', group: 'Operations & Access' },
+  { col: 'drive_sheet_url', label: 'Onboarding Sheet', group: 'Operations & Access' },
+  { col: 'drive_doc_url', label: 'Onboarding Doc', group: 'Operations & Access' },
+  { col: 'status', label: 'Onboarding Status', group: 'Operations & Access' },
+];
+
 // Columns we never want to surface (sensitive billing data)
 const HIDDEN_HEADERS = new Set([
   'name on card',
@@ -85,6 +132,49 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ---------- 1) Try aicapitalraising.com DB first (new submissions live here) ----------
+    try {
+      const selectCols = AICR_FIELDS.map((f) => f.col).join(',') + ',created_at';
+      const aicrResp = await fetch(
+        `${AICR_URL}/rest/v1/clients?select=${selectCols}&order=created_at.desc&limit=500`,
+        { headers: { apikey: AICR_KEY, Authorization: `Bearer ${AICR_KEY}` } },
+      );
+      if (aicrResp.ok) {
+        const aicrRows: Record<string, any>[] = await aicrResp.json();
+        let aBest: { row: Record<string, any>; score: number; name: string } | null = null;
+        for (const row of aicrRows) {
+          const candidate = (row.company_name || row.fund_name || row.legal_business_name || '').toString();
+          if (!candidate) continue;
+          const s = scoreMatch(nameToMatch, candidate);
+          if (s > 0 && (!aBest || s > aBest.score)) aBest = { row, score: s, name: candidate };
+        }
+        if (aBest && aBest.score >= 30) {
+          const fields: { label: string; value: string; group: string }[] = [];
+          for (const f of AICR_FIELDS) {
+            const raw = aBest.row[f.col];
+            if (raw === null || raw === undefined) continue;
+            const value = String(raw).trim();
+            if (!value) continue;
+            fields.push({ label: f.label, value, group: f.group });
+          }
+          return new Response(JSON.stringify({
+            matched: true,
+            client_name: nameToMatch,
+            matched_company: aBest.name,
+            match_score: aBest.score,
+            fields,
+            source: 'aicapitalraising.com',
+            fetched_at: new Date().toISOString(),
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      } else {
+        console.warn('AICR fetch non-ok', aicrResp.status);
+      }
+    } catch (e) {
+      console.warn('AICR lookup failed, falling back to sheet', (e as Error).message);
+    }
+
+    // ---------- 2) Fallback: Google Sheet (legacy onboarding records) ----------
     const url = `${GATEWAY_URL}/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(TAB_NAME)}!A1:AN200`;
     const resp = await fetch(url, {
       headers: {
