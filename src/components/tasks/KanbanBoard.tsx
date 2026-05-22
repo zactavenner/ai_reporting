@@ -39,6 +39,7 @@ import {
   UserCircle,
   Clock,
   AlertTriangle,
+  ClipboardPaste,
 } from 'lucide-react';
 import {
   DropdownMenu,
