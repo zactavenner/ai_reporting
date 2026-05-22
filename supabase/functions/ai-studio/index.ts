@@ -1103,7 +1103,7 @@ Deno.serve(async (req) => {
     action?: "history" | "clear" | "settings" | "test_doc";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
-    imageModels?: Array<"gemini-pro" | "nano-banana" | "openai"> | null;
+    imageModels?: Array<"nano-banana" | "openai"> | null;
     activeReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
@@ -1111,7 +1111,7 @@ Deno.serve(async (req) => {
   };
 
   const selectedImageModels = Array.isArray(imageModels)
-    ? imageModels.filter((m) => m === "gemini-pro" || m === "nano-banana" || m === "openai")
+    ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
     : [];
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
