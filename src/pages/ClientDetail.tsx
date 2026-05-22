@@ -25,6 +25,7 @@ import { ShareableLinkButton } from '@/components/dashboard/ShareableLinkButton'
 import { CSVImportModal, ImportType } from '@/components/import/CSVImportModal';
 import { ImportHistoryModal } from '@/components/import/ImportHistoryModal';
 import { AddCustomTabModal } from '@/components/import/AddCustomTabModal';
+import { AgencySettingsModal } from '@/components/settings/AgencySettingsModal';
 import { CreativesSection } from '@/components/creative/CreativesSection';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { useUpdateAgencySettings } from '@/hooks/useAgencySettings';
@@ -56,7 +57,7 @@ import { useClientSettings, getThresholdsFromSettings } from '@/hooks/useClientS
 import { useSheetMetrics } from '@/hooks/useSheetMetrics';
 import { useMetricsSourcePreference } from '@/hooks/useMetricsSourcePreference';
 import { MetricsSourceToggle } from '@/components/dashboard/MetricsSourceToggle';
-import { useCustomTabs, useDeleteCustomTab } from '@/hooks/useCustomTabs';
+import { useCustomTabs, useDeleteCustomTab, type CustomTab } from '@/hooks/useCustomTabs';
 import { useAllTasks } from '@/hooks/useTasks';
 import { useVoiceNotes } from '@/hooks/useVoiceNotes';
 import { useMeetings } from '@/hooks/useMeetings';
