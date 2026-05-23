@@ -439,6 +439,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
+    setFollowups([]);
     const userMsg: Msg = { role: "user", content: text };
     const placeholder: Msg = { role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
@@ -546,6 +547,40 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }
 
   function stop() { abortRef.current?.abort(); }
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const mr = new MediaRecorder(stream, { mimeType: mime });
+      mediaRecRef.current = mr;
+      mr.ondataavailable = (e) => { if (e.data?.size) audioChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        recStreamRef.current?.getTracks().forEach(t => t.stop());
+        recStreamRef.current = null;
+        if (!audioChunksRef.current.length) return;
+        setIsTranscribing(true);
+        const blob = new Blob(audioChunksRef.current, { type: mime });
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const { data, error } = await supabase.functions.invoke("transcribe-audio", { body: { audio: reader.result } });
+            if (error) throw error;
+            const txt = (data as any)?.text?.trim();
+            if (txt) setInput(curr => (curr ? curr + " " : "") + txt);
+            else toast.error("No speech detected");
+          } catch (e: any) { toast.error(e?.message || "Transcription failed"); }
+          finally { setIsTranscribing(false); }
+        };
+        reader.readAsDataURL(blob);
+      };
+      mr.start();
+      setIsRecording(true);
+    } catch (e: any) { toast.error(e?.message || "Mic permission denied"); }
+  }, []);
+  const stopRecording = useCallback(() => { try { mediaRecRef.current?.stop(); } catch {} setIsRecording(false); }, []);
 
   async function clearConversation() {
     if (!conversationId) { setMessages([]); setCanvas([]); return; }
