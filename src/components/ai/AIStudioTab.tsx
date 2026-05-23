@@ -524,6 +524,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 : curr;
               return [evt.item as CanvasItem, ...filtered];
             });
+          } else if (evt.type === "suggested_followups") {
+            setFollowups(Array.isArray(evt.suggestions) ? evt.suggestions : []);
           } else if (evt.type === "error") {
             updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\n⚠️ ${evt.message}` }));
             toast.error(evt.message);
