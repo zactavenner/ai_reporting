@@ -962,6 +962,7 @@ export type Database = {
       ai_studio_conversations: {
         Row: {
           active_reference_ids: Json
+          archived_at: string | null
           canvas_pan_x: number
           canvas_pan_y: number
           canvas_zoom: number
@@ -974,12 +975,15 @@ export type Database = {
           id: string
           image_quality: string
           last_active_at: string
+          pinned: boolean
           sheet_url: string | null
+          title: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           active_reference_ids?: Json
+          archived_at?: string | null
           canvas_pan_x?: number
           canvas_pan_y?: number
           canvas_zoom?: number
@@ -992,12 +996,15 @@ export type Database = {
           id?: string
           image_quality?: string
           last_active_at?: string
+          pinned?: boolean
           sheet_url?: string | null
+          title?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           active_reference_ids?: Json
+          archived_at?: string | null
           canvas_pan_x?: number
           canvas_pan_y?: number
           canvas_zoom?: number
@@ -1010,7 +1017,9 @@ export type Database = {
           id?: string
           image_quality?: string
           last_active_at?: string
+          pinned?: boolean
           sheet_url?: string | null
+          title?: string | null
           updated_at?: string
           user_id?: string
         }
