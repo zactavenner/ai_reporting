@@ -126,3 +126,9 @@ verify_jwt = false
 
 [functions.ghl-daily-reconciliation]
 verify_jwt = false
+
+[functions.onboarding-webhook]
+verify_jwt = false
+
+[functions.fulfill-client]
+verify_jwt = false
