@@ -458,7 +458,62 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     setHydrated(true);
   }, [clientId, getStudioAuth, studioFetch]);
 
-  useEffect(() => { loadHistory(); }, [loadHistory]);
+  useEffect(() => { loadHistory(); loadThreads(); }, [loadHistory, loadThreads]);
+
+  // Thread actions
+  const newThread = useCallback(async () => {
+    const res = await studioFetch({ action: "new_thread", clientId, threadTitle: "New chat", quality, chatModel });
+    if (!res.ok) { toast.error("Failed to create thread"); return; }
+    const { conversation } = await res.json();
+    setConversationId(conversation.id);
+    setMessages([]);
+    setCanvas([]);
+    setPendingAttachments([]);
+    setFollowups([]);
+    await loadThreads();
+  }, [clientId, quality, chatModel, studioFetch, loadThreads]);
+
+  const switchThread = useCallback(async (id: string) => {
+    if (id === conversationId) return;
+    setConversationId(id);
+    await loadHistory(id);
+  }, [conversationId, loadHistory]);
+
+  const updateThread = useCallback(async (id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }) => {
+    const res = await studioFetch({ action: "update_thread", clientId, conversationId: id, threadUpdate: patch });
+    if (!res.ok) { toast.error("Update failed"); return; }
+    if (patch.archived && id === conversationId) {
+      setConversationId(null); setMessages([]); setCanvas([]);
+    }
+    await loadThreads();
+  }, [clientId, conversationId, studioFetch, loadThreads]);
+
+  // File upload — store in gpt-files bucket, parse PDFs server-side later if needed
+  const uploadFiles = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    for (const f of list) {
+      if (f.size > 20 * 1024 * 1024) { toast.error(`${f.name} exceeds 20MB`); continue; }
+      const tempUrl = URL.createObjectURL(f);
+      const tempAtt: Attachment = { url: tempUrl, name: f.name, mime: f.type || "application/octet-stream", uploading: true };
+      setPendingAttachments(curr => [...curr, tempAtt]);
+      try {
+        const ext = f.name.split(".").pop() || "bin";
+        const path = `ai-studio/${clientId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error } = await supabase.storage.from("gpt-files").upload(path, f, { contentType: f.type, upsert: false });
+        if (error) throw error;
+        const { data: pub } = supabase.storage.from("gpt-files").getPublicUrl(path);
+        let text: string | undefined;
+        if (/^text\/|\b(application\/json|csv|markdown)\b/i.test(f.type) || /\.(txt|md|json|csv|log)$/i.test(f.name)) {
+          try { text = await f.text(); } catch {}
+        }
+        setPendingAttachments(curr => curr.map(a => a.url === tempUrl ? { url: pub.publicUrl, name: f.name, mime: f.type, text } : a));
+        URL.revokeObjectURL(tempUrl);
+      } catch (e: any) {
+        toast.error(`Failed to upload ${f.name}: ${e?.message || e}`);
+        setPendingAttachments(curr => curr.filter(a => a.url !== tempUrl));
+      }
+    }
+  }, [clientId]);
 
   // Load the Google Doc tied directly to this client (clients.google_doc_url)
   useEffect(() => {
