@@ -576,12 +576,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
+    if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
-    const userMsg: Msg = { role: "user", content: text };
+    const attSnapshot = pendingAttachments.slice();
+    const userContent = attSnapshot.length
+      ? text + "\n\n" + attSnapshot.map(a => `📎 ${a.name}`).join("\n")
+      : text;
+    const userMsg: Msg = { role: "user", content: userContent };
     const placeholder: Msg = { role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
     const assistantIdx = messages.length + 1;
     setInput("");
+    setPendingAttachments([]);
     setLoading(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -597,6 +603,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try {
       const res = await studioFetch({
         clientId,
+        conversationId: conversationId || undefined,
         userText: text,
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
@@ -605,6 +612,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         imageModels,
         activeReferenceIds,
         autoDocContext,
+        agentMode,
+        attachments: attSnapshot.map(a => ({ url: a.url, name: a.name, mime: a.mime, text: a.text })),
       }, ctrl.signal);
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
@@ -680,6 +689,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     } finally {
       abortRef.current = null;
       setLoading(false);
+      loadThreads();
     }
   }
 
