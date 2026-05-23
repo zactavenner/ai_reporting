@@ -277,6 +277,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [showCanvas, setShowCanvas] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:show-canvas") !== "false"; } catch { return true; }
+  });
+  const [followups, setFollowups] = useState<string[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recStreamRef = useRef<MediaStream | null>(null);
+  useEffect(() => { try { localStorage.setItem("ai-studio:show-canvas", String(showCanvas)); } catch {} }, [showCanvas]);
   const [clientDocUrl, setClientDocUrl] = useState<string>("");
   const [docTest, setDocTest] = useState<null | { ok: boolean; source?: string; title?: string; char_count?: number; doc_id?: string; latency_ms?: number; error?: string; client?: { name?: string } }>(null);
   const [testingDoc, setTestingDoc] = useState(false);
