@@ -1,0 +1,1 @@
+UPDATE public.clients SET slug = 'healingrt' WHERE id = '055eea03-76b7-4e6b-aa1d-6fbd2719e532';
