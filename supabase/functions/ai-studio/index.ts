@@ -1414,11 +1414,23 @@ Deno.serve(async (req) => {
   const priorMessages = (history || []).map(m => ({ role: m.role, content: m.content || "" }));
 
   // Persist user message immediately
+  const attachmentNote = Array.isArray(attachments) && attachments.length
+    ? "\n\n[Attachments provided by user — treat as authoritative context]\n" + attachments.map((a, i) => {
+        const lines: string[] = [`#${i + 1} ${a.name || "file"}${a.mime ? ` (${a.mime})` : ""} → ${a.url}`];
+        if (a.text && a.text.trim()) {
+          lines.push("--- BEGIN EXTRACTED TEXT ---");
+          lines.push(a.text.slice(0, 30000));
+          lines.push("--- END EXTRACTED TEXT ---");
+        }
+        return lines.join("\n");
+      }).join("\n\n")
+    : "";
+  const persistedUserText = userText + attachmentNote;
   await supa.from("ai_studio_messages").insert({
     conversation_id: conversationId,
     user_id: userId,
     role: "user",
-    content: userText,
+    content: persistedUserText,
   });
 
   // Brand context
@@ -1486,8 +1498,27 @@ Deno.serve(async (req) => {
   const convo: any[] = [
     { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels }) },
     ...priorMessages,
-    { role: "user", content: userText },
+    { role: "user", content: persistedUserText },
   ];
+  if (agentMode) {
+    convo.splice(1, 0, {
+      role: "system",
+      content: `[AGENT MODE]\nYou are operating autonomously. For every user goal:\n1. Restate the goal in one line.\n2. Lay out a numbered plan (3–7 steps) before any tool call.\n3. Execute the plan step-by-step using available tools, narrating progress concisely.\n4. After every tool call, briefly note what you learned and what's next.\n5. End with a clear "Done" summary listing every artifact produced (doc edits, sheet writes, images, files) with links.\nDo not stop early — chain tool calls until the goal is fully complete or you genuinely need user input.`,
+    });
+  }
+  // Vision: attach image attachments to the final user message for multimodal models
+  const imageAttachments = (attachments || []).filter(a => /^image\//i.test(a.mime || "") || /\.(png|jpe?g|webp|gif)$/i.test(a.url));
+  if (imageAttachments.length) {
+    const lastIdx = convo.length - 1;
+    const text = typeof convo[lastIdx].content === "string" ? convo[lastIdx].content : userText;
+    convo[lastIdx] = {
+      role: "user",
+      content: [
+        { type: "text", text },
+        ...imageAttachments.map(a => ({ type: "image_url", image_url: { url: a.url } })),
+      ],
+    };
+  }
 
   // ── Auto Doc context ──────────────────────────────────────────────
   // When the client opts in, prefetch the tied Google Doc once and
