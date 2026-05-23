@@ -1205,6 +1205,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </Tabs>
       </Card>
       )}
+      </div>
     </div>
   );
 }
