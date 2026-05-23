@@ -342,6 +342,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [showThreads, setShowThreads] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:show-threads") !== "false"; } catch { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:show-threads", String(showThreads)); } catch {} }, [showThreads]);
+  const [agentMode, setAgentMode] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:agent-mode") === "true"; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:agent-mode", String(agentMode)); } catch {} }, [agentMode]);
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recStreamRef = useRef<MediaStream | null>(null);
