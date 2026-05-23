@@ -1024,6 +1024,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "",
   "TOOL USE:",
   "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro' (GPT Image 2). Pass `model: 'openai'` for GPT Image 2 (highest quality finals), or `model: 'nano-banana'` for Nano Banana 2 (quick iteration). Those are the ONLY two supported image models.",
+  "- Use web_search whenever the user asks about real-time info, current events, news, prices, benchmarks, competitor data, or anything you might not know. Always cite source URLs from the result in your reply.",
   "- Use compare_image_models when the user asks to 'compare', 'try both', 'see both models', or wants the same prompt across both image models side-by-side. Default models = ['nano-banana', 'openai'].",
   "- APPROVED REFERENCES: This client's approved creatives are auto-loaded as visual references for new generations. You can mention this if helpful (e.g. 'Riffed on the approved ad style from earlier this week').",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
