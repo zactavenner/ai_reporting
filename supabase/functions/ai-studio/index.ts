@@ -1933,6 +1933,35 @@ Deno.serve(async (req) => {
             tools: finalToolEvents,
           });
         } catch (e) { console.error("persist assistant", e); }
+        // Suggested follow-ups — quick lightweight call
+        try {
+          if (cleaned && cleaned.length > 20) {
+            const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "google/gemini-3-flash-preview",
+                messages: [
+                  { role: "system", content: "Given the user's last request and the assistant's reply, propose 3 short, concrete next-step prompts the user is most likely to want next. Reply with ONLY a JSON array of 3 strings, max 70 chars each. No prose." },
+                  { role: "user", content: `USER: ${(userText || "").slice(0, 800)}\n\nASSISTANT: ${cleaned.slice(0, 1500)}` },
+                ],
+                temperature: 0.6,
+                max_tokens: 200,
+              }),
+            });
+            if (r.ok) {
+              const j = await r.json();
+              const txt = j?.choices?.[0]?.message?.content || "";
+              const m = txt.match(/\[[\s\S]*\]/);
+              if (m) {
+                const arr = JSON.parse(m[0]);
+                if (Array.isArray(arr) && arr.length) {
+                  send({ type: "suggested_followups", suggestions: arr.slice(0, 3).map((s: any) => String(s)) });
+                }
+              }
+            }
+          }
+        } catch (e) { console.error("followups failed", e); }
         try { controller.close(); } catch {}
       }
     },
