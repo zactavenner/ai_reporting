@@ -1319,22 +1319,63 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Upsert conversation
-  const upsertPayload: Record<string, any> = {
-    user_id: userId, client_id: clientId,
-    doc_url: docUrl || null, sheet_url: sheetUrl || null,
+  // Resolve / create conversation thread
+  const baseUpdate: Record<string, any> = {
+    doc_url: docUrl || null,
+    sheet_url: sheetUrl || null,
     image_quality: quality,
     last_active_at: new Date().toISOString(),
     cleared_at: null,
   };
-  if (typeof chatModel === "string") upsertPayload.chat_model = chatModel;
-  if (Array.isArray(activeReferenceIds)) upsertPayload.active_reference_ids = activeReferenceIds;
-  const { data: convoRow } = await supa
-    .from("ai_studio_conversations")
-    .upsert(upsertPayload, { onConflict: "user_id,client_id" })
-    .select("id, cleared_at, active_reference_ids")
-    .single();
+  if (typeof chatModel === "string") baseUpdate.chat_model = chatModel;
+  if (Array.isArray(activeReferenceIds)) baseUpdate.active_reference_ids = activeReferenceIds;
+
+  let convoRow: any = null;
+  if (requestedConversationId) {
+    const { data } = await supa
+      .from("ai_studio_conversations")
+      .update(baseUpdate)
+      .eq("id", requestedConversationId)
+      .eq("user_id", userId)
+      .select("id, cleared_at, active_reference_ids, title")
+      .maybeSingle();
+    convoRow = data;
+  }
+  if (!convoRow) {
+    // Fallback: latest non-archived thread, or insert a new one
+    const { data: existing } = await supa
+      .from("ai_studio_conversations")
+      .select("id, cleared_at, active_reference_ids, title")
+      .eq("client_id", clientId)
+      .eq("user_id", userId)
+      .is("archived_at", null)
+      .order("last_active_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      await supa.from("ai_studio_conversations").update(baseUpdate).eq("id", existing.id);
+      convoRow = existing;
+    } else {
+      const insertPayload: Record<string, any> = {
+        user_id: userId,
+        client_id: clientId,
+        title: userText.slice(0, 60),
+        ...baseUpdate,
+      };
+      const { data: created } = await supa
+        .from("ai_studio_conversations")
+        .insert(insertPayload)
+        .select("id, cleared_at, active_reference_ids, title")
+        .single();
+      convoRow = created;
+    }
+  }
   const conversationId = convoRow!.id;
+
+  // Auto-title new threads from the first user message
+  if (!convoRow.title || convoRow.title === "New chat") {
+    await supa.from("ai_studio_conversations").update({ title: userText.slice(0, 60) }).eq("id", conversationId);
+  }
 
   // Resolve default reference image. Priority:
   // 1. First explicitly-active reference from the conversation
