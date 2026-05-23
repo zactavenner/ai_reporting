@@ -1573,6 +1573,33 @@ Deno.serve(async (req) => {
                 const pc = await precheckDoc();
                 if (!pc.ok) { result = { error: pc.error, precheck_failed: true, action_blocked: "read_doc" }; }
                 else { result = await readDoc(docId!); result.precheck = { title: pc.title, latency_ms: pc.latency_ms }; }
+              } else if (name === "web_search") {
+                try {
+                  const q = String(args.query || "").trim();
+                  if (!q) throw new Error("query is required");
+                  const fresh = args.freshness && args.freshness !== "any" ? ` (last ${args.freshness})` : "";
+                  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured — cannot run web search.");
+                  const r = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Search the web for: ${q}${fresh}.\n\nReturn a 4–6 sentence answer with concrete facts and numbers. Then list the top 5 sources as: TITLE — URL.` }] }],
+                        tools: [{ google_search: {} }],
+                        generationConfig: { temperature: 0.2, maxOutputTokens: 1200 },
+                      }),
+                    },
+                  );
+                  if (!r.ok) throw new Error(`Search failed: ${r.status} ${await r.text().catch(() => "")}`);
+                  const j = await r.json();
+                  const text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("\n").trim() || "";
+                  const grounding = j?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+                  const sources = grounding.slice(0, 8).map((g: any) => ({ title: g?.web?.title, url: g?.web?.uri })).filter((s: any) => s.url);
+                  result = { ok: true, query: q, summary: text, sources };
+                } catch (e: any) {
+                  result = { error: e?.message || String(e) };
+                }
               } else if (name === "append_to_doc") {
                 const pc = await precheckDoc();
                 if (!pc.ok) {
