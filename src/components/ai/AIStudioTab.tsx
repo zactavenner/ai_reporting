@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,7 @@ interface Props {
 }
 
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
+type ChatImage = { url: string; aspect_ratio?: string; prompt?: string };
 
 const CHAT_MODELS = [
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (reasoning)" },
@@ -69,13 +70,28 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
   // Surface lead-quality tool results as a prominent inline alert
   const lqTool = (m.tools || []).find((t: any) => t.name === "check_lead_quality" && t.result && !t.result.error);
   const lq = lqTool?.result;
+  // Web search citations
+  const wsTools = (m.tools || []).filter((t: any) => t.name === "web_search" && t.result?.sources?.length);
+  // Inline images produced this turn (from generate_static_ad / edit_static_ad / compare_image_models / generate_ad_variations / generate_scene_image)
+  const inlineImages: ChatImage[] = [];
+  for (const t of m.tools || []) {
+    if (!t.result || t.result.error) continue;
+    const u = t.result.url_for_internal_use_only || t.result.image_url;
+    if (u) inlineImages.push({ url: u, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt });
+    if (Array.isArray(t.result.variant_urls_internal)) {
+      for (const vu of t.result.variant_urls_internal) inlineImages.push({ url: vu, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt });
+    }
+  }
   return (
     <div className="text-sm text-foreground leading-relaxed">
       {m.tools && m.tools.length > 0 && (
         <div className="mb-2 space-y-1">
           {m.tools.map((t: any, j: number) => (
             <div key={j} className="text-xs flex items-center gap-2 text-muted-foreground">
-              <Badge variant="secondary" className="text-[10px]">{t.name}</Badge>
+              <Badge variant="secondary" className="text-[10px] gap-1">
+                {t.name === "web_search" && <Globe className="h-2.5 w-2.5" />}
+                {t.name}
+              </Badge>
               {t.status === "running" ? (
                 <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
               ) : t.status === "error" || t.result?.error ? (
@@ -124,7 +140,7 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
         </div>
       )}
       {m.content ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-4 prose-headings:mb-2">
+        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:text-foreground prose-strong:font-semibold prose-h1:text-base prose-h2:text-sm prose-h3:text-sm prose-blockquote:border-l-primary/50 prose-code:bg-muted prose-code:px-1 prose-code:rounded">
           <ReactMarkdown>{m.content}</ReactMarkdown>
           {isStreaming && (
             <span className="inline-flex items-center gap-1 ml-1 text-muted-foreground align-middle">
@@ -139,7 +155,82 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
           <Loader2 className="h-3 w-3 animate-spin" /> thinking…
         </span>
       ) : null}
+      {inlineImages.length > 0 && (
+        <div className={`mt-3 grid gap-2 ${inlineImages.length === 1 ? "grid-cols-1 max-w-sm" : "grid-cols-2 max-w-2xl"}`}>
+          {inlineImages.map((img, idx) => (
+            <ChatImagePreview key={idx} image={img} />
+          ))}
+        </div>
+      )}
+      {wsTools.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {wsTools.map((t: any, i: number) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-muted/30 p-2.5 text-xs">
+              <div className="flex items-center gap-1.5 font-medium mb-1.5 text-muted-foreground">
+                <Search className="h-3 w-3" /> Sources for "{t.args?.query}"
+              </div>
+              <ul className="space-y-1">
+                {t.result.sources.slice(0, 5).map((s: any, k: number) => (
+                  <li key={k} className="truncate">
+                    <a href={s.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                      {s.title || s.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+      {!isStreaming && m.content && (
+        <div className="mt-2 flex items-center gap-1">
+          <CopyButton text={m.content} />
+        </div>
+      )}
     </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+      }}
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition px-2 py-1 rounded-md hover:bg-muted"
+      title="Copy reply"
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+function ChatImagePreview({ image }: { image: ChatImage }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="group relative block overflow-hidden rounded-xl border border-border/60 bg-muted/40 hover:border-primary/40 transition"
+      >
+        <img src={image.url} alt={image.prompt || "Generated"} className="w-full h-auto object-cover" loading="lazy" />
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition flex items-center justify-between">
+          <span>Click to view</span>
+          <span className="inline-flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit on canvas</span>
+        </div>
+      </button>
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm grid place-items-center p-4 cursor-zoom-out"
+        >
+          <img src={image.url} alt={image.prompt || "Generated"} className="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl" />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -186,6 +277,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [showCanvas, setShowCanvas] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:show-canvas") !== "false"; } catch { return true; }
+  });
+  const [followups, setFollowups] = useState<string[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recStreamRef = useRef<MediaStream | null>(null);
+  useEffect(() => { try { localStorage.setItem("ai-studio:show-canvas", String(showCanvas)); } catch {} }, [showCanvas]);
   const [clientDocUrl, setClientDocUrl] = useState<string>("");
   const [docTest, setDocTest] = useState<null | { ok: boolean; source?: string; title?: string; char_count?: number; doc_id?: string; latency_ms?: number; error?: string; client?: { name?: string } }>(null);
   const [testingDoc, setTestingDoc] = useState(false);
@@ -338,6 +439,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
+    setFollowups([]);
     const userMsg: Msg = { role: "user", content: text };
     const placeholder: Msg = { role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
@@ -423,6 +525,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 : curr;
               return [evt.item as CanvasItem, ...filtered];
             });
+          } else if (evt.type === "suggested_followups") {
+            setFollowups(Array.isArray(evt.suggestions) ? evt.suggestions : []);
           } else if (evt.type === "error") {
             updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\n⚠️ ${evt.message}` }));
             toast.error(evt.message);
@@ -443,6 +547,40 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }
 
   function stop() { abortRef.current?.abort(); }
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const mr = new MediaRecorder(stream, { mimeType: mime });
+      mediaRecRef.current = mr;
+      mr.ondataavailable = (e) => { if (e.data?.size) audioChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        recStreamRef.current?.getTracks().forEach(t => t.stop());
+        recStreamRef.current = null;
+        if (!audioChunksRef.current.length) return;
+        setIsTranscribing(true);
+        const blob = new Blob(audioChunksRef.current, { type: mime });
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const { data, error } = await supabase.functions.invoke("transcribe-audio", { body: { audio: reader.result } });
+            if (error) throw error;
+            const txt = (data as any)?.text?.trim();
+            if (txt) setInput(curr => (curr ? curr + " " : "") + txt);
+            else toast.error("No speech detected");
+          } catch (e: any) { toast.error(e?.message || "Transcription failed"); }
+          finally { setIsTranscribing(false); }
+        };
+        reader.readAsDataURL(blob);
+      };
+      mr.start();
+      setIsRecording(true);
+    } catch (e: any) { toast.error(e?.message || "Mic permission denied"); }
+  }, []);
+  const stopRecording = useCallback(() => { try { mediaRecRef.current?.stop(); } catch {} setIsRecording(false); }, []);
 
   async function clearConversation() {
     if (!conversationId) { setMessages([]); setCanvas([]); return; }
@@ -471,7 +609,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [/* send is stable enough via closure; no deps to avoid loop */]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr,1.1fr] gap-4 h-[calc(100vh-220px)] min-h-[600px]">
+    <div className={`grid grid-cols-1 ${showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
       {/* LEFT — Chat */}
       <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm">
         <div className="px-5 pt-4 pb-3 border-b border-border/60">
@@ -483,6 +621,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <h3 className="font-semibold text-sm leading-tight truncate">AI Studio</h3>
               <p className="text-[11px] text-muted-foreground truncate">{clientName}</p>
             </div>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
+              {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+            </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={clearConversation} title="Clear conversation">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -747,18 +888,42 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Square className="h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
-                    <Send className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      size="icon"
+                      variant={isRecording ? "destructive" : "ghost"}
+                      className="h-9 w-9 rounded-xl"
+                      title={isRecording ? "Stop recording" : "Record voice"}
+                      disabled={isTranscribing}
+                    >
+                      {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    </Button>
+                    <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline · Model + image quality apply to this turn</p>
+            {followups.length > 0 && !loading && (
+              <div className="mt-3 flex flex-wrap gap-2 justify-center">
+                <span className="text-[10px] text-muted-foreground self-center mr-1">Try next:</span>
+                {followups.map((s, i) => (
+                  <button key={i} onClick={() => send(s)} className="text-[11px] px-3 py-1.5 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-primary/40 transition text-left">
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter newline · 🎤 voice · 🌐 web search built-in</p>
           </div>
         </div>
       </Card>
 
       {/* RIGHT — Canvas */}
+      {showCanvas && (
       <Card className="flex flex-col overflow-hidden">
         <Tabs defaultValue="canvas" className="flex-1 flex flex-col">
           <TabsList className="m-2 self-start">

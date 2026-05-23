@@ -842,6 +842,7 @@ async function generateSceneVideo(opts: {
 // ---------- Tool schema ----------
 const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
+  { type: "function", function: { name: "web_search", description: "Search the live web for real-time information (news, stock prices, recent events, competitor info, fact-checks, ad benchmarks, etc). Returns a short summary plus the top source URLs and snippets. Call this whenever the user asks about anything that requires current/real-time info, anything you don't know, or anything that needs sources/citations. Always cite the source URLs in your reply.", parameters: { type: "object", properties: { query: { type: "string", description: "Search query (be specific)." }, freshness: { type: "string", enum: ["day", "week", "month", "year", "any"], description: "How fresh results should be. Default 'any'." } }, required: ["query"] } } },
   { type: "function", function: { name: "append_to_doc", description: "Append paragraphs to the end of the active Google Doc.", parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] } } },
   { type: "function", function: { name: "replace_doc_text", description: "Find and replace text in the active Google Doc.", parameters: { type: "object", properties: { find: { type: "string" }, replace: { type: "string" } }, required: ["find", "replace"] } } },
   { type: "function", function: { name: "list_sheet_tabs", description: "List every tab (worksheet) in the active Google Sheet with its title, gid, and size. ALWAYS call this FIRST when the user asks to audit, summarize, or analyze the sheet so you can iterate across every tab.", parameters: { type: "object", properties: {}, required: [] } } },
@@ -1023,6 +1024,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "",
   "TOOL USE:",
   "- Use generate_static_ad for ANY request to build, design, or create an ad creative. Default quality = 'pro' (GPT Image 2). Pass `model: 'openai'` for GPT Image 2 (highest quality finals), or `model: 'nano-banana'` for Nano Banana 2 (quick iteration). Those are the ONLY two supported image models.",
+  "- Use web_search whenever the user asks about real-time info, current events, news, prices, benchmarks, competitor data, or anything you might not know. Always cite source URLs from the result in your reply.",
   "- Use compare_image_models when the user asks to 'compare', 'try both', 'see both models', or wants the same prompt across both image models side-by-side. Default models = ['nano-banana', 'openai'].",
   "- APPROVED REFERENCES: This client's approved creatives are auto-loaded as visual references for new generations. You can mention this if helpful (e.g. 'Riffed on the approved ad style from earlier this week').",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
@@ -1572,6 +1574,33 @@ Deno.serve(async (req) => {
                 const pc = await precheckDoc();
                 if (!pc.ok) { result = { error: pc.error, precheck_failed: true, action_blocked: "read_doc" }; }
                 else { result = await readDoc(docId!); result.precheck = { title: pc.title, latency_ms: pc.latency_ms }; }
+              } else if (name === "web_search") {
+                try {
+                  const q = String(args.query || "").trim();
+                  if (!q) throw new Error("query is required");
+                  const fresh = args.freshness && args.freshness !== "any" ? ` (last ${args.freshness})` : "";
+                  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured — cannot run web search.");
+                  const r = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Search the web for: ${q}${fresh}.\n\nReturn a 4–6 sentence answer with concrete facts and numbers. Then list the top 5 sources as: TITLE — URL.` }] }],
+                        tools: [{ google_search: {} }],
+                        generationConfig: { temperature: 0.2, maxOutputTokens: 1200 },
+                      }),
+                    },
+                  );
+                  if (!r.ok) throw new Error(`Search failed: ${r.status} ${await r.text().catch(() => "")}`);
+                  const j = await r.json();
+                  const text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("\n").trim() || "";
+                  const grounding = j?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+                  const sources = grounding.slice(0, 8).map((g: any) => ({ title: g?.web?.title, url: g?.web?.uri })).filter((s: any) => s.url);
+                  result = { ok: true, query: q, summary: text, sources };
+                } catch (e: any) {
+                  result = { error: e?.message || String(e) };
+                }
               } else if (name === "append_to_doc") {
                 const pc = await precheckDoc();
                 if (!pc.ok) {
@@ -1905,6 +1934,35 @@ Deno.serve(async (req) => {
             tools: finalToolEvents,
           });
         } catch (e) { console.error("persist assistant", e); }
+        // Suggested follow-ups — quick lightweight call
+        try {
+          if (cleaned && cleaned.length > 20) {
+            const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "google/gemini-3-flash-preview",
+                messages: [
+                  { role: "system", content: "Given the user's last request and the assistant's reply, propose 3 short, concrete next-step prompts the user is most likely to want next. Reply with ONLY a JSON array of 3 strings, max 70 chars each. No prose." },
+                  { role: "user", content: `USER: ${(userText || "").slice(0, 800)}\n\nASSISTANT: ${cleaned.slice(0, 1500)}` },
+                ],
+                temperature: 0.6,
+                max_tokens: 200,
+              }),
+            });
+            if (r.ok) {
+              const j = await r.json();
+              const txt = j?.choices?.[0]?.message?.content || "";
+              const m = txt.match(/\[[\s\S]*\]/);
+              if (m) {
+                const arr = JSON.parse(m[0]);
+                if (Array.isArray(arr) && arr.length) {
+                  send({ type: "suggested_followups", suggestions: arr.slice(0, 3).map((s: any) => String(s)) });
+                }
+              }
+            }
+          }
+        } catch (e) { console.error("followups failed", e); }
         try { controller.close(); } catch {}
       }
     },
