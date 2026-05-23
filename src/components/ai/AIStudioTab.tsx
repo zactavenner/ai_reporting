@@ -27,6 +27,7 @@ interface Props {
 
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string };
+type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean };
 
 const CHAT_MODELS = [
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (reasoning)" },
