@@ -1102,8 +1102,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext } = body as {
-    action?: "history" | "clear" | "settings" | "test_doc";
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
+    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
@@ -1111,6 +1111,10 @@ Deno.serve(async (req) => {
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
     autoDocContext?: boolean;
+    threadTitle?: string | null;
+    threadUpdate?: { title?: string | null; pinned?: boolean; archived?: boolean } | null;
+    agentMode?: boolean;
+    attachments?: Array<{ url: string; name?: string; mime?: string; text?: string }> | null;
   };
 
   const selectedImageModels = Array.isArray(imageModels)
@@ -1140,12 +1144,27 @@ Deno.serve(async (req) => {
   }
 
   if (action === "history") {
-    const { data: convo } = await supa
-      .from("ai_studio_conversations")
-      .select("*")
-      .eq("client_id", clientId)
-      .eq("user_id", userId)
-      .maybeSingle();
+    let convo: any = null;
+    if (requestedConversationId) {
+      const { data } = await supa
+        .from("ai_studio_conversations")
+        .select("*")
+        .eq("id", requestedConversationId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      convo = data;
+    } else {
+      const { data } = await supa
+        .from("ai_studio_conversations")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("user_id", userId)
+        .is("archived_at", null)
+        .order("last_active_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      convo = data;
+    }
     if (!convo) {
       return new Response(JSON.stringify({ conversation: null, messages: [], canvasItems: [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1159,6 +1178,58 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ conversation: convo, messages: messages || [], canvasItems: canvasItems || [] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  if (action === "list_threads") {
+    const { data: threads } = await supa
+      .from("ai_studio_conversations")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model")
+      .eq("client_id", clientId)
+      .eq("user_id", userId)
+      .is("archived_at", null)
+      .order("pinned", { ascending: false })
+      .order("last_active_at", { ascending: false })
+      .limit(100);
+    return new Response(JSON.stringify({ threads: threads || [] }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (action === "new_thread") {
+    const { data: created, error } = await supa
+      .from("ai_studio_conversations")
+      .insert({
+        user_id: userId,
+        client_id: clientId,
+        title: (typeof threadTitle === "string" && threadTitle.trim()) ? threadTitle.trim().slice(0, 120) : "New chat",
+        image_quality: quality,
+        chat_model: typeof chatModel === "string" ? chatModel : null,
+        last_active_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ conversation: created }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (action === "update_thread" && requestedConversationId) {
+    const upd: Record<string, any> = {};
+    if (threadUpdate) {
+      if (typeof threadUpdate.title === "string") upd.title = threadUpdate.title.trim().slice(0, 120) || null;
+      if (typeof threadUpdate.pinned === "boolean") upd.pinned = threadUpdate.pinned;
+      if (typeof threadUpdate.archived === "boolean") upd.archived_at = threadUpdate.archived ? new Date().toISOString() : null;
+    }
+    if (Object.keys(upd).length === 0) {
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    await supa.from("ai_studio_conversations").update(upd).eq("id", requestedConversationId).eq("user_id", userId);
+    return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   if (action === "clear" && requestedConversationId) {
