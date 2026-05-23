@@ -60,6 +60,7 @@ function contextLimitFor(model: string): number {
 }
 
 function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: boolean }) {
+  const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   if (m.role === "user") {
     return (
       <div className="flex justify-end">
@@ -187,9 +188,65 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
       {!isStreaming && m.content && (
         <div className="mt-2 flex items-center gap-1">
           <CopyButton text={m.content} />
+          {artifacts.map((a, i) => (
+            <ArtifactPreviewButton key={i} artifact={a} />
+          ))}
         </div>
       )}
     </div>
+  );
+}
+
+type Artifact = { lang: string; code: string; label: string };
+function extractArtifacts(text: string): Artifact[] {
+  const out: Artifact[] = [];
+  const re = /```(html|jsx|tsx|react|svg)\s*\n([\s\S]*?)```/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const lang = m[1].toLowerCase();
+    out.push({ lang, code: m[2].trim(), label: lang.toUpperCase() });
+  }
+  return out;
+}
+
+function ArtifactPreviewButton({ artifact }: { artifact: Artifact }) {
+  const [open, setOpen] = useState(false);
+  const html = (() => {
+    if (artifact.lang === "svg") return `<!doctype html><html><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#0a0a0a">${artifact.code}</body></html>`;
+    if (artifact.lang === "html") return artifact.code;
+    // jsx/tsx/react → wrap in Babel standalone
+    return `<!doctype html><html><head><meta charset="utf-8"/><script src="https://unpkg.com/react@18/umd/react.development.js"></script><script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script><script src="https://unpkg.com/@babel/standalone/babel.min.js"></script><script src="https://cdn.tailwindcss.com"></script></head><body><div id="root"></div><script type="text/babel" data-presets="react,typescript">${artifact.code}\ntry{const Comp=typeof App!=='undefined'?App:(typeof Component!=='undefined'?Component:null);if(Comp){ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Comp));}}catch(e){document.body.innerText=String(e);}</script></body></html>`;
+  })();
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline px-2 py-1 rounded-md hover:bg-primary/10"
+        title="Preview artifact"
+      >
+        <Eye className="h-3 w-3" /> Preview {artifact.label}
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm grid place-items-center p-6" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-5xl h-[80vh] bg-background rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-2 border-b">
+              <div className="flex items-center gap-2 text-xs"><Code2 className="h-3.5 w-3.5" /> Live artifact preview ({artifact.label})</div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { navigator.clipboard.writeText(artifact.code); toast.success("Copied"); }} className="text-[10px] px-2 py-1 rounded hover:bg-muted">Copy code</button>
+                <button onClick={() => {
+                  const blob = new Blob([artifact.lang === "html" ? html : artifact.code], { type: "text/html" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = `artifact.${artifact.lang === "tsx" ? "tsx" : artifact.lang === "jsx" ? "jsx" : artifact.lang}`;
+                  a.click(); URL.revokeObjectURL(url);
+                }} className="text-[10px] px-2 py-1 rounded hover:bg-muted">Download</button>
+                <button onClick={() => setOpen(false)} className="p-1 hover:bg-muted rounded"><X className="h-4 w-4" /></button>
+              </div>
+            </div>
+            <iframe srcDoc={html} className="flex-1 w-full bg-white" sandbox="allow-scripts" title="artifact" />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
