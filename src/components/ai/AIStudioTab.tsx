@@ -1001,15 +1001,54 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </div>
             )}
             <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
+              {pendingAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+                  {pendingAttachments.map((a, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[10px] bg-muted rounded-md px-2 py-1">
+                      {a.uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
+                      <span className="max-w-[140px] truncate">{a.name}</span>
+                      <button onClick={() => setPendingAttachments(curr => curr.filter((_, j) => j !== i))} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.target.value = ""; }}
+                accept="image/*,application/pdf,.txt,.md,.json,.csv,.log,.tsv"
+              />
               <Textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+                onPaste={(e) => {
+                  const files = Array.from(e.clipboardData.files || []);
+                  if (files.length) { e.preventDefault(); uploadFiles(files); }
+                }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
                 className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-14 pt-3 text-sm"
                 rows={1}
               />
               <div className="absolute bottom-2 left-2 right-14 flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files (images, PDFs, text)"
+                  className="h-7 w-7 rounded-lg bg-muted/40 hover:bg-muted border border-border/60 grid place-items-center text-muted-foreground hover:text-foreground transition"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAgentMode(v => !v)}
+                  title="Agent mode — plan + auto-execute multi-step tasks"
+                  className={`h-7 px-2 rounded-lg text-[10px] border transition inline-flex items-center gap-1 ${agentMode ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                >
+                  <Bot className="h-3 w-3" /> Agent
+                </button>
                 <Select value={chatModel} onValueChange={setChatModel}>
                   <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
                     <SelectValue />
