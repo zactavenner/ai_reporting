@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,7 @@ import { useClient } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
+import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 
 interface Props {
