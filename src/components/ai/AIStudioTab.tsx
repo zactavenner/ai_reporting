@@ -756,7 +756,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [/* send is stable enough via closure; no deps to avoid loop */]);
 
   return (
-    <div className={`grid grid-cols-1 ${showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
+    <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
+      {showThreads && (
+        <Card className="hidden lg:flex flex-col overflow-hidden border-border/60 shadow-sm p-0">
+          <AIStudioThreadSidebar
+            threads={threads}
+            activeId={conversationId}
+            onSelect={switchThread}
+            onNew={newThread}
+            onRename={(id, title) => updateThread(id, { title })}
+            onPin={(id, pinned) => updateThread(id, { pinned })}
+            onArchive={(id) => updateThread(id, { archived: true })}
+          />
+        </Card>
+      )}
+      <div className={`grid grid-cols-1 ${showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-4 min-w-0`}>
       {/* LEFT — Chat */}
       <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm">
         <div className="px-5 pt-4 pb-3 border-b border-border/60">
@@ -768,6 +782,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <h3 className="font-semibold text-sm leading-tight truncate">AI Studio</h3>
               <p className="text-[11px] text-muted-foreground truncate">{clientName}</p>
             </div>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowThreads(v => !v)} title={showThreads ? "Hide threads" : "Show threads"}>
+              <History className="h-3.5 w-3.5" />
+            </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
               {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
