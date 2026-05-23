@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,7 @@ import { useClient } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
+import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
 
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string };
+type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean };
 
 const CHAT_MODELS = [
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (reasoning)" },
@@ -58,6 +60,7 @@ function contextLimitFor(model: string): number {
 }
 
 function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: boolean }) {
+  const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   if (m.role === "user") {
     return (
       <div className="flex justify-end">
@@ -185,9 +188,65 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
       {!isStreaming && m.content && (
         <div className="mt-2 flex items-center gap-1">
           <CopyButton text={m.content} />
+          {artifacts.map((a, i) => (
+            <ArtifactPreviewButton key={i} artifact={a} />
+          ))}
         </div>
       )}
     </div>
+  );
+}
+
+type Artifact = { lang: string; code: string; label: string };
+function extractArtifacts(text: string): Artifact[] {
+  const out: Artifact[] = [];
+  const re = /```(html|jsx|tsx|react|svg)\s*\n([\s\S]*?)```/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const lang = m[1].toLowerCase();
+    out.push({ lang, code: m[2].trim(), label: lang.toUpperCase() });
+  }
+  return out;
+}
+
+function ArtifactPreviewButton({ artifact }: { artifact: Artifact }) {
+  const [open, setOpen] = useState(false);
+  const html = (() => {
+    if (artifact.lang === "svg") return `<!doctype html><html><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#0a0a0a">${artifact.code}</body></html>`;
+    if (artifact.lang === "html") return artifact.code;
+    // jsx/tsx/react → wrap in Babel standalone
+    return `<!doctype html><html><head><meta charset="utf-8"/><script src="https://unpkg.com/react@18/umd/react.development.js"></script><script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script><script src="https://unpkg.com/@babel/standalone/babel.min.js"></script><script src="https://cdn.tailwindcss.com"></script></head><body><div id="root"></div><script type="text/babel" data-presets="react,typescript">${artifact.code}\ntry{const Comp=typeof App!=='undefined'?App:(typeof Component!=='undefined'?Component:null);if(Comp){ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Comp));}}catch(e){document.body.innerText=String(e);}</script></body></html>`;
+  })();
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline px-2 py-1 rounded-md hover:bg-primary/10"
+        title="Preview artifact"
+      >
+        <Eye className="h-3 w-3" /> Preview {artifact.label}
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm grid place-items-center p-6" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-5xl h-[80vh] bg-background rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-2 border-b">
+              <div className="flex items-center gap-2 text-xs"><Code2 className="h-3.5 w-3.5" /> Live artifact preview ({artifact.label})</div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { navigator.clipboard.writeText(artifact.code); toast.success("Copied"); }} className="text-[10px] px-2 py-1 rounded hover:bg-muted">Copy code</button>
+                <button onClick={() => {
+                  const blob = new Blob([artifact.lang === "html" ? html : artifact.code], { type: "text/html" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = `artifact.${artifact.lang === "tsx" ? "tsx" : artifact.lang === "jsx" ? "jsx" : artifact.lang}`;
+                  a.click(); URL.revokeObjectURL(url);
+                }} className="text-[10px] px-2 py-1 rounded hover:bg-muted">Download</button>
+                <button onClick={() => setOpen(false)} className="p-1 hover:bg-muted rounded"><X className="h-4 w-4" /></button>
+              </div>
+            </div>
+            <iframe srcDoc={html} className="flex-1 w-full bg-white" sandbox="allow-scripts" title="artifact" />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -283,6 +342,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [showThreads, setShowThreads] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:show-threads") !== "false"; } catch { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:show-threads", String(showThreads)); } catch {} }, [showThreads]);
+  const [agentMode, setAgentMode] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:agent-mode") === "true"; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:agent-mode", String(agentMode)); } catch {} }, [agentMode]);
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recStreamRef = useRef<MediaStream | null>(null);
@@ -318,8 +388,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     });
   }, [aiStudioUrl, getStudioAuth]);
 
+  // Load list of threads for this client
+  const loadThreads = useCallback(async () => {
+    try {
+      const { token, dashboardToken } = await getStudioAuth(false);
+      if (!token && !dashboardToken) return;
+      const res = await studioFetch({ action: "list_threads", clientId });
+      if (!res.ok) return;
+      const { threads = [] } = await res.json();
+      setThreads(threads as Thread[]);
+    } catch (e) { console.error("list_threads failed", e); }
+  }, [clientId, getStudioAuth, studioFetch]);
+
   // Load conversation + history + canvas items from DB
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (threadId?: string | null) => {
     setHydrated(false);
     try {
       const { token, dashboardToken } = await getStudioAuth(false);
@@ -329,7 +411,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         setHydrated(true);
         return;
       }
-      const res = await studioFetch({ action: "history", clientId });
+      const res = await studioFetch({ action: "history", clientId, conversationId: threadId || undefined });
       if (!res.ok) throw new Error(await res.text().catch(() => "Failed to load AI Studio history"));
       const { conversation: convo, messages: msgs = [], canvasItems: items = [] } = await res.json();
 
@@ -376,7 +458,62 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     setHydrated(true);
   }, [clientId, getStudioAuth, studioFetch]);
 
-  useEffect(() => { loadHistory(); }, [loadHistory]);
+  useEffect(() => { loadHistory(); loadThreads(); }, [loadHistory, loadThreads]);
+
+  // Thread actions
+  const newThread = useCallback(async () => {
+    const res = await studioFetch({ action: "new_thread", clientId, threadTitle: "New chat", quality, chatModel });
+    if (!res.ok) { toast.error("Failed to create thread"); return; }
+    const { conversation } = await res.json();
+    setConversationId(conversation.id);
+    setMessages([]);
+    setCanvas([]);
+    setPendingAttachments([]);
+    setFollowups([]);
+    await loadThreads();
+  }, [clientId, quality, chatModel, studioFetch, loadThreads]);
+
+  const switchThread = useCallback(async (id: string) => {
+    if (id === conversationId) return;
+    setConversationId(id);
+    await loadHistory(id);
+  }, [conversationId, loadHistory]);
+
+  const updateThread = useCallback(async (id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }) => {
+    const res = await studioFetch({ action: "update_thread", clientId, conversationId: id, threadUpdate: patch });
+    if (!res.ok) { toast.error("Update failed"); return; }
+    if (patch.archived && id === conversationId) {
+      setConversationId(null); setMessages([]); setCanvas([]);
+    }
+    await loadThreads();
+  }, [clientId, conversationId, studioFetch, loadThreads]);
+
+  // File upload — store in gpt-files bucket, parse PDFs server-side later if needed
+  const uploadFiles = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    for (const f of list) {
+      if (f.size > 20 * 1024 * 1024) { toast.error(`${f.name} exceeds 20MB`); continue; }
+      const tempUrl = URL.createObjectURL(f);
+      const tempAtt: Attachment = { url: tempUrl, name: f.name, mime: f.type || "application/octet-stream", uploading: true };
+      setPendingAttachments(curr => [...curr, tempAtt]);
+      try {
+        const ext = f.name.split(".").pop() || "bin";
+        const path = `ai-studio/${clientId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error } = await supabase.storage.from("gpt-files").upload(path, f, { contentType: f.type, upsert: false });
+        if (error) throw error;
+        const { data: pub } = supabase.storage.from("gpt-files").getPublicUrl(path);
+        let text: string | undefined;
+        if (/^text\/|\b(application\/json|csv|markdown)\b/i.test(f.type) || /\.(txt|md|json|csv|log)$/i.test(f.name)) {
+          try { text = await f.text(); } catch {}
+        }
+        setPendingAttachments(curr => curr.map(a => a.url === tempUrl ? { url: pub.publicUrl, name: f.name, mime: f.type, text } : a));
+        URL.revokeObjectURL(tempUrl);
+      } catch (e: any) {
+        toast.error(`Failed to upload ${f.name}: ${e?.message || e}`);
+        setPendingAttachments(curr => curr.filter(a => a.url !== tempUrl));
+      }
+    }
+  }, [clientId]);
 
   // Load the Google Doc tied directly to this client (clients.google_doc_url)
   useEffect(() => {
@@ -439,12 +576,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
+    if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
-    const userMsg: Msg = { role: "user", content: text };
+    const attSnapshot = pendingAttachments.slice();
+    const userContent = attSnapshot.length
+      ? text + "\n\n" + attSnapshot.map(a => `📎 ${a.name}`).join("\n")
+      : text;
+    const userMsg: Msg = { role: "user", content: userContent };
     const placeholder: Msg = { role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
     const assistantIdx = messages.length + 1;
     setInput("");
+    setPendingAttachments([]);
     setLoading(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -460,6 +603,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try {
       const res = await studioFetch({
         clientId,
+        conversationId: conversationId || undefined,
         userText: text,
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
@@ -468,6 +612,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         imageModels,
         activeReferenceIds,
         autoDocContext,
+        agentMode,
+        attachments: attSnapshot.map(a => ({ url: a.url, name: a.name, mime: a.mime, text: a.text })),
       }, ctrl.signal);
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
 
@@ -543,6 +689,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     } finally {
       abortRef.current = null;
       setLoading(false);
+      loadThreads();
     }
   }
 
@@ -609,7 +756,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [/* send is stable enough via closure; no deps to avoid loop */]);
 
   return (
-    <div className={`grid grid-cols-1 ${showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
+    <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
+      {showThreads && (
+        <Card className="hidden lg:flex flex-col overflow-hidden border-border/60 shadow-sm p-0">
+          <AIStudioThreadSidebar
+            threads={threads}
+            activeId={conversationId}
+            onSelect={switchThread}
+            onNew={newThread}
+            onRename={(id, title) => updateThread(id, { title })}
+            onPin={(id, pinned) => updateThread(id, { pinned })}
+            onArchive={(id) => updateThread(id, { archived: true })}
+          />
+        </Card>
+      )}
+      <div className={`grid grid-cols-1 ${showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-4 min-w-0`}>
       {/* LEFT — Chat */}
       <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm">
         <div className="px-5 pt-4 pb-3 border-b border-border/60">
@@ -621,6 +782,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <h3 className="font-semibold text-sm leading-tight truncate">AI Studio</h3>
               <p className="text-[11px] text-muted-foreground truncate">{clientName}</p>
             </div>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowThreads(v => !v)} title={showThreads ? "Hide threads" : "Show threads"}>
+              <History className="h-3.5 w-3.5" />
+            </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
               {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
@@ -837,15 +1001,54 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </div>
             )}
             <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
+              {pendingAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+                  {pendingAttachments.map((a, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[10px] bg-muted rounded-md px-2 py-1">
+                      {a.uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
+                      <span className="max-w-[140px] truncate">{a.name}</span>
+                      <button onClick={() => setPendingAttachments(curr => curr.filter((_, j) => j !== i))} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.target.value = ""; }}
+                accept="image/*,application/pdf,.txt,.md,.json,.csv,.log,.tsv"
+              />
               <Textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+                onPaste={(e) => {
+                  const files = Array.from(e.clipboardData.files || []);
+                  if (files.length) { e.preventDefault(); uploadFiles(files); }
+                }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
                 className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-14 pt-3 text-sm"
                 rows={1}
               />
               <div className="absolute bottom-2 left-2 right-14 flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files (images, PDFs, text)"
+                  className="h-7 w-7 rounded-lg bg-muted/40 hover:bg-muted border border-border/60 grid place-items-center text-muted-foreground hover:text-foreground transition"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAgentMode(v => !v)}
+                  title="Agent mode — plan + auto-execute multi-step tasks"
+                  className={`h-7 px-2 rounded-lg text-[10px] border transition inline-flex items-center gap-1 ${agentMode ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                >
+                  <Bot className="h-3 w-3" /> Agent
+                </button>
                 <Select value={chatModel} onValueChange={setChatModel}>
                   <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
                     <SelectValue />
@@ -1041,6 +1244,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </Tabs>
       </Card>
       )}
+      </div>
     </div>
   );
 }

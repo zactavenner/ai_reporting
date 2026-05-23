@@ -1102,8 +1102,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext } = body as {
-    action?: "history" | "clear" | "settings" | "test_doc";
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
+    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
@@ -1111,6 +1111,10 @@ Deno.serve(async (req) => {
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
     autoDocContext?: boolean;
+    threadTitle?: string | null;
+    threadUpdate?: { title?: string | null; pinned?: boolean; archived?: boolean } | null;
+    agentMode?: boolean;
+    attachments?: Array<{ url: string; name?: string; mime?: string; text?: string }> | null;
   };
 
   const selectedImageModels = Array.isArray(imageModels)
@@ -1140,12 +1144,27 @@ Deno.serve(async (req) => {
   }
 
   if (action === "history") {
-    const { data: convo } = await supa
-      .from("ai_studio_conversations")
-      .select("*")
-      .eq("client_id", clientId)
-      .eq("user_id", userId)
-      .maybeSingle();
+    let convo: any = null;
+    if (requestedConversationId) {
+      const { data } = await supa
+        .from("ai_studio_conversations")
+        .select("*")
+        .eq("id", requestedConversationId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      convo = data;
+    } else {
+      const { data } = await supa
+        .from("ai_studio_conversations")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("user_id", userId)
+        .is("archived_at", null)
+        .order("last_active_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      convo = data;
+    }
     if (!convo) {
       return new Response(JSON.stringify({ conversation: null, messages: [], canvasItems: [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1159,6 +1178,58 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ conversation: convo, messages: messages || [], canvasItems: canvasItems || [] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  if (action === "list_threads") {
+    const { data: threads } = await supa
+      .from("ai_studio_conversations")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model")
+      .eq("client_id", clientId)
+      .eq("user_id", userId)
+      .is("archived_at", null)
+      .order("pinned", { ascending: false })
+      .order("last_active_at", { ascending: false })
+      .limit(100);
+    return new Response(JSON.stringify({ threads: threads || [] }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (action === "new_thread") {
+    const { data: created, error } = await supa
+      .from("ai_studio_conversations")
+      .insert({
+        user_id: userId,
+        client_id: clientId,
+        title: (typeof threadTitle === "string" && threadTitle.trim()) ? threadTitle.trim().slice(0, 120) : "New chat",
+        image_quality: quality,
+        chat_model: typeof chatModel === "string" ? chatModel : null,
+        last_active_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ conversation: created }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (action === "update_thread" && requestedConversationId) {
+    const upd: Record<string, any> = {};
+    if (threadUpdate) {
+      if (typeof threadUpdate.title === "string") upd.title = threadUpdate.title.trim().slice(0, 120) || null;
+      if (typeof threadUpdate.pinned === "boolean") upd.pinned = threadUpdate.pinned;
+      if (typeof threadUpdate.archived === "boolean") upd.archived_at = threadUpdate.archived ? new Date().toISOString() : null;
+    }
+    if (Object.keys(upd).length === 0) {
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    await supa.from("ai_studio_conversations").update(upd).eq("id", requestedConversationId).eq("user_id", userId);
+    return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   if (action === "clear" && requestedConversationId) {
@@ -1248,22 +1319,63 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Upsert conversation
-  const upsertPayload: Record<string, any> = {
-    user_id: userId, client_id: clientId,
-    doc_url: docUrl || null, sheet_url: sheetUrl || null,
+  // Resolve / create conversation thread
+  const baseUpdate: Record<string, any> = {
+    doc_url: docUrl || null,
+    sheet_url: sheetUrl || null,
     image_quality: quality,
     last_active_at: new Date().toISOString(),
     cleared_at: null,
   };
-  if (typeof chatModel === "string") upsertPayload.chat_model = chatModel;
-  if (Array.isArray(activeReferenceIds)) upsertPayload.active_reference_ids = activeReferenceIds;
-  const { data: convoRow } = await supa
-    .from("ai_studio_conversations")
-    .upsert(upsertPayload, { onConflict: "user_id,client_id" })
-    .select("id, cleared_at, active_reference_ids")
-    .single();
+  if (typeof chatModel === "string") baseUpdate.chat_model = chatModel;
+  if (Array.isArray(activeReferenceIds)) baseUpdate.active_reference_ids = activeReferenceIds;
+
+  let convoRow: any = null;
+  if (requestedConversationId) {
+    const { data } = await supa
+      .from("ai_studio_conversations")
+      .update(baseUpdate)
+      .eq("id", requestedConversationId)
+      .eq("user_id", userId)
+      .select("id, cleared_at, active_reference_ids, title")
+      .maybeSingle();
+    convoRow = data;
+  }
+  if (!convoRow) {
+    // Fallback: latest non-archived thread, or insert a new one
+    const { data: existing } = await supa
+      .from("ai_studio_conversations")
+      .select("id, cleared_at, active_reference_ids, title")
+      .eq("client_id", clientId)
+      .eq("user_id", userId)
+      .is("archived_at", null)
+      .order("last_active_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      await supa.from("ai_studio_conversations").update(baseUpdate).eq("id", existing.id);
+      convoRow = existing;
+    } else {
+      const insertPayload: Record<string, any> = {
+        user_id: userId,
+        client_id: clientId,
+        title: userText.slice(0, 60),
+        ...baseUpdate,
+      };
+      const { data: created } = await supa
+        .from("ai_studio_conversations")
+        .insert(insertPayload)
+        .select("id, cleared_at, active_reference_ids, title")
+        .single();
+      convoRow = created;
+    }
+  }
   const conversationId = convoRow!.id;
+
+  // Auto-title new threads from the first user message
+  if (!convoRow.title || convoRow.title === "New chat") {
+    await supa.from("ai_studio_conversations").update({ title: userText.slice(0, 60) }).eq("id", conversationId);
+  }
 
   // Resolve default reference image. Priority:
   // 1. First explicitly-active reference from the conversation
@@ -1302,11 +1414,23 @@ Deno.serve(async (req) => {
   const priorMessages = (history || []).map(m => ({ role: m.role, content: m.content || "" }));
 
   // Persist user message immediately
+  const attachmentNote = Array.isArray(attachments) && attachments.length
+    ? "\n\n[Attachments provided by user — treat as authoritative context]\n" + attachments.map((a, i) => {
+        const lines: string[] = [`#${i + 1} ${a.name || "file"}${a.mime ? ` (${a.mime})` : ""} → ${a.url}`];
+        if (a.text && a.text.trim()) {
+          lines.push("--- BEGIN EXTRACTED TEXT ---");
+          lines.push(a.text.slice(0, 30000));
+          lines.push("--- END EXTRACTED TEXT ---");
+        }
+        return lines.join("\n");
+      }).join("\n\n")
+    : "";
+  const persistedUserText = userText + attachmentNote;
   await supa.from("ai_studio_messages").insert({
     conversation_id: conversationId,
     user_id: userId,
     role: "user",
-    content: userText,
+    content: persistedUserText,
   });
 
   // Brand context
@@ -1374,8 +1498,27 @@ Deno.serve(async (req) => {
   const convo: any[] = [
     { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels }) },
     ...priorMessages,
-    { role: "user", content: userText },
+    { role: "user", content: persistedUserText },
   ];
+  if (agentMode) {
+    convo.splice(1, 0, {
+      role: "system",
+      content: `[AGENT MODE]\nYou are operating autonomously. For every user goal:\n1. Restate the goal in one line.\n2. Lay out a numbered plan (3–7 steps) before any tool call.\n3. Execute the plan step-by-step using available tools, narrating progress concisely.\n4. After every tool call, briefly note what you learned and what's next.\n5. End with a clear "Done" summary listing every artifact produced (doc edits, sheet writes, images, files) with links.\nDo not stop early — chain tool calls until the goal is fully complete or you genuinely need user input.`,
+    });
+  }
+  // Vision: attach image attachments to the final user message for multimodal models
+  const imageAttachments = (attachments || []).filter(a => /^image\//i.test(a.mime || "") || /\.(png|jpe?g|webp|gif)$/i.test(a.url));
+  if (imageAttachments.length) {
+    const lastIdx = convo.length - 1;
+    const text = typeof convo[lastIdx].content === "string" ? convo[lastIdx].content : userText;
+    convo[lastIdx] = {
+      role: "user",
+      content: [
+        { type: "text", text },
+        ...imageAttachments.map(a => ({ type: "image_url", image_url: { url: a.url } })),
+      ],
+    };
+  }
 
   // ── Auto Doc context ──────────────────────────────────────────────
   // When the client opts in, prefetch the tied Google Doc once and
