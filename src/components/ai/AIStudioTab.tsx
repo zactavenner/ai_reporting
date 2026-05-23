@@ -888,18 +888,42 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Square className="h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
-                    <Send className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      size="icon"
+                      variant={isRecording ? "destructive" : "ghost"}
+                      className="h-9 w-9 rounded-xl"
+                      title={isRecording ? "Stop recording" : "Record voice"}
+                      disabled={isTranscribing}
+                    >
+                      {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    </Button>
+                    <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter for newline · Model + image quality apply to this turn</p>
+            {followups.length > 0 && !loading && (
+              <div className="mt-3 flex flex-wrap gap-2 justify-center">
+                <span className="text-[10px] text-muted-foreground self-center mr-1">Try next:</span>
+                {followups.map((s, i) => (
+                  <button key={i} onClick={() => send(s)} className="text-[11px] px-3 py-1.5 rounded-full border border-border/60 bg-muted/40 hover:bg-muted hover:border-primary/40 transition text-left">
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter newline · 🎤 voice · 🌐 web search built-in</p>
           </div>
         </div>
       </Card>
 
       {/* RIGHT — Canvas */}
+      {showCanvas && (
       <Card className="flex flex-col overflow-hidden">
         <Tabs defaultValue="canvas" className="flex-1 flex flex-col">
           <TabsList className="m-2 self-start">
