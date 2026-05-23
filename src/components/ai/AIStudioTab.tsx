@@ -388,8 +388,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     });
   }, [aiStudioUrl, getStudioAuth]);
 
+  // Load list of threads for this client
+  const loadThreads = useCallback(async () => {
+    try {
+      const { token, dashboardToken } = await getStudioAuth(false);
+      if (!token && !dashboardToken) return;
+      const res = await studioFetch({ action: "list_threads", clientId });
+      if (!res.ok) return;
+      const { threads = [] } = await res.json();
+      setThreads(threads as Thread[]);
+    } catch (e) { console.error("list_threads failed", e); }
+  }, [clientId, getStudioAuth, studioFetch]);
+
   // Load conversation + history + canvas items from DB
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (threadId?: string | null) => {
     setHydrated(false);
     try {
       const { token, dashboardToken } = await getStudioAuth(false);
@@ -399,7 +411,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         setHydrated(true);
         return;
       }
-      const res = await studioFetch({ action: "history", clientId });
+      const res = await studioFetch({ action: "history", clientId, conversationId: threadId || undefined });
       if (!res.ok) throw new Error(await res.text().catch(() => "Failed to load AI Studio history"));
       const { conversation: convo, messages: msgs = [], canvasItems: items = [] } = await res.json();
 
