@@ -803,21 +803,33 @@ function SortableHeader({
   label,
   sortConfig,
   onSort,
+  align = 'right',
 }: {
   column: string;
   label: string;
   sortConfig: SortConfig;
   onSort: (column: string) => void;
+  align?: 'right' | 'center' | 'left';
 }) {
   const isActive = sortConfig.column === column;
   const direction = isActive ? sortConfig.direction : null;
 
   return (
     <TableHead
-      className="font-bold text-[11px] text-right cursor-pointer select-none hover:bg-muted/50 transition-colors py-0 px-1"
+      className={cn(
+        "font-bold text-[11px] cursor-pointer select-none hover:bg-muted/50 transition-colors py-0 px-1",
+        align === 'right' && 'text-right',
+        align === 'center' && 'text-center',
+        align === 'left' && 'text-left',
+      )}
       onClick={() => onSort(column)}
     >
-      <div className="flex items-center gap-0.5 justify-end">
+      <div className={cn(
+        "flex items-center gap-0.5",
+        align === 'right' && 'justify-end',
+        align === 'center' && 'justify-center',
+        align === 'left' && 'justify-start',
+      )}>
         <span>{label}</span>
         {direction === 'asc' ? (
           <ArrowUp className="h-2.5 w-2.5" />
