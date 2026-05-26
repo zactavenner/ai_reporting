@@ -777,6 +777,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     await send(text);
   }, [/* send is stable enough via closure; no deps to avoid loop */]);
 
+  // Drag-from-chat → drop on composer (and click "+ Reference" button on hover)
+  const addImageAsReference = useCallback((url: string, name?: string) => {
+    if (!url) return;
+    setPendingAttachments(curr => {
+      if (curr.some(a => a.url === url)) return curr;
+      return [...curr, { url, name: name || url.split("/").pop() || "reference.png", mime: "image/png" }];
+    });
+  }, []);
+  useEffect(() => {
+    const onUse = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      addImageAsReference(d.url, d.name);
+    };
+    const onEdit = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (d.url) inlineEdit(d.url, d.aspect_ratio || "1:1", "Make the changes I'll describe next").catch(() => {});
+    };
+    window.addEventListener("aistudio:use-image", onUse);
+    window.addEventListener("aistudio:edit-image", onEdit);
+    return () => {
+      window.removeEventListener("aistudio:use-image", onUse);
+      window.removeEventListener("aistudio:edit-image", onEdit);
+    };
+  }, [addImageAsReference, inlineEdit]);
+
   return (
     <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
       {showThreads && (
