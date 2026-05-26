@@ -510,6 +510,8 @@ export function DraggableClientTable({
               const isInactive = inactiveClientIds.has(client.id);
               const missingIntegrationStyle = getMissingIntegrationRowStyle(client);
 
+              const isCcError = client.status === 'cc_error';
+
               return (
                 <TooltipProvider key={client.id}>
                   <TableRow
@@ -518,7 +520,8 @@ export function DraggableClientTable({
                       draggedId === client.id && "opacity-50",
                       syncBorderStyle,
                       missingIntegrationStyle,
-                      isInactive && "opacity-70"
+                      isInactive && "opacity-70",
+                      isCcError && "bg-red-950/40 border-red-900/60 hover:bg-red-950/50"
                     )}
                     draggable
                     onDragStart={(e) => handleDragStart(e, client.id)}
