@@ -551,6 +551,7 @@ export function DraggableClientTable({
                               client.status === 'active' ? 'default' :
                               client.status === 'onboarding' ? 'secondary' :
                               client.status === 'paused' || client.status === 'on_hold' ? 'outline' :
+                              client.status === 'cc_error' ? 'destructive' :
                               'destructive'
                             }
                             className={cn(
@@ -558,10 +559,11 @@ export function DraggableClientTable({
                               client.status === 'active' && 'bg-chart-2/15 text-chart-2 border-chart-2/30',
                               client.status === 'onboarding' && 'bg-primary/15 text-primary border-primary/30',
                               (client.status === 'paused' || client.status === 'on_hold') && 'bg-muted text-muted-foreground',
-                              client.status === 'inactive' && 'bg-destructive/15 text-destructive'
+                              client.status === 'inactive' && 'bg-destructive/15 text-destructive',
+                              client.status === 'cc_error' && 'bg-red-700 text-white border-red-600'
                             )}
                           >
-                            {client.status === 'on_hold' ? 'On Hold' : client.status?.charAt(0).toUpperCase() + client.status?.slice(1)}
+                            {client.status === 'on_hold' ? 'On Hold' : client.status === 'cc_error' ? 'CC Error' : client.status?.charAt(0).toUpperCase() + client.status?.slice(1)}
                           </Badge>
                         </SelectTrigger>
                         <SelectContent>
@@ -573,6 +575,9 @@ export function DraggableClientTable({
                           </SelectItem>
                           <SelectItem value="paused">
                             <Badge className="bg-muted text-muted-foreground text-[9px]">Paused</Badge>
+                          </SelectItem>
+                          <SelectItem value="cc_error">
+                            <Badge className="bg-red-700 text-white border-red-600 text-[9px]">CC Error</Badge>
                           </SelectItem>
                         </SelectContent>
                       </Select>
