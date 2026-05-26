@@ -1,0 +1,1 @@
+UPDATE public.tasks SET stage='todo' WHERE stage='to-do';
