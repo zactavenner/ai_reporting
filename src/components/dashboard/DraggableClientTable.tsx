@@ -1362,15 +1362,8 @@ function CrmStatusCell({
 }) {
   const [locationId, setLocationId] = useState(client.ghl_location_id || '');
   const [apiKey, setApiKey] = useState(client.ghl_api_key || '');
-  const [accountUrl, setAccountUrl] = useState((client as any).ghl_account_url || '');
   const [open, setOpen] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const updateClient = useUpdateClient();
-  const queryClient = useQueryClient();
-  const [syncing, setSyncing] = useState(false);
-  const [syncDays, setSyncDays] = useState<string>('7');
-  const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const handleSave = async () => {
     try {
@@ -1378,7 +1371,6 @@ function CrmStatusCell({
         id: client.id,
         ghl_location_id: locationId || null,
         ghl_api_key: apiKey || null,
-        ghl_account_url: accountUrl || null,
       } as any);
       toast.success('GHL settings updated');
       setOpen(false);
@@ -1389,82 +1381,21 @@ function CrmStatusCell({
 
   const openGhl = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = accountUrl || (locationId ? `https://app.gohighlevel.com/v2/location/${locationId}` : null);
+    const url = locationId ? `https://app.gohighlevel.com/v2/location/${locationId}` : null;
     if (url) window.open(url, '_blank');
-    else toast.error('No GHL URL or Location ID set');
+    else toast.error('No Location ID set');
   };
 
-  const handleTestConnection = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!apiKey || !locationId) {
-      setTestResult({ ok: false, message: 'Enter both Location ID and API Key first' });
-      return;
-    }
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('test-ghl-connection', {
-        body: { api_key: apiKey, location_id: locationId },
-      });
-      if (error) throw error;
-      if (data?.ok) {
-        setTestResult({ ok: true, message: `Connected${data.location_name ? ` — ${data.location_name}` : ''}` });
-      } else {
-        setTestResult({ ok: false, message: data?.error || 'Connection failed' });
-      }
-    } catch (err: any) {
-      setTestResult({ ok: false, message: err?.message || 'Test failed' });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const handleManualSync = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!client.ghl_api_key || !client.ghl_location_id) {
-      setSyncResult({ ok: false, message: 'Save credentials before syncing' });
-      return;
-    }
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      const days = parseInt(syncDays, 10) || 7;
-      const { data, error } = await supabase.functions.invoke('sync-ghl-contacts', {
-        body: { clientId: client.id, sinceDateDays: days, syncTimeline: days >= 30 },
-      });
-      if (error) throw error;
-      const summary = data?.results?.[0];
-      const synced = summary?.contacts?.created ?? summary?.contacts?.updated ?? 0;
-      setSyncResult({ ok: true, message: `Synced last ${days} day${days === 1 ? '' : 's'}${synced ? ` — ${synced} records` : ''}` });
-      queryClient.invalidateQueries({ queryKey: ['daily-metrics'] });
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['calls'] });
-      queryClient.invalidateQueries({ queryKey: ['integration-statuses'] });
-    } catch (err: any) {
-      setSyncResult({ ok: false, message: err?.message || 'Sync failed' });
-    } finally {
-      setSyncing(false);
-    }
-  };
+  const hasCreds = !!(locationId && apiKey) || !!(client.hubspot_portal_id && client.hubspot_access_token);
+  const sourceLabel = (client.hubspot_portal_id && client.hubspot_access_token) ? 'HS' : 'GHL';
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div className="inline-flex items-center gap-0.5 cursor-pointer">
-          {syncInfo.status === 'healthy' && (
-            <Badge variant="success" className="text-[9px] px-1 py-0 h-4">
-              {syncInfo.source === 'hubspot' ? 'HS' : 'GHL'}
-            </Badge>
-          )}
-          {syncInfo.status === 'stale' && (
-            <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 border-yellow-500/50 text-yellow-600 dark:text-yellow-400">Old</Badge>
-          )}
-          {syncInfo.status === 'error' && (
-            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
-              <AlertTriangle className="h-3 w-3" />{syncInfo.source === 'hubspot' ? 'HS' : syncInfo.source === 'ghl' ? 'GHL' : 'CRM'}
-            </Badge>
-          )}
-          {syncInfo.status === 'not_configured' && (
+          {hasCreds ? (
+            <Badge variant="success" className="text-[9px] px-1 py-0 h-4">{sourceLabel}</Badge>
+          ) : (
             <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
               <AlertTriangle className="h-3 w-3" />CRM
             </Badge>
@@ -1476,7 +1407,7 @@ function CrmStatusCell({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="font-medium text-xs">GHL Integration — {client.name}</h4>
-            {(accountUrl || locationId) && (
+            {locationId && (
               <Button variant="ghost" size="icon" className="h-5 w-5" onClick={openGhl} title="Open GHL account">
                 <ExternalLink className="h-3 w-3" />
               </Button>
@@ -1501,92 +1432,11 @@ function CrmStatusCell({
               type="password"
             />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] text-muted-foreground font-medium">GHL Account URL <span className="text-muted-foreground">(if custom domain)</span></label>
-            <Input
-              value={accountUrl}
-              onChange={(e) => setAccountUrl(e.target.value)}
-              placeholder="https://app.gohighlevel.com/v2/location/..."
-              className="h-7 text-xs"
-            />
-          </div>
-          {syncInfo.lastSyncAt && (
-            <div className="text-[10px] text-muted-foreground">
-              Last sync: {formatDistanceToNow(new Date(syncInfo.lastSyncAt), { addSuffix: true })}
-            </div>
-          )}
-          {syncInfo.error && (
-            <div className="text-[10px] text-destructive bg-destructive/10 rounded p-1.5">
-              {syncInfo.error}
-            </div>
-          )}
-          {testResult && (
-            <div className={cn(
-              "text-[10px] rounded p-1.5 flex items-center gap-1",
-              testResult.ok
-                ? "text-green-700 dark:text-green-400 bg-green-500/10 border border-green-500/30"
-                : "text-destructive bg-destructive/10"
-            )}>
-              {testResult.ok ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-              {testResult.message}
-            </div>
-          )}
-          <div className="space-y-1.5 pt-1 border-t border-border">
-            <label className="text-[11px] text-muted-foreground font-medium">Manual Sync</label>
-            <div className="flex gap-1.5">
-              <Select value={syncDays} onValueChange={setSyncDays}>
-                <SelectTrigger className="h-7 text-xs flex-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Last 1 day</SelectItem>
-                  <SelectItem value="3">Last 3 days</SelectItem>
-                  <SelectItem value="7">Last 7 days</SelectItem>
-                  <SelectItem value="14">Last 14 days</SelectItem>
-                  <SelectItem value="30">Last 30 days</SelectItem>
-                  <SelectItem value="90">Last 90 days</SelectItem>
-                  <SelectItem value="365">Last 365 days</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-[10px] gap-1"
-                onClick={handleManualSync}
-                disabled={syncing || !client.ghl_api_key || !client.ghl_location_id}
-              >
-                <RefreshCw className={cn('h-3 w-3', syncing && 'animate-spin')} />
-                {syncing ? 'Syncing…' : 'Sync'}
-              </Button>
-            </div>
-            {syncResult && (
-              <div className={cn(
-                'text-[10px] rounded p-1.5 flex items-center gap-1',
-                syncResult.ok
-                  ? 'text-green-700 dark:text-green-400 bg-green-500/10 border border-green-500/30'
-                  : 'text-destructive bg-destructive/10'
-              )}>
-                {syncResult.ok ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                {syncResult.message}
-              </div>
-            )}
-          </div>
-          <div className="flex justify-between gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 text-[10px]"
-              onClick={handleTestConnection}
-              disabled={testing || !apiKey || !locationId}
-            >
-              {testing ? 'Testing…' : 'Test Connection'}
-            </Button>
-            <div className="flex gap-1.5">
+          <div className="flex justify-end gap-1.5">
             <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setOpen(false)}>Cancel</Button>
             <Button size="sm" className="h-6 text-[10px]" onClick={handleSave} disabled={updateClient.isPending}>
               {updateClient.isPending ? 'Saving…' : 'Save'}
             </Button>
-            </div>
           </div>
         </div>
       </PopoverContent>
