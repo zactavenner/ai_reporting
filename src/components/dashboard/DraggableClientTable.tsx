@@ -531,14 +531,14 @@ export function DraggableClientTable({
                     onClick={() => navigate(`/client/${client.id}`)}
                   >
                     {/* Drag handle + sync dot */}
-                    <TableCell className="cursor-grab sticky left-0 bg-card z-10 py-0 px-1" onClick={(e) => e.stopPropagation()}>
+                    <TableCell className={cn("cursor-grab sticky left-0 z-10 py-0 px-1", isCcError ? 'bg-red-950/40' : 'bg-card')} onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5">
                         <GripVertical className="h-3 w-3 text-muted-foreground" />
                       </div>
                     </TableCell>
 
                     {/* Client name */}
-                    <TableCell className="font-medium text-[11px] sticky left-7 bg-card z-10 py-0 px-1 truncate max-w-[120px]">
+                    <TableCell className={cn("font-medium text-[11px] sticky left-7 z-10 py-0 px-1 truncate max-w-[120px]", isCcError ? 'bg-red-950/40' : 'bg-card')}>
                       <span className="truncate">{client.name}</span>
                     </TableCell>
 
