@@ -236,11 +236,11 @@ Deno.serve(async (req) => {
 
     // Also create initial project management tasks
     const initialTasks = [
-      { title: `Onboarding Kickoff - ${company_name}`, priority: 'high', status: 'todo', stage: 'to-do' },
-      { title: `Collect Brand Assets - ${company_name}`, priority: 'medium', status: 'todo', stage: 'to-do' },
-      { title: `Research & Positioning - ${company_name}`, priority: 'medium', status: 'todo', stage: 'to-do' },
-      { title: `Create Quiz Funnel - ${company_name}`, priority: 'medium', status: 'todo', stage: 'to-do' },
-      { title: `Ad Creatives - ${company_name}`, priority: 'medium', status: 'todo', stage: 'to-do' },
+      { title: `Onboarding Kickoff - ${company_name}`, priority: 'high', status: 'todo', stage: 'todo' },
+      { title: `Collect Brand Assets - ${company_name}`, priority: 'medium', status: 'todo', stage: 'todo' },
+      { title: `Research & Positioning - ${company_name}`, priority: 'medium', status: 'todo', stage: 'todo' },
+      { title: `Create Quiz Funnel - ${company_name}`, priority: 'medium', status: 'todo', stage: 'todo' },
+      { title: `Ad Creatives - ${company_name}`, priority: 'medium', status: 'todo', stage: 'todo' },
     ];
 
     const { error: pmTaskError } = await supabase
