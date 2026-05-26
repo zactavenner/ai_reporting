@@ -1460,12 +1460,14 @@ function CrmStatusCell({
             <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 border-yellow-500/50 text-yellow-600 dark:text-yellow-400">Old</Badge>
           )}
           {syncInfo.status === 'error' && (
-            <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
-              {syncInfo.source === 'hubspot' ? 'HS' : syncInfo.source === 'ghl' ? 'GHL' : 'ERR'}
+            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+              <AlertTriangle className="h-3 w-3" />{syncInfo.source === 'hubspot' ? 'HS' : syncInfo.source === 'ghl' ? 'GHL' : 'CRM'}
             </Badge>
           )}
           {syncInfo.status === 'not_configured' && (
-            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-muted-foreground">—</Badge>
+            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+              <AlertTriangle className="h-3 w-3" />CRM
+            </Badge>
           )}
           <Pencil className="h-2 w-2 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
