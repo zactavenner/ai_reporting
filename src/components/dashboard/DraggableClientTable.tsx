@@ -530,57 +530,6 @@ export function DraggableClientTable({
                     <TableCell className="cursor-grab sticky left-0 bg-card z-10 py-0 px-1" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5">
                         <GripVertical className="h-3 w-3 text-muted-foreground" />
-                        {apiTestResults[client.id] ? (
-                          <ApiConnectionStatus
-                            contacts={apiTestResults[client.id].contacts}
-                            calendars={apiTestResults[client.id].calendars}
-                            opportunities={apiTestResults[client.id].opportunities}
-                            errors={apiTestResults[client.id].errors}
-                            unified
-                          />
-                        ) : (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                className={cn(
-                                  "ml-0.5 cursor-pointer hover:opacity-70",
-                                  syncInfo.status === 'healthy' && 'text-chart-2',
-                                  syncInfo.status === 'stale' && 'text-yellow-600 dark:text-yellow-500',
-                                  syncInfo.status === 'error' && 'text-destructive',
-                                  syncInfo.status === 'not_configured' && 'text-muted-foreground'
-                                )}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (syncInfo.status !== 'not_configured') {
-                                    setSyncHistoryClient({ id: client.id, name: client.name });
-                                  }
-                                }}
-                              >
-                                {syncInfo.status === 'healthy' && <CheckCircle className="h-2.5 w-2.5" />}
-                                {syncInfo.status === 'stale' && <Clock className="h-2.5 w-2.5" />}
-                                {syncInfo.status === 'error' && <XCircle className="h-2.5 w-2.5" />}
-                                {syncInfo.status === 'not_configured' && <AlertCircle className="h-2.5 w-2.5" />}
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="max-w-xs">
-                              <div className="text-xs">
-                                <strong>{syncInfo.source === 'hubspot' ? 'HubSpot' : syncInfo.source === 'ghl' ? 'GHL' : 'CRM'}: </strong>
-                                {syncInfo.status === 'healthy' && 'Synced'}
-                                {syncInfo.status === 'stale' && 'Stale'}
-                                {syncInfo.status === 'error' && 'Error'}
-                                {syncInfo.status === 'not_configured' && 'Not Configured'}
-                                {syncInfo.lastSyncAt && (
-                                  <div className="text-[10px] text-muted-foreground mt-0.5">
-                                    {formatDistanceToNow(new Date(syncInfo.lastSyncAt), { addSuffix: true })}
-                                  </div>
-                                )}
-                                {syncInfo.status !== 'not_configured' && (
-                                  <div className="text-[10px] text-primary mt-0.5">Click for sync history</div>
-                                )}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
                       </div>
                     </TableCell>
 
