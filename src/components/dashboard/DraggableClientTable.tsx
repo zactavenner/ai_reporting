@@ -358,6 +358,19 @@ export function DraggableClientTable({
       let aVal: number = 0;
       let bVal: number = 0;
 
+      // String-based sorts (Status, MB, AM)
+      const strSort = (av: string, bv: string) =>
+        sortConfig.direction === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      if (sortConfig.column === 'status') {
+        return strSort(a.client.status || '', b.client.status || '');
+      }
+      if (sortConfig.column === 'mediaBuyer') {
+        return strSort(assignments[a.client.id]?.media_buyer || '', assignments[b.client.id]?.media_buyer || '');
+      }
+      if (sortConfig.column === 'accountManager') {
+        return strSort(assignments[a.client.id]?.account_manager || '', assignments[b.client.id]?.account_manager || '');
+      }
+
       switch (sortConfig.column) {
         case 'adSpend': aVal = a.metrics.totalAdSpend || 0; bVal = b.metrics.totalAdSpend || 0; break;
         case 'metaLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
@@ -380,7 +393,7 @@ export function DraggableClientTable({
 
       return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [clientsWithComputedValues, sortConfig]);
+  }, [clientsWithComputedValues, sortConfig, assignments]);
 
   const handleSort = (column: string) => {
     setSortConfig(prev => {
@@ -489,15 +502,12 @@ export function DraggableClientTable({
             <TableRow className="border-b h-7">
               <TableHead className="w-7 sticky left-0 bg-card z-10 py-0 px-1"></TableHead>
               <TableHead className="font-bold text-[11px] sticky left-7 bg-card z-10 min-w-[100px] py-0 px-1">Client</TableHead>
-              <TableHead className="font-bold text-[11px] py-0 px-1 text-center">Status</TableHead>
-              <TableHead className="font-bold text-[11px] py-0 px-1 text-center min-w-[80px]">MB</TableHead>
-              <TableHead className="font-bold text-[11px] py-0 px-1 text-center min-w-[80px]">AM</TableHead>
+              <SortableHeader column="status" label="Status" sortConfig={sortConfig} onSort={handleSort} align="center" />
+              <SortableHeader column="mediaBuyer" label="MB" sortConfig={sortConfig} onSort={handleSort} align="center" />
+              <SortableHeader column="accountManager" label="AM" sortConfig={sortConfig} onSort={handleSort} align="center" />
               <SortableHeader column="adSpend" label="Spend" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
-              <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[180px]">Quick Links</TableHead>
-              <TableHead className="font-bold text-[11px] text-center py-0 px-1">BM</TableHead>
-              <TableHead className="font-bold text-[11px] text-center py-0 px-1">Meta</TableHead>
-              <TableHead className="font-bold text-[11px] text-center py-0 px-1">CRM</TableHead>
+              <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[280px]">Quick Links</TableHead>
               {isAdmin && <SortableHeader column="mrr" label="MRR" sortConfig={sortConfig} onSort={handleSort} />}
               <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[130px]">Actions</TableHead>
             </TableRow>
@@ -667,49 +677,69 @@ export function DraggableClientTable({
                       {formatCurrency(m.totalAdSpend || 0)}
                     </TableCell>
 
-                    {/* Expected Spend ($/Day × days in range) */}
-                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1 text-muted-foreground/70">
-                      {computed.dailyTarget > 0 ? formatCurrency(computed.dailyTarget * numberOfDays) : <span className="text-muted-foreground">-</span>}
+                    {/* $/Day — true per-day target (daily override or monthly/daysInMonth) */}
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1 text-muted-foreground/80">
+                      {computed.dailyTarget > 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>{formatCurrency(computed.dailyTarget)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-[10px]">
+                            {(fullSettings[client.id] as any)?.daily_ad_spend_target > 0
+                              ? 'Source: daily target override'
+                              : `Source: monthly target ÷ ${new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()} days`}
+                            <div className="text-muted-foreground">Expected over range: {formatCurrency(computed.dailyTarget * numberOfDays)}</div>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
 
-                    {/* Quick Links — Sheet, Doc, Creatives, Funnel, Activity */}
+                    {/* Quick Links — Sheet, Doc, Creatives, Funnel, Activity, BM, Meta, CRM */}
                     <TableCell className="py-0 px-1" onClick={(e) => e.stopPropagation()}>
-                      <QuickLinksCell
-                        client={client}
-                        settings={fullSettings[client.id]}
-                        onConfigureSheet={() =>
-                          onOpenSheetSettings ? onOpenSheetSettings(client) : onOpenSettings(client)
-                        }
-                        onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
-                        hasCreatives={(creativeCounts[client.id] || 0) > 0}
-                        hasFunnel={(funnelCounts[client.id] || 0) > 0}
-                      />
-                    </TableCell>
-
-                    {/* BM URL */}
-                    <TableCell className="text-center py-0 px-1" onClick={(e) => e.stopPropagation()}>
-                      {client.business_manager_url ? (
-                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => openAdsManager(e, client.business_manager_url)} title="Business Manager">
-                          <BarChart3 className="h-3 w-3 text-chart-2" />
-                        </Button>
-                      ) : (
-                        <span className="text-muted-foreground text-[9px]">—</span>
-                      )}
-                    </TableCell>
-
-                    {/* Meta Sync Status */}
-                    <TableCell className="text-center py-0 px-1" onClick={(e) => e.stopPropagation()}>
-                      <MetaStatusCell
-                        client={client}
-                        metaSync={computed.metaSync}
-                        isDuplicate={!!client.meta_ad_account_id && duplicateMetaAccounts.has(client.meta_ad_account_id)}
-                        clients={clients}
-                      />
-                    </TableCell>
-
-                    {/* CRM Status */}
-                    <TableCell className="text-center py-0 px-1" onClick={(e) => e.stopPropagation()}>
-                      <CrmStatusCell client={client} syncInfo={syncInfo} />
+                      <div className="flex items-center justify-start gap-1 flex-wrap">
+                        <QuickLinksCell
+                          client={client}
+                          settings={fullSettings[client.id]}
+                          onConfigureSheet={() =>
+                            onOpenSheetSettings ? onOpenSheetSettings(client) : onOpenSettings(client)
+                          }
+                          onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
+                          hasCreatives={(creativeCounts[client.id] || 0) > 0}
+                          hasFunnel={(funnelCounts[client.id] || 0) > 0}
+                        />
+                        <div className="h-4 w-px bg-border mx-0.5" />
+                        {/* BM — big bright red pulse when missing */}
+                        {client.business_manager_url ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => openAdsManager(e, client.business_manager_url)}>
+                                <BarChart3 className="h-3 w-3 text-chart-2" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-[10px]">Open Business Manager</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge
+                                variant="destructive"
+                                className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5"
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                BM
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-[10px]">No Business Manager URL — configure Meta</TooltipContent>
+                          </Tooltip>
+                        )}
+                        <MetaStatusCell
+                          client={client}
+                          metaSync={computed.metaSync}
+                          isDuplicate={!!client.meta_ad_account_id && duplicateMetaAccounts.has(client.meta_ad_account_id)}
+                          clients={clients}
+                        />
+                        <CrmStatusCell client={client} syncInfo={syncInfo} />
+                      </div>
                     </TableCell>
 
                     {/* MRR - admin only */}
@@ -793,21 +823,33 @@ function SortableHeader({
   label,
   sortConfig,
   onSort,
+  align = 'right',
 }: {
   column: string;
   label: string;
   sortConfig: SortConfig;
   onSort: (column: string) => void;
+  align?: 'right' | 'center' | 'left';
 }) {
   const isActive = sortConfig.column === column;
   const direction = isActive ? sortConfig.direction : null;
 
   return (
     <TableHead
-      className="font-bold text-[11px] text-right cursor-pointer select-none hover:bg-muted/50 transition-colors py-0 px-1"
+      className={cn(
+        "font-bold text-[11px] cursor-pointer select-none hover:bg-muted/50 transition-colors py-0 px-1",
+        align === 'right' && 'text-right',
+        align === 'center' && 'text-center',
+        align === 'left' && 'text-left',
+      )}
       onClick={() => onSort(column)}
     >
-      <div className="flex items-center gap-0.5 justify-end">
+      <div className={cn(
+        "flex items-center gap-0.5",
+        align === 'right' && 'justify-end',
+        align === 'center' && 'justify-center',
+        align === 'left' && 'justify-start',
+      )}>
         <span>{label}</span>
         {direction === 'asc' ? (
           <ArrowUp className="h-2.5 w-2.5" />
@@ -926,7 +968,9 @@ function MetaStatusCell({
           ) : metaSync.status === 'stale' ? (
             <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 border-yellow-500/50 text-yellow-600 dark:text-yellow-400">Old</Badge>
           ) : (
-            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-muted-foreground">—</Badge>
+            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+              <AlertTriangle className="h-3 w-3" />META
+            </Badge>
           )}
           <Pencil className="h-2 w-2 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
@@ -1416,12 +1460,14 @@ function CrmStatusCell({
             <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 border-yellow-500/50 text-yellow-600 dark:text-yellow-400">Old</Badge>
           )}
           {syncInfo.status === 'error' && (
-            <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
-              {syncInfo.source === 'hubspot' ? 'HS' : syncInfo.source === 'ghl' ? 'GHL' : 'ERR'}
+            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+              <AlertTriangle className="h-3 w-3" />{syncInfo.source === 'hubspot' ? 'HS' : syncInfo.source === 'ghl' ? 'GHL' : 'CRM'}
             </Badge>
           )}
           {syncInfo.status === 'not_configured' && (
-            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-muted-foreground">—</Badge>
+            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+              <AlertTriangle className="h-3 w-3" />CRM
+            </Badge>
           )}
           <Pencil className="h-2 w-2 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
