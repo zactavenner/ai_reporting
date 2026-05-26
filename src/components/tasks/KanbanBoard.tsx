@@ -182,7 +182,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 4,
       },
     })
   );
@@ -352,10 +352,17 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     
     const taskId = active.id as string;
     const overId = over.id as string;
-    
-    // Check if dropped on a stage column
-    const targetStage = STAGES.find(s => s.id === overId);
-    
+
+    // Resolve target stage: either dropped directly on a column,
+    // or dropped on a task card inside a column (use that task's stage).
+    let targetStage = STAGES.find(s => s.id === overId);
+    if (!targetStage) {
+      const overTask = filteredTasks.find(t => t.id === overId);
+      if (overTask) {
+        targetStage = STAGES.find(s => s.id === overTask.stage);
+      }
+    }
+
     if (targetStage) {
       const task = filteredTasks.find(t => t.id === taskId);
       if (task && task.stage !== targetStage.id) {
