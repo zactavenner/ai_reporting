@@ -734,7 +734,6 @@ export function DraggableClientTable({
                         )}
                         <MetaStatusCell
                           client={client}
-                          metaSync={computed.metaSync}
                           isDuplicate={!!client.meta_ad_account_id && duplicateMetaAccounts.has(client.meta_ad_account_id)}
                           clients={clients}
                         />
