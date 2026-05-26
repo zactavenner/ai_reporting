@@ -333,6 +333,7 @@ export function DraggableClientTable({
           metaSync,
           mrr,
           dailyTarget,
+          monthlyTarget,
         },
       };
     });
@@ -361,7 +362,7 @@ export function DraggableClientTable({
       }
 
       switch (sortConfig.column) {
-        case 'adSpend': aVal = a.metrics.totalAdSpend || 0; bVal = b.metrics.totalAdSpend || 0; break;
+        case 'adSpend': aVal = a.computed.monthlyTarget || 0; bVal = b.computed.monthlyTarget || 0; break;
         case 'metaLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
         case 'cpl': aVal = a.metrics.costPerLead || 0; bVal = b.metrics.costPerLead || 0; break;
         case 'costPerCall': aVal = a.metrics.costPerCall || 0; bVal = b.metrics.costPerCall || 0; break;
@@ -494,7 +495,7 @@ export function DraggableClientTable({
               <SortableHeader column="status" label="Status" sortConfig={sortConfig} onSort={handleSort} align="center" />
               <SortableHeader column="mediaBuyer" label="MB" sortConfig={sortConfig} onSort={handleSort} align="center" />
               <SortableHeader column="accountManager" label="AM" sortConfig={sortConfig} onSort={handleSort} align="center" />
-              <SortableHeader column="adSpend" label="Spend" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="adSpend" label="Monthly $" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
               <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[280px]">Quick Links</TableHead>
               {isAdmin && <SortableHeader column="mrr" label="MRR" sortConfig={sortConfig} onSort={handleSort} />}
@@ -610,9 +611,9 @@ export function DraggableClientTable({
                       </Select>
                     </TableCell>
 
-                    {/* Meta Spend */}
+                    {/* Monthly $ — monthly ad spend KPI target */}
                     <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1 font-semibold">
-                      {formatCurrency(m.totalAdSpend || 0)}
+                      {computed.monthlyTarget > 0 ? formatCurrency(computed.monthlyTarget) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
 
                     {/* $/Day — true per-day target (daily override or monthly/daysInMonth) */}
