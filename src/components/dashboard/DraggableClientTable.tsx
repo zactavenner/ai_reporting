@@ -696,7 +696,7 @@ export function DraggableClientTable({
 
                     {/* Quick Links — Sheet, Doc, Creatives, Funnel, Activity, BM, Meta, CRM */}
                     <TableCell className="py-0 px-1" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-start gap-1 flex-wrap">
+                      <div className="flex items-center justify-center gap-1.5">
                         <QuickLinksCell
                           client={client}
                           settings={fullSettings[client.id]}
@@ -707,7 +707,7 @@ export function DraggableClientTable({
                           hasCreatives={(creativeCounts[client.id] || 0) > 0}
                           hasFunnel={(funnelCounts[client.id] || 0) > 0}
                         />
-                        <div className="h-4 w-px bg-border mx-0.5" />
+                        <div className="h-5 w-px bg-border" />
                         {/* BM — big bright red pulse when missing */}
                         {client.business_manager_url ? (
                           <Tooltip>
@@ -723,7 +723,7 @@ export function DraggableClientTable({
                             <TooltipTrigger asChild>
                               <Badge
                                 variant="destructive"
-                                className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5"
+                                className="text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5"
                               >
                                 <AlertTriangle className="h-3 w-3" />
                                 BM
