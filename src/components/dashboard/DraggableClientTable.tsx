@@ -734,7 +734,6 @@ export function DraggableClientTable({
                         )}
                         <MetaStatusCell
                           client={client}
-                          metaSync={computed.metaSync}
                           isDuplicate={!!client.meta_ad_account_id && duplicateMetaAccounts.has(client.meta_ad_account_id)}
                           clients={clients}
                         />
@@ -866,56 +865,17 @@ function SortableHeader({
 // Inline Meta status cell with duplicate detection and quick-edit popover
 function MetaStatusCell({
   client,
-  metaSync,
   isDuplicate,
   clients,
 }: {
   client: Client;
-  metaSync: { status: 'healthy' | 'stale' | 'not_synced'; lastSyncAt: string | null };
   isDuplicate: boolean;
   clients: Client[];
 }) {
   const [adAccountId, setAdAccountId] = useState(client.meta_ad_account_id || '');
-  const [accessToken, setAccessToken] = useState(client.meta_access_token || '');
   const [bmUrl, setBmUrl] = useState(client.business_manager_url || '');
-  const extraInitial = (((client as any).meta_ad_account_ids as string[] | null) || []).filter(
-    (a) => a && a !== client.meta_ad_account_id,
-  );
-  const [extraAccount1, setExtraAccount1] = useState(extraInitial[0] || '');
-  const [extraAccount2, setExtraAccount2] = useState(extraInitial[1] || '');
   const [open, setOpen] = useState(false);
-  const [syncingAccount, setSyncingAccount] = useState<string | null>(null);
-  const [syncDays, setSyncDays] = useState<string>('30');
   const updateClient = useUpdateClient();
-  const queryClient = useQueryClient();
-
-  const syncAccount = async (e: React.MouseEvent, accountId: string) => {
-    e.stopPropagation();
-    const cleanId = accountId.replace(/^act_/, '').trim();
-    if (!cleanId) {
-      toast.error('Enter an Ad Account ID first');
-      return;
-    }
-    setSyncingAccount(cleanId);
-    try {
-      const days = parseInt(syncDays, 10) || 30;
-      const today = new Date();
-      const start = new Date(today.getTime() - days * 24 * 60 * 60 * 1000);
-      const startDate = start.toISOString().split('T')[0];
-      const endDate = today.toISOString().split('T')[0];
-      const { error } = await supabase.functions.invoke('sync-meta-ads', {
-        body: { clientId: client.id, adAccountOverride: cleanId, startDate, endDate },
-      });
-      if (error) throw error;
-      toast.success(`Synced act_${cleanId} (last ${days}d)`);
-      queryClient.invalidateQueries({ queryKey: ['daily-metrics'] });
-      queryClient.invalidateQueries({ queryKey: ['meta_ads'] });
-    } catch (err: any) {
-      toast.error(`Sync failed: ${err.message || 'Unknown error'}`);
-    } finally {
-      setSyncingAccount(null);
-    }
-  };
 
   const duplicateWith = isDuplicate
     ? clients.filter(c => c.id !== client.id && c.meta_ad_account_id === client.meta_ad_account_id).map(c => c.name)
@@ -923,15 +883,10 @@ function MetaStatusCell({
 
   const handleSave = async () => {
     try {
-      const extras = [extraAccount1, extraAccount2]
-        .map((a) => a.trim())
-        .filter((a) => a && a !== adAccountId);
       await updateClient.mutateAsync({
         id: client.id,
         meta_ad_account_id: adAccountId || null,
-        meta_access_token: accessToken || null,
         business_manager_url: bmUrl || null,
-        meta_ad_account_ids: extras,
       } as any);
       toast.success('Meta settings updated');
       setOpen(false);
@@ -939,6 +894,10 @@ function MetaStatusCell({
       toast.error('Failed to update Meta settings');
     }
   };
+
+  const hasAccount = !!adAccountId;
+  const cleanPrimaryId = adAccountId.replace(/^act_/, '').trim();
+  const primaryAdsUrl = cleanPrimaryId ? `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${cleanPrimaryId}` : null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -963,10 +922,8 @@ function MetaStatusCell({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          ) : metaSync.status === 'healthy' ? (
-            <Badge variant="success" className="text-[9px] px-1 py-0 h-4">OK</Badge>
-          ) : metaSync.status === 'stale' ? (
-            <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 border-yellow-500/50 text-yellow-600 dark:text-yellow-400">Old</Badge>
+          ) : hasAccount ? (
+            <Badge variant="success" className="text-[9px] px-1 py-0 h-4">META</Badge>
           ) : (
             <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
               <AlertTriangle className="h-3 w-3" />META
@@ -1000,78 +957,20 @@ function MetaStatusCell({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[11px] text-muted-foreground font-medium">Sync Timeframe</label>
-            <Select value={syncDays} onValueChange={setSyncDays}>
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">Last 1 day</SelectItem>
-                <SelectItem value="3">Last 3 days</SelectItem>
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="14">Last 14 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="60">Last 60 days</SelectItem>
-                <SelectItem value="90">Last 90 days</SelectItem>
-                <SelectItem value="180">Last 180 days</SelectItem>
-                <SelectItem value="365">Last 365 days</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">Applies to the per-account sync button below.</p>
-          </div>
-          {[
-            { label: 'Ad Account ID (Primary)', value: adAccountId, set: setAdAccountId, placeholder: 'act_123456789' },
-            { label: 'Ad Account ID #2 (optional)', value: extraAccount1, set: setExtraAccount1, placeholder: 'act_...' },
-            { label: 'Ad Account ID #3 (optional)', value: extraAccount2, set: setExtraAccount2, placeholder: 'act_...' },
-          ].map((f, idx) => {
-            const cleanId = f.value.replace(/^act_/, '').trim();
-            const adsUrl = cleanId ? `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${cleanId}` : null;
-            return (
-              <div className="space-y-1.5" key={idx}>
-                <label className="text-[11px] text-muted-foreground font-medium">{f.label}</label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    value={f.value}
-                    onChange={(e) => f.set(e.target.value)}
-                    placeholder={f.placeholder}
-                    className="h-7 text-xs flex-1"
-                  />
-                  {adsUrl && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        disabled={syncingAccount === cleanId}
-                        onClick={(e) => syncAccount(e, f.value)}
-                        title={`Sync act_${cleanId}`}
-                      >
-                        <RefreshCw className={cn("h-3 w-3", syncingAccount === cleanId && "animate-spin")} />
-                      </Button>
-                      <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); window.open(adsUrl, '_blank'); }} title="Open in Ads Manager">
-                        <ExternalLink className="h-3 w-3" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <div className="space-y-1.5">
-            <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between">
-              <span>Meta System User Token <span className="text-muted-foreground">(per-client sync)</span></span>
-              {accessToken && <span className="text-emerald-600 text-[10px]">●&nbsp;set</span>}
-            </label>
-            <Input
-              value={accessToken}
-              onChange={(e) => setAccessToken(e.target.value)}
-              placeholder="Paste Meta system user token (overrides master)"
-              className="h-7 text-xs font-mono"
-              type="password"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Used to sync this client's ad accounts. Leave blank to fall back to the master token.
-            </p>
+            <label className="text-[11px] text-muted-foreground font-medium">Ad Account ID</label>
+            <div className="flex items-center gap-1">
+              <Input
+                value={adAccountId}
+                onChange={(e) => setAdAccountId(e.target.value)}
+                placeholder="act_123456789"
+                className="h-7 text-xs flex-1"
+              />
+              {primaryAdsUrl && (
+                <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); window.open(primaryAdsUrl, '_blank'); }} title="Open in Ads Manager">
+                  <ExternalLink className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
           </div>
           {isDuplicate && (
             <div className="text-[10px] text-destructive bg-destructive/10 rounded p-1.5">
