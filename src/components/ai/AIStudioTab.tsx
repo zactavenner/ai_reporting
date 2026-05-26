@@ -159,7 +159,7 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
         </span>
       ) : null}
       {inlineImages.length > 0 && (
-        <div className={`mt-3 grid gap-2 ${inlineImages.length === 1 ? "grid-cols-1 max-w-sm" : "grid-cols-2 max-w-2xl"}`}>
+        <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
           {inlineImages.map((img, idx) => (
             <ChatImagePreview key={idx} image={img} />
           ))}
@@ -268,19 +268,41 @@ function CopyButton({ text }: { text: string }) {
 
 function ChatImagePreview({ image }: { image: ChatImage }) {
   const [open, setOpen] = useState(false);
+  const onDragStart = (e: React.DragEvent) => {
+    try {
+      e.dataTransfer.setData("text/uri-list", image.url);
+      e.dataTransfer.setData("text/plain", image.url);
+      e.dataTransfer.setData(
+        "application/x-aistudio-image",
+        JSON.stringify({ url: image.url, aspect_ratio: image.aspect_ratio, prompt: image.prompt })
+      );
+      e.dataTransfer.effectAllowed = "copyMove";
+    } catch {}
+  };
+  const useAsReference = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent("aistudio:use-image", { detail: { url: image.url, name: `ref-${Date.now()}.png` } }));
+    toast.success("Added to composer as reference");
+  };
+  const editOnCanvas = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent("aistudio:edit-image", { detail: { url: image.url, aspect_ratio: image.aspect_ratio || "1:1" } }));
+  };
   return (
     <>
-      <button
-        type="button"
+      <div
+        draggable
+        onDragStart={onDragStart}
         onClick={() => setOpen(true)}
-        className="group relative block overflow-hidden rounded-xl border border-border/60 bg-muted/40 hover:border-primary/40 transition"
+        className="group relative shrink-0 snap-start h-40 w-40 cursor-grab active:cursor-grabbing overflow-hidden rounded-xl border border-border/60 bg-muted/40 hover:border-primary/40 hover:shadow-md transition"
+        title="Drag onto the composer to use as reference"
       >
-        <img src={image.url} alt={image.prompt || "Generated"} className="w-full h-auto object-cover" loading="lazy" />
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition flex items-center justify-between">
-          <span>Click to view</span>
-          <span className="inline-flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit on canvas</span>
+        <img src={image.url} alt={image.prompt || "Generated"} className="h-full w-full object-cover pointer-events-none" loading="lazy" draggable={false} />
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-1.5 py-1.5 opacity-0 group-hover:opacity-100 transition">
+          <button onClick={useAsReference} className="text-[9px] text-white bg-white/15 hover:bg-white/30 rounded px-1.5 py-0.5 backdrop-blur">+ Reference</button>
+          <button onClick={editOnCanvas} className="text-[9px] text-white bg-white/15 hover:bg-white/30 rounded px-1.5 py-0.5 backdrop-blur inline-flex items-center gap-1"><Pencil className="h-2.5 w-2.5" /> Edit</button>
         </div>
-      </button>
+      </div>
       {open && (
         <div
           onClick={() => setOpen(false)}
