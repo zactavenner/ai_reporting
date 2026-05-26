@@ -510,6 +510,8 @@ export function DraggableClientTable({
               const isInactive = inactiveClientIds.has(client.id);
               const missingIntegrationStyle = getMissingIntegrationRowStyle(client);
 
+              const isCcError = client.status === 'cc_error';
+
               return (
                 <TooltipProvider key={client.id}>
                   <TableRow
@@ -518,7 +520,8 @@ export function DraggableClientTable({
                       draggedId === client.id && "opacity-50",
                       syncBorderStyle,
                       missingIntegrationStyle,
-                      isInactive && "opacity-70"
+                      isInactive && "opacity-70",
+                      isCcError && "bg-red-950/40 border-red-900/60 hover:bg-red-950/50"
                     )}
                     draggable
                     onDragStart={(e) => handleDragStart(e, client.id)}
@@ -528,14 +531,14 @@ export function DraggableClientTable({
                     onClick={() => navigate(`/client/${client.id}`)}
                   >
                     {/* Drag handle + sync dot */}
-                    <TableCell className="cursor-grab sticky left-0 bg-card z-10 py-0 px-1" onClick={(e) => e.stopPropagation()}>
+                    <TableCell className={cn("cursor-grab sticky left-0 z-10 py-0 px-1", isCcError ? 'bg-red-950/40' : 'bg-card')} onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5">
                         <GripVertical className="h-3 w-3 text-muted-foreground" />
                       </div>
                     </TableCell>
 
                     {/* Client name */}
-                    <TableCell className="font-medium text-[11px] sticky left-7 bg-card z-10 py-0 px-1 truncate max-w-[120px]">
+                    <TableCell className={cn("font-medium text-[11px] sticky left-7 z-10 py-0 px-1 truncate max-w-[120px]", isCcError ? 'bg-red-950/40' : 'bg-card')}>
                       <span className="truncate">{client.name}</span>
                     </TableCell>
 
@@ -548,6 +551,7 @@ export function DraggableClientTable({
                               client.status === 'active' ? 'default' :
                               client.status === 'onboarding' ? 'secondary' :
                               client.status === 'paused' || client.status === 'on_hold' ? 'outline' :
+                              client.status === 'cc_error' ? 'destructive' :
                               'destructive'
                             }
                             className={cn(
@@ -555,10 +559,11 @@ export function DraggableClientTable({
                               client.status === 'active' && 'bg-chart-2/15 text-chart-2 border-chart-2/30',
                               client.status === 'onboarding' && 'bg-primary/15 text-primary border-primary/30',
                               (client.status === 'paused' || client.status === 'on_hold') && 'bg-muted text-muted-foreground',
-                              client.status === 'inactive' && 'bg-destructive/15 text-destructive'
+                              client.status === 'inactive' && 'bg-destructive/15 text-destructive',
+                              client.status === 'cc_error' && 'bg-red-700 text-white border-red-600'
                             )}
                           >
-                            {client.status === 'on_hold' ? 'On Hold' : client.status?.charAt(0).toUpperCase() + client.status?.slice(1)}
+                            {client.status === 'on_hold' ? 'On Hold' : client.status === 'cc_error' ? 'CC Error' : client.status?.charAt(0).toUpperCase() + client.status?.slice(1)}
                           </Badge>
                         </SelectTrigger>
                         <SelectContent>
@@ -570,6 +575,9 @@ export function DraggableClientTable({
                           </SelectItem>
                           <SelectItem value="paused">
                             <Badge className="bg-muted text-muted-foreground text-[9px]">Paused</Badge>
+                          </SelectItem>
+                          <SelectItem value="cc_error">
+                            <Badge className="bg-red-700 text-white border-red-600 text-[9px]">CC Error</Badge>
                           </SelectItem>
                         </SelectContent>
                       </Select>
