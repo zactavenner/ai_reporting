@@ -358,6 +358,19 @@ export function DraggableClientTable({
       let aVal: number = 0;
       let bVal: number = 0;
 
+      // String-based sorts (Status, MB, AM)
+      const strSort = (av: string, bv: string) =>
+        sortConfig.direction === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      if (sortConfig.column === 'status') {
+        return strSort(a.client.status || '', b.client.status || '');
+      }
+      if (sortConfig.column === 'mediaBuyer') {
+        return strSort(assignments[a.client.id]?.media_buyer || '', assignments[b.client.id]?.media_buyer || '');
+      }
+      if (sortConfig.column === 'accountManager') {
+        return strSort(assignments[a.client.id]?.account_manager || '', assignments[b.client.id]?.account_manager || '');
+      }
+
       switch (sortConfig.column) {
         case 'adSpend': aVal = a.metrics.totalAdSpend || 0; bVal = b.metrics.totalAdSpend || 0; break;
         case 'metaLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
@@ -380,7 +393,7 @@ export function DraggableClientTable({
 
       return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [clientsWithComputedValues, sortConfig]);
+  }, [clientsWithComputedValues, sortConfig, assignments]);
 
   const handleSort = (column: string) => {
     setSortConfig(prev => {
