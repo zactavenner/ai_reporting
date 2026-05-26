@@ -137,10 +137,6 @@ function computeBottleneck(
 
 function getSyncBorderStyle(status: 'healthy' | 'stale' | 'error' | 'not_configured'): string {
   switch (status) {
-    case 'error':
-      return 'border-l-4 border-l-destructive';
-    case 'stale':
-      return 'border-l-4 border-l-yellow-500';
     default:
       return '';
   }
@@ -148,13 +144,6 @@ function getSyncBorderStyle(status: 'healthy' | 'stale' | 'error' | 'not_configu
 
 // Row tint when integration is missing — faded red so it's actionable at a glance
 function getMissingIntegrationRowStyle(client: Client): string {
-  const hasGhl = !!(client.ghl_api_key && client.ghl_location_id);
-  const hasHubspot = !!(client.hubspot_portal_id && client.hubspot_access_token);
-  const hasCrm = hasGhl || hasHubspot;
-  const hasMeta = !!client.meta_ad_account_id;
-  if (!hasCrm || !hasMeta) {
-    return 'bg-destructive/5 hover:bg-destructive/10';
-  }
   return '';
 }
 
