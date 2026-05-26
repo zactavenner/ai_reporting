@@ -1047,7 +1047,36 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{chatModel.split("/").pop()}</Badge>
               </div>
             )}
-            <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
+            <div
+              className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition data-[dragging=true]:border-primary data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary/30"
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes("application/x-aistudio-image") || e.dataTransfer.types.includes("text/uri-list") || e.dataTransfer.types.includes("Files")) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                  (e.currentTarget as HTMLElement).dataset.dragging = "true";
+                }
+              }}
+              onDragLeave={(e) => { (e.currentTarget as HTMLElement).dataset.dragging = "false"; }}
+              onDrop={(e) => {
+                (e.currentTarget as HTMLElement).dataset.dragging = "false";
+                const json = e.dataTransfer.getData("application/x-aistudio-image");
+                if (json) {
+                  e.preventDefault();
+                  try { const d = JSON.parse(json); if (d.url) addImageAsReference(d.url); } catch {}
+                  return;
+                }
+                const uri = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+                if (uri && /^https?:\/\//.test(uri)) {
+                  e.preventDefault();
+                  addImageAsReference(uri);
+                  return;
+                }
+                if (e.dataTransfer.files && e.dataTransfer.files.length) {
+                  e.preventDefault();
+                  uploadFiles(e.dataTransfer.files);
+                }
+              }}
+            >
               {pendingAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-3 pt-2">
                   {pendingAttachments.map((a, i) => (
