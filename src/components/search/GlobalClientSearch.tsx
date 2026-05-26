@@ -49,6 +49,7 @@ export function GlobalClientSearch() {
   const statusColor = (s: string) => {
     if (s === 'active') return 'default';
     if (s === 'onboarding') return 'secondary';
+    if (s === 'cc_error') return 'destructive';
     return 'outline';
   };
 
