@@ -159,7 +159,7 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
         </span>
       ) : null}
       {inlineImages.length > 0 && (
-        <div className={`mt-3 grid gap-2 ${inlineImages.length === 1 ? "grid-cols-1 max-w-sm" : "grid-cols-2 max-w-2xl"}`}>
+        <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
           {inlineImages.map((img, idx) => (
             <ChatImagePreview key={idx} image={img} />
           ))}
@@ -268,19 +268,41 @@ function CopyButton({ text }: { text: string }) {
 
 function ChatImagePreview({ image }: { image: ChatImage }) {
   const [open, setOpen] = useState(false);
+  const onDragStart = (e: React.DragEvent) => {
+    try {
+      e.dataTransfer.setData("text/uri-list", image.url);
+      e.dataTransfer.setData("text/plain", image.url);
+      e.dataTransfer.setData(
+        "application/x-aistudio-image",
+        JSON.stringify({ url: image.url, aspect_ratio: image.aspect_ratio, prompt: image.prompt })
+      );
+      e.dataTransfer.effectAllowed = "copyMove";
+    } catch {}
+  };
+  const useAsReference = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent("aistudio:use-image", { detail: { url: image.url, name: `ref-${Date.now()}.png` } }));
+    toast.success("Added to composer as reference");
+  };
+  const editOnCanvas = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent("aistudio:edit-image", { detail: { url: image.url, aspect_ratio: image.aspect_ratio || "1:1" } }));
+  };
   return (
     <>
-      <button
-        type="button"
+      <div
+        draggable
+        onDragStart={onDragStart}
         onClick={() => setOpen(true)}
-        className="group relative block overflow-hidden rounded-xl border border-border/60 bg-muted/40 hover:border-primary/40 transition"
+        className="group relative shrink-0 snap-start h-40 w-40 cursor-grab active:cursor-grabbing overflow-hidden rounded-xl border border-border/60 bg-muted/40 hover:border-primary/40 hover:shadow-md transition"
+        title="Drag onto the composer to use as reference"
       >
-        <img src={image.url} alt={image.prompt || "Generated"} className="w-full h-auto object-cover" loading="lazy" />
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition flex items-center justify-between">
-          <span>Click to view</span>
-          <span className="inline-flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit on canvas</span>
+        <img src={image.url} alt={image.prompt || "Generated"} className="h-full w-full object-cover pointer-events-none" loading="lazy" draggable={false} />
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-1.5 py-1.5 opacity-0 group-hover:opacity-100 transition">
+          <button onClick={useAsReference} className="text-[9px] text-white bg-white/15 hover:bg-white/30 rounded px-1.5 py-0.5 backdrop-blur">+ Reference</button>
+          <button onClick={editOnCanvas} className="text-[9px] text-white bg-white/15 hover:bg-white/30 rounded px-1.5 py-0.5 backdrop-blur inline-flex items-center gap-1"><Pencil className="h-2.5 w-2.5" /> Edit</button>
         </div>
-      </button>
+      </div>
       {open && (
         <div
           onClick={() => setOpen(false)}
@@ -755,6 +777,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     await send(text);
   }, [/* send is stable enough via closure; no deps to avoid loop */]);
 
+  // Drag-from-chat → drop on composer (and click "+ Reference" button on hover)
+  const addImageAsReference = useCallback((url: string, name?: string) => {
+    if (!url) return;
+    setPendingAttachments(curr => {
+      if (curr.some(a => a.url === url)) return curr;
+      return [...curr, { url, name: name || url.split("/").pop() || "reference.png", mime: "image/png" }];
+    });
+  }, []);
+  useEffect(() => {
+    const onUse = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      addImageAsReference(d.url, d.name);
+    };
+    const onEdit = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (d.url) inlineEdit(d.url, d.aspect_ratio || "1:1", "Make the changes I'll describe next").catch(() => {});
+    };
+    window.addEventListener("aistudio:use-image", onUse);
+    window.addEventListener("aistudio:edit-image", onEdit);
+    return () => {
+      window.removeEventListener("aistudio:use-image", onUse);
+      window.removeEventListener("aistudio:edit-image", onEdit);
+    };
+  }, [addImageAsReference, inlineEdit]);
+
   return (
     <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
       {showThreads && (
@@ -1000,7 +1047,36 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{chatModel.split("/").pop()}</Badge>
               </div>
             )}
-            <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition">
+            <div
+              className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition data-[dragging=true]:border-primary data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary/30"
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes("application/x-aistudio-image") || e.dataTransfer.types.includes("text/uri-list") || e.dataTransfer.types.includes("Files")) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                  (e.currentTarget as HTMLElement).dataset.dragging = "true";
+                }
+              }}
+              onDragLeave={(e) => { (e.currentTarget as HTMLElement).dataset.dragging = "false"; }}
+              onDrop={(e) => {
+                (e.currentTarget as HTMLElement).dataset.dragging = "false";
+                const json = e.dataTransfer.getData("application/x-aistudio-image");
+                if (json) {
+                  e.preventDefault();
+                  try { const d = JSON.parse(json); if (d.url) addImageAsReference(d.url); } catch {}
+                  return;
+                }
+                const uri = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+                if (uri && /^https?:\/\//.test(uri)) {
+                  e.preventDefault();
+                  addImageAsReference(uri);
+                  return;
+                }
+                if (e.dataTransfer.files && e.dataTransfer.files.length) {
+                  e.preventDefault();
+                  uploadFiles(e.dataTransfer.files);
+                }
+              }}
+            >
               {pendingAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-3 pt-2">
                   {pendingAttachments.map((a, i) => (
