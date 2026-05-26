@@ -333,6 +333,7 @@ export function DraggableClientTable({
           metaSync,
           mrr,
           dailyTarget,
+          monthlyTarget,
         },
       };
     });
