@@ -36,6 +36,7 @@ import {
 } from 'recharts';
 import { useClientSettings } from '@/hooks/useClientSettings';
 import { useSheetMetrics } from '@/hooks/useSheetMetrics';
+import { TabBreakdownDrilldown } from './TabBreakdownDrilldown';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
