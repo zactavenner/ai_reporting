@@ -36,6 +36,7 @@ import {
 } from 'recharts';
 import { useClientSettings } from '@/hooks/useClientSettings';
 import { useSheetMetrics } from '@/hooks/useSheetMetrics';
+import { TabBreakdownDrilldown } from './TabBreakdownDrilldown';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -733,6 +734,13 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       </div>
 
       {/* Footer meta */}
+      {current.data?.tabsBreakdown && current.data.tabsBreakdown.length > 0 && (
+        <TabBreakdownDrilldown
+          tabs={current.data.tabsBreakdown}
+          skipped={current.data.tabsSkipped}
+        />
+      )}
+
       {(current.data?.sheetTitle || current.data?.fetchedAt) && (
         <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pt-2 border-t border-border/40">
           <span>

@@ -9,6 +9,29 @@ export interface SheetMetricsResult {
   sheetTitle?: string;
   fetchedAt?: string;
   rowCount?: number;
+  tabsScanned?: string[];
+  tabsUsed?: string[];
+  tabsSkipped?: { title: string; reason: string }[];
+  tabsBreakdown?: TabBreakdown[];
+}
+
+export interface TabBreakdown {
+  title: string;
+  isPrimary: boolean;
+  dayCount: number;
+  dateRange: { start: string; end: string } | null;
+  overlapDayCount: number;
+  adSpend: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  spamLeads: number;
+  calls: number;
+  showedCalls: number;
+  commitments: number;
+  commitmentDollars: number;
+  fundedInvestors: number;
+  fundedDollars: number;
 }
 
 /**
