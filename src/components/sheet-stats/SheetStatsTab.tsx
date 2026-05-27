@@ -537,53 +537,26 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         </Card>
       )}
 
-      {/* Charts */}
+      {/* Trend Analysis — separate dual-axis charts so spend doesn't dominate */}
+      <div>
+        <div className="mb-3 flex items-end justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Daily Performance</p>
+            <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Trend Analysis</h3>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Volume (solid) vs. cost (dashed) per day</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <DualTrendCard title="Leads" volKey="leads" costKey="cpl" costLabel="Cost / Lead" data={chartData} volColor="hsl(var(--primary))" costColor="hsl(40 45% 55%)" costIsMoney />
+          <DualTrendCard title="Booked Calls" volKey="booked" costKey="cpBooked" costLabel="Cost / Booked" data={chartData} volColor="hsl(217 91% 60%)" costColor="hsl(40 45% 55%)" costIsMoney />
+          <DualTrendCard title="Funded Investors" volKey="funded" costKey="cpFunded" costLabel="Cost / Funded" data={chartData} volColor="hsl(142 71% 45%)" costColor="hsl(40 45% 55%)" costIsMoney />
+          <DualTrendCard title="Ad Spend" volKey="spend" costKey="spend" costLabel="" data={chartData} volColor="hsl(40 45% 55%)" costColor="hsl(40 45% 55%)" volIsMoney singleSeries />
+        </div>
+      </div>
+
+      {/* Funnel + Investor profile */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="p-5 lg:col-span-2 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Daily Performance</p>
-              <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Trend Analysis</h3>
-            </div>
-            <div className="flex items-center gap-3 text-[11px]">
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" />Leads</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: 'hsl(40 45% 55%)' }} />Spend</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />Funded</span>
-            </div>
-          </div>
-          <div className="h-80">
-            {chartData.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No daily rows</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gradSpend" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(40 45% 55%)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(40 45% 55%)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" tickLine={false} axisLine={false} width={40} />
-                  <Tooltip
-                    contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12, boxShadow: '0 8px 24px hsl(0 0% 0% / 0.08)' }}
-                    cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
-                  />
-                  <Area type="monotone" dataKey="leads" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#gradLeads)" />
-                  <Area type="monotone" dataKey="spend" stroke="hsl(40 45% 55%)" strokeWidth={2} fill="url(#gradSpend)" />
-                  <Area type="monotone" dataKey="funded" stroke="hsl(142 71% 45%)" strokeWidth={2.5} fill="transparent" />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
           <div className="mb-4">
             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Pipeline</p>
             <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Conversion Funnel</h3>
@@ -593,11 +566,28 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={funnelData} layout="vertical" margin={{ top: 5, right: 40, left: 0, bottom: 0 }}>
+                <BarChart data={funnelData} layout="vertical" margin={{ top: 5, right: 90, left: 0, bottom: 0 }}>
                   <XAxis type="number" hide />
                   <YAxis dataKey="stage" type="category" width={70} tick={{ fontSize: 12, fill: 'hsl(var(--foreground))', fontWeight: 500 }} stroke="hsl(var(--border))" tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }} cursor={{ fill: 'hsl(var(--muted) / 0.4)' }} />
-                  <Bar dataKey="value" radius={[0, 8, 8, 0]} label={{ position: 'right', fill: 'hsl(var(--foreground))', fontSize: 11, fontWeight: 600 }}>
+                  <Tooltip
+                    contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }}
+                    cursor={{ fill: 'hsl(var(--muted) / 0.4)' }}
+                    formatter={(value: any, _name: any, item: any) => [`${fmtInt(value as number)}  ·  ${fmtPct(item?.payload?.pct ?? 0, 1)}`, 'Volume']}
+                  />
+                  <Bar
+                    dataKey="value"
+                    radius={[0, 8, 8, 0]}
+                    label={(props: any) => {
+                      const { x = 0, y = 0, width = 0, height = 0, value, index } = props;
+                      const row = funnelData[index];
+                      if (!row) return null;
+                      return (
+                        <text x={Number(x) + Number(width) + 8} y={Number(y) + Number(height) / 2} dy={4} fill="hsl(var(--foreground))" fontSize={11} fontWeight={600}>
+                          {fmtInt(value as number)} · {fmtPct(row.pct, 1)}
+                        </text>
+                      );
+                    }}
+                  >
                     {funnelData.map((_, i) => (
                       <Cell key={i} fill={`hsl(var(--primary) / ${1 - i * 0.18})`} />
                     ))}
@@ -605,6 +595,26 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
                 </BarChart>
               </ResponsiveContainer>
             )}
+          </div>
+        </Card>
+
+        <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+          <div className="mb-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Investor Profile</p>
+            <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Who's raising their hand</h3>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 rounded-xl bg-muted/40 border border-border/50 px-3 py-2.5">
+              <Wallet className="h-4 w-4 text-[hsl(40_45%_55%)]" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Stated Pipeline</p>
+                <p className="text-lg font-semibold tabular-nums">{fmtMoneyFull(investorProfile.pipelineSum)}</p>
+                <p className="text-[10px] text-muted-foreground">{fmtInt(investorProfile.pipelineCount)} of {fmtInt(investorProfile.totalValid)} leads disclosed</p>
+              </div>
+            </div>
+
+            <ProfileBuckets title="Ideal Investment Range" icon={Wallet} entries={investorProfile.topRange} total={investorProfile.totalValid} />
+            <ProfileBuckets title="Deployment Timeline" icon={Clock} entries={investorProfile.topTimeline} total={investorProfile.totalValid} />
           </div>
         </Card>
       </div>
