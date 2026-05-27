@@ -14,6 +14,16 @@ export interface CreativeComment {
   attachmentType?: string;
 }
 
+export interface CreativeVariation {
+  id: string;
+  url: string;
+  type: 'image' | 'video';
+  prompt?: string;
+  model?: string;
+  description?: string;
+  created_at: string;
+}
+
 export interface Creative {
   id: string;
   client_id: string;
@@ -30,6 +40,7 @@ export interface Creative {
   source: string;
   trigger_campaign_id: string | null;
   ai_performance_score: number | null;
+  ai_variations?: CreativeVariation[];
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +68,7 @@ export function useCreatives(clientId?: string) {
         source: (item as any).source || 'manual',
         trigger_campaign_id: (item as any).trigger_campaign_id || null,
         ai_performance_score: (item as any).ai_performance_score || null,
+        ai_variations: ((item as any).ai_variations as CreativeVariation[]) || [],
       })) as Creative[];
     },
     enabled: !!clientId,

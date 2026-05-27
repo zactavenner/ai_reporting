@@ -1,0 +1,1 @@
+ALTER TABLE public.creatives ADD COLUMN IF NOT EXISTS ai_variations jsonb NOT NULL DEFAULT '[]'::jsonb;
