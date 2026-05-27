@@ -1206,6 +1206,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </div>
       </Card>
+      )}
 
       {/* RIGHT — Canvas */}
       {showCanvas && (
