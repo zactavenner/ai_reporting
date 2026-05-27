@@ -529,6 +529,8 @@ export function DraggableClientTable({
               const missingIntegrationStyle = getMissingIntegrationRowStyle(client);
 
               const isCcError = client.status === 'cc_error';
+              const isPaused = client.status === 'paused' || client.status === 'on_hold';
+              const rowAlertsMuted = alertsMuted || isPaused;
 
               return (
                 <TooltipProvider key={client.id}>
@@ -539,7 +541,8 @@ export function DraggableClientTable({
                       syncBorderStyle,
                       missingIntegrationStyle,
                       isInactive && "opacity-70",
-                      isCcError && "bg-red-950/40 border-red-900/60 hover:bg-red-950/50"
+                      isCcError && "bg-red-950/40 border-red-900/60 hover:bg-red-950/50",
+                      isPaused && "opacity-60 grayscale"
                     )}
                     draggable
                     onDragStart={(e) => handleDragStart(e, client.id)}
