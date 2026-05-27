@@ -199,6 +199,119 @@ function RatioPill({ label, value, sub }: { label: string; value: string; sub?: 
   );
 }
 
+interface DualTrendCardProps {
+  title: string;
+  data: any[];
+  volKey: string;
+  costKey: string;
+  costLabel: string;
+  volColor: string;
+  costColor: string;
+  volIsMoney?: boolean;
+  costIsMoney?: boolean;
+  singleSeries?: boolean;
+}
+function DualTrendCard({ title, data, volKey, costKey, costLabel, volColor, costColor, volIsMoney, costIsMoney, singleSeries }: DualTrendCardProps) {
+  const empty = !data || data.length === 0;
+  return (
+    <Card className="p-4 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold tracking-tight">{title}</p>
+        <div className="flex items-center gap-3 text-[10px]">
+          <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: volColor }} />{title}</span>
+          {!singleSeries && costLabel && (
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: costColor }} />{costLabel}</span>
+          )}
+        </div>
+      </div>
+      <div className="h-44">
+        {empty ? (
+          <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No daily rows</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} stroke="hsl(var(--border))" tickLine={false} axisLine={false} />
+              <YAxis
+                yAxisId="left"
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                stroke="hsl(var(--border))"
+                tickLine={false}
+                axisLine={false}
+                width={36}
+                tickFormatter={(v: number) => (volIsMoney ? fmtMoney(v) : fmtInt(v))}
+              />
+              {!singleSeries && (
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  stroke="hsl(var(--border))"
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                  tickFormatter={(v: number) => (costIsMoney ? fmtMoney(v) : fmtInt(v))}
+                />
+              )}
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }}
+                formatter={(value: any, name: any) => {
+                  const isMoney = name === costLabel ? !!costIsMoney : !!volIsMoney;
+                  return [isMoney ? fmtMoneyFull(Number(value)) : fmtInt(Number(value)), name];
+                }}
+              />
+              <Line yAxisId="left" type="monotone" dataKey={volKey} name={title} stroke={volColor} strokeWidth={2.25} dot={false} />
+              {!singleSeries && (
+                <Line yAxisId="right" type="monotone" dataKey={costKey} name={costLabel} stroke={costColor} strokeWidth={1.75} strokeDasharray="4 3" dot={false} />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ProfileBuckets({ title, icon: Icon, entries, total }: { title: string; icon: React.ComponentType<{ className?: string }>; entries: [string, number][]; total: number }) {
+  if (!entries || entries.length === 0) {
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-1.5">
+          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+          <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{title}</p>
+        </div>
+        <p className="text-[11px] text-muted-foreground">No survey responses in this range.</p>
+      </div>
+    );
+  }
+  const max = Math.max(...entries.map((e) => e[1]));
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{title}</p>
+      </div>
+      <div className="space-y-1.5">
+        {entries.map(([label, count]) => {
+          const pctOfTotal = total > 0 ? (count / total) * 100 : 0;
+          const widthPct = max > 0 ? (count / max) * 100 : 0;
+          return (
+            <div key={label} className="text-[11px]">
+              <div className="flex items-center justify-between gap-2 mb-0.5">
+                <span className="truncate text-foreground/90" title={label}>{label}</span>
+                <span className="tabular-nums text-muted-foreground shrink-0">{fmtInt(count)} · {fmtPct(pctOfTotal, 0)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full rounded-full bg-primary/70" style={{ width: `${widthPct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   clientId: string;
   isPublicView?: boolean;
