@@ -97,6 +97,26 @@ function pctDelta(curr: number, prev: number): number | null {
   return ((curr - prev) / Math.abs(prev)) * 100;
 }
 
+/** Parse the lowest dollar amount mentioned in a string like "$50k-$100k" or "$1M+". */
+function parseLowestDollar(answer: string): number {
+  if (!answer) return 0;
+  const matches = answer.match(/\$?\s*([\d][\d,.]*)\s*([kKmM])?/g) || [];
+  const nums: number[] = [];
+  for (const m of matches) {
+    const p = m.match(/([\d][\d,.]*)\s*([kKmM])?/);
+    if (!p) continue;
+    let v = parseFloat(p[1].replace(/,/g, ''));
+    if (!isFinite(v) || v <= 0) continue;
+    const suf = (p[2] || '').toLowerCase();
+    if (suf === 'k') v *= 1_000;
+    if (suf === 'm') v *= 1_000_000;
+    // Filter implausible standalone small numbers like years/days
+    if (v < 1000) continue;
+    nums.push(v);
+  }
+  return nums.length ? Math.min(...nums) : 0;
+}
+
 interface KpiTileProps {
   label: string;
   value: string;
