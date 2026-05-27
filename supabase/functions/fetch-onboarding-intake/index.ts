@@ -110,19 +110,24 @@ Deno.serve(async (req) => {
     const { client_name, client_id } = await req.json().catch(() => ({}));
 
     let nameToMatch: string | null = (client_name || '').toString().trim() || null;
+    let overrideName: string | null = null;
 
     // Look up client name from Supabase if only id supplied
     if (!nameToMatch && client_id) {
       const supaUrl = Deno.env.get('SUPABASE_URL')!;
       const supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const r = await fetch(`${supaUrl}/rest/v1/clients?id=eq.${client_id}&select=name`, {
+      const r = await fetch(`${supaUrl}/rest/v1/clients?id=eq.${client_id}&select=name,intake_company_name`, {
         headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` },
       });
       const rows = await r.json();
       nameToMatch = rows?.[0]?.name ?? null;
+      overrideName = (rows?.[0]?.intake_company_name || '').toString().trim() || null;
     }
 
-    if (!nameToMatch) {
+    // Manual override forces an exact match against intake sources
+    const lookupName = overrideName || nameToMatch;
+
+    if (!lookupName) {
       return new Response(JSON.stringify({ matched: false, reason: 'no_client_name' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -149,10 +154,11 @@ Deno.serve(async (req) => {
         for (const row of aicrRows) {
           const candidate = (row.company_name || row.fund_name || row.legal_business_name || '').toString();
           if (!candidate) continue;
-          const s = scoreMatch(nameToMatch, candidate);
+          const s = scoreMatch(lookupName, candidate);
           if (s > 0 && (!aBest || s > aBest.score)) aBest = { row, score: s, name: candidate };
         }
-        if (aBest && aBest.score >= 75) {
+        const minScore = overrideName ? 500 : 75;
+        if (aBest && aBest.score >= minScore) {
           const fields: { label: string; value: string; group: string }[] = [];
           for (const f of AICR_FIELDS) {
             const raw = aBest.row[f.col];
@@ -164,6 +170,7 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({
             matched: true,
             client_name: nameToMatch,
+            override_used: !!overrideName,
             matched_company: aBest.name,
             match_score: aBest.score,
             fields,
@@ -206,11 +213,12 @@ Deno.serve(async (req) => {
     for (const row of rows) {
       const sheetName = (row[1] || '').trim();
       if (!sheetName) continue;
-      const s = scoreMatch(nameToMatch, sheetName);
+      const s = scoreMatch(lookupName, sheetName);
       if (s > 0 && (!best || s > best.score)) best = { row, score: s, sheetName };
     }
 
-    if (!best || best.score < 75) {
+    const minSheetScore = overrideName ? 500 : 75;
+    if (!best || best.score < minSheetScore) {
       return new Response(JSON.stringify({
         matched: false, reason: 'no_row_match', client_name: nameToMatch,
       }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -231,6 +239,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       matched: true,
       client_name: nameToMatch,
+      override_used: !!overrideName,
       matched_company: best.sheetName,
       match_score: best.score,
       fields,
