@@ -184,7 +184,14 @@ export default function SheetsHealthPage() {
       if ((data as any)?.error) throw new Error((data as any).error);
       patch(r.client_id, {
         testing: false,
-        test: { ok: true, rows: (data as any)?.rowCount ?? 0, tab: (data as any)?.sheetTitle, ms: Date.now() - t0 },
+        test: {
+          ok: true,
+          rows: (data as any)?.rowCount ?? 0,
+          tab: (data as any)?.sheetTitle,
+          ms: Date.now() - t0,
+          tabsUsed: (data as any)?.tabsUsed ?? [],
+          tabsSkipped: (data as any)?.tabsSkipped ?? [],
+        },
       });
     } catch (e: any) {
       patch(r.client_id, { testing: false, test: { ok: false, rows: 0, error: e?.message ?? 'failed', ms: Date.now() - t0 } });
