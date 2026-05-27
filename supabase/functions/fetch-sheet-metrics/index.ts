@@ -419,6 +419,7 @@ Deno.serve(async (req) => {
           const mergedByDate: Record<string, DailyMetric> = {};
           let layout: 'column-major' | 'row-major' = 'column-major';
           const tabsUsed: string[] = [];
+          const partsByTab: { title: string; daily: DailyMetric[] }[] = [];
           for (const { title, rows } of fetched) {
             let part: DailyMetric[] = parseColumnMajor(rows, mapping);
             let layoutForTab: 'column-major' | 'row-major' = 'column-major';
@@ -477,6 +478,7 @@ Deno.serve(async (req) => {
               continue;
             }
             tabsUsed.push(title);
+            partsByTab.push({ title, daily: part });
             for (const d of part) {
               const acc = mergedByDate[d.date];
               if (!acc) { mergedByDate[d.date] = { ...d }; continue; }
@@ -502,6 +504,7 @@ Deno.serve(async (req) => {
             tabsScanned: titlesToFetch,
             tabsUsed,
             tabsSkipped,
+            partsByTab,
             fetchedAt: new Date().toISOString(),
           };
           parsedCache.set(cacheKey, { at: Date.now(), payload });
@@ -516,6 +519,7 @@ Deno.serve(async (req) => {
     const sheetTitle = baseParsed!.sheetTitle;
     const layout = baseParsed!.layout;
     let daily: DailyMetric[] = baseParsed!.daily.slice();
+    const partsByTab: { title: string; daily: DailyMetric[] }[] = (baseParsed as any).partsByTab || [];
 
     // Apply date-range filter
     const startD = start_date ? new Date(start_date) : null;
@@ -528,6 +532,56 @@ Deno.serve(async (req) => {
         return true;
       });
     }
+
+    // Per-tab breakdown within the active date range. Lets the UI show which
+    // tabs contributed to each KPI and flag overlapping dates (potential dupes).
+    const inRange = (ds: string) => {
+      const dt = new Date(ds);
+      if (startD && dt < startD) return false;
+      if (endD && dt > endD) return false;
+      return true;
+    };
+    // First pass: count tabs per date to flag overlap.
+    const dateTabCount: Record<string, number> = {};
+    for (const t of partsByTab) {
+      const seen = new Set<string>();
+      for (const d of t.daily) {
+        if (!inRange(d.date)) continue;
+        if (seen.has(d.date)) continue;
+        seen.add(d.date);
+        dateTabCount[d.date] = (dateTabCount[d.date] || 0) + 1;
+      }
+    }
+    const tabsBreakdown = partsByTab.map((t) => {
+      const filtered = t.daily.filter((d) => inRange(d.date));
+      const sum = filtered.reduce((acc, d) => ({
+        adSpend: acc.adSpend + d.ad_spend,
+        impressions: acc.impressions + d.impressions,
+        clicks: acc.clicks + d.clicks,
+        leads: acc.leads + d.leads,
+        spamLeads: acc.spamLeads + d.spam_leads,
+        calls: acc.calls + d.calls,
+        showedCalls: acc.showedCalls + d.showed_calls,
+        commitments: acc.commitments + d.commitments,
+        commitmentDollars: acc.commitmentDollars + d.commitment_dollars,
+        fundedInvestors: acc.fundedInvestors + d.funded_investors,
+        fundedDollars: acc.fundedDollars + d.funded_dollars,
+      }), {
+        adSpend: 0, impressions: 0, clicks: 0, leads: 0, spamLeads: 0,
+        calls: 0, showedCalls: 0, commitments: 0, commitmentDollars: 0,
+        fundedInvestors: 0, fundedDollars: 0,
+      });
+      const dates = filtered.map((d) => d.date).sort();
+      const overlapDates = dates.filter((d) => (dateTabCount[d] || 0) > 1);
+      return {
+        title: t.title,
+        isPrimary: t.title === sheetTitle,
+        dayCount: filtered.length,
+        dateRange: dates.length ? { start: dates[0], end: dates[dates.length - 1] } : null,
+        overlapDayCount: overlapDates.length,
+        ...sum,
+      };
+    }).sort((a, b) => b.adSpend - a.adSpend || b.leads - a.leads);
 
     // Aggregate
     const t = daily.reduce((acc, d) => ({
@@ -588,6 +642,7 @@ Deno.serve(async (req) => {
       tabsScanned: (baseParsed as any).tabsScanned ?? [],
       tabsUsed: (baseParsed as any).tabsUsed ?? [],
       tabsSkipped: (baseParsed as any).tabsSkipped ?? [],
+      tabsBreakdown,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
