@@ -3246,6 +3246,7 @@ export type Database = {
           hubspot_sync_status: string | null
           id: string
           industry: string | null
+          intake_company_name: string | null
           last_ghl_sync_at: string | null
           last_hubspot_sync_at: string | null
           last_timeline_sync_at: string | null
@@ -3290,6 +3291,7 @@ export type Database = {
           hubspot_sync_status?: string | null
           id?: string
           industry?: string | null
+          intake_company_name?: string | null
           last_ghl_sync_at?: string | null
           last_hubspot_sync_at?: string | null
           last_timeline_sync_at?: string | null
@@ -3334,6 +3336,7 @@ export type Database = {
           hubspot_sync_status?: string | null
           id?: string
           industry?: string | null
+          intake_company_name?: string | null
           last_ghl_sync_at?: string | null
           last_hubspot_sync_at?: string | null
           last_timeline_sync_at?: string | null

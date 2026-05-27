@@ -1,0 +1,2 @@
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS intake_company_name text;
+COMMENT ON COLUMN public.clients.intake_company_name IS 'Optional override used by fetch-onboarding-intake to look up the matching company name in the AICR DB / CRA Onboarding sheet. When set, exact-matches and bypasses fuzzy scoring.';

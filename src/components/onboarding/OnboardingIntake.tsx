@@ -1,11 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
-import { ExternalLink, FileText, RefreshCw, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { ExternalLink, FileText, Link2, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { toast } from '@/hooks/use-toast';
 
 interface Field { label: string; value: string; group: string }
 interface IntakeResponse {
@@ -42,6 +44,10 @@ function renderValue(v: string) {
 interface Props { clientId: string; isPublicView?: boolean }
 
 export function OnboardingIntake({ clientId, isPublicView }: Props) {
+  const queryClient = useQueryClient();
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideValue, setOverrideValue] = useState('');
+
   const { data, isLoading, error, refetch, isFetching } = useQuery<IntakeResponse>({
     queryKey: ['onboarding-intake', clientId, 'v2-strict-match'],
     queryFn: async () => {
@@ -53,6 +59,22 @@ export function OnboardingIntake({ clientId, isPublicView }: Props) {
     },
     staleTime: 5 * 60 * 1000,
     enabled: !!clientId,
+  });
+
+  const saveOverride = useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await supabase
+        .from('clients')
+        .update({ intake_company_name: name || null } as any)
+        .eq('id', clientId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: 'Intake mapping saved' });
+      setOverrideOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['onboarding-intake', clientId] });
+    },
+    onError: (e: any) => toast({ title: 'Failed to save', description: e.message, variant: 'destructive' }),
   });
 
   const grouped = useMemo(() => {
@@ -95,8 +117,25 @@ export function OnboardingIntake({ clientId, isPublicView }: Props) {
             <p className="text-sm font-medium">No intake record found for this client</p>
             <p className="text-xs text-muted-foreground mt-1">
               We couldn't match "{data?.client_name || 'this client'}" against the CRA Onboarding sheet.
-              Make sure the company name matches.
+              Enter the exact company name as it appears in CRA Onboarding / AICR below to map it.
             </p>
+            {!isPublicView && (
+              <div className="mt-3 flex gap-2">
+                <Input
+                  placeholder="Exact intake company name…"
+                  value={overrideValue}
+                  onChange={(e) => setOverrideValue(e.target.value)}
+                  className="h-8 text-xs"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => saveOverride.mutate(overrideValue.trim())}
+                  disabled={!overrideValue.trim() || saveOverride.isPending}
+                >
+                  <Link2 className="h-3 w-3 mr-1" /> Map
+                </Button>
+              </div>
+            )}
           </div>
           <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={`h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />
@@ -122,14 +161,35 @@ export function OnboardingIntake({ clientId, isPublicView }: Props) {
               {data.match_score !== undefined && data.match_score < 500 && (
                 <Badge variant="outline" className="text-[10px] h-4">Fuzzy match · {data.match_score}</Badge>
               )}
+              {(data as any).override_used && (
+                <Badge variant="outline" className="text-[10px] h-4">Manual map</Badge>
+              )}
             </div>
           </div>
           {!isPublicView && (
-            <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onClick={() => { setOverrideValue(data.matched_company || ''); setOverrideOpen((v) => !v); }}>
+                <Link2 className="h-3 w-3 mr-1" /> Remap
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
+                <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
+              </Button>
+            </div>
           )}
         </div>
+        {!isPublicView && overrideOpen && (
+          <div className="mt-3 flex gap-2">
+            <Input
+              placeholder="Exact intake company name (blank = auto match)"
+              value={overrideValue}
+              onChange={(e) => setOverrideValue(e.target.value)}
+              className="h-8 text-xs"
+            />
+            <Button size="sm" onClick={() => saveOverride.mutate(overrideValue.trim())} disabled={saveOverride.isPending}>
+              Save
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Groups */}
