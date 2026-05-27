@@ -43,7 +43,7 @@ interface Props { clientId: string; isPublicView?: boolean }
 
 export function OnboardingIntake({ clientId, isPublicView }: Props) {
   const { data, isLoading, error, refetch, isFetching } = useQuery<IntakeResponse>({
-    queryKey: ['onboarding-intake', clientId],
+    queryKey: ['onboarding-intake', clientId, 'v2-strict-match'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('fetch-onboarding-intake', {
         body: { client_id: clientId },
