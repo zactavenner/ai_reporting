@@ -16,7 +16,15 @@ type Row = {
   sheet_id: string | null;
   sheet_gid: string | null;
   default_source: 'sheet' | 'database' | null;
-  test?: { ok: boolean; rows: number; tab?: string; error?: string; ms?: number };
+  test?: {
+    ok: boolean;
+    rows: number;
+    tab?: string;
+    error?: string;
+    ms?: number;
+    tabsUsed?: string[];
+    tabsSkipped?: { title: string; reason: string }[];
+  };
   testing?: boolean;
   draftUrl?: string;
   saving?: boolean;
@@ -176,7 +184,14 @@ export default function SheetsHealthPage() {
       if ((data as any)?.error) throw new Error((data as any).error);
       patch(r.client_id, {
         testing: false,
-        test: { ok: true, rows: (data as any)?.rowCount ?? 0, tab: (data as any)?.sheetTitle, ms: Date.now() - t0 },
+        test: {
+          ok: true,
+          rows: (data as any)?.rowCount ?? 0,
+          tab: (data as any)?.sheetTitle,
+          ms: Date.now() - t0,
+          tabsUsed: (data as any)?.tabsUsed ?? [],
+          tabsSkipped: (data as any)?.tabsSkipped ?? [],
+        },
       });
     } catch (e: any) {
       patch(r.client_id, { testing: false, test: { ok: false, rows: 0, error: e?.message ?? 'failed', ms: Date.now() - t0 } });
@@ -419,8 +434,16 @@ export default function SheetsHealthPage() {
                       <Loader2 className="h-3 w-3 animate-spin" /> testing
                     </span>
                   ) : r.test?.ok ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                      <CheckCircle2 className="h-3 w-3" /> {r.test.rows} rows · {r.test.tab} · {r.test.ms}ms
+                    <span
+                      className="inline-flex items-center gap-1 text-xs text-emerald-700"
+                      title={[
+                        r.test.tabsUsed?.length ? `Used: ${r.test.tabsUsed.join(', ')}` : '',
+                        r.test.tabsSkipped?.length ? `Skipped: ${r.test.tabsSkipped.map(t => `${t.title} (${t.reason})`).join(', ')}` : '',
+                      ].filter(Boolean).join('\n')}
+                    >
+                      <CheckCircle2 className="h-3 w-3" /> {r.test.rows} rows ·{' '}
+                      {r.test.tabsUsed?.length ? `${r.test.tabsUsed.length} tabs` : r.test.tab} ·{' '}
+                      {r.test.ms}ms
                     </span>
                   ) : r.test?.ok === false ? (
                     <span className="inline-flex items-center gap-1 text-xs text-destructive" title={r.test.error}>

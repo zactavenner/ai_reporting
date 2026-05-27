@@ -8,6 +8,7 @@ import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { DailyAISummaryCard } from '@/components/dashboard/DailyAISummaryCard';
 import { DataAccuracyAuditPanel } from '@/components/dashboard/DataAccuracyAuditPanel';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
+import { BestPerformingPanel } from '@/components/dashboard/BestPerformingPanel';
 import { DraggableClientTable } from '@/components/dashboard/DraggableClientTable';
 import { AgencyStatsBar } from '@/components/dashboard/AgencyStatsBar';
 import { AgencySyncStatusPanel } from '@/components/dashboard/AgencySyncStatusPanel';
@@ -454,6 +455,10 @@ const Index = () => {
                       />
                     )}
                   </section>
+                </SectionErrorBoundary>
+
+                <SectionErrorBoundary sectionName="Best Performing">
+                  <BestPerformingPanel clientIds={clients?.map((c: any) => c.id)} />
                 </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="Integration Health">
