@@ -457,7 +457,7 @@ const Index = () => {
                   </section>
                 </SectionErrorBoundary>
 
-                <SectionErrorBoundary sectionName="Integration Health">
+                <SectionErrorBoundary sectionName="Best Performing">
                   <BestPerformingPanel clientIds={clients?.map((c: any) => c.id)} />
                 </SectionErrorBoundary>
 
