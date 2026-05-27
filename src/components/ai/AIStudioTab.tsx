@@ -808,7 +808,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [addImageAsReference, inlineEdit]);
 
   return (
-    <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-4 h-[calc(100vh-220px)] min-h-[600px]`}>
+    <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-3 h-full min-h-0`}>
       {showThreads && (
         <Card className="hidden lg:flex flex-col overflow-hidden border-border/60 shadow-sm p-0">
           <AIStudioThreadSidebar
@@ -822,9 +822,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           />
         </Card>
       )}
-      <div className={`grid grid-cols-1 ${showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-4 min-w-0`}>
+      <div className={`grid grid-cols-1 ${showChat && showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-3 min-w-0 min-h-0`}>
       {/* LEFT — Chat */}
-      <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm">
+      {showChat && (
+      <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm min-h-0">
         <div className="px-5 pt-4 pb-3 border-b border-border/60">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
