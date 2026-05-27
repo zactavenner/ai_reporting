@@ -47,7 +47,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, creative, videoUrl, transcript, imageUrl, editPrompt } = body;
+    const { action, creative, videoUrl, transcript, imageUrl, editPrompt, model, annotatedImageUrl, aspectRatio, duration } = body;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -228,6 +228,20 @@ ${creativeDetails}`;
         );
       }
 
+      // Default to Gemini flash image; allow caller to pick another image-capable model.
+      const editModel = model || "google/gemini-3.1-flash-image-preview";
+
+      // If the user marked up the image, send BOTH images so the model sees what to change.
+      const userContent: any[] = [];
+      const promptText = annotatedImageUrl
+        ? `The second image is the original ad. The first image is the SAME ad with red markup drawn on top to indicate the exact regions the user wants you to change. Apply this edit only to the marked regions and keep everything else identical: ${actualEditPrompt || "improve the marked area"}`
+        : (actualEditPrompt || "Enhance this image for advertising");
+      userContent.push({ type: "text", text: promptText });
+      if (annotatedImageUrl) {
+        userContent.push({ type: "image_url", image_url: { url: annotatedImageUrl } });
+      }
+      userContent.push({ type: "image_url", image_url: { url: actualImageUrl } });
+
       const editResponse = await fetch(AI_GATEWAY_URL, {
         method: "POST",
         headers: {
@@ -235,14 +249,8 @@ ${creativeDetails}`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3.1-flash-image-preview",
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: actualEditPrompt || "Enhance this image for advertising" },
-              { type: "image_url", image_url: { url: actualImageUrl } },
-            ],
-          }],
+          model: editModel,
+          messages: [{ role: "user", content: userContent }],
           modalities: ["image", "text"],
         }),
       });
@@ -283,9 +291,36 @@ ${creativeDetails}`;
       const { data: publicUrl } = supabase.storage.from("creatives").getPublicUrl(filePath);
 
       return new Response(
-        JSON.stringify({ editedImageUrl: publicUrl.publicUrl, description: editText }),
+        JSON.stringify({ editedImageUrl: publicUrl.publicUrl, description: editText, model: editModel }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // === IMAGE -> VIDEO (Veo 3.1) ===
+    if (action === "to_video") {
+      const srcUrl = imageUrl || creative?.file_url;
+      if (!srcUrl) {
+        return new Response(JSON.stringify({ error: "No image URL provided" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Proxy to the existing generate-video-from-image edge function.
+      const { data: vData, error: vErr } = await supabase.functions.invoke('generate-video-from-image', {
+        body: {
+          imageUrl: srcUrl,
+          prompt: editPrompt || 'Create a subtle, professional animation from this ad image with gentle parallax and natural motion.',
+          aspectRatio: aspectRatio || '9:16',
+          duration: duration || 5,
+        },
+      });
+      if (vErr) {
+        return new Response(JSON.stringify({ error: vErr.message || 'Video kickoff failed' }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(vData || {}), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // === AI VARIATIONS ===
