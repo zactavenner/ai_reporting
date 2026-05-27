@@ -432,7 +432,13 @@ Deno.serve(async (req) => {
               }
               const headerRow = (rows[headerRowIdx] || []).map((c) => String(c ?? ''));
               const headerMap = buildHeaderMap(headerRow, mapping);
-              if (headerMap.date !== undefined) {
+              // Only treat as a daily-metrics tab if the header has a date column
+              // AND at least 2 known metric columns. This excludes per-record
+              // export tabs that happen to have a "Date" column (e.g. "[FOR EXPORT]")
+              // whose other columns are names/phones/notes that would otherwise
+              // be coerced into bogus metric values.
+              const metricCols = Object.keys(headerMap).filter((k) => k !== 'date').length;
+              if (headerMap.date !== undefined && metricCols >= 2) {
                 for (let i = headerRowIdx + 1; i < rows.length; i++) {
                   const row = rows[i];
                   const dateStr = parseDate(row[headerMap.date]);
