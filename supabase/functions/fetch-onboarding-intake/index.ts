@@ -93,6 +93,10 @@ function scoreMatch(a: string, b: string): number {
   if (na.includes(nb) || nb.includes(na)) return 500;
   const ta = new Set(na.split(' ').filter(Boolean));
   const tb = new Set(nb.split(' ').filter(Boolean));
+  // Ignore generic finance/business tokens so they don't create false matches
+  const GENERIC = new Set(['investment','investments','investor','investors','council','management','advisors','advisory','ventures','equity','realty','real','estate']);
+  GENERIC.forEach((t) => { ta.delete(t); tb.delete(t); });
+  if (ta.size === 0 || tb.size === 0) return 0;
   let shared = 0;
   ta.forEach((t) => { if (tb.has(t)) shared++; });
   if (shared === 0) return 0;
@@ -148,7 +152,7 @@ Deno.serve(async (req) => {
           const s = scoreMatch(nameToMatch, candidate);
           if (s > 0 && (!aBest || s > aBest.score)) aBest = { row, score: s, name: candidate };
         }
-        if (aBest && aBest.score >= 30) {
+        if (aBest && aBest.score >= 75) {
           const fields: { label: string; value: string; group: string }[] = [];
           for (const f of AICR_FIELDS) {
             const raw = aBest.row[f.col];
@@ -206,7 +210,7 @@ Deno.serve(async (req) => {
       if (s > 0 && (!best || s > best.score)) best = { row, score: s, sheetName };
     }
 
-    if (!best || best.score < 30) {
+    if (!best || best.score < 75) {
       return new Response(JSON.stringify({
         matched: false, reason: 'no_row_match', client_name: nameToMatch,
       }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
