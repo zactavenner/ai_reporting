@@ -9420,6 +9420,23 @@ export type Database = {
           total_records_processed: number
         }[]
       }
+      get_top_performers: {
+        Args: { p_client_ids?: string[] }
+        Returns: {
+          client_id: string
+          cost_per_funded: number
+          cost_per_lead: number
+          entity_id: string
+          funded: number
+          funded_dollars: number
+          leads: number
+          meta_id: string
+          name: string
+          scope: string
+          spend: number
+          thumbnail_url: string
+        }[]
+      }
       queue_client_sync: {
         Args: { p_client_id: string; p_days_back?: number }
         Returns: number
