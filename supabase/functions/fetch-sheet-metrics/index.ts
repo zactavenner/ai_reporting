@@ -437,39 +437,6 @@ Deno.serve(async (req) => {
             }
           }
           const daily: DailyMetric[] = Object.values(mergedByDate).sort((a, b) => a.date.localeCompare(b.date));
-          // Dead branch retained below for type compatibility — unused.
-          if (false) {
-            layout = 'row-major';
-            let headerRowIdx = 0;
-            for (let i = 0; i < Math.min(rows.length, 5); i++) {
-              const candidate = (rows[i] || []).map((c) => normalize(String(c ?? '')));
-              if (FIELD_ALIASES.date.some((a) => candidate.includes(normalize(a)))) {
-                headerRowIdx = i; break;
-              }
-            }
-            const headerRow = (rows[headerRowIdx] || []).map((c) => String(c ?? ''));
-            const headerMap = buildHeaderMap(headerRow, mapping);
-            if (headerMap.date !== undefined) {
-              for (let i = headerRowIdx + 1; i < rows.length; i++) {
-                const row = rows[i];
-                const dateStr = parseDate(row[headerMap.date]);
-                if (!dateStr) continue;
-                const get = (k: string) => headerMap[k] !== undefined ? parseNumber(row[headerMap[k]]) : 0;
-                const impressions = get('impressions');
-                const clicks = get('clicks');
-                daily.push({
-                  date: dateStr, ad_spend: get('ad_spend'), impressions, clicks,
-                  ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-                  leads: get('leads'), spam_leads: get('spam_leads'),
-                  calls: get('calls'), showed_calls: get('showed_calls'),
-                  commitments: get('commitments'), commitment_dollars: get('commitment_dollars'),
-                  funded_investors: get('funded_investors'), funded_dollars: get('funded_dollars'),
-                  reconnect_calls: get('reconnect_calls'), reconnect_showed: get('reconnect_showed'),
-                });
-              }
-            }
-          }
-
           const payload = { sheetTitle, daily, layout, fetchedAt: new Date().toISOString() };
           parsedCache.set(cacheKey, { at: Date.now(), payload });
           return payload;
