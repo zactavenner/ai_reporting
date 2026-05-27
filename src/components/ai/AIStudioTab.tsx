@@ -1212,12 +1212,23 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       {showCanvas && (
       <Card className="flex flex-col overflow-hidden">
         <Tabs defaultValue="canvas" className="flex-1 flex flex-col">
-          <TabsList className="m-2 self-start">
-            <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
-            <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
-            <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
-            <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between px-2 pt-2 gap-2">
+            <TabsList className="self-start">
+              <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
+              <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
+              <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
+              <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
+            </TabsList>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 hidden lg:inline-flex shrink-0"
+              onClick={() => setShowChat(v => !v)}
+              title={showChat ? "Hide chat" : "Show chat"}
+            >
+              {showChat ? <PanelRightClose className="h-3.5 w-3.5 rotate-180" /> : <PanelRightOpen className="h-3.5 w-3.5 rotate-180" />}
+            </Button>
+          </div>
 
           <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden flex flex-col">
             <div className="flex-1 overflow-hidden">
