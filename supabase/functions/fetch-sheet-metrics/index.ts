@@ -12,7 +12,8 @@ const TAB_DENYLIST = [
   'note', 'notes', 'instruction', 'readme', 'template', 'dashboard',
   'summary', 'monthly', 'weekly', 'mtd', 'ytd', 'pivot', 'chart',
   'lookup', 'config', 'archive', 'overview', 'guide', 'help',
-  'goal', 'goals', 'forecast', 'projection',
+  'goal', 'goals', 'forecast', 'projection', 'export', 'recording', 'fathom',
+  'helper',
 ];
 
 function isDenylistedTab(title: string): boolean {
