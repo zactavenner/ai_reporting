@@ -500,7 +500,24 @@ export function DraggableClientTable({
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
               <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[280px]">Quick Links</TableHead>
               {isAdmin && <SortableHeader column="mrr" label="MRR" sortConfig={sortConfig} onSort={handleSort} />}
-              <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[130px]">Actions</TableHead>
+              <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[130px]">
+                <div className="flex items-center gap-1">
+                  Actions
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-4 w-4"
+                    onClick={() => {
+                      const next = !alertsMuted;
+                      setAlertsMuted(next);
+                      localStorage.setItem('draggableClientTable.alertsMuted', String(next));
+                    }}
+                    title={alertsMuted ? 'Turn alerts on' : 'Turn alerts off'}
+                  >
+                    {alertsMuted ? <BellOff className="h-3 w-3 text-muted-foreground" /> : <Bell className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
