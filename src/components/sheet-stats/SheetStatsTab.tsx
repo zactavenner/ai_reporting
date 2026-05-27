@@ -467,60 +467,42 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       ) : agg ? (
         <>
           {/* Hero row — what a CEO cares about */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             <KpiTile
-              label="Pipeline Value"
-              value={fmtMoneyFull((agg.totalLeads || 0) * 100_000)}
-              sub={`${fmtInt(agg.totalLeads)} leads × $100k`}
-              delta={pctDelta(agg.totalLeads, aggPrior?.totalLeads ?? 0)}
-              icon={Briefcase}
-              hero
-              accent="gold"
-            />
-            <KpiTile
-              label="Committed Investors"
-              value={fmtInt(agg.totalCommitments)}
-              sub={agg.totalLeads ? `${fmtPct((agg.totalCommitments / agg.totalLeads) * 100, 2)} of leads` : undefined}
-              delta={pctDelta(agg.totalCommitments, aggPrior?.totalCommitments ?? 0)}
+              label="Committed Capital"
+              value={fmtMoneyFull(agg.commitmentDollars)}
+              sub={`${fmtInt(agg.totalCommitments)} committed investors`}
+              delta={pctDelta(agg.commitmentDollars, aggPrior?.commitmentDollars ?? 0)}
               icon={Handshake}
               hero
               accent="gold"
             />
             <KpiTile
-              label="Committed Capital"
-              value={fmtMoneyFull(agg.commitmentDollars)}
-              sub="Soft-circled commitments"
-              delta={pctDelta(agg.commitmentDollars, aggPrior?.commitmentDollars ?? 0)}
+              label="Funded Capital"
+              value={fmtMoneyFull(agg.fundedDollars)}
+              sub={`${fmtInt(agg.fundedInvestors)} funded investors`}
+              delta={pctDelta(agg.fundedDollars, aggPrior?.fundedDollars ?? 0)}
               icon={Banknote}
               hero
               accent="emerald"
             />
             <KpiTile
-              label="Funded Investors"
-              value={fmtInt(agg.fundedInvestors)}
-              sub={ratios ? `${fmtPct(ratios.leadToFund)} of leads` : undefined}
-              delta={pctDelta(agg.fundedInvestors, aggPrior?.fundedInvestors ?? 0)}
-              icon={Target}
-              hero
-              accent="emerald"
-            />
-            <KpiTile
-              label="Cost per Funded"
-              value={fmtMoneyFull(agg.costPerInvestor)}
-              sub="Blended acquisition cost"
-              delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)}
-              icon={DollarSign}
+              label="Cost of Capital"
+              value={fmtPct(agg.costOfCapital, 2)}
+              sub="Ad spend ÷ funded capital"
+              delta={pctDelta(agg.costOfCapital, aggPrior?.costOfCapital ?? 0)}
+              icon={Percent}
               hero
               invert
             />
             <KpiTile
-              label="Total Ad Spend"
-              value={fmtMoneyFull(agg.totalAdSpend)}
-              sub={`${days}-day investment`}
-              delta={pctDelta(agg.totalAdSpend, aggPrior?.totalAdSpend ?? 0)}
-              icon={Activity}
+              label="Pipeline Value"
+              value={fmtMoneyFull(investorProfile.pipelineSum)}
+              sub={`Sum of ${fmtInt(investorProfile.pipelineCount)} stated minimums`}
+              delta={null}
+              icon={Briefcase}
               hero
-              invert
+              accent="gold"
             />
           </div>
 
