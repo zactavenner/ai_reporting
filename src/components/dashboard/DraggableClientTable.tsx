@@ -1075,7 +1075,7 @@ function QuickLinksCell({
               onClick={(e) => (sheetUrl ? openExternal(e, sheetUrl) : (e.stopPropagation(), setSheetOpen(true)))}
             >
               <FileSpreadsheet
-                className={cn('h-3 w-3', sheetUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
+                className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : sheetUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
               />
             </Button>
           </TooltipTrigger>
@@ -1172,7 +1172,7 @@ function QuickLinksCell({
               title="Google Doc"
             >
               <FileText
-                className={cn('h-3 w-3', docUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
+                className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : docUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
               />
             </Button>
           </PopoverTrigger>
@@ -1206,7 +1206,7 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('creatives'); }}
             >
-              <Palette className={cn('h-3 w-3', hasCreatives ? 'text-green-600' : 'text-red-500 animate-pulse')} />
+              <Palette className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : hasCreatives ? 'text-green-600' : 'text-red-500 animate-pulse')} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">{hasCreatives ? 'Creatives' : 'No creatives — add some'}</TooltipContent>
@@ -1221,7 +1221,7 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('pipeline'); }}
             >
-              <Layers className={cn('h-3 w-3', hasFunnel ? 'text-green-600' : 'text-red-500 animate-pulse')} />
+              <Layers className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : hasFunnel ? 'text-green-600' : 'text-red-500 animate-pulse')} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">{hasFunnel ? 'Funnel' : 'No funnel/pipeline configured'}</TooltipContent>
@@ -1236,7 +1236,7 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('activity'); }}
             >
-              <ActivityIcon className="h-3 w-3 text-green-600" />
+              <ActivityIcon className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : 'text-green-600')} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">Activity</TooltipContent>
