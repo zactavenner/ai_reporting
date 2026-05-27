@@ -133,6 +133,14 @@ export default function ClientDetail() {
   const { startDate, endDate } = useDateFilter();
   const { data: client, isLoading: clientLoading } = useClient(clientId);
   const { data: dailyMetrics = [], isLoading: metricsLoading } = useDailyMetrics(clientId, startDate, endDate);
+
+  // Broadcast current client so the floating Agency AI Chat auto-scopes to this client
+  useEffect(() => {
+    if (!clientId) return;
+    window.dispatchEvent(
+      new CustomEvent('agency:current-client', { detail: { clientId, clientName: client?.name || '' } })
+    );
+  }, [clientId, client?.name]);
   const { data: fundedInvestors = [] } = useFundedInvestors(clientId, startDate, endDate);
   const { data: priorMetrics } = usePriorPeriodMetrics(clientId, startDate, endDate);
   const { data: leads = [], isLoading: leadsLoading } = useLeads(clientId, startDate, endDate);

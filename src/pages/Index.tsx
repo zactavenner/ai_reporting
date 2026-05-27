@@ -5,6 +5,7 @@ import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AISheetSummaryButton } from '@/components/ai/AISheetSummaryButton';
 import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
+import { DailyAISummaryCard } from '@/components/dashboard/DailyAISummaryCard';
 import { DataAccuracyAuditPanel } from '@/components/dashboard/DataAccuracyAuditPanel';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { DraggableClientTable } from '@/components/dashboard/DraggableClientTable';
@@ -338,6 +339,7 @@ const Index = () => {
             {/* Dashboard */}
             {activeTab === 'dashboard' && (
               <>
+                <DailyAISummaryCard />
                 <DateRangeFilter
                   onExportCSV={handleExportCSV}
                   onAddClient={() => setAddClientOpen(true)}

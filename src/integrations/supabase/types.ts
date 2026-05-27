@@ -3879,6 +3879,45 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_ai_summaries: {
+        Row: {
+          ai_summary: string | null
+          client_stats: Json
+          created_at: string
+          delivered_email: boolean
+          delivered_slack: boolean
+          id: string
+          sheet_alerts: Json
+          summary_date: string
+          tasks_due_today: Json
+          updated_at: string
+        }
+        Insert: {
+          ai_summary?: string | null
+          client_stats?: Json
+          created_at?: string
+          delivered_email?: boolean
+          delivered_slack?: boolean
+          id?: string
+          sheet_alerts?: Json
+          summary_date: string
+          tasks_due_today?: Json
+          updated_at?: string
+        }
+        Update: {
+          ai_summary?: string | null
+          client_stats?: Json
+          created_at?: string
+          delivered_email?: boolean
+          delivered_slack?: boolean
+          id?: string
+          sheet_alerts?: Json
+          summary_date?: string
+          tasks_due_today?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       daily_metrics: {
         Row: {
           ad_spend: number | null
