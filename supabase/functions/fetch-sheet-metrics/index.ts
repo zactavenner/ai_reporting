@@ -564,6 +564,9 @@ Deno.serve(async (req) => {
       layout,
       fetchedAt: new Date().toISOString(),
       rowCount: daily.length,
+      tabsScanned: (baseParsed as any).tabsScanned ?? [],
+      tabsUsed: (baseParsed as any).tabsUsed ?? [],
+      tabsSkipped: (baseParsed as any).tabsSkipped ?? [],
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
