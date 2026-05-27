@@ -108,6 +108,16 @@ export function AgencyAIChat({ clients, clientMetrics, agencyMetrics }: AgencyAI
     }
   }, [isOpen]);
 
+  // Auto-detect current client broadcast by AgencyAIStudioTab / client detail pages
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { clientId?: string } | undefined;
+      if (detail?.clientId) setSelectedClientId(detail.clientId);
+    };
+    window.addEventListener('agency:current-client', handler);
+    return () => window.removeEventListener('agency:current-client', handler);
+  }, []);
+
   // Build context based on selected client filter
   const buildContext = useCallback(() => {
     const filteredClients = selectedClientId 
