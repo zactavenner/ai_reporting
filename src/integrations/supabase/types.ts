@@ -3651,6 +3651,7 @@ export type Database = {
       creatives: {
         Row: {
           ai_performance_score: number | null
+          ai_variations: Json
           aspect_ratio: string | null
           body_copy: string | null
           client_id: string
@@ -3671,6 +3672,7 @@ export type Database = {
         }
         Insert: {
           ai_performance_score?: number | null
+          ai_variations?: Json
           aspect_ratio?: string | null
           body_copy?: string | null
           client_id: string
@@ -3691,6 +3693,7 @@ export type Database = {
         }
         Update: {
           ai_performance_score?: number | null
+          ai_variations?: Json
           aspect_ratio?: string | null
           body_copy?: string | null
           client_id?: string
