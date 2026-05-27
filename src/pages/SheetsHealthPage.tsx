@@ -16,7 +16,15 @@ type Row = {
   sheet_id: string | null;
   sheet_gid: string | null;
   default_source: 'sheet' | 'database' | null;
-  test?: { ok: boolean; rows: number; tab?: string; error?: string; ms?: number };
+  test?: {
+    ok: boolean;
+    rows: number;
+    tab?: string;
+    error?: string;
+    ms?: number;
+    tabsUsed?: string[];
+    tabsSkipped?: { title: string; reason: string }[];
+  };
   testing?: boolean;
   draftUrl?: string;
   saving?: boolean;
