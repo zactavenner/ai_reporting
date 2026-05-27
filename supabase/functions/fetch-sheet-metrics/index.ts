@@ -420,8 +420,9 @@ Deno.serve(async (req) => {
           const tabsUsed: string[] = [];
           for (const { title, rows } of fetched) {
             let part: DailyMetric[] = parseColumnMajor(rows, mapping);
+            let layoutForTab: 'column-major' | 'row-major' = 'column-major';
             if (part.length === 0 && rows.length >= 2) {
-              layout = 'row-major';
+              layoutForTab = 'row-major';
               let headerRowIdx = 0;
               for (let i = 0; i < Math.min(rows.length, 5); i++) {
                 const candidate = (rows[i] || []).map((c) => normalize(String(c ?? '')));
@@ -451,6 +452,19 @@ Deno.serve(async (req) => {
                 }
               }
             }
+            // Reject row-major tabs that look like record-level lists (one row per
+            // lead/call) instead of daily aggregates. Heuristic: <60% unique dates
+            // means the same date repeats many times, which would massively inflate
+            // any sum/max merge. These are typically the per-record tabs in client
+            // sheets (Leads, Discovery Call, etc.) that should not roll up.
+            if (layoutForTab === 'row-major' && part.length > 5) {
+              const unique = new Set(part.map((d) => d.date)).size;
+              if (unique / part.length < 0.6) {
+                tabsSkipped.push({ title, reason: 'record-level (repeating dates)' });
+                continue;
+              }
+            }
+            if (layoutForTab === 'row-major') layout = 'row-major';
             if (part.length === 0) {
               if (title !== sheetTitle) tabsSkipped.push({ title, reason: 'no dates' });
               continue;
