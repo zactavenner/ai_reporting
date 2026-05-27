@@ -328,79 +328,115 @@ Deno.serve(async (req) => {
       let pending = inflight.get(cacheKey);
       if (!pending) {
         pending = (async () => {
-          // 1. Resolve gid -> sheet title (cached separately, 10min)
+          // 1. Resolve gid -> sheet title and collect sibling year-tab titles.
+          // If the chosen tab is named like a year (e.g. "2025"), we also pull
+          // sibling year tabs and merge them so cross-year date ranges work
+          // without re-saving the gid every January.
           let sheetTitle: string;
+          let extraTitles: string[] = [];
           if (range && typeof range === 'string') {
             sheetTitle = range;
           } else {
-            const metaKey = `${sheet_id}::${gid ?? ''}`;
-            const metaHit = metaCache.get(metaKey);
-            if (metaHit && now - metaHit.at < META_TTL_MS) {
-              sheetTitle = metaHit.title;
-            } else {
-              const metaRes = await fetchWithRetry(
-                `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title))`,
-                { headers }
-              );
-              const metaText = await metaRes.text();
-              if (!metaRes.ok) throw new Error(`Sheet metadata fetch failed [${metaRes.status}]: ${metaText}`);
-              const meta = JSON.parse(metaText);
-              const sheets = meta?.sheets || [];
-              let target = sheets[0]?.properties;
-              if (gid !== undefined && gid !== null && gid !== '') {
-                const found = sheets.find((s: any) => String(s?.properties?.sheetId) === String(gid));
-                if (found) target = found.properties;
-              }
-              if (!target?.title) throw new Error('Could not resolve sheet title from gid');
-              sheetTitle = target.title;
-              metaCache.set(metaKey, { at: Date.now(), title: sheetTitle });
+            const metaRes = await fetchWithRetry(
+              `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title))`,
+              { headers }
+            );
+            const metaText = await metaRes.text();
+            if (!metaRes.ok) throw new Error(`Sheet metadata fetch failed [${metaRes.status}]: ${metaText}`);
+            const meta = JSON.parse(metaText);
+            const sheets = meta?.sheets || [];
+            let target = sheets[0]?.properties;
+            if (gid !== undefined && gid !== null && gid !== '') {
+              const found = sheets.find((s: any) => String(s?.properties?.sheetId) === String(gid));
+              if (found) target = found.properties;
+            }
+            if (!target?.title) throw new Error('Could not resolve sheet title from gid');
+            sheetTitle = target.title;
+            metaCache.set(`${sheet_id}::${gid ?? ''}`, { at: Date.now(), title: sheetTitle });
+
+            if (/^\d{4}$/.test(String(sheetTitle).trim())) {
+              extraTitles = sheets
+                .map((s: any) => String(s?.properties?.title ?? '').trim())
+                .filter((t: string) => /^\d{4}$/.test(t) && t !== sheetTitle);
             }
           }
 
-          // 2. Fetch values
-          const valuesRes = await fetchWithRetry(
-            `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${sheetTitle}`,
-            { headers }
-          );
-          const valuesText = await valuesRes.text();
-          if (!valuesRes.ok) throw new Error(`Sheet values fetch failed [${valuesRes.status}]: ${valuesText}`);
-          const valuesJson = JSON.parse(valuesText);
-          const rows: any[][] = valuesJson?.values || [];
+          // 2. Fetch values for the primary tab + any year siblings in parallel.
+          const titlesToFetch = [sheetTitle, ...extraTitles];
+          const fetched = await Promise.all(titlesToFetch.map(async (title) => {
+            const vr = await fetchWithRetry(
+              `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${title}`,
+              { headers }
+            );
+            const vt = await vr.text();
+            if (!vr.ok) {
+              // Don't fail the whole request because one sibling year tab is bad.
+              if (title !== sheetTitle) {
+                console.warn(`sibling tab "${title}" fetch failed [${vr.status}]: ${vt.slice(0, 200)}`);
+                return { title, rows: [] as any[][] };
+              }
+              throw new Error(`Sheet values fetch failed [${vr.status}]: ${vt}`);
+            }
+            const vj = JSON.parse(vt);
+            return { title, rows: (vj?.values || []) as any[][] };
+          }));
 
-          let daily: DailyMetric[] = parseColumnMajor(rows, mapping);
+          // 3. Parse each tab and merge daily metrics by date (sum across tabs).
+          const mergedByDate: Record<string, DailyMetric> = {};
           let layout: 'column-major' | 'row-major' = 'column-major';
-          if (daily.length === 0 && rows.length >= 2) {
-            layout = 'row-major';
-            let headerRowIdx = 0;
-            for (let i = 0; i < Math.min(rows.length, 5); i++) {
-              const candidate = (rows[i] || []).map((c) => normalize(String(c ?? '')));
-              if (FIELD_ALIASES.date.some((a) => candidate.includes(normalize(a)))) {
-                headerRowIdx = i; break;
+          for (const { rows } of fetched) {
+            let part: DailyMetric[] = parseColumnMajor(rows, mapping);
+            if (part.length === 0 && rows.length >= 2) {
+              layout = 'row-major';
+              let headerRowIdx = 0;
+              for (let i = 0; i < Math.min(rows.length, 5); i++) {
+                const candidate = (rows[i] || []).map((c) => normalize(String(c ?? '')));
+                if (FIELD_ALIASES.date.some((a) => candidate.includes(normalize(a)))) {
+                  headerRowIdx = i; break;
+                }
+              }
+              const headerRow = (rows[headerRowIdx] || []).map((c) => String(c ?? ''));
+              const headerMap = buildHeaderMap(headerRow, mapping);
+              if (headerMap.date !== undefined) {
+                for (let i = headerRowIdx + 1; i < rows.length; i++) {
+                  const row = rows[i];
+                  const dateStr = parseDate(row[headerMap.date]);
+                  if (!dateStr) continue;
+                  const get = (k: string) => headerMap[k] !== undefined ? parseNumber(row[headerMap[k]]) : 0;
+                  const impressions = get('impressions');
+                  const clicks = get('clicks');
+                  part.push({
+                    date: dateStr, ad_spend: get('ad_spend'), impressions, clicks,
+                    ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+                    leads: get('leads'), spam_leads: get('spam_leads'),
+                    calls: get('calls'), showed_calls: get('showed_calls'),
+                    commitments: get('commitments'), commitment_dollars: get('commitment_dollars'),
+                    funded_investors: get('funded_investors'), funded_dollars: get('funded_dollars'),
+                    reconnect_calls: get('reconnect_calls'), reconnect_showed: get('reconnect_showed'),
+                  });
+                }
               }
             }
-            const headerRow = (rows[headerRowIdx] || []).map((c) => String(c ?? ''));
-            const headerMap = buildHeaderMap(headerRow, mapping);
-            if (headerMap.date !== undefined) {
-              for (let i = headerRowIdx + 1; i < rows.length; i++) {
-                const row = rows[i];
-                const dateStr = parseDate(row[headerMap.date]);
-                if (!dateStr) continue;
-                const get = (k: string) => headerMap[k] !== undefined ? parseNumber(row[headerMap[k]]) : 0;
-                const impressions = get('impressions');
-                const clicks = get('clicks');
-                daily.push({
-                  date: dateStr, ad_spend: get('ad_spend'), impressions, clicks,
-                  ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-                  leads: get('leads'), spam_leads: get('spam_leads'),
-                  calls: get('calls'), showed_calls: get('showed_calls'),
-                  commitments: get('commitments'), commitment_dollars: get('commitment_dollars'),
-                  funded_investors: get('funded_investors'), funded_dollars: get('funded_dollars'),
-                  reconnect_calls: get('reconnect_calls'), reconnect_showed: get('reconnect_showed'),
-                });
-              }
+            for (const d of part) {
+              const acc = mergedByDate[d.date];
+              if (!acc) { mergedByDate[d.date] = { ...d }; continue; }
+              acc.ad_spend += d.ad_spend;
+              acc.impressions += d.impressions;
+              acc.clicks += d.clicks;
+              acc.leads += d.leads;
+              acc.spam_leads += d.spam_leads;
+              acc.calls += d.calls;
+              acc.showed_calls += d.showed_calls;
+              acc.commitments += d.commitments;
+              acc.commitment_dollars += d.commitment_dollars;
+              acc.funded_investors += d.funded_investors;
+              acc.funded_dollars += d.funded_dollars;
+              acc.reconnect_calls += d.reconnect_calls;
+              acc.reconnect_showed += d.reconnect_showed;
+              acc.ctr = acc.impressions > 0 ? (acc.clicks / acc.impressions) * 100 : 0;
             }
           }
-
+          const daily: DailyMetric[] = Object.values(mergedByDate).sort((a, b) => a.date.localeCompare(b.date));
           const payload = { sheetTitle, daily, layout, fetchedAt: new Date().toISOString() };
           parsedCache.set(cacheKey, { at: Date.now(), payload });
           return payload;
