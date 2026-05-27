@@ -1,11 +1,13 @@
-import { useState } from 'react';
-import { Creative } from '@/hooks/useCreatives';
+import { useEffect, useRef, useState } from 'react';
+import { Creative, CreativeVariation } from '@/hooks/useCreatives';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
@@ -19,14 +21,26 @@ import {
   Star,
   Paintbrush,
   Copy,
-  Download
+  Download,
+  Wand2,
+  Trash2,
+  Eraser,
+  Layers
 } from 'lucide-react';
 
 interface CreativeAIActionsProps {
   creative: Creative;
 }
 
+const EDIT_MODELS = [
+  { id: 'google/gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image (fast)' },
+  { id: 'google/gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image (high quality)' },
+  { id: 'google/gemini-2.5-flash-image', label: 'Nano Banana (Gemini 2.5)' },
+  { id: 'openai/gpt-5.4', label: 'ChatGPT (GPT-5.4)' },
+];
+
 export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
+  const queryClient = useQueryClient();
   const [transcribing, setTranscribing] = useState(false);
   const [auditing, setAuditing] = useState(false);
   const [transcript, setTranscript] = useState<string | null>(null);
@@ -38,13 +52,135 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [editing, setEditing] = useState(false);
-  const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null);
-  const [editDescription, setEditDescription] = useState<string | null>(null);
+  const [editModel, setEditModel] = useState<string>(EDIT_MODELS[0].id);
+  const [latestEdit, setLatestEdit] = useState<CreativeVariation | null>(null);
 
   // AI Variations state
   const [variationsOpen, setVariationsOpen] = useState(false);
   const [generatingVariations, setGeneratingVariations] = useState(false);
-  const [variations, setVariations] = useState<{ url: string; description: string }[]>([]);
+
+  // Saved variations live on the creative row
+  const variations: CreativeVariation[] = creative.ai_variations || [];
+
+  // To-video state
+  const [videoBusy, setVideoBusy] = useState(false);
+
+  // Markup canvas refs
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const drawingRef = useRef(false);
+  const [hasMarkup, setHasMarkup] = useState(false);
+
+  const setupCanvas = () => {
+    const img = imgRef.current;
+    const canvas = canvasRef.current;
+    if (!img || !canvas) return;
+    const rect = img.getBoundingClientRect();
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+  };
+
+  useEffect(() => {
+    if (!editOpen) return;
+    const id = setTimeout(setupCanvas, 80);
+    return () => clearTimeout(id);
+  }, [editOpen, latestEdit]);
+
+  const pointToCanvas = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const pt = 'touches' in e ? e.touches[0] : (e as React.MouseEvent);
+    const x = ((pt.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((pt.clientY - rect.top) / rect.height) * canvas.height;
+    return { x, y };
+  };
+
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    drawingRef.current = true;
+    const ctx = canvasRef.current!.getContext('2d')!;
+    const { x, y } = pointToCanvas(e);
+    ctx.strokeStyle = 'rgba(255, 30, 30, 0.9)';
+    ctx.lineWidth = Math.max(8, canvasRef.current!.width / 120);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+  const moveDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!drawingRef.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current!.getContext('2d')!;
+    const { x, y } = pointToCanvas(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasMarkup(true);
+  };
+  const endDraw = () => { drawingRef.current = false; };
+  const clearMarkup = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
+    setHasMarkup(false);
+  };
+
+  const buildAnnotatedImage = async (): Promise<string | null> => {
+    if (!hasMarkup) return null;
+    const img = imgRef.current!;
+    const canvas = canvasRef.current!;
+    const out = document.createElement('canvas');
+    out.width = img.naturalWidth;
+    out.height = img.naturalHeight;
+    const ctx = out.getContext('2d')!;
+    // Draw original via crossOrigin fetch to avoid taint
+    const resp = await fetch(creative.file_url!, { mode: 'cors' });
+    const blob = await resp.blob();
+    const bmp = await createImageBitmap(blob);
+    ctx.drawImage(bmp, 0, 0, out.width, out.height);
+    ctx.drawImage(canvas, 0, 0);
+    const dataUrl = out.toDataURL('image/png');
+    // Upload so the edge function (and the model) can fetch it
+    const base64 = dataUrl.split(',')[1];
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    const path = `${creative.client_id}/ai-markup-${Date.now()}.png`;
+    const { error } = await supabase.storage.from('creatives').upload(path, bytes, {
+      contentType: 'image/png', upsert: true,
+    });
+    if (error) throw error;
+    return supabase.storage.from('creatives').getPublicUrl(path).data.publicUrl;
+  };
+
+  const persistVariation = async (v: CreativeVariation) => {
+    const next = [...variations, v];
+    const { error } = await supabase
+      .from('creatives')
+      .update({ ai_variations: next as any })
+      .eq('id', creative.id);
+    if (error) throw error;
+    queryClient.invalidateQueries({ queryKey: ['creatives'] });
+  };
+
+  const deleteVariation = async (id: string) => {
+    const next = variations.filter(v => v.id !== id);
+    const { error } = await supabase
+      .from('creatives')
+      .update({ ai_variations: next as any })
+      .eq('id', creative.id);
+    if (error) { toast.error('Delete failed'); return; }
+    queryClient.invalidateQueries({ queryKey: ['creatives'] });
+    toast.success('Variation deleted');
+  };
+
+  const promoteToMain = async (v: CreativeVariation) => {
+    const { error } = await supabase
+      .from('creatives')
+      .update({ file_url: v.url, type: v.type === 'video' ? 'video' : 'image' })
+      .eq('id', creative.id);
+    if (error) { toast.error('Could not set as main'); return; }
+    queryClient.invalidateQueries({ queryKey: ['creatives'] });
+    toast.success('Set as main creative');
+  };
 
   const handleTranscribe = async () => {
     if (!creative.file_url) {
@@ -116,13 +252,14 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
 
   const handleAIEdit = async () => {
     if (!editPrompt.trim()) {
-      toast.error('Please describe the edits you want');
+      toast.error('Describe the edit (or mark up the image)');
       return;
     }
 
     setEditing(true);
-    setEditedImageUrl(null);
+    setLatestEdit(null);
     try {
+      const annotatedImageUrl = await buildAnnotatedImage();
       const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
         body: { 
           action: 'ai_edit',
@@ -132,15 +269,28 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
           },
           imageUrl: creative.file_url,
           editPrompt: editPrompt,
+          model: editModel,
+          annotatedImageUrl,
         }
       });
 
       if (error) throw error;
 
       if (data?.editedImageUrl) {
-        setEditedImageUrl(data.editedImageUrl);
-        setEditDescription(data.description || null);
-        toast.success('AI edit complete!');
+        const v: CreativeVariation = {
+          id: crypto.randomUUID(),
+          url: data.editedImageUrl,
+          type: 'image',
+          prompt: editPrompt,
+          model: data.model || editModel,
+          description: data.description || undefined,
+          created_at: new Date().toISOString(),
+        };
+        await persistVariation(v);
+        setLatestEdit(v);
+        clearMarkup();
+        setEditPrompt('');
+        toast.success('Variation saved');
       } else if (data?.error) {
         toast.error(data.error);
       } else {
@@ -148,7 +298,7 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
       }
     } catch (error) {
       console.error('AI Edit error:', error);
-      toast.error('Failed to apply AI edits');
+      toast.error(error instanceof Error ? error.message : 'Failed to apply AI edits');
     } finally {
       setEditing(false);
     }
@@ -156,34 +306,89 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
 
   const handleAIVariations = async () => {
     setGeneratingVariations(true);
-    setVariations([]);
     try {
       const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
-        body: { 
+        body: {
           action: 'ai_variations',
-          creative: {
-            client_id: creative.client_id,
-            file_url: creative.file_url,
-          },
+          creative: { client_id: creative.client_id, file_url: creative.file_url },
           imageUrl: creative.file_url,
         }
       });
-
       if (error) throw error;
-
-      if (data?.variations && data.variations.length > 0) {
-        setVariations(data.variations);
-        toast.success(`Generated ${data.variations.length} variation(s)`);
-      } else if (data?.error) {
-        toast.error(data.error);
-      } else {
-        throw new Error('No variations returned');
-      }
+      if (data?.variations?.length) {
+        const newVars: CreativeVariation[] = data.variations.map((v: any) => ({
+          id: crypto.randomUUID(),
+          url: v.url,
+          type: 'image',
+          description: v.description,
+          model: 'google/gemini-3.1-flash-image-preview',
+          created_at: new Date().toISOString(),
+        }));
+        const next = [...variations, ...newVars];
+        await supabase.from('creatives').update({ ai_variations: next as any }).eq('id', creative.id);
+        queryClient.invalidateQueries({ queryKey: ['creatives'] });
+        toast.success(`Saved ${newVars.length} variations`);
+      } else if (data?.error) toast.error(data.error);
     } catch (error) {
       console.error('AI Variations error:', error);
       toast.error('Failed to generate variations');
     } finally {
       setGeneratingVariations(false);
+    }
+  };
+
+  const handleToVideo = async () => {
+    if (!creative.file_url) return;
+    setVideoBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
+        body: {
+          action: 'to_video',
+          creative: { client_id: creative.client_id, file_url: creative.file_url },
+          imageUrl: creative.file_url,
+          editPrompt,
+          aspectRatio: creative.aspect_ratio === '1:1' ? '1:1' : creative.aspect_ratio === '16:9' ? '16:9' : '9:16',
+          duration: 5,
+        },
+      });
+      if (error) throw error;
+      const opId: string | undefined = data?.operationId;
+      if (!opId) {
+        if (data?.error) throw new Error(data.error);
+        throw new Error('Video kickoff failed');
+      }
+      toast.message('Veo 3.1 rendering — this takes 1–3 minutes…');
+
+      // Poll up to ~6 minutes
+      let videoUrl: string | null = null;
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 6000));
+        const { data: poll } = await supabase.functions.invoke('poll-video-status', {
+          body: { operationId: opId },
+        });
+        if (poll?.status === 'completed' && poll.videoUrl) {
+          videoUrl = poll.videoUrl;
+          break;
+        }
+        if (poll?.status === 'failed') throw new Error(poll.error || 'Video failed');
+      }
+      if (!videoUrl) throw new Error('Video timed out');
+
+      const v: CreativeVariation = {
+        id: crypto.randomUUID(),
+        url: videoUrl,
+        type: 'video',
+        prompt: editPrompt || 'Animate ad image',
+        model: 'veo-3.1',
+        created_at: new Date().toISOString(),
+      };
+      await persistVariation(v);
+      toast.success('Video variation saved');
+      setVariationsOpen(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Video conversion failed');
+    } finally {
+      setVideoBusy(false);
     }
   };
 
@@ -247,7 +452,21 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
             className="gap-2"
           >
             <Paintbrush className="h-4 w-4" />
-            AI Edit
+            AI Edit + Markup
+          </Button>
+        )}
+
+        {/* Image -> Video (Veo 3.1) */}
+        {isImageCreative && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToVideo}
+            disabled={videoBusy}
+            className="gap-2"
+          >
+            {videoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
+            {videoBusy ? 'Rendering Veo 3.1…' : 'Image → Video (Veo 3.1)'}
           </Button>
         )}
 
@@ -256,16 +475,24 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => { setVariationsOpen(true); handleAIVariations(); }}
+            onClick={handleAIVariations}
             disabled={generatingVariations}
             className="gap-2"
           >
             {generatingVariations ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Copy className="h-4 w-4" />
+              <Wand2 className="h-4 w-4" />
             )}
-            {generatingVariations ? 'Generating...' : 'AI Variations'}
+            {generatingVariations ? 'Generating…' : 'Auto Variations'}
+          </Button>
+        )}
+
+        {/* Variations gallery */}
+        {variations.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setVariationsOpen(true)} className="gap-1 text-primary">
+            <Layers className="h-4 w-4" />
+            {variations.length} Variation{variations.length === 1 ? '' : 's'}
           </Button>
         )}
 
