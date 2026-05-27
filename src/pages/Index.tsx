@@ -458,6 +458,10 @@ const Index = () => {
                 </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="Integration Health">
+                  <BestPerformingPanel clientIds={clients?.map((c: any) => c.id)} />
+                </SectionErrorBoundary>
+
+                <SectionErrorBoundary sectionName="Integration Health">
                   <section>
                     <h2 className="text-lg font-bold mb-2">Integration Health</h2>
                     <IntegrationStatusCards onNavigateToSettings={() => {}} />
