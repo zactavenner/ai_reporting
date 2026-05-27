@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
 
     // List-tabs mode: return all tab titles for mapping UI.
     if (action === 'list_tabs') {
-      const metaRes = await fetch(
+      const metaRes = await fetchWithRetry(
         `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title,index))`,
         { headers }
       );
@@ -281,7 +281,7 @@ Deno.serve(async (req) => {
     // Raw-grid mode: return headers + rows for a tab so callers (e.g. audits) can inspect data.
     if (action === 'raw_grid') {
       let rawTitle: string | undefined;
-      const metaRes = await fetch(
+      const metaRes = await fetchWithRetry(
         `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title))`,
         { headers }
       );
@@ -296,7 +296,7 @@ Deno.serve(async (req) => {
       }
       rawTitle = target?.title;
       if (!rawTitle) throw new Error('Could not resolve sheet title for raw_grid');
-      const valuesRes = await fetch(
+      const valuesRes = await fetchWithRetry(
         `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${rawTitle}`,
         { headers }
       );
@@ -315,86 +315,105 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 1. Resolve gid -> sheet title
-    let sheetTitle: string;
-    if (range && typeof range === 'string') {
-      // user provided explicit range like 'Sheet1!A:Z'
-      sheetTitle = range;
+    // Coalesce + cache the full parsed payload by sheet+gid (independent of
+    // start/end so current+prior period calls hit one fetch). Date filter and
+    // aggregation are applied below from the cached parsed `daily`.
+    const cacheKey = `${sheet_id}::${gid ?? ''}::${range ?? ''}::${mapping ? JSON.stringify(mapping) : ''}`;
+    const now = Date.now();
+    let baseParsed: { sheetTitle: string; daily: DailyMetric[]; layout: 'column-major' | 'row-major'; fetchedAt: string } | null = null;
+    const cached = parsedCache.get(cacheKey);
+    if (cached && now - cached.at < PARSED_TTL_MS) {
+      baseParsed = cached.payload;
     } else {
-      const metaRes = await fetch(
-        `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title))`,
-        { headers }
-      );
-      const metaText = await metaRes.text();
-      if (!metaRes.ok) {
-        throw new Error(`Sheet metadata fetch failed [${metaRes.status}]: ${metaText}`);
+      let pending = inflight.get(cacheKey);
+      if (!pending) {
+        pending = (async () => {
+          // 1. Resolve gid -> sheet title (cached separately, 10min)
+          let sheetTitle: string;
+          if (range && typeof range === 'string') {
+            sheetTitle = range;
+          } else {
+            const metaKey = `${sheet_id}::${gid ?? ''}`;
+            const metaHit = metaCache.get(metaKey);
+            if (metaHit && now - metaHit.at < META_TTL_MS) {
+              sheetTitle = metaHit.title;
+            } else {
+              const metaRes = await fetchWithRetry(
+                `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title))`,
+                { headers }
+              );
+              const metaText = await metaRes.text();
+              if (!metaRes.ok) throw new Error(`Sheet metadata fetch failed [${metaRes.status}]: ${metaText}`);
+              const meta = JSON.parse(metaText);
+              const sheets = meta?.sheets || [];
+              let target = sheets[0]?.properties;
+              if (gid !== undefined && gid !== null && gid !== '') {
+                const found = sheets.find((s: any) => String(s?.properties?.sheetId) === String(gid));
+                if (found) target = found.properties;
+              }
+              if (!target?.title) throw new Error('Could not resolve sheet title from gid');
+              sheetTitle = target.title;
+              metaCache.set(metaKey, { at: Date.now(), title: sheetTitle });
+            }
+          }
+
+          // 2. Fetch values
+          const valuesRes = await fetchWithRetry(
+            `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${sheetTitle}`,
+            { headers }
+          );
+          const valuesText = await valuesRes.text();
+          if (!valuesRes.ok) throw new Error(`Sheet values fetch failed [${valuesRes.status}]: ${valuesText}`);
+          const valuesJson = JSON.parse(valuesText);
+          const rows: any[][] = valuesJson?.values || [];
+
+          let daily: DailyMetric[] = parseColumnMajor(rows, mapping);
+          let layout: 'column-major' | 'row-major' = 'column-major';
+          if (daily.length === 0 && rows.length >= 2) {
+            layout = 'row-major';
+            let headerRowIdx = 0;
+            for (let i = 0; i < Math.min(rows.length, 5); i++) {
+              const candidate = (rows[i] || []).map((c) => normalize(String(c ?? '')));
+              if (FIELD_ALIASES.date.some((a) => candidate.includes(normalize(a)))) {
+                headerRowIdx = i; break;
+              }
+            }
+            const headerRow = (rows[headerRowIdx] || []).map((c) => String(c ?? ''));
+            const headerMap = buildHeaderMap(headerRow, mapping);
+            if (headerMap.date !== undefined) {
+              for (let i = headerRowIdx + 1; i < rows.length; i++) {
+                const row = rows[i];
+                const dateStr = parseDate(row[headerMap.date]);
+                if (!dateStr) continue;
+                const get = (k: string) => headerMap[k] !== undefined ? parseNumber(row[headerMap[k]]) : 0;
+                const impressions = get('impressions');
+                const clicks = get('clicks');
+                daily.push({
+                  date: dateStr, ad_spend: get('ad_spend'), impressions, clicks,
+                  ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+                  leads: get('leads'), spam_leads: get('spam_leads'),
+                  calls: get('calls'), showed_calls: get('showed_calls'),
+                  commitments: get('commitments'), commitment_dollars: get('commitment_dollars'),
+                  funded_investors: get('funded_investors'), funded_dollars: get('funded_dollars'),
+                  reconnect_calls: get('reconnect_calls'), reconnect_showed: get('reconnect_showed'),
+                });
+              }
+            }
+          }
+
+          const payload = { sheetTitle, daily, layout, fetchedAt: new Date().toISOString() };
+          parsedCache.set(cacheKey, { at: Date.now(), payload });
+          return payload;
+        })();
+        inflight.set(cacheKey, pending);
+        pending.finally(() => inflight.delete(cacheKey));
       }
-      const meta = JSON.parse(metaText);
-      const sheets = meta?.sheets || [];
-      let target = sheets[0]?.properties;
-      if (gid !== undefined && gid !== null && gid !== '') {
-        const found = sheets.find((s: any) => String(s?.properties?.sheetId) === String(gid));
-        if (found) target = found.properties;
-      }
-      if (!target?.title) throw new Error('Could not resolve sheet title from gid');
-      sheetTitle = target.title;
+      baseParsed = await pending;
     }
 
-    // 2. Fetch values (do NOT encode the range)
-    const valuesRes = await fetch(
-      `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${sheetTitle}`,
-      { headers }
-    );
-    const valuesText = await valuesRes.text();
-    if (!valuesRes.ok) {
-      throw new Error(`Sheet values fetch failed [${valuesRes.status}]: ${valuesText}`);
-    }
-    const valuesJson = JSON.parse(valuesText);
-    const rows: any[][] = valuesJson?.values || [];
-
-    if (rows.length < 2) {
-      return new Response(JSON.stringify({ daily: [], aggregated: null, sheetTitle, fetchedAt: new Date().toISOString(), rowCount: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Try column-major first (metrics-down, dates-across) — common for KPI dashboards.
-    // Fall back to row-major (header row + data rows) if not detected.
-    let daily: DailyMetric[] = parseColumnMajor(rows, mapping);
-    let layout: 'column-major' | 'row-major' = 'column-major';
-
-    if (daily.length === 0) {
-      layout = 'row-major';
-      let headerRowIdx = 0;
-      for (let i = 0; i < Math.min(rows.length, 5); i++) {
-        const candidate = (rows[i] || []).map((c) => normalize(String(c ?? '')));
-        if (FIELD_ALIASES.date.some((a) => candidate.includes(normalize(a)))) {
-          headerRowIdx = i; break;
-        }
-      }
-      const headerRow = (rows[headerRowIdx] || []).map((c) => String(c ?? ''));
-      const headerMap = buildHeaderMap(headerRow, mapping);
-      if (headerMap.date === undefined) {
-        throw new Error(`Could not detect sheet layout. Headers: ${headerRow.slice(0, 10).join(', ')}`);
-      }
-      for (let i = headerRowIdx + 1; i < rows.length; i++) {
-        const row = rows[i];
-        const dateStr = parseDate(row[headerMap.date]);
-        if (!dateStr) continue;
-        const get = (k: string) => headerMap[k] !== undefined ? parseNumber(row[headerMap[k]]) : 0;
-        const impressions = get('impressions');
-        const clicks = get('clicks');
-        daily.push({
-          date: dateStr, ad_spend: get('ad_spend'), impressions, clicks,
-          ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-          leads: get('leads'), spam_leads: get('spam_leads'),
-          calls: get('calls'), showed_calls: get('showed_calls'),
-          commitments: get('commitments'), commitment_dollars: get('commitment_dollars'),
-          funded_investors: get('funded_investors'), funded_dollars: get('funded_dollars'),
-          reconnect_calls: get('reconnect_calls'), reconnect_showed: get('reconnect_showed'),
-        });
-      }
-    }
+    const sheetTitle = baseParsed!.sheetTitle;
+    const layout = baseParsed!.layout;
+    let daily: DailyMetric[] = baseParsed!.daily.slice();
 
     // Apply date-range filter
     const startD = start_date ? new Date(start_date) : null;
