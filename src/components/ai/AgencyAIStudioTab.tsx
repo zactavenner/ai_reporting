@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sparkles, Users } from "lucide-react";
@@ -38,8 +38,16 @@ export function AgencyAIStudioTab() {
 
   const [mode, setMode] = useState<"studio" | "tasks" | "feedback" | "activity">("studio");
 
+  // Broadcast current client so the floating Agency AI Chat can auto-detect it
+  useEffect(() => {
+    if (!activeId) return;
+    window.dispatchEvent(
+      new CustomEvent("agency:current-client", { detail: { clientId: activeId, clientName: selected?.name || "" } })
+    );
+  }, [activeId, selected?.name]);
+
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-9rem)]">
+    <div className="flex flex-col gap-3 h-[calc(100vh-7.5rem)] min-h-0">
       {/* Header */}
       <Card className="p-4 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
@@ -78,7 +86,7 @@ export function AgencyAIStudioTab() {
       </Card>
 
       {/* Studio + Task Board — both reuse the same components the client detail page uses */}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex-1 min-h-0">
         {activeId ? (
           mode === "studio" ? (
             <AIStudioTab key={activeId} clientId={activeId} clientName={selected?.name || ""} />
