@@ -16,6 +16,9 @@ import {
   Handshake,
   Briefcase,
   Banknote,
+  Percent,
+  Clock,
+  Wallet,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -28,9 +31,13 @@ import {
   BarChart,
   Bar,
   Cell,
+  LineChart,
+  Line,
 } from 'recharts';
 import { useClientSettings } from '@/hooks/useClientSettings';
 import { useSheetMetrics } from '@/hooks/useSheetMetrics';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -46,12 +53,13 @@ function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } 
   return { sheet_id: idMatch[1], gid: gidMatch?.[1] };
 }
 
-type Preset = 'y' | '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'ly' | 'custom';
+type Preset = 'y' | '3d' | '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'launch' | 'custom';
 
-function presetRange(p: Preset): { from: Date; to: Date } {
+function presetRange(p: Preset, launchDate?: Date): { from: Date; to: Date } {
   const today = new Date();
   switch (p) {
     case 'y': { const y = subDays(today, 1); return { from: y, to: y }; }
+    case '3d': return { from: subDays(today, 2), to: today };
     case '7d': return { from: subDays(today, 6), to: today };
     case '30d': return { from: subDays(today, 29), to: today };
     case '90d': return { from: subDays(today, 89), to: today };
@@ -61,10 +69,7 @@ function presetRange(p: Preset): { from: Date; to: Date } {
       return { from: startOfMonth(prev), to: endOfMonth(prev) };
     }
     case 'ty': return { from: startOfYear(today), to: today };
-    case 'ly': {
-      const prev = subYears(today, 1);
-      return { from: startOfYear(prev), to: endOfYear(prev) };
-    }
+    case 'launch': return { from: launchDate ?? subYears(today, 1), to: today };
     default: return { from: subDays(today, 29), to: today };
   }
 }
@@ -184,12 +189,29 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   const sheetUrl = (settings as any)?.kpi_google_sheet_url as string | undefined;
   const parsed = parseSheetUrl(sheetUrl);
 
-  const [preset, setPreset] = useState<Preset>('y');
+  const [preset, setPreset] = useState<Preset>('7d');
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
+
+  // Launch date = client created_at
+  const { data: clientMeta } = useQuery({
+    queryKey: ['client-launch-date', clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('created_at')
+        .eq('id', clientId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!clientId,
+    staleTime: 60 * 60 * 1000,
+  });
+  const launchDate = clientMeta?.created_at ? new Date(clientMeta.created_at) : undefined;
 
   const range = preset === 'custom'
     ? { from: customRange.from ?? subDays(new Date(), 29), to: customRange.to ?? new Date() }
-    : presetRange(preset);
+    : presetRange(preset, launchDate);
 
   const from = format(range.from, 'yyyy-MM-dd');
   const to = format(range.to, 'yyyy-MM-dd');
@@ -209,22 +231,97 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   const chartData = useMemo(() => {
     return [...daily]
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((d) => ({
-        date: format(parseISO(d.date), 'MMM d'),
-        leads: d.leads || 0,
-        spend: Number(d.ad_spend || 0),
-        funded: d.funded_investors || 0,
-      }));
+      .map((d) => {
+        const leads = d.leads || 0;
+        const spend = Number(d.ad_spend || 0);
+        const booked = d.calls || 0;
+        const funded = d.funded_investors || 0;
+        return {
+          date: format(parseISO(d.date), 'MMM d'),
+          leads,
+          spend,
+          booked,
+          funded,
+          cpl: leads > 0 ? spend / leads : 0,
+          cpBooked: booked > 0 ? spend / booked : 0,
+          cpFunded: funded > 0 ? spend / funded : 0,
+        };
+      });
   }, [daily]);
+
+  // Fetch lead questions in range for investor profile + pipeline value
+  const { data: leadProfiles = [] } = useQuery({
+    queryKey: ['lead-profiles', clientId, from, to],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, questions, created_at, is_spam, email, phone')
+        .eq('client_id', clientId)
+        .gte('created_at', `${from}T00:00:00.000Z`)
+        .lte('created_at', `${to}T23:59:59.999Z`)
+        .limit(5000);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!clientId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const investorProfile = useMemo(() => {
+    const valid = (leadProfiles as any[]).filter(
+      (l) => !l.is_spam && l.email && l.phone && Array.isArray(l.questions)
+    );
+    const rangeBuckets: Record<string, number> = {};
+    const timelineBuckets: Record<string, number> = {};
+    let pipelineSum = 0;
+    let pipelineCount = 0;
+
+    const isRangeQ = (q: string) =>
+      /investment range|amount.*invest|ready to invest|how much.*invest/i.test(q);
+    const isTimelineQ = (q: string) =>
+      /how soon|when.*plan|deploy.*capital|timeline|ready.*three months/i.test(q);
+
+    for (const lead of valid) {
+      let leadLow = 0;
+      for (const q of lead.questions as any[]) {
+        const question = String(q?.question || '');
+        const answer = String(q?.answer || '').trim();
+        if (!answer) continue;
+        if (isRangeQ(question)) {
+          rangeBuckets[answer] = (rangeBuckets[answer] || 0) + 1;
+          const low = parseLowestDollar(answer);
+          if (low > 0 && (leadLow === 0 || low < leadLow)) leadLow = low;
+        } else if (isTimelineQ(question)) {
+          timelineBuckets[answer] = (timelineBuckets[answer] || 0) + 1;
+        }
+      }
+      if (leadLow > 0) {
+        pipelineSum += leadLow;
+        pipelineCount += 1;
+      }
+    }
+
+    const topRange = Object.entries(rangeBuckets).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const topTimeline = Object.entries(timelineBuckets).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    return {
+      pipelineSum,
+      pipelineCount,
+      totalValid: valid.length,
+      topRange,
+      topTimeline,
+    };
+  }, [leadProfiles]);
 
   const funnelData = useMemo(() => {
     if (!agg) return [];
+    const leads = agg.totalLeads || 0;
+    const pct = (v: number) => (leads > 0 ? (v / leads) * 100 : 0);
     return [
-      { stage: 'Leads', value: agg.totalLeads || 0 },
-      { stage: 'Booked', value: agg.totalCalls || 0 },
-      { stage: 'Showed', value: agg.showedCalls || 0 },
-      { stage: 'Committed', value: agg.totalCommitments || 0 },
-      { stage: 'Funded', value: agg.fundedInvestors || 0 },
+      { stage: 'Leads', value: leads, pct: 100 },
+      { stage: 'Booked', value: agg.totalCalls || 0, pct: pct(agg.totalCalls || 0) },
+      { stage: 'Showed', value: agg.showedCalls || 0, pct: pct(agg.showedCalls || 0) },
+      { stage: 'Committed', value: agg.totalCommitments || 0, pct: pct(agg.totalCommitments || 0) },
+      { stage: 'Funded', value: agg.fundedInvestors || 0, pct: pct(agg.fundedInvestors || 0) },
     ];
   }, [agg]);
 
@@ -255,13 +352,14 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
   const presets: { id: Preset; label: string }[] = [
     { id: 'y', label: 'Yesterday' },
+    { id: '3d', label: 'Last 3d' },
     { id: '7d', label: 'Last 7d' },
     { id: '30d', label: 'Last 30d' },
     { id: '90d', label: 'Last 90d' },
     { id: 'tm', label: 'This month' },
     { id: 'lm', label: 'Last month' },
     { id: 'ty', label: 'This year' },
-    { id: 'ly', label: 'Last year' },
+    { id: 'launch', label: 'Since launch' },
   ];
 
   return (
