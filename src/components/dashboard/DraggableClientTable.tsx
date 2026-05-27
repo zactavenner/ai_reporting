@@ -671,6 +671,7 @@ export function DraggableClientTable({
                           onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
                           hasCreatives={(creativeCounts[client.id] || 0) > 0}
                           hasFunnel={(funnelCounts[client.id] || 0) > 0}
+                          alertsMuted={alertsMuted}
                         />
                         <div className="h-5 w-px bg-border" />
                         {/* BM — big bright red pulse when missing */}
@@ -678,7 +679,7 @@ export function DraggableClientTable({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => openAdsManager(e, client.business_manager_url)}>
-                                <BarChart3 className="h-3 w-3 text-green-600" />
+                                <BarChart3 className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : 'text-green-600')} />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-[10px]">Open Business Manager</TooltipContent>
@@ -687,8 +688,13 @@ export function DraggableClientTable({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Badge
-                                variant="destructive"
-                                className="text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5"
+                                variant="outline"
+                                className={cn(
+                                  'text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center gap-0.5',
+                                  alertsMuted
+                                    ? 'bg-muted text-muted-foreground border-muted-foreground/30'
+                                    : 'bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse'
+                                )}
                               >
                                 <AlertTriangle className="h-3 w-3" />
                                 BM
@@ -701,8 +707,9 @@ export function DraggableClientTable({
                           client={client}
                           isDuplicate={!!client.meta_ad_account_id && duplicateMetaAccounts.has(client.meta_ad_account_id)}
                           clients={clients}
+                          alertsMuted={alertsMuted}
                         />
-                        <CrmStatusCell client={client} syncInfo={syncInfo} />
+                        <CrmStatusCell client={client} syncInfo={syncInfo} alertsMuted={alertsMuted} />
                       </div>
                     </TableCell>
 
