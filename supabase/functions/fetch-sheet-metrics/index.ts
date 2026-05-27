@@ -354,10 +354,29 @@ Deno.serve(async (req) => {
             sheetTitle = target.title;
             metaCache.set(`${sheet_id}::${gid ?? ''}`, { at: Date.now(), title: sheetTitle });
 
-            if (/^\d{4}$/.test(String(sheetTitle).trim())) {
-              extraTitles = sheets
-                .map((s: any) => String(s?.properties?.title ?? '').trim())
-                .filter((t: string) => /^\d{4}$/.test(t) && t !== sheetTitle);
+            // Detect sibling "year" tabs sharing the same prefix.
+            // Matches: "2025"/"2026", "SCORECARD-25"/"SCORECARD-26",
+            // "SCORECARD 2025"/"SCORECARD 2026", "KPI 25"/"KPI 26", etc.
+            const extractYearPattern = (raw: string): { prefix: string; year: number; width: 2 | 4 } | null => {
+              const t = String(raw ?? '').trim();
+              const m = t.match(/^(.*?)[\s\-_]*(\d{2}|\d{4})$/);
+              if (!m) return null;
+              const prefix = m[1].trim().toLowerCase();
+              const yr = parseInt(m[2], 10);
+              const width = (m[2].length === 4 ? 4 : 2) as 2 | 4;
+              const fullYr = width === 4 ? yr : 2000 + yr;
+              if (fullYr < 2015 || fullYr > 2099) return null;
+              return { prefix, year: fullYr, width };
+            };
+            const primary = extractYearPattern(sheetTitle);
+            if (primary) {
+              extraTitles = (sheets as any[])
+                .map((s) => String(s?.properties?.title ?? '').trim())
+                .filter((t) => {
+                  if (!t || t === sheetTitle) return false;
+                  const m = extractYearPattern(t);
+                  return !!m && m.prefix === primary.prefix && m.year !== primary.year;
+                });
             }
           }
 
