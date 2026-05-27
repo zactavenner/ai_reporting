@@ -68,6 +68,7 @@ export function useCreatives(clientId?: string) {
         source: (item as any).source || 'manual',
         trigger_campaign_id: (item as any).trigger_campaign_id || null,
         ai_performance_score: (item as any).ai_performance_score || null,
+        ai_variations: ((item as any).ai_variations as CreativeVariation[]) || [],
       })) as Creative[];
     },
     enabled: !!clientId,
