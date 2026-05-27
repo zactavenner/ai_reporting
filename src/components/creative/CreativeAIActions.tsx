@@ -570,172 +570,140 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
         </DialogContent>
       </Dialog>
 
-      {/* AI Edit Modal */}
+      {/* AI Edit Modal — markup + model picker */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="max-w-5xl max-h-[92vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Paintbrush className="h-5 w-5 text-primary" />
-              AI Edit Creative
+              AI Edit — draw on the image to mark what you want to change
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Original Image */}
+            {/* Image with markup canvas overlay */}
             <div>
-              <p className="text-sm font-medium mb-2">Original</p>
-              <div className="border rounded-lg overflow-hidden bg-muted">
-                <img 
-                  src={creative.file_url!} 
-                  alt="Original" 
-                  className="w-full h-auto object-contain max-h-[400px]"
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium">Original {hasMarkup && <Badge variant="outline" className="ml-2">Marked up</Badge>}</p>
+                <Button size="sm" variant="ghost" onClick={clearMarkup} disabled={!hasMarkup} className="gap-1">
+                  <Eraser className="h-3 w-3" /> Clear
+                </Button>
+              </div>
+              <div className="relative border rounded-lg overflow-hidden bg-muted inline-block">
+                <img
+                  ref={imgRef}
+                  src={creative.file_url!}
+                  alt="Original"
+                  crossOrigin="anonymous"
+                  onLoad={setupCanvas}
+                  className="block max-h-[460px] w-auto"
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 cursor-crosshair touch-none"
+                  onMouseDown={startDraw}
+                  onMouseMove={moveDraw}
+                  onMouseUp={endDraw}
+                  onMouseLeave={endDraw}
+                  onTouchStart={startDraw}
+                  onTouchMove={moveDraw}
+                  onTouchEnd={endDraw}
                 />
               </div>
             </div>
 
-            {/* Edited Image or Prompt */}
-            <div>
-              <p className="text-sm font-medium mb-2">
-                {editedImageUrl ? 'Edited Result' : 'Describe your edits'}
-              </p>
-              {editedImageUrl ? (
+            {/* Latest result or prompt */}
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium mb-1">Model</p>
+                <Select value={editModel} onValueChange={setEditModel}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {EDIT_MODELS.map(m => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs font-medium mb-1">What should change?</p>
+                <Textarea
+                  value={editPrompt}
+                  onChange={(e) => setEditPrompt(e.target.value)}
+                  placeholder="e.g., Replace the marked area with a sunset sky. Keep all text identical."
+                  rows={4}
+                />
+              </div>
+              {latestEdit && (
                 <div className="border rounded-lg overflow-hidden bg-muted">
-                  <img 
-                    src={editedImageUrl} 
-                    alt="Edited" 
-                    className="w-full h-auto object-contain max-h-[400px]"
-                  />
-                  {editDescription && (
-                    <p className="p-2 text-xs text-muted-foreground">{editDescription}</p>
-                  )}
-                  <div className="p-2 flex gap-2">
-                    <Button size="sm" variant="outline" asChild>
-                      <a href={editedImageUrl} download target="_blank" rel="noreferrer">
-                        <Download className="h-4 w-4 mr-1" />
-                        Download
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <Textarea
-                    value={editPrompt}
-                    onChange={(e) => setEditPrompt(e.target.value)}
-                    placeholder="e.g., Change the background to sunset colors, make the text larger, add a gold border..."
-                    rows={6}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    {['Change background color', 'Make text bolder', 'Add warm overlay', 'Increase contrast'].map((suggestion) => (
-                      <Button
-                        key={suggestion}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={() => setEditPrompt(prev => prev ? `${prev}, ${suggestion.toLowerCase()}` : suggestion)}
-                      >
-                        {suggestion}
-                      </Button>
-                    ))}
-                  </div>
+                  <p className="text-xs font-medium p-2 border-b">Latest variation (saved)</p>
+                  <img src={latestEdit.url} alt="Edit" className="w-full h-auto object-contain max-h-[280px]" />
                 </div>
               )}
+              <div className="flex justify-end gap-2">
+                <Button onClick={handleAIEdit} disabled={editing || !editPrompt.trim()}>
+                  {editing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating…</> : <><Paintbrush className="h-4 w-4 mr-2" />Apply Edit</>}
+                </Button>
+              </div>
             </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            {editedImageUrl && (
-              <Button 
-                variant="outline"
-                onClick={() => { setEditedImageUrl(null); setEditPrompt(''); }}
-              >
-                Edit Again
-              </Button>
-            )}
-            {!editedImageUrl && (
-              <Button 
-                onClick={handleAIEdit}
-                disabled={editing || !editPrompt.trim()}
-              >
-                {editing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Generating Edit...
-                  </>
-                ) : (
-                  <>
-                    <Paintbrush className="h-4 w-4 mr-2" />
-                    Apply Edit
-                  </>
-                )}
-              </Button>
-            )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* AI Variations Modal */}
+      {/* Variations gallery — saved per-creative */}
       <Dialog open={variationsOpen} onOpenChange={setVariationsOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Copy className="h-5 w-5 text-primary" />
-              AI Variations
-              <Badge variant="outline" className="ml-2">3 Variations</Badge>
+              <Layers className="h-5 w-5 text-primary" />
+              Variations
+              <Badge variant="outline" className="ml-2">{variations.length}</Badge>
+              <Button size="sm" variant="outline" className="ml-auto gap-1" onClick={() => { setEditOpen(true); setVariationsOpen(false); }}>
+                <Paintbrush className="h-3 w-3" /> New AI Edit
+              </Button>
             </DialogTitle>
           </DialogHeader>
-          
-          {generatingVariations ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-4">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Generating 3 creative variations...</p>
-              <p className="text-xs text-muted-foreground">This may take up to a minute</p>
+
+          {variations.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>No variations yet. Use “AI Edit + Markup” or “Image → Video” to create one.</p>
             </div>
-          ) : variations.length > 0 ? (
+          ) : (
             <ScrollArea className="max-h-[70vh]">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pr-4">
                 {variations.map((v, i) => (
-                  <div key={i} className="border rounded-lg overflow-hidden">
-                    <img 
-                      src={v.url} 
-                      alt={`Variation ${i + 1}`} 
-                      className="w-full h-auto object-contain bg-muted"
-                    />
+                  <div key={v.id} className="border rounded-lg overflow-hidden bg-muted/40">
+                    {v.type === 'video' ? (
+                      <video src={v.url} controls className="w-full h-auto bg-black" />
+                    ) : (
+                      <img src={v.url} alt={`Variation ${i + 1}`} className="w-full h-auto object-contain bg-muted" />
+                    )}
                     <div className="p-3 space-y-2">
-                      <p className="text-sm font-medium">Variation {i + 1}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-3">{v.description}</p>
-                      <Button size="sm" variant="outline" className="w-full" asChild>
-                        <a href={v.url} download target="_blank" rel="noreferrer">
-                          <Download className="h-4 w-4 mr-1" />
-                          Download
-                        </a>
-                      </Button>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">Variation {i + 1}</p>
+                        <Badge variant="outline" className="text-[10px]">{v.model || v.type}</Badge>
+                      </div>
+                      {v.prompt && <p className="text-xs text-muted-foreground line-clamp-2">{v.prompt}</p>}
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="outline" className="flex-1 gap-1" onClick={() => promoteToMain(v)}>
+                          <CheckCircle className="h-3 w-3" /> Set as main
+                        </Button>
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={v.url} download target="_blank" rel="noreferrer"><Download className="h-3 w-3" /></a>
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => deleteVariation(v.id)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </ScrollArea>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <p>No variations generated yet. Try again.</p>
-              <Button className="mt-4" onClick={handleAIVariations}>
-                <Copy className="h-4 w-4 mr-2" />
-                Generate Variations
-              </Button>
-            </div>
           )}
 
-          {/* Original for comparison */}
-          {variations.length > 0 && (
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium mb-2">Original</p>
-              <img 
-                src={creative.file_url!} 
-                alt="Original" 
-                className="h-24 rounded border object-contain bg-muted"
-              />
-            </div>
-          )}
+          <div className="border-t pt-4">
+            <p className="text-sm font-medium mb-2">Original</p>
+            <img src={creative.file_url!} alt="Original" className="h-24 rounded border object-contain bg-muted" />
+          </div>
         </DialogContent>
       </Dialog>
     </>
