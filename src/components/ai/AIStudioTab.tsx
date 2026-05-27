@@ -361,6 +361,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [showCanvas, setShowCanvas] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:show-canvas") !== "false"; } catch { return true; }
   });
+  const [showChat, setShowChat] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:show-chat") !== "false"; } catch { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:show-chat", String(showChat)); } catch {} }, [showChat]);
+  useEffect(() => { try { localStorage.setItem("ai-studio:show-canvas", String(showCanvas)); } catch {} }, [showCanvas]);
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
