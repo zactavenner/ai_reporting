@@ -78,3 +78,21 @@ export function getTemplatesForClientType(clientType?: string | null) {
   }
   return STANDARD_TASKS;
 }
+
+// Map onboarding categories → agency pod name so seeded PM tasks are
+// auto-routed to the right department on creation.
+export const CATEGORY_TO_POD: Record<string, string> = {
+  'Compliance & Legal': 'Account Management',
+  'Offer Setup': 'Account Management',
+  'Brand & Creative': 'Creatives',
+  'Funnel': 'Media Buying',
+  'Ads': 'Media Buying',
+  'CRM & Pipeline': 'CRM',
+  'Setup': 'Account Management',
+  'Fulfillment': 'Creatives',
+  'Launch': 'Account Management',
+};
+
+export function podForCategory(category: string): string | null {
+  return CATEGORY_TO_POD[category] ?? 'Account Management';
+}

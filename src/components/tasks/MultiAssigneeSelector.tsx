@@ -231,31 +231,17 @@ export function MultiAssigneeSelector({
               Add Assignee
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-72 p-0" align="start">
-            <div className="max-h-64 overflow-y-auto p-2 space-y-2">
-                {/* Clients section */}
-                {clients.length > 0 && (
-                  <>
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      Clients
-                    </div>
-                    {clients.filter(c => c.status === 'active').map(client => (
-                      <div
-                        key={client.id}
-                        className={cn(
-                          "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted",
-                          currentClientName === client.name && "bg-muted"
-                        )}
-                        onClick={() => selectClient(client)}
-                      >
-                        <Checkbox checked={currentClientName === client.name} />
-                        <Briefcase className="h-3 w-3 text-primary" />
-                        <span className="text-sm">{client.name}</span>
-                      </div>
-                    ))}
-                  </>
-                )}
-                {/* Pods section */}
+          <PopoverContent
+            className="w-72 p-0"
+            align="start"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            <div
+              className="max-h-96 overflow-y-auto overscroll-contain p-2 space-y-2"
+              onWheel={(e) => e.stopPropagation()}
+            >
+                {/* Pods section — Teams first */}
                 <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
                   Teams
                 </div>
@@ -331,6 +317,29 @@ export function MultiAssigneeSelector({
                         <Checkbox checked={selectedMemberIds.includes(member.id)} />
                         <User className="h-3 w-3" />
                         <span className="text-sm">{member.name}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {/* Clients section — moved to the bottom */}
+                {clients.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground mt-2 border-t pt-2">
+                      Clients
+                    </div>
+                    {clients.filter(c => c.status === 'active').map(client => (
+                      <div
+                        key={client.id}
+                        className={cn(
+                          "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted",
+                          currentClientName === client.name && "bg-muted"
+                        )}
+                        onClick={() => selectClient(client)}
+                      >
+                        <Checkbox checked={currentClientName === client.name} />
+                        <Briefcase className="h-3 w-3 text-primary" />
+                        <span className="text-sm">{client.name}</span>
                       </div>
                     ))}
                   </>

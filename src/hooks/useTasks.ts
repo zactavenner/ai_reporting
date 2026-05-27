@@ -265,6 +265,7 @@ export function useCreateTask() {
               toast.success(`AI assigned task to ${result.member_name}`);
               queryClient.invalidateQueries({ queryKey: ['tasks'] });
               queryClient.invalidateQueries({ queryKey: ['all-tasks'] });
+              queryClient.invalidateQueries({ queryKey: ['task-assignees', data.id] });
             }
           } catch (err) {
             console.error('AI auto-assign failed:', err);
