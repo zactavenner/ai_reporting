@@ -5,6 +5,22 @@ const corsHeaders = {
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_sheets/v4';
 
+// Tabs to skip when scanning the whole spreadsheet. Substring match, case-insensitive.
+// These are rollup / instructional / non-daily tabs that would otherwise inflate or
+// duplicate the daily totals.
+const TAB_DENYLIST = [
+  'note', 'notes', 'instruction', 'readme', 'template', 'dashboard',
+  'summary', 'monthly', 'weekly', 'mtd', 'ytd', 'pivot', 'chart',
+  'lookup', 'config', 'archive', 'overview', 'guide', 'help',
+  'goal', 'goals', 'forecast', 'projection',
+];
+
+function isDenylistedTab(title: string): boolean {
+  const t = (title || '').toLowerCase();
+  if (!t) return true;
+  return TAB_DENYLIST.some((kw) => t.includes(kw));
+}
+
 // ---- In-memory caches (per edge instance) -----------------------------------
 // Cache parsed daily metrics by sheet_id+gid for 90s so repeated requests
 // (current + prior period, multi-client dashboards) coalesce into one
@@ -328,12 +344,13 @@ Deno.serve(async (req) => {
       let pending = inflight.get(cacheKey);
       if (!pending) {
         pending = (async () => {
-          // 1. Resolve gid -> sheet title and collect sibling year-tab titles.
-          // If the chosen tab is named like a year (e.g. "2025"), we also pull
-          // sibling year tabs and merge them so cross-year date ranges work
-          // without re-saving the gid every January.
+          // 1. Resolve gid -> sheet title and collect ALL other data tabs.
+          // We scan every tab in the spreadsheet (minus a denylist of obvious
+          // rollup/instructional tabs) so the executive dashboard reflects 100%
+          // of the client's data without re-pointing gids every quarter.
           let sheetTitle: string;
           let extraTitles: string[] = [];
+          const tabsSkipped: { title: string; reason: string }[] = [];
           if (range && typeof range === 'string') {
             sheetTitle = range;
           } else {
@@ -354,56 +371,54 @@ Deno.serve(async (req) => {
             sheetTitle = target.title;
             metaCache.set(`${sheet_id}::${gid ?? ''}`, { at: Date.now(), title: sheetTitle });
 
-            // Detect sibling "year" tabs sharing the same prefix.
-            // Matches: "2025"/"2026", "SCORECARD-25"/"SCORECARD-26",
-            // "SCORECARD 2025"/"SCORECARD 2026", "KPI 25"/"KPI 26", etc.
-            const extractYearPattern = (raw: string): { prefix: string; year: number; width: 2 | 4 } | null => {
-              const t = String(raw ?? '').trim();
-              const m = t.match(/^(.*?)[\s\-_]*(\d{2}|\d{4})$/);
-              if (!m) return null;
-              const prefix = m[1].trim().toLowerCase();
-              const yr = parseInt(m[2], 10);
-              const width = (m[2].length === 4 ? 4 : 2) as 2 | 4;
-              const fullYr = width === 4 ? yr : 2000 + yr;
-              if (fullYr < 2015 || fullYr > 2099) return null;
-              return { prefix, year: fullYr, width };
-            };
-            const primary = extractYearPattern(sheetTitle);
-            if (primary) {
-              extraTitles = (sheets as any[])
-                .map((s) => String(s?.properties?.title ?? '').trim())
-                .filter((t) => {
-                  if (!t || t === sheetTitle) return false;
-                  const m = extractYearPattern(t);
-                  return !!m && m.prefix === primary.prefix && m.year !== primary.year;
-                });
+            // Scan ALL other tabs, excluding denylisted titles. The primary
+            // tab is always included regardless of name.
+            for (const s of sheets as any[]) {
+              const title = String(s?.properties?.title ?? '').trim();
+              if (!title || title === sheetTitle) continue;
+              if (isDenylistedTab(title)) {
+                tabsSkipped.push({ title, reason: 'denylist' });
+                continue;
+              }
+              extraTitles.push(title);
             }
           }
 
-          // 2. Fetch values for the primary tab + any year siblings in parallel.
+          // 2. Fetch values for the primary tab + every other data tab,
+          // chunked at 8 in parallel to respect Google's 60 req/min/user quota.
           const titlesToFetch = [sheetTitle, ...extraTitles];
-          const fetched = await Promise.all(titlesToFetch.map(async (title) => {
-            const vr = await fetchWithRetry(
-              `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${title}`,
-              { headers }
-            );
-            const vt = await vr.text();
-            if (!vr.ok) {
-              // Don't fail the whole request because one sibling year tab is bad.
-              if (title !== sheetTitle) {
-                console.warn(`sibling tab "${title}" fetch failed [${vr.status}]: ${vt.slice(0, 200)}`);
-                return { title, rows: [] as any[][] };
+          const fetched: { title: string; rows: any[][] }[] = [];
+          const CHUNK = 8;
+          for (let i = 0; i < titlesToFetch.length; i += CHUNK) {
+            const batch = titlesToFetch.slice(i, i + CHUNK);
+            const results = await Promise.all(batch.map(async (title) => {
+              const vr = await fetchWithRetry(
+                `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${title}`,
+                { headers }
+              );
+              const vt = await vr.text();
+              if (!vr.ok) {
+                if (title !== sheetTitle) {
+                  console.warn(`tab "${title}" fetch failed [${vr.status}]: ${vt.slice(0, 200)}`);
+                  tabsSkipped.push({ title, reason: `fetch ${vr.status}` });
+                  return { title, rows: [] as any[][] };
+                }
+                throw new Error(`Sheet values fetch failed [${vr.status}]: ${vt}`);
               }
-              throw new Error(`Sheet values fetch failed [${vr.status}]: ${vt}`);
-            }
-            const vj = JSON.parse(vt);
-            return { title, rows: (vj?.values || []) as any[][] };
-          }));
+              const vj = JSON.parse(vt);
+              return { title, rows: (vj?.values || []) as any[][] };
+            }));
+            fetched.push(...results);
+          }
 
-          // 3. Parse each tab and merge daily metrics by date (sum across tabs).
+          // 3. Parse each tab and merge daily metrics by date.
+          // De-dupe strategy: take MAX per (date, metric) across tabs so that
+          // overlapping tabs (e.g. a "Q1" sheet and a "2025" sheet) don't
+          // double-count, while dates that exist in only one tab still flow.
           const mergedByDate: Record<string, DailyMetric> = {};
           let layout: 'column-major' | 'row-major' = 'column-major';
-          for (const { rows } of fetched) {
+          const tabsUsed: string[] = [];
+          for (const { title, rows } of fetched) {
             let part: DailyMetric[] = parseColumnMajor(rows, mapping);
             if (part.length === 0 && rows.length >= 2) {
               layout = 'row-major';
@@ -436,27 +451,38 @@ Deno.serve(async (req) => {
                 }
               }
             }
+            if (part.length === 0) {
+              if (title !== sheetTitle) tabsSkipped.push({ title, reason: 'no dates' });
+              continue;
+            }
+            tabsUsed.push(title);
             for (const d of part) {
               const acc = mergedByDate[d.date];
               if (!acc) { mergedByDate[d.date] = { ...d }; continue; }
-              acc.ad_spend += d.ad_spend;
-              acc.impressions += d.impressions;
-              acc.clicks += d.clicks;
-              acc.leads += d.leads;
-              acc.spam_leads += d.spam_leads;
-              acc.calls += d.calls;
-              acc.showed_calls += d.showed_calls;
-              acc.commitments += d.commitments;
-              acc.commitment_dollars += d.commitment_dollars;
-              acc.funded_investors += d.funded_investors;
-              acc.funded_dollars += d.funded_dollars;
-              acc.reconnect_calls += d.reconnect_calls;
-              acc.reconnect_showed += d.reconnect_showed;
+              acc.ad_spend = Math.max(acc.ad_spend, d.ad_spend);
+              acc.impressions = Math.max(acc.impressions, d.impressions);
+              acc.clicks = Math.max(acc.clicks, d.clicks);
+              acc.leads = Math.max(acc.leads, d.leads);
+              acc.spam_leads = Math.max(acc.spam_leads, d.spam_leads);
+              acc.calls = Math.max(acc.calls, d.calls);
+              acc.showed_calls = Math.max(acc.showed_calls, d.showed_calls);
+              acc.commitments = Math.max(acc.commitments, d.commitments);
+              acc.commitment_dollars = Math.max(acc.commitment_dollars, d.commitment_dollars);
+              acc.funded_investors = Math.max(acc.funded_investors, d.funded_investors);
+              acc.funded_dollars = Math.max(acc.funded_dollars, d.funded_dollars);
+              acc.reconnect_calls = Math.max(acc.reconnect_calls, d.reconnect_calls);
+              acc.reconnect_showed = Math.max(acc.reconnect_showed, d.reconnect_showed);
               acc.ctr = acc.impressions > 0 ? (acc.clicks / acc.impressions) * 100 : 0;
             }
           }
           const daily: DailyMetric[] = Object.values(mergedByDate).sort((a, b) => a.date.localeCompare(b.date));
-          const payload = { sheetTitle, daily, layout, fetchedAt: new Date().toISOString() };
+          const payload = {
+            sheetTitle, daily, layout,
+            tabsScanned: titlesToFetch,
+            tabsUsed,
+            tabsSkipped,
+            fetchedAt: new Date().toISOString(),
+          };
           parsedCache.set(cacheKey, { at: Date.now(), payload });
           return payload;
         })();
