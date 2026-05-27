@@ -839,10 +839,12 @@ function MetaStatusCell({
   client,
   isDuplicate,
   clients,
+  alertsMuted,
 }: {
   client: Client;
   isDuplicate: boolean;
   clients: Client[];
+  alertsMuted: boolean;
 }) {
   const [adAccountId, setAdAccountId] = useState(client.meta_ad_account_id || '');
   const [bmUrl, setBmUrl] = useState(client.business_manager_url || '');
@@ -969,6 +971,7 @@ function QuickLinksCell({
   onNavigate,
   hasCreatives,
   hasFunnel,
+  alertsMuted,
 }: {
   client: Client;
   settings: ClientSettings | undefined;
@@ -976,6 +979,7 @@ function QuickLinksCell({
   onNavigate: (tab: string) => void;
   hasCreatives: boolean;
   hasFunnel: boolean;
+  alertsMuted: boolean;
 }) {
   const s: any = settings;
   const sheetId = s?.metrics_sheet_id || null;
@@ -1227,9 +1231,11 @@ function QuickLinksCell({
 function CrmStatusCell({
   client,
   syncInfo,
+  alertsMuted,
 }: {
   client: Client;
   syncInfo: { status: 'healthy' | 'stale' | 'error' | 'not_configured'; lastSyncAt: string | null; error: string | null; source: 'ghl' | 'hubspot' | 'none' };
+  alertsMuted: boolean;
 }) {
   const [locationId, setLocationId] = useState(client.ghl_location_id || '');
   const [apiKey, setApiKey] = useState(client.ghl_api_key || '');
