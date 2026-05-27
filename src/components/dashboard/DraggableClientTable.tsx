@@ -881,7 +881,13 @@ function MetaStatusCell({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-5 inline-flex items-center gap-0.5">
+                  <Badge
+                    variant={alertsMuted ? 'outline' : 'destructive'}
+                    className={cn(
+                      'text-[10px] px-1.5 py-0 h-5 inline-flex items-center gap-0.5',
+                      alertsMuted && 'bg-muted text-muted-foreground border-muted-foreground/30'
+                    )}
+                  >
                     <AlertTriangle className="h-2.5 w-2.5" />
                     DUP
                   </Badge>
@@ -897,9 +903,22 @@ function MetaStatusCell({
               </Tooltip>
             </TooltipProvider>
           ) : hasAccount ? (
-            <Badge variant="success" className="text-[10px] px-1.5 py-0 h-5 inline-flex items-center">META</Badge>
+            <Badge
+              variant={alertsMuted ? 'outline' : 'success'}
+              className={cn('text-[10px] px-1.5 py-0 h-5 inline-flex items-center', alertsMuted && 'bg-muted text-muted-foreground border-muted-foreground/30')}
+            >
+              META
+            </Badge>
           ) : (
-            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+            <Badge
+              variant={alertsMuted ? 'outline' : 'destructive'}
+              className={cn(
+                'text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center gap-0.5',
+                alertsMuted
+                  ? 'bg-muted text-muted-foreground border-muted-foreground/30'
+                  : 'bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse'
+              )}
+            >
               <AlertTriangle className="h-3 w-3" />META
             </Badge>
           )}
