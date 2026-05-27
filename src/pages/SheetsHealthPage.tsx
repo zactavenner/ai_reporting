@@ -434,8 +434,16 @@ export default function SheetsHealthPage() {
                       <Loader2 className="h-3 w-3 animate-spin" /> testing
                     </span>
                   ) : r.test?.ok ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                      <CheckCircle2 className="h-3 w-3" /> {r.test.rows} rows · {r.test.tab} · {r.test.ms}ms
+                    <span
+                      className="inline-flex items-center gap-1 text-xs text-emerald-700"
+                      title={[
+                        r.test.tabsUsed?.length ? `Used: ${r.test.tabsUsed.join(', ')}` : '',
+                        r.test.tabsSkipped?.length ? `Skipped: ${r.test.tabsSkipped.map(t => `${t.title} (${t.reason})`).join(', ')}` : '',
+                      ].filter(Boolean).join('\n')}
+                    >
+                      <CheckCircle2 className="h-3 w-3" /> {r.test.rows} rows ·{' '}
+                      {r.test.tabsUsed?.length ? `${r.test.tabsUsed.length} tabs` : r.test.tab} ·{' '}
+                      {r.test.ms}ms
                     </span>
                   ) : r.test?.ok === false ? (
                     <span className="inline-flex items-center gap-1 text-xs text-destructive" title={r.test.error}>
