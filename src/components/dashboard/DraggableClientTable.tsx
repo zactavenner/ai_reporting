@@ -40,7 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet, FileText, Palette, Layers, Activity as ActivityIcon } from 'lucide-react';
+import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet, FileText, Palette, Layers, Activity as ActivityIcon, Bell, BellOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -165,6 +165,7 @@ export function DraggableClientTable({
   const numberOfDays = useMemo(() => differenceInDays(dateRange.to, dateRange.from) + 1, [dateRange]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ column: '', direction: null });
+  const [alertsMuted, setAlertsMuted] = useState(() => localStorage.getItem('draggableClientTable.alertsMuted') === 'true');
   const [syncHistoryClient, setSyncHistoryClient] = useState<{ id: string; name: string } | null>(null);
   const [syncingGhl, setSyncingGhl] = useState<Record<string, boolean>>({});
   const [syncingMeta, setSyncingMeta] = useState<Record<string, boolean>>({});
@@ -499,7 +500,24 @@ export function DraggableClientTable({
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
               <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[280px]">Quick Links</TableHead>
               {isAdmin && <SortableHeader column="mrr" label="MRR" sortConfig={sortConfig} onSort={handleSort} />}
-              <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[130px]">Actions</TableHead>
+              <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[130px]">
+                <div className="flex items-center gap-1">
+                  Actions
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-4 w-4"
+                    onClick={() => {
+                      const next = !alertsMuted;
+                      setAlertsMuted(next);
+                      localStorage.setItem('draggableClientTable.alertsMuted', String(next));
+                    }}
+                    title={alertsMuted ? 'Turn alerts on' : 'Turn alerts off'}
+                  >
+                    {alertsMuted ? <BellOff className="h-3 w-3 text-muted-foreground" /> : <Bell className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -653,6 +671,7 @@ export function DraggableClientTable({
                           onNavigate={(tab) => navigate(`/client/${client.id}?tab=${tab}`)}
                           hasCreatives={(creativeCounts[client.id] || 0) > 0}
                           hasFunnel={(funnelCounts[client.id] || 0) > 0}
+                          alertsMuted={alertsMuted}
                         />
                         <div className="h-5 w-px bg-border" />
                         {/* BM — big bright red pulse when missing */}
@@ -660,7 +679,7 @@ export function DraggableClientTable({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => openAdsManager(e, client.business_manager_url)}>
-                                <BarChart3 className="h-3 w-3 text-green-600" />
+                                <BarChart3 className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : 'text-green-600')} />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-[10px]">Open Business Manager</TooltipContent>
@@ -669,8 +688,13 @@ export function DraggableClientTable({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Badge
-                                variant="destructive"
-                                className="text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5"
+                                variant="outline"
+                                className={cn(
+                                  'text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center gap-0.5',
+                                  alertsMuted
+                                    ? 'bg-muted text-muted-foreground border-muted-foreground/30'
+                                    : 'bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse'
+                                )}
                               >
                                 <AlertTriangle className="h-3 w-3" />
                                 BM
@@ -683,8 +707,9 @@ export function DraggableClientTable({
                           client={client}
                           isDuplicate={!!client.meta_ad_account_id && duplicateMetaAccounts.has(client.meta_ad_account_id)}
                           clients={clients}
+                          alertsMuted={alertsMuted}
                         />
-                        <CrmStatusCell client={client} syncInfo={syncInfo} />
+                        <CrmStatusCell client={client} syncInfo={syncInfo} alertsMuted={alertsMuted} />
                       </div>
                     </TableCell>
 
@@ -814,10 +839,12 @@ function MetaStatusCell({
   client,
   isDuplicate,
   clients,
+  alertsMuted,
 }: {
   client: Client;
   isDuplicate: boolean;
   clients: Client[];
+  alertsMuted: boolean;
 }) {
   const [adAccountId, setAdAccountId] = useState(client.meta_ad_account_id || '');
   const [bmUrl, setBmUrl] = useState(client.business_manager_url || '');
@@ -854,7 +881,13 @@ function MetaStatusCell({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-5 inline-flex items-center gap-0.5">
+                  <Badge
+                    variant={alertsMuted ? 'outline' : 'destructive'}
+                    className={cn(
+                      'text-[10px] px-1.5 py-0 h-5 inline-flex items-center gap-0.5',
+                      alertsMuted && 'bg-muted text-muted-foreground border-muted-foreground/30'
+                    )}
+                  >
                     <AlertTriangle className="h-2.5 w-2.5" />
                     DUP
                   </Badge>
@@ -870,9 +903,22 @@ function MetaStatusCell({
               </Tooltip>
             </TooltipProvider>
           ) : hasAccount ? (
-            <Badge variant="success" className="text-[10px] px-1.5 py-0 h-5 inline-flex items-center">META</Badge>
+            <Badge
+              variant={alertsMuted ? 'outline' : 'success'}
+              className={cn('text-[10px] px-1.5 py-0 h-5 inline-flex items-center', alertsMuted && 'bg-muted text-muted-foreground border-muted-foreground/30')}
+            >
+              META
+            </Badge>
           ) : (
-            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+            <Badge
+              variant={alertsMuted ? 'outline' : 'destructive'}
+              className={cn(
+                'text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center gap-0.5',
+                alertsMuted
+                  ? 'bg-muted text-muted-foreground border-muted-foreground/30'
+                  : 'bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse'
+              )}
+            >
               <AlertTriangle className="h-3 w-3" />META
             </Badge>
           )}
@@ -944,6 +990,7 @@ function QuickLinksCell({
   onNavigate,
   hasCreatives,
   hasFunnel,
+  alertsMuted,
 }: {
   client: Client;
   settings: ClientSettings | undefined;
@@ -951,6 +998,7 @@ function QuickLinksCell({
   onNavigate: (tab: string) => void;
   hasCreatives: boolean;
   hasFunnel: boolean;
+  alertsMuted: boolean;
 }) {
   const s: any = settings;
   const sheetId = s?.metrics_sheet_id || null;
@@ -1027,7 +1075,7 @@ function QuickLinksCell({
               onClick={(e) => (sheetUrl ? openExternal(e, sheetUrl) : (e.stopPropagation(), setSheetOpen(true)))}
             >
               <FileSpreadsheet
-                className={cn('h-3 w-3', sheetUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
+                className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : sheetUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
               />
             </Button>
           </TooltipTrigger>
@@ -1124,7 +1172,7 @@ function QuickLinksCell({
               title="Google Doc"
             >
               <FileText
-                className={cn('h-3 w-3', docUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
+                className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : docUrl ? 'text-green-600' : 'text-red-500 animate-pulse')}
               />
             </Button>
           </PopoverTrigger>
@@ -1158,7 +1206,7 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('creatives'); }}
             >
-              <Palette className={cn('h-3 w-3', hasCreatives ? 'text-green-600' : 'text-red-500 animate-pulse')} />
+              <Palette className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : hasCreatives ? 'text-green-600' : 'text-red-500 animate-pulse')} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">{hasCreatives ? 'Creatives' : 'No creatives — add some'}</TooltipContent>
@@ -1173,7 +1221,7 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('pipeline'); }}
             >
-              <Layers className={cn('h-3 w-3', hasFunnel ? 'text-green-600' : 'text-red-500 animate-pulse')} />
+              <Layers className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : hasFunnel ? 'text-green-600' : 'text-red-500 animate-pulse')} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">{hasFunnel ? 'Funnel' : 'No funnel/pipeline configured'}</TooltipContent>
@@ -1188,7 +1236,7 @@ function QuickLinksCell({
               className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); onNavigate('activity'); }}
             >
-              <ActivityIcon className="h-3 w-3 text-green-600" />
+              <ActivityIcon className={cn('h-3 w-3', alertsMuted ? 'text-muted-foreground' : 'text-green-600')} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">Activity</TooltipContent>
@@ -1202,9 +1250,11 @@ function QuickLinksCell({
 function CrmStatusCell({
   client,
   syncInfo,
+  alertsMuted,
 }: {
   client: Client;
   syncInfo: { status: 'healthy' | 'stale' | 'error' | 'not_configured'; lastSyncAt: string | null; error: string | null; source: 'ghl' | 'hubspot' | 'none' };
+  alertsMuted: boolean;
 }) {
   const [locationId, setLocationId] = useState(client.ghl_location_id || '');
   const [apiKey, setApiKey] = useState(client.ghl_api_key || '');
@@ -1240,9 +1290,22 @@ function CrmStatusCell({
       <PopoverTrigger asChild>
         <div className="inline-flex items-center gap-0.5 cursor-pointer">
           {hasCreds ? (
-            <Badge variant="success" className="text-[10px] px-1.5 py-0 h-5 inline-flex items-center">{sourceLabel}</Badge>
+            <Badge
+              variant={alertsMuted ? 'outline' : 'success'}
+              className={cn('text-[10px] px-1.5 py-0 h-5 inline-flex items-center', alertsMuted && 'bg-muted text-muted-foreground border-muted-foreground/30')}
+            >
+              {sourceLabel}
+            </Badge>
           ) : (
-            <Badge className="text-[10px] font-bold px-1.5 py-0 h-5 bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse gap-0.5">
+            <Badge
+              variant={alertsMuted ? 'outline' : 'destructive'}
+              className={cn(
+                'text-[10px] font-bold px-1.5 py-0 h-5 inline-flex items-center gap-0.5',
+                alertsMuted
+                  ? 'bg-muted text-muted-foreground border-muted-foreground/30'
+                  : 'bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.7)] animate-pulse'
+              )}
+            >
               <AlertTriangle className="h-3 w-3" />CRM
             </Badge>
           )}
