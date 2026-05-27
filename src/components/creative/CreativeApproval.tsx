@@ -376,6 +376,20 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
               Copy Approval Link
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBulkDownload}
+            disabled={downloadingAll || filteredCreatives.filter((c) => !!c.file_url).length === 0}
+            title="Download all creatives in current view as a ZIP"
+          >
+            {downloadingAll ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Download All ({filteredCreatives.filter((c) => !!c.file_url).length})
+          </Button>
           <Dialog open={bulkUploadOpen} onOpenChange={setBulkUploadOpen}>
             <DialogTrigger asChild>
               <Button variant={isPublicView ? 'default' : 'outline'}>
