@@ -5,6 +5,40 @@ const corsHeaders = {
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_sheets/v4';
 
+// ---- In-memory caches (per edge instance) -----------------------------------
+// Cache parsed daily metrics by sheet_id+gid for 90s so repeated requests
+// (current + prior period, multi-client dashboards) coalesce into one
+// upstream call and stay under Google's 60 req/min/user quota.
+const PARSED_TTL_MS = 90_000;
+const META_TTL_MS = 10 * 60_000;
+const parsedCache = new Map<string, { at: number; payload: any }>();
+const metaCache = new Map<string, { at: number; title: string }>();
+const inflight = new Map<string, Promise<any>>();
+
+async function fetchWithRetry(url: string, init: RequestInit, attempts = 4): Promise<Response> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.status !== 429 && res.status < 500) return res;
+      // Retry on 429 / 5xx
+      const body = await res.text();
+      lastErr = new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+      if (i === attempts - 1) {
+        // Return the last response so caller can surface upstream details.
+        return new Response(body, { status: res.status, headers: res.headers });
+      }
+    } catch (e) {
+      lastErr = e;
+      if (i === attempts - 1) throw e;
+    }
+    // Exponential backoff with jitter: 600ms, 1.4s, 3s
+    const delay = 600 * Math.pow(2, i) + Math.random() * 400;
+    await new Promise((r) => setTimeout(r, delay));
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('fetchWithRetry exhausted');
+}
+
 interface DailyMetric {
   date: string;
   ad_spend: number;
