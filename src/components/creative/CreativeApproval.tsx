@@ -96,6 +96,7 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [bulkPlatform, setBulkPlatform] = useState<'meta' | 'tiktok' | 'youtube' | 'google'>('meta');
+  const [downloadingAll, setDownloadingAll] = useState(false);
   
   const [newCreative, setNewCreative] = useState({
     title: '',
@@ -135,6 +136,63 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
     const url = `${window.location.origin}/public/${publicToken}/creatives`;
     navigator.clipboard.writeText(url);
     toast.success('Creative approval link copied to clipboard');
+  };
+
+  const handleBulkDownload = async () => {
+    const downloadable = filteredCreatives.filter((c) => !!c.file_url);
+    if (downloadable.length === 0) {
+      toast.error('No downloadable creatives in this view');
+      return;
+    }
+    setDownloadingAll(true);
+    const toastId = toast.loading(`Preparing ${downloadable.length} creative${downloadable.length !== 1 ? 's' : ''}...`);
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      const used = new Set<string>();
+      let ok = 0;
+      let fail = 0;
+      for (const c of downloadable) {
+        try {
+          const res = await fetch(c.file_url as string);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const urlPath = (c.file_url as string).split('?')[0];
+          const extFromUrl = urlPath.split('.').pop() || '';
+          const ext = extFromUrl.length <= 5 ? extFromUrl : (c.type === 'video' ? 'mp4' : 'png');
+          const safeTitle = (c.title || 'creative').replace(/[^\w\-]+/g, '_').slice(0, 80);
+          let name = `${safeTitle}.${ext}`;
+          let i = 2;
+          while (used.has(name)) {
+            name = `${safeTitle}_${i}.${ext}`;
+            i++;
+          }
+          used.add(name);
+          zip.file(name, blob);
+          ok++;
+        } catch (err) {
+          console.error('Download failed for', c.title, err);
+          fail++;
+        }
+      }
+      if (ok === 0) throw new Error('All downloads failed');
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeClient = (clientName || 'client').replace(/[^\w\-]+/g, '_');
+      const stamp = new Date().toISOString().split('T')[0];
+      a.download = `${safeClient}-creatives-${activeTab}-${stamp}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${ok} creative${ok !== 1 ? 's' : ''}${fail ? ` (${fail} failed)` : ''}`, { id: toastId });
+    } catch (e: any) {
+      toast.error('Bulk download failed: ' + (e?.message || 'Unknown error'), { id: toastId });
+    } finally {
+      setDownloadingAll(false);
+    }
   };
 
   const handleLaunch = (creative: Creative) => {
@@ -318,6 +376,20 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
               Copy Approval Link
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBulkDownload}
+            disabled={downloadingAll || filteredCreatives.filter((c) => !!c.file_url).length === 0}
+            title="Download all creatives in current view as a ZIP"
+          >
+            {downloadingAll ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Download All ({filteredCreatives.filter((c) => !!c.file_url).length})
+          </Button>
           <Dialog open={bulkUploadOpen} onOpenChange={setBulkUploadOpen}>
             <DialogTrigger asChild>
               <Button variant={isPublicView ? 'default' : 'outline'}>
