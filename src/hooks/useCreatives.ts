@@ -14,6 +14,16 @@ export interface CreativeComment {
   attachmentType?: string;
 }
 
+export interface CreativeVariation {
+  id: string;
+  url: string;
+  type: 'image' | 'video';
+  prompt?: string;
+  model?: string;
+  description?: string;
+  created_at: string;
+}
+
 export interface Creative {
   id: string;
   client_id: string;
@@ -30,6 +40,7 @@ export interface Creative {
   source: string;
   trigger_campaign_id: string | null;
   ai_performance_score: number | null;
+  ai_variations?: CreativeVariation[];
   created_at: string;
   updated_at: string;
 }
