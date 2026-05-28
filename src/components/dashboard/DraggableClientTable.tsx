@@ -737,6 +737,26 @@ export function DraggableClientTable({
                               variant="ghost"
                               size="icon"
                               className="h-5 w-5"
+                              onClick={() => toggleClientMuted(client.id)}
+                              title={clientMuted ? 'Turn alerts on' : 'Turn alerts off'}
+                            >
+                              {clientMuted ? (
+                                <BellOff className="h-2.5 w-2.5 text-muted-foreground" />
+                              ) : (
+                                <Bell className="h-2.5 w-2.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-[10px]">
+                            {clientMuted ? 'Alerts muted for this client' : 'Mute alerts for this client'}
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5"
                               disabled={syncingGhl[client.id] || !client.ghl_api_key}
                               onClick={(e) => handleSyncGhlClient(e, client.id, client.name)}
                               title="Sync GHL"
