@@ -75,7 +75,7 @@ interface DailyMetric {
 }
 
 const FIELD_ALIASES: Record<string, string[]> = {
-  date: ['date', 'day'],
+  date: ['date', 'day', 'current date', 'lead date', 'date created', 'created at', 'created', 'submitted', 'submission date', 'submitted at', 'timestamp', 'booked date', 'call date', 'funded date', 'commit date'],
   ad_spend: ['spend', 'ad spend', 'total spend', 'adspend'],
   leads: ['leads', 'total leads', 'new leads'],
   spam_leads: ['spam', 'spam leads', 'bad leads'],
@@ -250,7 +250,37 @@ function buildHeaderMap(headers: string[], override?: Record<string, string>): R
       if (idx >= 0) { map[field] = idx; break; }
     }
   }
+  // Fuzzy fallback for date: any header containing the word "date" or "day".
+  if (map.date === undefined) {
+    const idx = normHeaders.findIndex((h) => /\bdate\b|\bday\b|timestamp|created|submitted|booked/.test(h));
+    if (idx >= 0) map.date = idx;
+  }
   return map;
+}
+
+// Map record-level tab titles → the metric they should contribute as a row count.
+// Used when a tab has a date column but no aggregate metric columns (one row per event).
+function inferRecordMetric(title: string): keyof DailyMetric | null {
+  const t = normalize(title);
+  if (/\bbad\b|\bspam\b|\bdisqualified\b/.test(t)) return 'spam_leads';
+  if (/\bfunded\b/.test(t)) return 'funded_investors';
+  if (/\bcommitt?ed|\bcommitments?\b/.test(t)) return 'commitments';
+  if (/reconnect.*show/.test(t)) return 'reconnect_showed';
+  if (/reconnect/.test(t)) return 'reconnect_calls';
+  if (/discovery.*outcome|\bshow(ed)?\b/.test(t)) return 'showed_calls';
+  if (/discovery|\bcall(s)?\b|\bbooked\b/.test(t)) return 'calls';
+  if (/\blead(s)?\b/.test(t)) return 'leads';
+  return null;
+}
+
+function emptyDaily(date: string): DailyMetric {
+  return {
+    date, ad_spend: 0, impressions: 0, clicks: 0, ctr: 0,
+    leads: 0, spam_leads: 0, calls: 0, showed_calls: 0,
+    commitments: 0, commitment_dollars: 0,
+    funded_investors: 0, funded_dollars: 0,
+    reconnect_calls: 0, reconnect_showed: 0,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -458,18 +488,24 @@ Deno.serve(async (req) => {
                     reconnect_calls: get('reconnect_calls'), reconnect_showed: get('reconnect_showed'),
                   });
                 }
-              }
-            }
-            // Reject row-major tabs that look like record-level lists (one row per
-            // lead/call) instead of daily aggregates. Heuristic: <60% unique dates
-            // means the same date repeats many times, which would massively inflate
-            // any sum/max merge. These are typically the per-record tabs in client
-            // sheets (Leads, Discovery Call, etc.) that should not roll up.
-            if (layoutForTab === 'row-major' && part.length > 5) {
-              const unique = new Set(part.map((d) => d.date)).size;
-              if (unique / part.length < 0.6) {
-                tabsSkipped.push({ title, reason: 'record-level (repeating dates)' });
-                continue;
+              } else if (headerMap.date !== undefined) {
+                // Record-level tab: one row per event with only a date column.
+                // Count rows per date and attribute to the metric implied by tab title.
+                const recordMetric = inferRecordMetric(title);
+                if (recordMetric) {
+                  const counts: Record<string, number> = {};
+                  for (let i = headerRowIdx + 1; i < rows.length; i++) {
+                    const row = rows[i] || [];
+                    const dateStr = parseDate(row[headerMap.date]);
+                    if (!dateStr) continue;
+                    counts[dateStr] = (counts[dateStr] || 0) + 1;
+                  }
+                  for (const [ds, n] of Object.entries(counts)) {
+                    const d = emptyDaily(ds);
+                    (d as any)[recordMetric] = n;
+                    part.push(d);
+                  }
+                }
               }
             }
             if (layoutForTab === 'row-major') layout = 'row-major';
