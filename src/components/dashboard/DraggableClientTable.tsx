@@ -165,7 +165,23 @@ export function DraggableClientTable({
   const numberOfDays = useMemo(() => differenceInDays(dateRange.to, dateRange.from) + 1, [dateRange]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ column: '', direction: null });
-  const [alertsMuted, setAlertsMuted] = useState(() => localStorage.getItem('draggableClientTable.alertsMuted') === 'true');
+  const [mutedClientIds, setMutedClientIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('draggableClientTable.mutedClientIds');
+      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggleClientMuted = (clientId: string) => {
+    setMutedClientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      localStorage.setItem('draggableClientTable.mutedClientIds', JSON.stringify(Array.from(next)));
+      return next;
+    });
+  };
   const [syncHistoryClient, setSyncHistoryClient] = useState<{ id: string; name: string } | null>(null);
   const [syncingGhl, setSyncingGhl] = useState<Record<string, boolean>>({});
   const [syncingMeta, setSyncingMeta] = useState<Record<string, boolean>>({});
@@ -500,22 +516,10 @@ export function DraggableClientTable({
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
               <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[280px]">Quick Links</TableHead>
               {isAdmin && <SortableHeader column="mrr" label="MRR" sortConfig={sortConfig} onSort={handleSort} />}
-              <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[130px]">
-                <div className="flex items-center gap-1">
+              <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[150px]">
+                <div className="flex items-center gap-1" title="Toggle alerts per client using the bell in each row">
                   Actions
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-4 w-4"
-                    onClick={() => {
-                      const next = !alertsMuted;
-                      setAlertsMuted(next);
-                      localStorage.setItem('draggableClientTable.alertsMuted', String(next));
-                    }}
-                    title={alertsMuted ? 'Turn alerts on' : 'Turn alerts off'}
-                  >
-                    {alertsMuted ? <BellOff className="h-3 w-3 text-muted-foreground" /> : <Bell className="h-3 w-3" />}
-                  </Button>
+                  <Bell className="h-3 w-3 text-muted-foreground/60" />
                 </div>
               </TableHead>
             </TableRow>
@@ -530,7 +534,8 @@ export function DraggableClientTable({
 
               const isCcError = client.status === 'cc_error';
               const isPaused = client.status === 'paused' || client.status === 'on_hold';
-              const rowAlertsMuted = alertsMuted || isPaused;
+              const clientMuted = mutedClientIds.has(client.id);
+              const rowAlertsMuted = clientMuted || isPaused;
 
               return (
                 <TooltipProvider key={client.id}>
@@ -726,6 +731,26 @@ export function DraggableClientTable({
                     {/* Actions */}
                     <TableCell className="py-0 px-1" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5"
+                              onClick={() => toggleClientMuted(client.id)}
+                              title={clientMuted ? 'Turn alerts on' : 'Turn alerts off'}
+                            >
+                              {clientMuted ? (
+                                <BellOff className="h-2.5 w-2.5 text-muted-foreground" />
+                              ) : (
+                                <Bell className="h-2.5 w-2.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-[10px]">
+                            {clientMuted ? 'Alerts muted for this client' : 'Mute alerts for this client'}
+                          </TooltipContent>
+                        </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
