@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
     // Eligible clients: auto-enrich ON + slug set
     const settingsQ = supabase
       .from('client_settings')
-      .select('client_id, retargetiq_auto_enrich, retargetiq_website_slug')
+      .select('client_id, retargetiq_auto_enrich, retargetiq_website_slug, kpi_google_sheet_url')
       .eq('retargetiq_auto_enrich', true)
       .not('retargetiq_website_slug', 'is', null);
     const { data: settings, error: sErr } = await settingsQ;
@@ -126,14 +126,18 @@ Deno.serve(async (req) => {
 
     const { data: clients } = await supabase
       .from('clients')
-      .select('id, name, kpi_google_sheet_url, master_google_sheet_url, status')
+      .select('id, name, status')
       .in('id', ids)
       .in('status', ['active', 'onboarding', 'paused']);
+
+    const sheetUrlByClient = new Map<string, string | null>(
+      (settings || []).map((s: any) => [s.client_id, s.kpi_google_sheet_url || null])
+    );
 
     const results: any[] = [];
 
     for (const c of (clients || [])) {
-      const sheetId = extractSheetId(c.kpi_google_sheet_url) || extractSheetId(c.master_google_sheet_url);
+      const sheetId = extractSheetId(sheetUrlByClient.get(c.id) || null);
       if (!sheetId) {
         results.push({ client: c.name, skipped: 'no_sheet' });
         continue;
