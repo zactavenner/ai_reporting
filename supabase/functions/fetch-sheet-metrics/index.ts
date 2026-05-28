@@ -250,7 +250,37 @@ function buildHeaderMap(headers: string[], override?: Record<string, string>): R
       if (idx >= 0) { map[field] = idx; break; }
     }
   }
+  // Fuzzy fallback for date: any header containing the word "date" or "day".
+  if (map.date === undefined) {
+    const idx = normHeaders.findIndex((h) => /\bdate\b|\bday\b|timestamp|created|submitted|booked/.test(h));
+    if (idx >= 0) map.date = idx;
+  }
   return map;
+}
+
+// Map record-level tab titles → the metric they should contribute as a row count.
+// Used when a tab has a date column but no aggregate metric columns (one row per event).
+function inferRecordMetric(title: string): keyof DailyMetric | null {
+  const t = normalize(title);
+  if (/\bbad\b|\bspam\b|\bdisqualified\b/.test(t)) return 'spam_leads';
+  if (/\bfunded\b/.test(t)) return 'funded_investors';
+  if (/\bcommitt?ed|\bcommitments?\b/.test(t)) return 'commitments';
+  if (/reconnect.*show/.test(t)) return 'reconnect_showed';
+  if (/reconnect/.test(t)) return 'reconnect_calls';
+  if (/discovery.*outcome|\bshow(ed)?\b/.test(t)) return 'showed_calls';
+  if (/discovery|\bcall(s)?\b|\bbooked\b/.test(t)) return 'calls';
+  if (/\blead(s)?\b/.test(t)) return 'leads';
+  return null;
+}
+
+function emptyDaily(date: string): DailyMetric {
+  return {
+    date, ad_spend: 0, impressions: 0, clicks: 0, ctr: 0,
+    leads: 0, spam_leads: 0, calls: 0, showed_calls: 0,
+    commitments: 0, commitment_dollars: 0,
+    funded_investors: 0, funded_dollars: 0,
+    reconnect_calls: 0, reconnect_showed: 0,
+  };
 }
 
 Deno.serve(async (req) => {
