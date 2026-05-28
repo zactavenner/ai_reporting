@@ -71,6 +71,7 @@ import {
   useSubtasks,
   useCompleteRecurringTask,
 } from '@/hooks/useTasks';
+import { useDeleteTaskComment } from '@/hooks/useTasks';
 import { useMeetings } from '@/hooks/useMeetings';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useTaskFileReview } from '@/hooks/useTaskFileReview';
