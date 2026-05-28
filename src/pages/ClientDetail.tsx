@@ -51,6 +51,7 @@ import { AIStudioTab } from '@/components/ai/AIStudioTab';
 import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
 import ConnectionsTab from '@/components/client/ConnectionsTab';
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
+import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
 import { useClient } from '@/hooks/useClients';
 import { useDailyMetrics, useFundedInvestors } from '@/hooks/useMetrics';
 import { useSourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
@@ -465,6 +466,7 @@ export default function ClientDetail() {
                   </p>
                 </div>
                 <BrandGuideSection client={client} />
+                <ClientTeamSection clientId={clientId} />
                 <div className="mt-10 pt-8 border-t border-border">
                   <div className="mb-4">
                     <h2 className="text-lg font-bold flex items-center gap-2">
