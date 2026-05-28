@@ -151,6 +151,7 @@ function useClientMetaAdAccounts(clientId?: string) {
    const { data: subtasks = [] } = useSubtasks(task?.id);
     const addComment = useAddTaskComment();
     const uploadFile = useUploadTaskFile();
+    const deleteComment = useDeleteTaskComment();
     const createNotification = useCreateNotification();
     const { data: pods = [] } = useAgencyPods();
   const { data: agencySettings } = useAgencySettings();
