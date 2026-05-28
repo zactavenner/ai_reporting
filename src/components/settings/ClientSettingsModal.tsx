@@ -1227,41 +1227,10 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
                   RetargetIQ Lead Enrichment
                 </h4>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Enrich leads with identity, financial, and company data via RetargetIQ
+                  Lead enrichment is now managed centrally on the <b>Enrichment</b> tab — set the website slug and
+                  toggle Auto-Enrich there. New contacts sync hourly, a summary note is posted to GHL, and (when a
+                  Google Sheet is connected) enrichment columns are appended to the matching row.
                 </p>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Website Slug</Label>
-                  <Input
-                    value={(settings as any)?.retargetiq_website_slug || ''}
-                    onChange={async (e) => {
-                      await updateSettings.mutateAsync({
-                        client_id: client.id,
-                        retargetiq_website_slug: e.target.value || null,
-                      } as any);
-                    }}
-                    placeholder="your-website-slug"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Find this in your RetargetIQ dashboard under website settings
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Auto-Enrich New Leads</Label>
-                    <p className="text-xs text-muted-foreground">Automatically enrich leads when they sync from GHL</p>
-                  </div>
-                  <Switch
-                    checked={(settings as any)?.retargetiq_auto_enrich || false}
-                    onCheckedChange={async (checked) => {
-                      await updateSettings.mutateAsync({
-                        client_id: client.id,
-                        retargetiq_auto_enrich: checked,
-                      } as any);
-                    }}
-                  />
-                </div>
               </div>
             </div>
 
