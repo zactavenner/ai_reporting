@@ -75,7 +75,7 @@ interface DailyMetric {
 }
 
 const FIELD_ALIASES: Record<string, string[]> = {
-  date: ['date', 'day'],
+  date: ['date', 'day', 'current date', 'lead date', 'date created', 'created at', 'created', 'submitted', 'submission date', 'submitted at', 'timestamp', 'booked date', 'call date', 'funded date', 'commit date'],
   ad_spend: ['spend', 'ad spend', 'total spend', 'adspend'],
   leads: ['leads', 'total leads', 'new leads'],
   spam_leads: ['spam', 'spam leads', 'bad leads'],
