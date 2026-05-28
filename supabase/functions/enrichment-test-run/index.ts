@@ -35,6 +35,66 @@ function rowValues(enr: any): string[] {
   ];
 }
 
+/** Stable per-header column index: each RIQ_HEADERS name -> 0-based column. Missing headers appended. */
+async function ensureRiqColumnMap(
+  tab: { title: string; sheetId: number; columnCount: number },
+  headerRow: string[],
+  sheetId: string,
+  sheetHeaders: Record<string, string>,
+  dryRun: boolean,
+): Promise<{ colByHeader: Map<string, number>; headerWriteRequest: { range: string; values: string[][] } | null; missing: string[] }> {
+  const headerLower = headerRow.map(h => String(h || '').trim().toLowerCase());
+  const colByHeader = new Map<string, number>();
+  const missing: string[] = [];
+  for (const h of RIQ_HEADERS) {
+    const idx = headerLower.indexOf(h.toLowerCase());
+    if (idx >= 0) colByHeader.set(h, idx);
+    else missing.push(h);
+  }
+  let headerWriteRequest: { range: string; values: string[][] } | null = null;
+  if (missing.length > 0) {
+    const startIdx = headerRow.length;
+    missing.forEach((h, i) => colByHeader.set(h, startIdx + i));
+    headerWriteRequest = {
+      range: `'${escapeRange(tab.title)}'!${colLetter(startIdx + 1)}1:${colLetter(startIdx + missing.length)}1`,
+      values: [missing],
+    };
+    const needed = startIdx + missing.length;
+    if (!dryRun && needed > tab.columnCount) {
+      await fetch(`${GATEWAY_URL}/spreadsheets/${sheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: { ...sheetHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ appendDimension: { sheetId: tab.sheetId, dimension: 'COLUMNS', length: needed - tab.columnCount } }] }),
+      });
+      tab.columnCount = needed;
+    }
+  }
+  return { colByHeader, headerWriteRequest, missing };
+}
+
+function rowWriteRequestsByMap(
+  tabTitle: string, rowNum: number, colByHeader: Map<string, number>, vals: string[],
+): { range: string; values: string[][] }[] {
+  const items = RIQ_HEADERS
+    .map((h, i) => ({ col: colByHeader.get(h)!, val: vals[i] }))
+    .filter(it => Number.isFinite(it.col))
+    .sort((a, b) => a.col - b.col);
+  const groups: { range: string; values: string[][] }[] = [];
+  let i = 0;
+  while (i < items.length) {
+    let j = i;
+    while (j + 1 < items.length && items[j + 1].col === items[j].col + 1) j++;
+    const startCol = items[i].col + 1;
+    const endCol = items[j].col + 1;
+    groups.push({
+      range: `'${escapeRange(tabTitle)}'!${colLetter(startCol)}${rowNum}:${colLetter(endCol)}${rowNum}`,
+      values: [items.slice(i, j + 1).map(x => x.val)],
+    });
+    i = j + 1;
+  }
+  return groups;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
@@ -177,19 +237,11 @@ Deno.serve(async (req) => {
         const phoneIdx = headerLower.findIndex(h => /\bphone\b|mobile|cell/.test(h));
         if (emailIdx < 0 && phoneIdx < 0) { tabRes.note = 'no_email_or_phone_column'; sheetAudit.tabs.push(tabRes); continue; }
 
-        let riqStart = headerLower.indexOf('riq net worth');
+        const { colByHeader, headerWriteRequest, missing } = await ensureRiqColumnMap(tab, headerRow, sheetId, sheetHeaders, dryRun);
         const writeRequests: { range: string; values: string[][] }[] = [];
-        if (riqStart < 0) {
-          riqStart = headerRow.length;
-          if (!dryRun) writeRequests.push({ range: `'${escapeRange(tab.title)}'!${colLetter(riqStart + 1)}1:${colLetter(riqStart + RIQ_HEADERS.length)}1`, values: [RIQ_HEADERS] });
-        }
-        const neededCols = riqStart + RIQ_HEADERS.length;
-        if (!dryRun && neededCols > tab.columnCount) {
-          await fetch(`${GATEWAY_URL}/spreadsheets/${sheetId}:batchUpdate`, {
-            method: 'POST', headers: { ...sheetHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requests: [{ appendDimension: { sheetId: tab.sheetId, dimension: 'COLUMNS', length: neededCols - tab.columnCount } }] }),
-          });
-        }
+        if (!dryRun && headerWriteRequest) writeRequests.push(headerWriteRequest);
+        const enrichedAtCol = colByHeader.get('RIQ Enriched At')!;
+        if (missing.length > 0) tabRes.headers_added = missing;
 
         tabRes.scanned_rows = rows.length - 1;
         for (let i = 1; i < rows.length; i++) {
@@ -201,7 +253,7 @@ Deno.serve(async (req) => {
           else if (ph.length === 10 && enrByPhone.has(ph)) { enr = enrByPhone.get(ph); matchedBy = 'phone'; }
           if (!enr) continue;
 
-          const existingEnrichedAt = row[riqStart + RIQ_HEADERS.length - 1];
+          const existingEnrichedAt = row[enrichedAtCol];
           const todayStr = enr.enriched_at ? new Date(enr.enriched_at).toISOString().slice(0, 10) : '';
           if (existingEnrichedAt && existingEnrichedAt === todayStr) {
             tabRes.skipped.push({ row: i + 1, reason: 'already_written_today', matched_by: matchedBy });
@@ -210,8 +262,9 @@ Deno.serve(async (req) => {
           tabRes.matched++;
           tabRes.matches.push({ row: i + 1, matched_by: matchedBy, email: em || null, phone: ph || null });
           if (!dryRun) {
-            const rng = `'${escapeRange(tab.title)}'!${colLetter(riqStart + 1)}${i + 1}:${colLetter(riqStart + RIQ_HEADERS.length)}${i + 1}`;
-            writeRequests.push({ range: rng, values: [rowValues(enr)] });
+            for (const req of rowWriteRequestsByMap(tab.title, i + 1, colByHeader, rowValues(enr))) {
+              writeRequests.push(req);
+            }
           }
         }
 
