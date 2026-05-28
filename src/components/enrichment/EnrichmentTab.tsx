@@ -30,6 +30,7 @@ export function EnrichmentTab() {
   const [slugDraft, setSlugDraft] = useState('');
   const [bulkRunning, setBulkRunning] = useState<string | null>(null);
   const [runAllLoading, setRunAllLoading] = useState(false);
+  const [sheetWritebackLoading, setSheetWritebackLoading] = useState(false);
 
   const { data: rows, isLoading, refetch } = useQuery({
     queryKey: ['enrichment-overview'],
@@ -140,6 +141,20 @@ export function EnrichmentTab() {
     }
   }
 
+  async function runSheetWritebackAll() {
+    setSheetWritebackLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-sheet-writeback', { body: {} });
+      if (error) throw error;
+      const total = (data?.results || []).reduce((s: number, r: any) => s + (r.matched || 0), 0);
+      toast.success(`Sheet writeback: ${total} rows enriched across ${data?.processed ?? 0} clients`);
+    } catch (e: any) {
+      toast.error(`Sheet writeback failed: ${e.message}`);
+    } finally {
+      setSheetWritebackLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -148,14 +163,21 @@ export function EnrichmentTab() {
             <Sparkles className="h-6 w-6 text-primary" /> Lead Enrichment (RetargetIQ)
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Every new lead is automatically enriched with financial data and a clean summary note is pushed to the GHL contact.
-            A background sweep runs every 15 minutes for every client with Auto-Enrich ON.
+            Enrichment is configured <b>per client</b> here. When Auto-Enrich is ON, new contacts sync hourly, a
+            financial summary note is posted to the GHL contact, and — if a Google Sheet is connected — enrichment
+            columns are appended to the matching row in every tab.
           </p>
         </div>
-        <Button onClick={runAutoEnrichAll} disabled={runAllLoading}>
-          {runAllLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-          Run Auto-Enrich Now
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={runSheetWritebackAll} disabled={sheetWritebackLoading}>
+            {sheetWritebackLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <DbIcon className="h-4 w-4 mr-2" />}
+            Sync to Sheets
+          </Button>
+          <Button onClick={runAutoEnrichAll} disabled={runAllLoading}>
+            {runAllLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            Run Auto-Enrich Now
+          </Button>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -191,7 +213,8 @@ export function EnrichmentTab() {
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <p>1. Add a client's <b>GHL Private Integration token</b> + <b>Location ID</b> in their settings.</p>
           <p>2. Set the client's <b>RetargetIQ website slug</b> below.</p>
-          <p>3. Every new GHL lead is auto-enriched in the background and a financial summary note is posted back to the GHL contact.</p>
+          <p>3. Toggle <b>Auto-Enrich</b> ON. Every hour, new GHL contacts are auto-enriched in the background and a financial summary note is posted back to the GHL contact.</p>
+          <p>4. If the client has a <b>Google Sheet connected</b>, enrichment columns (Net Worth, HH Income, Home Value, etc.) are appended to the matching contact row in every tab.</p>
           <p>Use <b>Bulk Enrich</b> to backfill existing un-enriched leads (50 at a time).</p>
         </CardContent>
       </Card>
