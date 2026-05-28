@@ -83,6 +83,79 @@ function rowValues(enr: any): string[] {
   ];
 }
 
+/**
+ * Build a stable per-header column index: each RIQ_HEADERS name -> 0-based column.
+ * Missing headers are appended at the end (grid expanded if needed). This makes
+ * writes resilient to column reordering or inserts between RIQ columns.
+ */
+async function ensureRiqColumnMap(
+  tab: { title: string; sheetId: number; columnCount: number },
+  headerRow: string[],
+  sheetId: string,
+  sheetHeaders: Record<string, string>,
+): Promise<{ colByHeader: Map<string, number>; headerWriteRequest: { range: string; values: string[][] } | null }> {
+  const headerLower = headerRow.map(h => String(h || '').trim().toLowerCase());
+  const colByHeader = new Map<string, number>();
+  const missing: string[] = [];
+  for (const h of RIQ_HEADERS) {
+    const idx = headerLower.indexOf(h.toLowerCase());
+    if (idx >= 0) colByHeader.set(h, idx);
+    else missing.push(h);
+  }
+  let headerWriteRequest: { range: string; values: string[][] } | null = null;
+  if (missing.length > 0) {
+    const startIdx = headerRow.length; // append at end (0-based)
+    missing.forEach((h, i) => colByHeader.set(h, startIdx + i));
+    const startCol = startIdx + 1;
+    const endCol = startIdx + missing.length;
+    headerWriteRequest = {
+      range: `'${escapeRange(tab.title)}'!${colLetter(startCol)}1:${colLetter(endCol)}1`,
+      values: [missing],
+    };
+    const needed = startIdx + missing.length;
+    if (needed > tab.columnCount) {
+      const toAdd = needed - tab.columnCount;
+      await fetch(`${GATEWAY_URL}/spreadsheets/${sheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: { ...sheetHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{ appendDimension: { sheetId: tab.sheetId, dimension: 'COLUMNS', length: toAdd } }],
+        }),
+      });
+      tab.columnCount = needed;
+    }
+  }
+  return { colByHeader, headerWriteRequest };
+}
+
+/** Group per-field cells into the minimum number of contiguous-range writes for a row. */
+function rowWriteRequestsByMap(
+  tabTitle: string,
+  rowNum: number,
+  colByHeader: Map<string, number>,
+  vals: string[],
+): { range: string; values: string[][] }[] {
+  const items = RIQ_HEADERS
+    .map((h, i) => ({ col: colByHeader.get(h)!, val: vals[i] }))
+    .filter(it => Number.isFinite(it.col))
+    .sort((a, b) => a.col - b.col);
+  const groups: { range: string; values: string[][] }[] = [];
+  let i = 0;
+  while (i < items.length) {
+    let j = i;
+    while (j + 1 < items.length && items[j + 1].col === items[j].col + 1) j++;
+    const startCol = items[i].col + 1;
+    const endCol = items[j].col + 1;
+    const groupVals = items.slice(i, j + 1).map(x => x.val);
+    groups.push({
+      range: `'${escapeRange(tabTitle)}'!${colLetter(startCol)}${rowNum}:${colLetter(endCol)}${rowNum}`,
+      values: [groupVals],
+    });
+    i = j + 1;
+  }
+  return groups;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -221,37 +294,11 @@ Deno.serve(async (req) => {
           const phoneIdx = headerLower.findIndex(h => /\bphone\b|mobile|cell/.test(h));
           if (emailIdx < 0 && phoneIdx < 0) continue;
 
-          // Determine where to write enrichment cols.
-          // If header row already contains "RIQ Net Worth", reuse that start; else append after current width.
-          let riqStart = headerLower.indexOf('riq net worth');
+          // Stable per-header column map (resilient to reordering / inserted columns).
+          const { colByHeader, headerWriteRequest } = await ensureRiqColumnMap(tab, headerRow, sheetId, sheetHeaders);
           const writeRequests: { range: string; values: string[][] }[] = [];
-
-          if (riqStart < 0) {
-            riqStart = headerRow.length; // 0-based index where RIQ block begins
-            const headerRange = `'${escapeRange(tab.title)}'!${colLetter(riqStart + 1)}1:${colLetter(riqStart + RIQ_HEADERS.length)}1`;
-            writeRequests.push({ range: headerRange, values: [RIQ_HEADERS] });
-          }
-
-          // Ensure grid has enough columns; if not, expand via spreadsheets:batchUpdate
-          const neededCols = riqStart + RIQ_HEADERS.length;
-          if (neededCols > tab.columnCount) {
-            const toAdd = neededCols - tab.columnCount;
-            const expandRes = await fetch(`${GATEWAY_URL}/spreadsheets/${sheetId}:batchUpdate`, {
-              method: 'POST',
-              headers: { ...sheetHeaders, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                requests: [{
-                  appendDimension: { sheetId: tab.sheetId, dimension: 'COLUMNS', length: toAdd },
-                }],
-              }),
-            });
-            if (!expandRes.ok) {
-              const t = await expandRes.text();
-              console.error(`[SHEET-WRITEBACK] ${c.name}/${tab.title} expand cols failed ${expandRes.status}: ${t.slice(0,200)}`);
-              continue;
-            }
-            tab.columnCount = neededCols;
-          }
+          if (headerWriteRequest) writeRequests.push(headerWriteRequest);
+          const enrichedAtCol = colByHeader.get('RIQ Enriched At')!;
 
           let matchedInTab = 0;
           // Iterate data rows
@@ -265,15 +312,16 @@ Deno.serve(async (req) => {
             else if (p && p.length === 10 && enrByPhone.has(p)) enr = enrByPhone.get(p);
             if (!enr) continue;
 
-            // Skip if RIQ Enriched At already filled with same date (avoid rewrites)
-            const existingEnrichedAt = row[riqStart + RIQ_HEADERS.length - 1];
+            // Skip if RIQ Enriched At column already filled with same date (avoid rewrites)
+            const existingEnrichedAt = row[enrichedAtCol];
             const todayStr = enr.enriched_at ? new Date(enr.enriched_at).toISOString().slice(0, 10) : '';
             if (existingEnrichedAt && existingEnrichedAt === todayStr) continue;
 
             matchedInTab++;
             const rowNum = i + 1;
-            const rng = `'${escapeRange(tab.title)}'!${colLetter(riqStart + 1)}${rowNum}:${colLetter(riqStart + RIQ_HEADERS.length)}${rowNum}`;
-            writeRequests.push({ range: rng, values: [rowValues(enr)] });
+            for (const req of rowWriteRequestsByMap(tab.title, rowNum, colByHeader, rowValues(enr))) {
+              writeRequests.push(req);
+            }
           }
 
           totalMatched += matchedInTab;
