@@ -488,18 +488,24 @@ Deno.serve(async (req) => {
                     reconnect_calls: get('reconnect_calls'), reconnect_showed: get('reconnect_showed'),
                   });
                 }
-              }
-            }
-            // Reject row-major tabs that look like record-level lists (one row per
-            // lead/call) instead of daily aggregates. Heuristic: <60% unique dates
-            // means the same date repeats many times, which would massively inflate
-            // any sum/max merge. These are typically the per-record tabs in client
-            // sheets (Leads, Discovery Call, etc.) that should not roll up.
-            if (layoutForTab === 'row-major' && part.length > 5) {
-              const unique = new Set(part.map((d) => d.date)).size;
-              if (unique / part.length < 0.6) {
-                tabsSkipped.push({ title, reason: 'record-level (repeating dates)' });
-                continue;
+              } else if (headerMap.date !== undefined) {
+                // Record-level tab: one row per event with only a date column.
+                // Count rows per date and attribute to the metric implied by tab title.
+                const recordMetric = inferRecordMetric(title);
+                if (recordMetric) {
+                  const counts: Record<string, number> = {};
+                  for (let i = headerRowIdx + 1; i < rows.length; i++) {
+                    const row = rows[i] || [];
+                    const dateStr = parseDate(row[headerMap.date]);
+                    if (!dateStr) continue;
+                    counts[dateStr] = (counts[dateStr] || 0) + 1;
+                  }
+                  for (const [ds, n] of Object.entries(counts)) {
+                    const d = emptyDaily(ds);
+                    (d as any)[recordMetric] = n;
+                    part.push(d);
+                  }
+                }
               }
             }
             if (layoutForTab === 'row-major') layout = 'row-major';
