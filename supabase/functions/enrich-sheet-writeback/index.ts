@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
 
       // List tabs
       const metaRes = await fetch(
-        `${GATEWAY_URL}/spreadsheets/${sheetId}?fields=sheets(properties(sheetId,title))`,
+        `${GATEWAY_URL}/spreadsheets/${sheetId}?fields=sheets(properties(sheetId,title,gridProperties))`,
         { headers: sheetHeaders },
       );
       if (!metaRes.ok) {
@@ -192,7 +192,13 @@ Deno.serve(async (req) => {
         continue;
       }
       const meta = await metaRes.json();
-      const tabs: { title: string }[] = (meta?.sheets || []).map((s: any) => ({ title: s?.properties?.title || '' })).filter((t: any) => t.title);
+      const tabs: { title: string; sheetId: number; columnCount: number }[] = (meta?.sheets || [])
+        .map((s: any) => ({
+          title: s?.properties?.title || '',
+          sheetId: s?.properties?.sheetId ?? 0,
+          columnCount: s?.properties?.gridProperties?.columnCount ?? 26,
+        }))
+        .filter((t: any) => t.title);
 
       let totalMatched = 0;
       let totalWritten = 0;
@@ -224,6 +230,27 @@ Deno.serve(async (req) => {
             riqStart = headerRow.length; // 0-based index where RIQ block begins
             const headerRange = `'${escapeRange(tab.title)}'!${colLetter(riqStart + 1)}1:${colLetter(riqStart + RIQ_HEADERS.length)}1`;
             writeRequests.push({ range: headerRange, values: [RIQ_HEADERS] });
+          }
+
+          // Ensure grid has enough columns; if not, expand via spreadsheets:batchUpdate
+          const neededCols = riqStart + RIQ_HEADERS.length;
+          if (neededCols > tab.columnCount) {
+            const toAdd = neededCols - tab.columnCount;
+            const expandRes = await fetch(`${GATEWAY_URL}/spreadsheets/${sheetId}:batchUpdate`, {
+              method: 'POST',
+              headers: { ...sheetHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                requests: [{
+                  appendDimension: { sheetId: tab.sheetId, dimension: 'COLUMNS', length: toAdd },
+                }],
+              }),
+            });
+            if (!expandRes.ok) {
+              const t = await expandRes.text();
+              console.error(`[SHEET-WRITEBACK] ${c.name}/${tab.title} expand cols failed ${expandRes.status}: ${t.slice(0,200)}`);
+              continue;
+            }
+            tab.columnCount = neededCols;
           }
 
           let matchedInTab = 0;
