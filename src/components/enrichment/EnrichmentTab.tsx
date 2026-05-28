@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Sparkles, RefreshCw, CheckCircle2, AlertCircle, Database as DbIcon, Settings2 } from 'lucide-react';
+import { Sparkles, RefreshCw, CheckCircle2, AlertCircle, Database as DbIcon, Settings2, FlaskConical } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { SheetEnricher } from './SheetEnricher';
@@ -31,6 +32,10 @@ export function EnrichmentTab() {
   const [bulkRunning, setBulkRunning] = useState<string | null>(null);
   const [runAllLoading, setRunAllLoading] = useState(false);
   const [sheetWritebackLoading, setSheetWritebackLoading] = useState(false);
+  const [testRunning, setTestRunning] = useState<string | null>(null);
+  const [testAudit, setTestAudit] = useState<any | null>(null);
+  const [testLimit, setTestLimit] = useState<number>(10);
+  const [testDryRun, setTestDryRun] = useState<boolean>(true);
 
   const { data: rows, isLoading, refetch } = useQuery({
     queryKey: ['enrichment-overview'],
@@ -155,6 +160,24 @@ export function EnrichmentTab() {
     }
   }
 
+  async function runTest(clientId: string, name: string) {
+    setTestRunning(clientId);
+    try {
+      const { data, error } = await supabase.functions.invoke('enrichment-test-run', {
+        body: { client_id: clientId, limit: testLimit, dry_run: testDryRun },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Test run failed');
+      setTestAudit({ name, ...data.audit });
+      toast.success(`${name}: test run complete`);
+      refetch();
+    } catch (e: any) {
+      toast.error(`Test run failed: ${e.message}`);
+    } finally {
+      setTestRunning(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -169,6 +192,16 @@ export function EnrichmentTab() {
           </p>
         </div>
         <div className="flex gap-2">
+          <div className="flex items-center gap-2 px-2 border rounded-md bg-muted/30">
+            <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
+            <Label className="text-xs text-muted-foreground">Test:</Label>
+            <Input type="number" min={1} max={50} value={testLimit}
+              onChange={(e) => setTestLimit(Math.max(1, Math.min(50, Number(e.target.value) || 10)))}
+              className="h-7 w-16 text-xs" />
+            <Label className="text-xs flex items-center gap-1">
+              <Switch checked={testDryRun} onCheckedChange={setTestDryRun} /> Dry-run
+            </Label>
+          </div>
           <Button variant="outline" onClick={runSheetWritebackAll} disabled={sheetWritebackLoading}>
             {sheetWritebackLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <DbIcon className="h-4 w-4 mr-2" />}
             Sync to Sheets
@@ -302,15 +335,27 @@ export function EnrichmentTab() {
                       {r.last_enriched_at ? formatDistanceToNow(new Date(r.last_enriched_at), { addSuffix: true }) : '—'}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!fullOk || bulkRunning === r.id}
-                        onClick={() => runBulkEnrich(r.id, r.name)}
-                      >
-                        {bulkRunning === r.id ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <DbIcon className="h-3 w-3 mr-1" />}
-                        Bulk Enrich 50
-                      </Button>
+                      <div className="flex gap-1 justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={!fullOk || testRunning === r.id}
+                          onClick={() => runTest(r.id, r.name)}
+                          title={`Run on ${testLimit} most recent leads${testDryRun ? ' (dry-run — no writes)' : ''}`}
+                        >
+                          {testRunning === r.id ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <FlaskConical className="h-3 w-3 mr-1" />}
+                          Test {testLimit}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!fullOk || bulkRunning === r.id}
+                          onClick={() => runBulkEnrich(r.id, r.name)}
+                        >
+                          {bulkRunning === r.id ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <DbIcon className="h-3 w-3 mr-1" />}
+                          Bulk 50
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -319,6 +364,101 @@ export function EnrichmentTab() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!testAudit} onOpenChange={(o) => !o && setTestAudit(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Test Run Audit — {testAudit?.name}</DialogTitle>
+            <DialogDescription>
+              {testAudit?.dry_run ? 'Dry-run (no writes performed)' : 'Live run — writes performed'} · limit {testAudit?.limit}
+            </DialogDescription>
+          </DialogHeader>
+          {testAudit && (
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 rounded-md border bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Leads considered</div>
+                  <div className="text-xl font-bold">{testAudit.leads_considered}</div>
+                </div>
+                <div className="p-3 rounded-md border bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Already enriched</div>
+                  <div className="text-xl font-bold">{testAudit.enrichment?.already_enriched ?? 0}</div>
+                </div>
+                <div className="p-3 rounded-md border bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Newly enriched</div>
+                  <div className="text-xl font-bold text-emerald-600">{testAudit.enrichment?.newly_enriched ?? 0}</div>
+                </div>
+                <div className="p-3 rounded-md border bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Enrichment failed</div>
+                  <div className="text-xl font-bold text-destructive">{testAudit.enrichment?.failed ?? 0}</div>
+                </div>
+              </div>
+
+              {testAudit.sheet?.skipped && (
+                <div className="p-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+                  Sheet writeback skipped: <b>{testAudit.sheet.skipped}</b>
+                </div>
+              )}
+
+              {testAudit.sheet?.totals && (
+                <div>
+                  <div className="font-semibold mb-2">Sheet writeback ({testAudit.sheet.tabs.length} tabs)</div>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="p-2 rounded border text-center"><div className="text-xs text-muted-foreground">Matched</div><div className="font-bold">{testAudit.sheet.totals.matched}</div></div>
+                    <div className="p-2 rounded border text-center"><div className="text-xs text-muted-foreground">Written</div><div className="font-bold text-emerald-600">{testAudit.sheet.totals.written}</div></div>
+                    <div className="p-2 rounded border text-center"><div className="text-xs text-muted-foreground">Skipped</div><div className="font-bold text-muted-foreground">{testAudit.sheet.totals.skipped}</div></div>
+                  </div>
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tab</TableHead>
+                          <TableHead className="text-right">Rows</TableHead>
+                          <TableHead className="text-right">Matched</TableHead>
+                          <TableHead className="text-right">Written</TableHead>
+                          <TableHead className="text-right">Skipped</TableHead>
+                          <TableHead>Note</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {testAudit.sheet.tabs.map((t: any) => (
+                          <TableRow key={t.tab}>
+                            <TableCell className="font-medium">{t.tab}</TableCell>
+                            <TableCell className="text-right tabular-nums">{t.scanned_rows ?? 0}</TableCell>
+                            <TableCell className="text-right tabular-nums">{t.matched ?? 0}</TableCell>
+                            <TableCell className="text-right tabular-nums text-emerald-600">{t.written ?? 0}</TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">{t.skipped?.length ?? 0}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{t.error || t.note || ''}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {testAudit.enrichment?.failures?.length > 0 && (
+                <div>
+                  <div className="font-semibold mb-2 text-destructive">Enrichment failures</div>
+                  <ul className="text-xs space-y-1">
+                    {testAudit.enrichment.failures.map((f: any, i: number) => (
+                      <li key={i}>· <b>{f.lead}</b> — {f.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground">Raw JSON</summary>
+                <pre className="mt-2 p-2 rounded bg-muted overflow-x-auto">{JSON.stringify(testAudit, null, 2)}</pre>
+              </details>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestAudit(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
