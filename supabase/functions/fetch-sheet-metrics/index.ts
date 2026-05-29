@@ -14,6 +14,9 @@ const TAB_DENYLIST = [
   'lookup', 'config', 'archive', 'overview', 'guide', 'help',
   'goal', 'goals', 'forecast', 'projection', 'export', 'recording', 'fathom',
   'helper',
+  // Standard client-tab template additions
+  'media buying', 'media buying update', 'media buying updates',
+  'lead disposition', 'disposition',
 ];
 
 function isDenylistedTab(title: string): boolean {
@@ -76,7 +79,7 @@ interface DailyMetric {
 
 const FIELD_ALIASES: Record<string, string[]> = {
   date: ['date', 'day', 'current date', 'lead date', 'date created', 'created at', 'created', 'submitted', 'submission date', 'submitted at', 'timestamp', 'booked date', 'call date', 'funded date', 'commit date'],
-  ad_spend: ['spend', 'ad spend', 'total spend', 'adspend'],
+  ad_spend: ['spend', 'ad spend', 'total spend', 'adspend', 'fb spend', 'facebook spend', 'meta spend', 'amount spent'],
   leads: ['leads', 'total leads', 'new leads'],
   spam_leads: ['spam', 'spam leads', 'bad leads'],
   calls: ['calls', 'booked calls', 'booked'],
@@ -94,7 +97,7 @@ const FIELD_ALIASES: Record<string, string[]> = {
 // Aliases used when the sheet is column-major (metrics down rows, dates across columns).
 // Matched against the value in column A.
 const COLMAJOR_METRIC_ALIASES: Record<string, string[]> = {
-  ad_spend: ['ad spend', 'spend', 'total spend'],
+  ad_spend: ['ad spend', 'spend', 'total spend', 'fb spend', 'facebook spend', 'meta spend', 'amount spent'],
   impressions: ['impressions'],
   clicks: ['link clicks', 'clicks'],
   leads: ['leads'],
@@ -263,12 +266,12 @@ function buildHeaderMap(headers: string[], override?: Record<string, string>): R
 function inferRecordMetric(title: string): keyof DailyMetric | null {
   const t = normalize(title);
   if (/\bbad\b|\bspam\b|\bdisqualified\b/.test(t)) return 'spam_leads';
-  if (/\bfunded\b/.test(t)) return 'funded_investors';
-  if (/\bcommitt?ed|\bcommitments?\b/.test(t)) return 'commitments';
+  if (/\bfunded\b|funded investors?/.test(t)) return 'funded_investors';
+  if (/\bcommitt?ed|\bcommitments?\b|committed investors?/.test(t)) return 'commitments';
   if (/reconnect.*show/.test(t)) return 'reconnect_showed';
   if (/reconnect/.test(t)) return 'reconnect_calls';
-  if (/discovery.*outcome|\bshow(ed)?\b/.test(t)) return 'showed_calls';
-  if (/discovery|\bcall(s)?\b|\bbooked\b/.test(t)) return 'calls';
+  if (/discovery.*outcome|\bshow(ed)?\b|outcomes?$/.test(t)) return 'showed_calls';
+  if (/discovery.*call|\bcall(s)?\b|\bbooked\b/.test(t)) return 'calls';
   if (/\blead(s)?\b/.test(t)) return 'leads';
   return null;
 }
