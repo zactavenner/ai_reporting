@@ -732,7 +732,7 @@ Deno.serve(async (req) => {
       avgCallsToFund: 0,
       leadToBookedPercent: t.totalLeads > 0 ? (t.totalCalls / t.totalLeads) * 100 : 0,
       closeRate: t.showedCalls > 0 ? (t.fundedInvestors / t.showedCalls) * 100 : 0,
-      pipelineValue: 0,
+      pipelineValue: Number((baseParsed as any)?.pipelineValue || 0),
       costPerReconnectCall: t.reconnectCalls > 0 ? t.totalAdSpend / t.reconnectCalls : 0,
       costPerReconnectShowed: t.reconnectShowed > 0 ? t.totalAdSpend / t.reconnectShowed : 0,
     };
