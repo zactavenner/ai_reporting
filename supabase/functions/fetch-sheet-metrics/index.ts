@@ -525,6 +525,7 @@ Deno.serve(async (req) => {
                       /commit(?:ment)?\s*\$/, /commit(?:ment)?\s*amount/, /commit(?:ment)?\s*dollars?/,
                       /capital\s*raised/, /raised/, /investment\s*amount/, /amount\s*invested/,
                       /\$\s*amount/, /amount\s*\$/, /\bamount\b/, /\binvestment\b/,
+                      /^funded$/, /^committed$/,
                     ];
                     for (let c = 0; c < headerNormForDollar.length; c++) {
                       const h = headerNormForDollar[c];
@@ -533,9 +534,38 @@ Deno.serve(async (req) => {
                     }
                     return -1;
                   })();
+                  // Build an ordered list of candidate date columns. Many client
+                  // sheets have multiple date headers (e.g. "Current Date",
+                  // "Funded Date", "Date Created") and individual rows often only
+                  // populate one of them. We try them in priority order per row.
+                  const headerNormForDate = (rows[headerRowIdx] || []).map((c) => normalize(String(c ?? '')));
+                  const dateColCandidates: number[] = (() => {
+                    const priority: RegExp[] = recordMetric === 'funded_investors'
+                      ? [/funded\s*date/, /^current\s*date$/, /^date$/, /date\s*created/, /created/, /booked\s*(call\s*)?date/]
+                      : recordMetric === 'commitments'
+                        ? [/commit(?:ted|ment)?\s*date/, /^current\s*date$/, /^date$/, /date\s*created/, /created/, /booked\s*(call\s*)?date/]
+                        : [/^date$/, /^current\s*date$/, /booked\s*(call\s*)?date/, /scheduled/, /date\s*created/, /created/];
+                    const found: number[] = [];
+                    for (const p of priority) {
+                      for (let c = 0; c < headerNormForDate.length; c++) {
+                        if (found.includes(c)) continue;
+                        if (p.test(headerNormForDate[c])) found.push(c);
+                      }
+                    }
+                    // Always include the originally detected date column as a fallback
+                    if (!found.includes(headerMap.date as number)) found.push(headerMap.date as number);
+                    return found;
+                  })();
+                  const rowDate = (row: any[]): string | null => {
+                    for (const c of dateColCandidates) {
+                      const ds = parseDate(row[c]);
+                      if (ds) return ds;
+                    }
+                    return null;
+                  };
                   for (let i = headerRowIdx + 1; i < rows.length; i++) {
                     const row = rows[i] || [];
-                    const dateStr = parseDate(row[headerMap.date]);
+                    const dateStr = rowDate(row);
                     if (!dateStr) continue;
                     counts[dateStr] = (counts[dateStr] || 0) + 1;
                     if (dollarColIdx >= 0) {
@@ -562,12 +592,29 @@ Deno.serve(async (req) => {
                   const capCol = headerNorm.findIndex((h) =>
                     /capital\s*to\s*deploy/.test(h) ||
                     /capital\s*available/.test(h) ||
-                    /investable\s*capital/.test(h)
+                    /investable\s*capital/.test(h) ||
+                    /investment\s*range/.test(h) ||
+                    /ideal\s*investment/.test(h) ||
+                    /investment\s*amount/.test(h)
                   );
                   if (capCol >= 0) {
                     for (let i = headerRowIdx + 1; i < rows.length; i++) {
                       const row = rows[i] || [];
-                      const v = parseNumber(row[capCol]);
+                      // Handle range strings like "$50,000-$100,000" → take the
+                      // lower bound; otherwise fall back to plain parseNumber.
+                      const raw = String(row[capCol] ?? '').trim();
+                      if (!raw) continue;
+                      const nums = (raw.match(/\$?\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/g) || [])
+                        .map((m) => {
+                          const isK = /[kK]\s*$/.test(m);
+                          const isM = /[mM]\s*$/.test(m);
+                          const n = parseNumber(m.replace(/[kKmM]/g, ''));
+                          if (isK) return n * 1_000;
+                          if (isM) return n * 1_000_000;
+                          return n;
+                        })
+                        .filter((n) => n > 0);
+                      const v = nums.length > 0 ? Math.min(...nums) : 0;
                       if (v > 0) {
                         capitalToDeployMin = capitalToDeployMin === null ? v : Math.min(capitalToDeployMin, v);
                       }
