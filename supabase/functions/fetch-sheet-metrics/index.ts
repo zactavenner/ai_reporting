@@ -466,6 +466,10 @@ Deno.serve(async (req) => {
           let layout: 'column-major' | 'row-major' = 'column-major';
           const tabsUsed: string[] = [];
           const partsByTab: { title: string; daily: DailyMetric[] }[] = [];
+          // Lowest "Capital to Deploy" value across the Leads tab(s). Used as
+          // pipelineValue if present. We track the minimum non-zero positive
+          // value because the user explicitly wants the lowest.
+          let capitalToDeployMin: number | null = null;
           for (const { title, rows } of fetched) {
             let part: DailyMetric[] = parseColumnMajor(rows, mapping);
             let layoutForTab: 'column-major' | 'row-major' = 'column-major';
@@ -510,16 +514,64 @@ Deno.serve(async (req) => {
                 const recordMetric = inferRecordMetric(title);
                 if (recordMetric) {
                   const counts: Record<string, number> = {};
+                  const dollarSums: Record<string, number> = {};
+                  // Look for a $ amount column on funded / commitment record tabs
+                  // so we can sum dollars in addition to row counts.
+                  const headerNormForDollar = (rows[headerRowIdx] || []).map((c) => normalize(String(c ?? '')));
+                  const dollarColIdx = (() => {
+                    if (recordMetric !== 'funded_investors' && recordMetric !== 'commitments') return -1;
+                    const patterns = [
+                      /funded\s*\$/, /\$\s*funded/, /funded\s*amount/, /funded\s*dollars?/,
+                      /commit(?:ment)?\s*\$/, /commit(?:ment)?\s*amount/, /commit(?:ment)?\s*dollars?/,
+                      /capital\s*raised/, /raised/, /investment\s*amount/, /amount\s*invested/,
+                      /\$\s*amount/, /amount\s*\$/, /\bamount\b/, /\binvestment\b/,
+                    ];
+                    for (let c = 0; c < headerNormForDollar.length; c++) {
+                      const h = headerNormForDollar[c];
+                      if (!h) continue;
+                      if (patterns.some((p) => p.test(h))) return c;
+                    }
+                    return -1;
+                  })();
                   for (let i = headerRowIdx + 1; i < rows.length; i++) {
                     const row = rows[i] || [];
                     const dateStr = parseDate(row[headerMap.date]);
                     if (!dateStr) continue;
                     counts[dateStr] = (counts[dateStr] || 0) + 1;
+                    if (dollarColIdx >= 0) {
+                      const v = parseNumber(row[dollarColIdx]);
+                      if (v > 0) dollarSums[dateStr] = (dollarSums[dateStr] || 0) + v;
+                    }
                   }
                   for (const [ds, n] of Object.entries(counts)) {
                     const d = emptyDaily(ds);
                     (d as any)[recordMetric] = n;
+                    const dol = dollarSums[ds] || 0;
+                    if (dol > 0) {
+                      if (recordMetric === 'funded_investors') d.funded_dollars = dol;
+                      else if (recordMetric === 'commitments') d.commitment_dollars = dol;
+                    }
                     part.push(d);
+                  }
+                }
+
+                // Capital to Deploy: scan Leads-style record tabs for the
+                // lowest positive value in any "Capital to Deploy" column.
+                if (recordMetric === 'leads' || /\blead/.test(normalize(title))) {
+                  const headerNorm = (rows[headerRowIdx] || []).map((c) => normalize(String(c ?? '')));
+                  const capCol = headerNorm.findIndex((h) =>
+                    /capital\s*to\s*deploy/.test(h) ||
+                    /capital\s*available/.test(h) ||
+                    /investable\s*capital/.test(h)
+                  );
+                  if (capCol >= 0) {
+                    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+                      const row = rows[i] || [];
+                      const v = parseNumber(row[capCol]);
+                      if (v > 0) {
+                        capitalToDeployMin = capitalToDeployMin === null ? v : Math.min(capitalToDeployMin, v);
+                      }
+                    }
                   }
                 }
               }
@@ -557,6 +609,7 @@ Deno.serve(async (req) => {
             tabsUsed,
             tabsSkipped,
             partsByTab,
+            pipelineValue: capitalToDeployMin || 0,
             fetchedAt: new Date().toISOString(),
           };
           parsedCache.set(cacheKey, { at: Date.now(), payload });
