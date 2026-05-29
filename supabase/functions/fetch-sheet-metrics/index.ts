@@ -219,6 +219,7 @@ function parseColumnMajor(rows: any[][], mapping?: Record<string, string>): Dail
   }
 
   // Walk metric rows. A metric row has col A = label, col B containing 'ACTUAL'.
+  let actualRowsFound = 0;
   for (let i = bestRow + 1; i < rows.length; i++) {
     const r = rows[i] || [];
     const label = normalize(String(r[0] ?? ''));
@@ -228,12 +229,20 @@ function parseColumnMajor(rows: any[][], mapping?: Record<string, string>): Dail
     const field = labelToField[label];
     if (!field) continue;
 
+    actualRowsFound++;
     for (const [colStr, ds] of Object.entries(colDates)) {
       const c = Number(colStr);
       const v = parseNumber(r[c]);
       (byDate[ds] as any)[field] = ((byDate[ds] as any)[field] || 0) + v;
     }
   }
+
+  // If we didn't find any real ACTUAL metric rows, this isn't actually a
+  // column-major tab — it's a record tab that happened to have date-looking
+  // values in some columns (e.g. "Discovery Booked Call Date" + "Funded
+  // Date" in a Funded Investors export). Return empty so the row-major /
+  // record-tab parser can handle it instead of emitting zeroed daily rows.
+  if (actualRowsFound === 0) return [];
 
   // Compute CTR per day
   const result = Object.values(byDate).map((d) => ({
