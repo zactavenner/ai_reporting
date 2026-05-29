@@ -424,7 +424,16 @@ Deno.serve(async (req) => {
 
           // 2. Fetch values for the primary tab + every other data tab,
           // chunked at 8 in parallel to respect Google's 60 req/min/user quota.
-          const titlesToFetch = [sheetTitle, ...extraTitles];
+          // If the configured primary tab is itself a denylisted rollup (e.g. a
+          // year tab like "2026"), exclude it so we only aggregate from the
+          // per-record tabs.
+          const primaryAllowed = !isDenylistedTab(sheetTitle);
+          const titlesToFetch = primaryAllowed
+            ? [sheetTitle, ...extraTitles]
+            : [...extraTitles];
+          if (!primaryAllowed) {
+            tabsSkipped.push({ title: sheetTitle, reason: 'year/rollup tab — skipped' });
+          }
           const fetched: { title: string; rows: any[][] }[] = [];
           const CHUNK = 8;
           for (let i = 0; i < titlesToFetch.length; i += CHUNK) {
