@@ -20,8 +20,12 @@ const TAB_DENYLIST = [
 ];
 
 function isDenylistedTab(title: string): boolean {
-  const t = (title || '').toLowerCase();
+  const t = (title || '').toLowerCase().trim();
   if (!t) return true;
+  // Year-only tabs (e.g. "2024", "2025", "2026") are column-major rollups that
+  // duplicate the per-record tabs. Skip them so record tabs are the sole
+  // source of truth and we don't double-count.
+  if (/^(19|20)\d{2}$/.test(t)) return true;
   return TAB_DENYLIST.some((kw) => t.includes(kw));
 }
 
