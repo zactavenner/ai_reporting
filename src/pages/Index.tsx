@@ -136,7 +136,7 @@ const Index = () => {
 
   const { startDate, endDate, sourceFilter } = useDateFilter();
   const { data: allClients = [], isLoading: clientsLoading } = useClients();
-  const clients = useMemo(() => allClients.filter(c => c.status === 'active' || c.status === 'onboarding' || c.status === 'paused'), [allClients]);
+  const clients = useMemo(() => allClients.filter(c => c.status === 'active' || c.status === 'onboarding' || c.status === 'paused' || c.status === 'cc_error'), [allClients]);
   const { data: dailyMetrics = [], isLoading: metricsLoading } = useAllDailyMetrics(startDate, endDate);
   const { data: fundedInvestors = [] } = useFundedInvestors(undefined, startDate, endDate);
   const { data: allLeads = [] } = useLeads(undefined, startDate, endDate);
