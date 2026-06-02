@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, Trash2, Check, ImagePlus, Sparkles, Trophy, Tags } from "lucide-react";
+import { Loader2, Upload, Trash2, Check, ImagePlus, Sparkles, Trophy, Tags, Image as ImageIcon, Film, Play } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 interface RefImage {
@@ -21,7 +22,54 @@ interface RefImage {
   source_creative_id: string | null;
 }
 
+interface RefVideo {
+  id: string;
+  name: string;
+  tags: string[] | null;
+  video_url: string;
+  poster_url: string | null;
+  storage_path: string | null;
+  created_by: string | null;
+  created_at: string;
+  client_id: string | null;
+  source: string | null;
+  source_creative_id: string | null;
+  aspect_ratio: string | null;
+  duration_seconds: number | null;
+}
+
 export function AIStudioReferenceLibrary({
+  activeIds, onToggle, activeVideoIds = [], onToggleVideo, clientId,
+}: {
+  activeIds: string[];
+  onToggle: (ids: string[]) => void;
+  activeVideoIds?: string[];
+  onToggleVideo?: (ids: string[]) => void;
+  clientId: string;
+}) {
+  return (
+    <Tabs defaultValue="static" className="w-full">
+      <TabsList className="grid w-full grid-cols-2 h-8">
+        <TabsTrigger value="static" className="text-[11px] gap-1.5">
+          <ImageIcon className="h-3 w-3" /> Static refs
+          {activeIds.length > 0 && <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{activeIds.length}</Badge>}
+        </TabsTrigger>
+        <TabsTrigger value="video" className="text-[11px] gap-1.5">
+          <Film className="h-3 w-3" /> Video refs
+          {activeVideoIds.length > 0 && <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{activeVideoIds.length}</Badge>}
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="static" className="mt-3">
+        <StaticReferenceLibrary activeIds={activeIds} onToggle={onToggle} clientId={clientId} />
+      </TabsContent>
+      <TabsContent value="video" className="mt-3">
+        <VideoReferenceLibrary activeIds={activeVideoIds} onToggle={onToggleVideo || (() => {})} clientId={clientId} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function StaticReferenceLibrary({
   activeIds, onToggle, clientId,
 }: {
   activeIds: string[];
@@ -221,7 +269,7 @@ export function AIStudioReferenceLibrary({
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs font-medium text-muted-foreground flex-1">
-          Reference library {activeIds.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px]">{activeIds.length} active</Badge>}
+          Static image references {activeIds.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px]">{activeIds.length} active</Badge>}
         </span>
         <Select value={industryFilter} onValueChange={setIndustryFilter}>
           <SelectTrigger className="h-7 w-[160px] text-[11px] rounded-md">
