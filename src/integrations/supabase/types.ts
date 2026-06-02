@@ -441,6 +441,7 @@ export type Database = {
           id: string
           last_login_at: string | null
           name: string
+          phone: string | null
           pod_id: string | null
           role: string
           updated_at: string
@@ -451,6 +452,7 @@ export type Database = {
           id?: string
           last_login_at?: string | null
           name: string
+          phone?: string | null
           pod_id?: string | null
           role?: string
           updated_at?: string
@@ -461,6 +463,7 @@ export type Database = {
           id?: string
           last_login_at?: string | null
           name?: string
+          phone?: string | null
           pod_id?: string | null
           role?: string
           updated_at?: string

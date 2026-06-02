@@ -17,7 +17,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Users, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, Loader2, MessageSquare, Phone, Send } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAgencyPods, useCreatePod, useUpdatePod, useDeletePod, useUpdateMemberPod, AgencyPod } from '@/hooks/useAgencyPods';
 import { useAgencyMembers, useAddAgencyMember, AgencyMember } from '@/hooks/useTasks';
 import { supabase } from '@/integrations/supabase/client';
@@ -58,8 +60,20 @@ export function TeamManagementTab() {
   // Member form state
   const [memberName, setMemberName] = useState('');
   const [memberEmail, setMemberEmail] = useState('');
+  const [memberPhone, setMemberPhone] = useState('');
   const [memberRole, setMemberRole] = useState('member');
   const [memberPodId, setMemberPodId] = useState<string>('');
+
+  // Messaging state
+  const [showMessageDialog, setShowMessageDialog] = useState(false);
+  const [msgChannel, setMsgChannel] = useState<'SMS' | 'WhatsApp'>('SMS');
+  const [msgBody, setMsgBody] = useState('');
+  const [msgSelectedIds, setMsgSelectedIds] = useState<string[]>([]);
+  const [msgSending, setMsgSending] = useState(false);
+
+  // Inline phone editing
+  const [editingPhoneId, setEditingPhoneId] = useState<string | null>(null);
+  const [phoneDraft, setPhoneDraft] = useState('');
 
   // Count members per pod
   const memberCountByPod = members.reduce((acc, member) => {
@@ -105,6 +119,7 @@ export function TeamManagementTab() {
       name: memberName.trim(),
       email: memberEmail.trim(),
       role: memberRole,
+      phone: memberPhone.trim() || undefined,
     });
     
     // If pod selected, update after creation
@@ -126,6 +141,7 @@ export function TeamManagementTab() {
     
     setMemberName('');
     setMemberEmail('');
+    setMemberPhone('');
     setMemberRole('member');
     setMemberPodId('');
     setShowAddMember(false);
@@ -147,6 +163,59 @@ export function TeamManagementTab() {
     } else {
       queryClient.invalidateQueries({ queryKey: ['agency-members'] });
       toast.success('Member removed');
+    }
+  };
+
+  const savePhone = async (memberId: string) => {
+    const trimmed = phoneDraft.trim();
+    const { error } = await supabase
+      .from('agency_members')
+      .update({ phone: trimmed || null } as any)
+      .eq('id', memberId);
+    if (error) {
+      toast.error('Failed to update phone');
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['agency-members'] });
+      toast.success('Phone updated');
+      setEditingPhoneId(null);
+      setPhoneDraft('');
+    }
+  };
+
+  const openMessageDialog = () => {
+    const withPhones = members.filter((m: any) => m.phone);
+    setMsgSelectedIds(withPhones.map((m) => m.id));
+    setMsgBody('');
+    setMsgChannel('SMS');
+    setShowMessageDialog(true);
+  };
+
+  const toggleMsgRecipient = (id: string) => {
+    setMsgSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const sendTeamMessage = async () => {
+    if (!msgBody.trim() || msgSelectedIds.length === 0) return;
+    setMsgSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-team-message', {
+        body: {
+          member_ids: msgSelectedIds,
+          channel: msgChannel,
+          message: msgBody.trim(),
+        },
+      });
+      if (error) throw error;
+      const sent = (data as any)?.sent ?? 0;
+      const total = (data as any)?.total ?? msgSelectedIds.length;
+      toast.success(`Sent ${msgChannel} to ${sent}/${total} team members`);
+      setShowMessageDialog(false);
+    } catch (e: any) {
+      toast.error('Failed to send: ' + (e?.message || 'unknown error'));
+    } finally {
+      setMsgSending(false);
     }
   };
 
@@ -336,6 +405,11 @@ export function TeamManagementTab() {
               Assign members to pods for organized task management
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={openMessageDialog}>
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Message Team
+            </Button>
           <Dialog open={showAddMember} onOpenChange={setShowAddMember}>
             <DialogTrigger asChild>
               <Button size="sm">
@@ -363,6 +437,15 @@ export function TeamManagementTab() {
                     onChange={(e) => setMemberEmail(e.target.value)}
                     placeholder="john@agency.com"
                     type="email"
+                  />
+                </div>
+                <div>
+                  <Label>Phone (for SMS / WhatsApp)</Label>
+                  <Input
+                    value={memberPhone}
+                    onChange={(e) => setMemberPhone(e.target.value)}
+                    placeholder="+1 555 123 4567"
+                    type="tel"
                   />
                 </div>
                 <div>
@@ -411,6 +494,7 @@ export function TeamManagementTab() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -433,6 +517,31 @@ export function TeamManagementTab() {
                     <div>
                       <span className="font-medium">{member.name || 'Unknown'}</span>
                       <p className="text-xs text-muted-foreground">{member.email}</p>
+                      {editingPhoneId === member.id ? (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Input
+                            value={phoneDraft}
+                            onChange={(e) => setPhoneDraft(e.target.value)}
+                            placeholder="+1 555 123 4567"
+                            className="h-7 text-xs w-44"
+                          />
+                          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => savePhone(member.id)}>
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setEditingPhoneId(null); setPhoneDraft(''); }}>
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-0.5"
+                          onClick={() => { setEditingPhoneId(member.id); setPhoneDraft((member as any).phone || ''); }}
+                        >
+                          <Phone className="h-3 w-3" />
+                          {(member as any).phone || 'Add phone'}
+                        </button>
+                      )}
                     </div>
                     <Badge variant="outline" className="text-xs">
                       {member.role}
@@ -487,6 +596,82 @@ export function TeamManagementTab() {
           )}
         </div>
       </div>
+
+      {/* Message Team Dialog */}
+      <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Message the Team</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Channel</Label>
+              <Select value={msgChannel} onValueChange={(v) => setMsgChannel(v as any)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SMS">SMS</SelectItem>
+                  <SelectItem value="WhatsApp">WhatsApp</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Sent via High Performance Ads GHL account.
+              </p>
+            </div>
+            <div>
+              <Label>Recipients</Label>
+              <div className="border rounded-md max-h-56 overflow-y-auto divide-y mt-1">
+                {members.filter((m: any) => m.phone).length === 0 ? (
+                  <p className="text-sm text-muted-foreground p-3 text-center">
+                    No team members have phone numbers yet. Add one above.
+                  </p>
+                ) : (
+                  members
+                    .filter((m: any) => m.phone)
+                    .map((m: any) => (
+                      <label
+                        key={m.id}
+                        className="flex items-center gap-3 p-2 cursor-pointer hover:bg-muted/50"
+                      >
+                        <Checkbox
+                          checked={msgSelectedIds.includes(m.id)}
+                          onCheckedChange={() => toggleMsgRecipient(m.id)}
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">{m.name}</div>
+                          <div className="text-xs text-muted-foreground">{m.phone}</div>
+                        </div>
+                      </label>
+                    ))
+                )}
+              </div>
+            </div>
+            <div>
+              <Label>Message</Label>
+              <Textarea
+                value={msgBody}
+                onChange={(e) => setMsgBody(e.target.value)}
+                placeholder={msgChannel === 'WhatsApp' ? 'Hey team — quick update...' : 'Hey team — quick update...'}
+                rows={5}
+              />
+              <p className="text-xs text-muted-foreground mt-1">{msgBody.length} characters</p>
+            </div>
+            <Button
+              onClick={sendTeamMessage}
+              disabled={msgSending || !msgBody.trim() || msgSelectedIds.length === 0}
+              className="w-full"
+            >
+              {msgSending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Send {msgChannel} to {msgSelectedIds.length} member{msgSelectedIds.length === 1 ? '' : 's'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
