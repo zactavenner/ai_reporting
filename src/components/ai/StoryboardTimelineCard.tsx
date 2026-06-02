@@ -151,6 +151,31 @@ export function StoryboardTimelineCard({
     }
   };
 
+  const polishAndUpscale = async () => {
+    if (!onSendMessage) return;
+    const videoScenes = scenes.filter(s => sceneMedia.vids[s.id]);
+    if (videoScenes.length < 1) {
+      toast.error("Generate scene videos before polishing");
+      return;
+    }
+    setPolishing(true);
+    try {
+      const sceneList = videoScenes.map(s => {
+        const v = sceneMedia.vids[s.id];
+        const img = sceneMedia.imgs[s.id];
+        return `- Scene #${s.order} (id: ${s.id})\n  video_url: ${v.url}${img ? `\n  keyframe_url: ${img.url}` : ""}`;
+      }).join("\n");
+      const msg =
+        `Run the continuity + upscaling pass for storyboard ${storyboardId} (${aspectRatio}).\n` +
+        `Goals: (1) enforce visual continuity between adjacent scenes (color, lighting, subject identity), ` +
+        `(2) upscale each clip to delivery quality, (3) stitch into a single final cut.\n` +
+        `Scenes:\n${sceneList}`;
+      onSendMessage(msg);
+    } finally {
+      setPolishing(false);
+    }
+  };
+
   const previewScene = previewSceneId ? scenes.find(s => s.id === previewSceneId) || null : null;
   const previewImg = previewScene ? sceneMedia.imgs[previewScene.id] : undefined;
   const previewVid = previewScene ? sceneMedia.vids[previewScene.id] : undefined;
