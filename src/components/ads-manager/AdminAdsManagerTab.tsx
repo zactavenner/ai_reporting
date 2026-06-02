@@ -32,6 +32,7 @@ import { RowActionsMenu } from './shared/RowActionsMenu';
 import { getAdHealth } from './shared/healthSignals';
 import { InsightsPanel } from './shared/InsightsPanel';
 import { AdsConnectionHealthPanel } from './shared/AdsConnectionHealthPanel';
+import { MetaTokenExpiryBanner } from './shared/MetaTokenExpiryBanner';
 
 const fmt$ = (v: number | null | undefined) =>
   !v ? '$0' : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -295,6 +296,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
   return (
     <TooltipProvider>
       <div className="space-y-6">
+        <MetaTokenExpiryBanner clientFilter={clientFilter} />
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
