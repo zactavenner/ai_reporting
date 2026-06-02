@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import {
   Clapperboard, ChevronUp, ChevronDown, Wand2, Film, Image as ImageIcon,
-  Save, Loader2, Play, RotateCw, Trash2, GripVertical, Check,
+  Save, Loader2, Play, RotateCw, Trash2, GripVertical, Check, Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +48,8 @@ export function StoryboardTimelineCard({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [previewSceneId, setPreviewSceneId] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<"video" | "image">("video");
 
   // Index sibling scene_image / scene_video entries by (storyboard_id, scene_id)
   const sceneMedia = useMemo(() => {
@@ -144,6 +149,20 @@ export function StoryboardTimelineCard({
     }
   };
 
+  const previewScene = previewSceneId ? scenes.find(s => s.id === previewSceneId) || null : null;
+  const previewImg = previewScene ? sceneMedia.imgs[previewScene.id] : undefined;
+  const previewVid = previewScene ? sceneMedia.vids[previewScene.id] : undefined;
+  const previewAr = aspectRatio === "9:16" ? "aspect-[9/16]" : aspectRatio === "16:9" ? "aspect-video" : "aspect-square";
+  const previewIdx = previewScene ? scenes.findIndex(s => s.id === previewScene.id) : -1;
+  const goPreview = (dir: -1 | 1) => {
+    if (previewIdx < 0) return;
+    const next = scenes[previewIdx + dir];
+    if (next) {
+      setPreviewSceneId(next.id);
+      setPreviewMode(sceneMedia.vids[next.id] ? "video" : "image");
+    }
+  };
+
   return (
     <Card data-canvas-card className="p-3">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -164,13 +183,16 @@ export function StoryboardTimelineCard({
           const isOpen = expanded === s.id;
           const ar = aspectRatio === "9:16" ? "aspect-[9/16]" : aspectRatio === "16:9" ? "aspect-video" : "aspect-square";
           return (
-            <button
+            <div
               key={s.id}
-              type="button"
-              onClick={() => setExpanded(isOpen ? null : s.id)}
-              className={`shrink-0 w-28 rounded-md border text-left transition ${isOpen ? "border-primary ring-1 ring-primary" : "border-border hover:border-muted-foreground/50"}`}
+              className={`relative shrink-0 w-28 rounded-md border text-left transition ${isOpen ? "border-primary ring-1 ring-primary" : "border-border hover:border-muted-foreground/50"}`}
               title={s.title}
             >
+              <button
+                type="button"
+                onClick={() => setExpanded(isOpen ? null : s.id)}
+                className="block w-full text-left"
+              >
               <div className={`relative w-full ${ar} bg-muted overflow-hidden rounded-t-md`}>
                 {vid ? (
                   <video src={vid.url} muted playsInline className="absolute inset-0 w-full h-full object-cover" />
@@ -194,7 +216,22 @@ export function StoryboardTimelineCard({
                 <div className="text-[10px] font-medium truncate">{s.title}</div>
                 <div className="text-[9px] text-muted-foreground truncate">{img ? (vid ? "video ready" : "keyframe ready") : "pending"}</div>
               </div>
-            </button>
+              </button>
+              {(img || vid) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewSceneId(s.id);
+                    setPreviewMode(vid ? "video" : "image");
+                  }}
+                  className="absolute top-1 left-1 bg-background/85 hover:bg-background rounded p-1 shadow-sm"
+                  title="Preview scene"
+                >
+                  <Eye className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
@@ -257,6 +294,20 @@ export function StoryboardTimelineCard({
                       <RotateCw className="h-3 w-3 mr-1" />
                       {img ? "Regenerate keyframe" : "Generate keyframe"}
                     </Button>
+                    {(img || sceneMedia.vids[s.id]) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setPreviewSceneId(s.id);
+                          setPreviewMode(sceneMedia.vids[s.id] ? "video" : "image");
+                        }}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        Preview
+                      </Button>
+                    )}
                     {img && (
                       <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Check className="h-3 w-3 text-emerald-500" /> keyframe ready
@@ -285,6 +336,93 @@ export function StoryboardTimelineCard({
           Generate videos
         </Button>
       </div>
+
+      <Dialog open={!!previewScene} onOpenChange={(o) => !o && setPreviewSceneId(null)}>
+        <DialogContent className="max-w-3xl">
+          {previewScene && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px]">#{previewScene.order}</Badge>
+                  {previewScene.title}
+                  <Badge variant="secondary" className="text-[10px] ml-auto">{aspectRatio}</Badge>
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  Preview the keyframe and 8s video before finalizing the storyboard.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex items-center gap-1 -mt-1">
+                <Button
+                  size="sm"
+                  variant={previewMode === "video" ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setPreviewMode("video")}
+                  disabled={!previewVid}
+                >
+                  <Film className="h-3 w-3 mr-1" /> Video {!previewVid && "(not generated)"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={previewMode === "image" ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setPreviewMode("image")}
+                  disabled={!previewImg}
+                >
+                  <ImageIcon className="h-3 w-3 mr-1" /> Keyframe
+                </Button>
+                <div className="flex-1" />
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => goPreview(-1)} disabled={previewIdx <= 0}>
+                  <ChevronUp className="h-3 w-3 rotate-[-90deg]" /> Prev
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => goPreview(1)} disabled={previewIdx >= scenes.length - 1}>
+                  Next <ChevronDown className="h-3 w-3 rotate-[-90deg]" />
+                </Button>
+              </div>
+
+              <div className={`relative w-full ${previewAr} bg-black rounded-md overflow-hidden max-h-[70vh] mx-auto`} style={{ maxWidth: aspectRatio === "9:16" ? "360px" : aspectRatio === "1:1" ? "560px" : "100%" }}>
+                {previewMode === "video" && previewVid ? (
+                  <video
+                    key={previewVid.url}
+                    src={previewVid.url}
+                    controls
+                    autoPlay
+                    loop
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-contain bg-black"
+                  />
+                ) : previewImg ? (
+                  <img src={previewImg.url} alt={previewScene.title} className="absolute inset-0 w-full h-full object-contain" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+                    No media yet
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Image prompt</div>
+                  <p className="text-xs text-foreground/80 whitespace-pre-wrap">{previewScene.image_prompt || "—"}</p>
+                </div>
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Video prompt</div>
+                  <p className="text-xs text-foreground/80 whitespace-pre-wrap">{previewScene.video_prompt || "—"}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t">
+                <Button size="sm" variant="outline" onClick={() => regenerateKeyframe(previewScene)} disabled={!onSendMessage}>
+                  <RotateCw className="h-3.5 w-3.5 mr-1" />
+                  Regenerate keyframe
+                </Button>
+                <div className="flex-1" />
+                <Button size="sm" variant="ghost" onClick={() => setPreviewSceneId(null)}>Close</Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
