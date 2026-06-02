@@ -49,6 +49,7 @@ export function StoryboardTimelineCard({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [polishing, setPolishing] = useState(false);
   const [previewSceneId, setPreviewSceneId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<"video" | "image">("video");
 
