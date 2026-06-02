@@ -1104,6 +1104,26 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "generate_seedance_video",
+      description: "Generate a single high-quality short video clip (3–15s, up to 1080p) using ByteDance Seedance 2.0 via OpenRouter. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url (and optionally last_frame_url) to animate a reference frame. Strong at character consistency, camera motion, and brand-style preservation. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Use 'fast: true' for cheap iteration drafts.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
+          aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1"], description: "Default 9:16 for reels/stories." },
+          duration: { type: "integer", minimum: 3, maximum: 15, description: "Clip length in seconds. Default 15." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p (highest supported on Seedance 2.0)." },
+          image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
+          last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
+          fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality). Default false." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "create_text_artifact",
       description: "Manus-style: write a long-form text deliverable (ad copy, video script, VSL script, caller script, email, landing-page copy, captions, outline, plan, brief, etc.) and drop it on the canvas as its own card. ALWAYS use this tool when the user asks you to WRITE, DRAFT, GENERATE, or CREATE any kind of script, copy, email, post, caption, outline, plan, or document body — instead of putting that text in your chat reply. The chat reply must only be a 1–2 sentence status (e.g. 'Drafted the 60s VSL script on the canvas.'). Render the body as Markdown.",
       parameters: {
