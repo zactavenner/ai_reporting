@@ -2168,6 +2168,21 @@ Deno.serve(async (req) => {
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "generate_seedance_video") {
+                const r = await generateSeedanceVideo({
+                  prompt: String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
+                  aspectRatio: args.aspect_ratio || "9:16",
+                  duration: typeof args.duration === "number" ? args.duration : 15,
+                  resolution: args.resolution === "720p" ? "720p" : "1080p",
+                  imageUrl: args.image_url || null,
+                  lastFrameUrl: args.last_frame_url || null,
+                  fast: !!args.fast,
+                  clientId: clientId || null,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, video_url: r.video_url, mode: args.image_url ? "image_to_video" : "text_to_video" };
+                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);
                 const artifactType = String(args.artifact_type || "other");
