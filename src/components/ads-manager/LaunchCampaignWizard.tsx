@@ -183,14 +183,66 @@ export function LaunchCampaignWizard({ open, onOpenChange, clientId, clientName 
 
   const preset = PRESETS[presetKey];
 
-  // Reset wizard when reopened
+  // ---- Draft persistence ----
+  // Each client gets its own scoped draft so partial wizard state survives
+  // accidental dialog close, page reload, or tab switch.
+  const DRAFT_KEY = `launch-wizard-draft:${clientId}`;
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  // Restore on open
   useEffect(() => {
-    if (open) {
-      setStep('offer');
-      setCampaignNameOverride('');
-      setAdSetNameOverride('');
-    }
-  }, [open]);
+    if (!open) { setDraftRestored(false); return; }
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        setStep(d.step || 'offer');
+        if (typeof d.offerId === 'string') setOfferId(d.offerId);
+        if (d.presetKey && PRESETS[d.presetKey as PresetKey]) setPresetKey(d.presetKey);
+        if (typeof d.dailyBudget === 'string') setDailyBudget(d.dailyBudget);
+        if (typeof d.countries === 'string') setCountries(d.countries);
+        if (typeof d.ageMin === 'string') setAgeMin(d.ageMin);
+        if (typeof d.ageMax === 'string') setAgeMax(d.ageMax);
+        if (d.genders === 'all' || d.genders === 'male' || d.genders === 'female') setGenders(d.genders);
+        if (typeof d.audienceTag === 'string') setAudienceTag(d.audienceTag);
+        if (typeof d.pageId === 'string') setPageId(d.pageId);
+        if (typeof d.pixelId === 'string') setPixelId(d.pixelId);
+        if (typeof d.campaignNameOverride === 'string') setCampaignNameOverride(d.campaignNameOverride);
+        if (typeof d.adSetNameOverride === 'string') setAdSetNameOverride(d.adSetNameOverride);
+        setDraftRestored(true);
+        toast.info('Draft restored', { description: 'Continuing where you left off.' });
+      } else {
+        setStep('offer');
+        setCampaignNameOverride('');
+        setAdSetNameOverride('');
+      }
+    } catch (e) { console.warn('Draft restore failed', e); }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist on change (debounced) while dialog is open
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+          step, offerId, presetKey, dailyBudget, countries, ageMin, ageMax,
+          genders, audienceTag, pageId, pixelId, campaignNameOverride, adSetNameOverride,
+        }));
+      } catch {}
+    }, 300);
+    return () => clearTimeout(t);
+  }, [open, step, offerId, presetKey, dailyBudget, countries, ageMin, ageMax,
+      genders, audienceTag, pageId, pixelId, campaignNameOverride, adSetNameOverride]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const clearDraft = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+    setDraftRestored(false);
+    setStep('offer'); setOfferId(''); setPresetKey('cold_leads');
+    setDailyBudget('100'); setCountries('US'); setAgeMin('35'); setAgeMax('65');
+    setGenders('all'); setAudienceTag('Cold-US-35-65');
+    setCampaignNameOverride(''); setAdSetNameOverride('');
+    toast.success('Draft cleared');
+  };
 
   // Apply preset defaults whenever preset changes
   useEffect(() => {
@@ -294,6 +346,7 @@ export function LaunchCampaignWizard({ open, onOpenChange, clientId, clientName 
       });
       qc.invalidateQueries({ queryKey: ['admin-meta-campaigns'] });
       qc.invalidateQueries({ queryKey: ['admin-meta-adsets'] });
+      try { localStorage.removeItem(DRAFT_KEY); } catch {}
       onOpenChange(false);
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to launch campaign'),
@@ -318,9 +371,21 @@ export function LaunchCampaignWizard({ open, onOpenChange, clientId, clientName 
           <DialogTitle className="flex items-center gap-2">
             <Rocket className="h-4 w-4 text-primary" />
             Launch Campaign — Guided · {clientName}
+            {draftRestored && (
+              <Badge variant="secondary" className="text-[10px] ml-2">Draft restored</Badge>
+            )}
           </DialogTitle>
           <DialogDescription>
             Walks through the agency's capital-raising SOP and launches in PAUSED state for review.
+            {draftRestored && (
+              <button
+                type="button"
+                onClick={clearDraft}
+                className="ml-2 text-[11px] underline text-muted-foreground hover:text-foreground"
+              >
+                Start fresh
+              </button>
+            )}
           </DialogDescription>
         </DialogHeader>
 
