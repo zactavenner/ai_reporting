@@ -6,6 +6,7 @@ import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as Ima
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { StoryboardTimelineCard } from "./StoryboardTimelineCard";
 
 export type CanvasPlaceholder = {
   __placeholder: true;
@@ -25,7 +26,7 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, clientId, onCanvasItemUpdated,
+  entries, onEditImage, onInlineEdit, clientId, onCanvasItemUpdated, onSendMessage,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
@@ -33,6 +34,7 @@ export function AIStudioCanvas({
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
+  onSendMessage?: (text: string) => void;
   initialView?: { zoom?: number; panX?: number; panY?: number } | null;
   focusedItemId?: string | null;
   onViewChange?: (view: { zoom: number; panX: number; panY: number }) => void;
