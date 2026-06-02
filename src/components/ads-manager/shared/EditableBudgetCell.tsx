@@ -27,9 +27,17 @@ export function EditableBudgetCell({ clientId, level, rowId, dailyBudget }: Prop
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
+  // Query keys touched by the campaigns / ad sets tables — we optimistically
+  // patch each list so the new $ amount appears instantly while Meta's API call resolves.
+  const AFFECTED_KEYS = [
+    ["admin-meta-campaigns"],
+    ["admin-meta-adsets"],
+    ["meta-campaigns"],
+    ["meta-ad-sets"],
+  ] as const;
+
   const save = useMutation({
-    mutationFn: async () => {
-      const dollars = Number(value);
+    mutationFn: async (dollars: number) => {
       if (!dollars || dollars < 1) throw new Error("Budget must be ≥ $1");
       const { data, error } = await supabase.functions.invoke("update-meta-budget", {
         body: { clientId, level, rowId, dailyBudgetCents: Math.round(dollars * 100) },
@@ -37,19 +45,46 @@ export function EditableBudgetCell({ clientId, level, rowId, dailyBudget }: Prop
       if (error || !data?.success) throw new Error(data?.error || error?.message || "Failed");
       return data;
     },
+    onMutate: async (dollars: number) => {
+      // Cancel pending refetches so they can't overwrite our optimistic value.
+      await Promise.all(AFFECTED_KEYS.map(k => qc.cancelQueries({ queryKey: k as unknown as any[] })));
+      const snapshots: Array<[readonly string[], unknown]> = [];
+      AFFECTED_KEYS.forEach((k) => {
+        const entries = qc.getQueriesData({ queryKey: k as unknown as any[] });
+        for (const [queryKey, data] of entries) snapshots.push([queryKey as unknown as readonly string[], data]);
+        qc.setQueriesData({ queryKey: k as unknown as any[] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((r: any) => (r?.id === rowId ? { ...r, daily_budget: dollars } : r));
+        });
+      });
+      setEditing(false);
+      return { snapshots };
+    },
     onSuccess: () => {
       toast.success("Budget updated on Meta");
-      qc.invalidateQueries({ queryKey: ["admin-meta-campaigns"] });
-      qc.invalidateQueries({ queryKey: ["admin-meta-adsets"] });
-      qc.invalidateQueries({ queryKey: ["meta-campaigns"] });
-      qc.invalidateQueries({ queryKey: ["meta-ad-sets"] });
-      setEditing(false);
     },
-    onError: (e: any) => {
-      toast.error(e.message || "Failed to update budget");
+    onError: (e: any, _vars, ctx: any) => {
+      // Roll back to pre-mutation snapshots
+      if (ctx?.snapshots) for (const [k, v] of ctx.snapshots) qc.setQueryData(k as any, v);
+      toast.error(e?.message || "Failed to update budget");
       setValue(dailyBudget != null ? String(dailyBudget) : "");
     },
+    onSettled: () => {
+      AFFECTED_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k as unknown as any[] }));
+    },
   });
+
+  const commit = () => {
+    const dollars = Number(value);
+    if (!dollars || dollars < 1) {
+      toast.error("Budget must be ≥ $1");
+      setValue(dailyBudget != null ? String(dailyBudget) : "");
+      setEditing(false);
+      return;
+    }
+    if (dollars === dailyBudget) { setEditing(false); return; }
+    save.mutate(dollars);
+  };
 
   if (editing) {
     return (
@@ -62,9 +97,9 @@ export function EditableBudgetCell({ clientId, level, rowId, dailyBudget }: Prop
           step="1"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          onBlur={() => { if (Number(value) !== dailyBudget) save.mutate(); else setEditing(false); }}
+          onBlur={commit}
           onKeyDown={(e) => {
-            if (e.key === "Enter") save.mutate();
+            if (e.key === "Enter") commit();
             if (e.key === "Escape") { setValue(dailyBudget != null ? String(dailyBudget) : ""); setEditing(false); }
           }}
           disabled={save.isPending}
