@@ -6,6 +6,7 @@ import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as Ima
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { StoryboardTimelineCard } from "./StoryboardTimelineCard";
 
 export type CanvasPlaceholder = {
   __placeholder: true;
@@ -25,7 +26,7 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, clientId, onCanvasItemUpdated,
+  entries, onEditImage, onInlineEdit, clientId, onCanvasItemUpdated, onSendMessage,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
@@ -33,6 +34,7 @@ export function AIStudioCanvas({
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
+  onSendMessage?: (text: string) => void;
   initialView?: { zoom?: number; panX?: number; panY?: number } | null;
   focusedItemId?: string | null;
   onViewChange?: (view: { zoom: number; panX: number; panY: number }) => void;
@@ -277,27 +279,14 @@ export function AIStudioCanvas({
           return <VariationSetCard key={e.id} item={e} clientId={clientId} onUpdated={onCanvasItemUpdated} />;
         }
         if (e.kind === "storyboard") {
-          const p = e.payload || {};
-          const scenes: any[] = Array.isArray(p.scenes) ? p.scenes : [];
           return (
-            <Card key={e.id} data-canvas-card className="p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Clapperboard className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Storyboard</span>
-                <Badge variant="outline" className="text-[10px]">{p.aspect_ratio || "9:16"}</Badge>
-                <Badge variant="secondary" className="text-[10px]">{scenes.length} scenes</Badge>
-                <span className="text-xs text-muted-foreground ml-auto">{new Date(e.created_at).toLocaleTimeString()}</span>
-              </div>
-              <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{p.brief}</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {scenes.map((s: any) => (
-                  <div key={s.id} className="rounded-md border p-2 text-xs">
-                    <div className="font-medium text-[11px] mb-1">#{s.order} {s.title}</div>
-                    <div className="text-muted-foreground line-clamp-3 text-[10px]">{s.image_prompt}</div>
-                  </div>
-                ))}
-              </div>
-            </Card>
+            <StoryboardTimelineCard
+              key={e.id}
+              item={e}
+              entries={entries}
+              onUpdated={onCanvasItemUpdated}
+              onSendMessage={onSendMessage}
+            />
           );
         }
         if (e.kind === "scene_image") {
