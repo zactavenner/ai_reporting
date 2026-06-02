@@ -840,6 +840,125 @@ async function generateSceneVideo(opts: {
 }
 
 // ---------- Tool schema ----------
+// ---------- Seedance 2.0 (OpenRouter) — 15s 1080p text-to-video / image-to-video ----------
+async function generateSeedanceVideo(opts: {
+  prompt: string;
+  aspectRatio: string;         // "16:9" | "9:16" | "1:1"
+  duration: number;            // 5..15
+  resolution: string;          // "720p" | "1080p"
+  imageUrl?: string | null;    // optional first-frame for image-to-video
+  lastFrameUrl?: string | null;
+  fast?: boolean;              // use seedance-2.0-fast
+  clientId: string | null;
+  conversationId: string;
+  userId: string;
+}) {
+  if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+
+  const model = opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0";
+  const body: Record<string, unknown> = {
+    model,
+    prompt: opts.prompt,
+    resolution: opts.resolution,
+    aspect_ratio: opts.aspectRatio,
+    duration: Math.max(3, Math.min(15, Math.round(opts.duration || 15))),
+  };
+  const frames: any[] = [];
+  if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
+  if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
+  if (frames.length) body.frame_images = frames;
+
+  const submit = await fetch("https://openrouter.ai/api/v1/videos", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://reporting.highperformanceads.com",
+      "X-Title": "AI Studio",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!submit.ok) {
+    const t = await submit.text();
+    throw new Error(`Seedance submit [${submit.status}]: ${t.slice(0, 400)}`);
+  }
+  const sj = await submit.json();
+  const pollingUrl: string | undefined = sj.polling_url;
+  const jobId: string = sj.id || crypto.randomUUID();
+  if (!pollingUrl) throw new Error(`Seedance returned no polling_url: ${JSON.stringify(sj).slice(0, 300)}`);
+
+  // Poll up to ~5 minutes
+  let videoUrl: string | null = null;
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+    if (!p.ok) continue;
+    const pj = await p.json();
+    if (pj.status === "completed") {
+      const urls: string[] = pj.unsigned_urls || pj.urls || (pj.video?.url ? [pj.video.url] : []);
+      videoUrl = urls[0] || null;
+      break;
+    }
+    if (pj.status === "failed") throw new Error(`Seedance failed: ${pj.error || "unknown"}`);
+  }
+  if (!videoUrl) throw new Error("Seedance timed out after 5 minutes");
+
+  // Download and store in 'creatives' bucket so URL is permanent (unsigned_urls may expire)
+  let storedUrl = videoUrl;
+  let storagePath: string | null = null;
+  try {
+    const dl = await fetch(videoUrl);
+    if (dl.ok) {
+      const bytes = new Uint8Array(await dl.arrayBuffer());
+      const path = `ai-studio/${opts.clientId || "shared"}/seedance/${jobId}-${Date.now()}.mp4`;
+      const up = await supa.storage.from("creatives").upload(path, bytes, { contentType: "video/mp4", upsert: false });
+      if (!up.error) {
+        const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+        storedUrl = pub.publicUrl;
+        storagePath = path;
+      }
+    }
+  } catch (e) { console.warn("Seedance rehost failed, using unsigned url", e); }
+
+  const ci = await supa.from("ai_studio_canvas_items").insert({
+    conversation_id: opts.conversationId,
+    user_id: opts.userId,
+    kind: "scene_video",
+    payload: {
+      video_url: storedUrl,
+      storage_path: storagePath,
+      keyframe_url: opts.imageUrl || null,
+      aspect_ratio: opts.aspectRatio,
+      video_prompt: opts.prompt,
+      model,
+      provider: "openrouter",
+      duration: body.duration,
+      resolution: opts.resolution,
+      scene_order: 1,
+      mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+      job_id: jobId,
+    },
+  }).select("id, kind, payload, created_at").single();
+
+  if (opts.clientId) {
+    await supa.from("client_assets").insert({
+      client_id: opts.clientId,
+      asset_type: "scene_video",
+      title: `Seedance ${opts.imageUrl ? "image→video" : "text→video"}`,
+      status: "completed",
+      content: {
+        video_url: storedUrl, storage_path: storagePath, keyframe_url: opts.imageUrl || null,
+        aspect_ratio: opts.aspectRatio, prompt: opts.prompt, source: "ai_studio", model,
+        duration: body.duration, resolution: opts.resolution,
+      },
+    });
+  }
+
+  return { item: ci.data, video_url: storedUrl };
+}
+
+// ---------- Tool schema ----------
 const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
   { type: "function", function: { name: "web_search", description: "Search the live web for real-time information (news, stock prices, recent events, competitor info, fact-checks, ad benchmarks, etc). Returns a short summary plus the top source URLs and snippets. Call this whenever the user asks about anything that requires current/real-time info, anything you don't know, or anything that needs sources/citations. Always cite the source URLs in your reply.", parameters: { type: "object", properties: { query: { type: "string", description: "Search query (be specific)." }, freshness: { type: "string", enum: ["day", "week", "month", "year", "any"], description: "How fresh results should be. Default 'any'." } }, required: ["query"] } } },
