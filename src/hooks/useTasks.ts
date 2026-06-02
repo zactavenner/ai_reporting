@@ -556,10 +556,10 @@ export function useAddAgencyMember() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ name, email, role }: { name: string; email: string; role?: string }) => {
+    mutationFn: async ({ name, email, role, phone }: { name: string; email: string; role?: string; phone?: string }) => {
       const { data, error } = await supabase
         .from('agency_members')
-        .insert({ name, email, role: role || 'member' })
+        .insert({ name, email, role: role || 'member', phone: phone || null } as any)
         .select()
         .single();
       
