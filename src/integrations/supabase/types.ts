@@ -962,6 +962,7 @@ export type Database = {
       ai_studio_conversations: {
         Row: {
           active_reference_ids: Json
+          active_video_reference_ids: Json
           archived_at: string | null
           canvas_pan_x: number
           canvas_pan_y: number
@@ -983,6 +984,7 @@ export type Database = {
         }
         Insert: {
           active_reference_ids?: Json
+          active_video_reference_ids?: Json
           archived_at?: string | null
           canvas_pan_x?: number
           canvas_pan_y?: number
@@ -1004,6 +1006,7 @@ export type Database = {
         }
         Update: {
           active_reference_ids?: Json
+          active_video_reference_ids?: Json
           archived_at?: string | null
           canvas_pan_x?: number
           canvas_pan_y?: number
@@ -1110,6 +1113,72 @@ export type Database = {
           },
           {
             foreignKeyName: "ai_studio_reference_images_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_studio_reference_videos: {
+        Row: {
+          aspect_ratio: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          duration_seconds: number | null
+          id: string
+          name: string
+          notes: string | null
+          poster_url: string | null
+          source: string
+          source_creative_id: string | null
+          storage_path: string | null
+          tags: string[] | null
+          video_url: string
+        }
+        Insert: {
+          aspect_ratio?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_seconds?: number | null
+          id?: string
+          name: string
+          notes?: string | null
+          poster_url?: string | null
+          source?: string
+          source_creative_id?: string | null
+          storage_path?: string | null
+          tags?: string[] | null
+          video_url: string
+        }
+        Update: {
+          aspect_ratio?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_seconds?: number | null
+          id?: string
+          name?: string
+          notes?: string | null
+          poster_url?: string | null
+          source?: string
+          source_creative_id?: string | null
+          storage_path?: string | null
+          tags?: string[] | null
+          video_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_studio_reference_videos_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ai_studio_reference_videos_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
