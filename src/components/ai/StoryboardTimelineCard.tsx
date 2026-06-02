@@ -417,6 +417,16 @@ export function StoryboardTimelineCard({
           {generating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />}
           Generate videos
         </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={polishAndUpscale}
+          disabled={polishing || !onSendMessage || Object.keys(sceneMedia.vids).length === 0}
+          title="Run continuity pass + upscale + stitch final cut"
+        >
+          {polishing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Wand className="h-3.5 w-3.5 mr-1" />}
+          Polish & upscale
+        </Button>
       </div>
 
       <Dialog open={!!previewScene} onOpenChange={(o) => !o && setPreviewSceneId(null)}>
