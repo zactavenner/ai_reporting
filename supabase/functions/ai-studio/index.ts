@@ -1868,6 +1868,17 @@ Deno.serve(async (req) => {
                 quality: name === "generate_scene_video" ? "veo" : "pro",
               });
             }
+            if (name === "generate_seedance_video") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Seedance 2.0 ${args.image_url ? "image→video" : "text→video"} • ${args.duration || 15}s ${args.resolution || "1080p"}: ${String(args.prompt || "").slice(0, 120)}`,
+                aspect_ratio: args.aspect_ratio || "9:16",
+                quality: "seedance",
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
