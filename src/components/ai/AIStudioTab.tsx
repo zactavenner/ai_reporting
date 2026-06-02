@@ -638,6 +638,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         chatModel,
         imageModels,
         activeReferenceIds,
+        activeVideoReferenceIds,
         autoDocContext,
         agentMode,
         attachments: attSnapshot.map(a => ({ url: a.url, name: a.name, mime: a.mime, text: a.text })),
@@ -770,11 +771,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     if (!hydrated || !conversationId) return;
     const t = setTimeout(() => {
-      studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds })
+      studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, activeVideoReferenceIds })
         .catch((e) => console.error("AI Studio settings save failed", e));
     }, 500);
     return () => clearTimeout(t);
-  }, [docUrl, sheetUrl, quality, chatModel, activeReferenceIds, conversationId, hydrated, clientId, studioFetch]);
+  }, [docUrl, sheetUrl, quality, chatModel, activeReferenceIds, activeVideoReferenceIds, conversationId, hydrated, clientId, studioFetch]);
 
   // Inline edit from canvas — fire a hidden edit prompt that targets edit_static_ad
   const inlineEdit = useCallback(async (imageUrl: string, aspectRatio: string, instruction: string) => {
@@ -963,7 +964,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Select>
           </div>
           <div className="pt-2 border-t">
-            <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
+            <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} activeVideoIds={activeVideoReferenceIds} onToggleVideo={setActiveVideoReferenceIds} />
           </div>
           </div>
         </details>
@@ -1240,13 +1241,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               onViewChange={(v) => {
                 setCanvasView(v);
                 if (conversationId) {
-                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, canvasView: v }).catch(() => {});
+                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, activeVideoReferenceIds, canvasView: v }).catch(() => {});
                 }
               }}
               onFocusItem={(id) => {
                 setFocusedItemId(id);
                 if (conversationId) {
-                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, focusedCanvasItemId: id }).catch(() => {});
+                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, activeVideoReferenceIds, focusedCanvasItemId: id }).catch(() => {});
                 }
               }}
               onCanvasItemUpdated={(updated) => {
@@ -1332,7 +1333,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   Auto-approved client creatives also appear here.
                 </p>
               </div>
-              <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
+              <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} activeVideoIds={activeVideoReferenceIds} onToggleVideo={setActiveVideoReferenceIds} />
             </div>
           </TabsContent>
         </Tabs>
