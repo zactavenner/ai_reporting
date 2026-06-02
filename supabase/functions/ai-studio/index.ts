@@ -1102,12 +1102,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
     activeReferenceIds?: string[] | null;
+    activeVideoReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
     autoDocContext?: boolean;
@@ -1241,6 +1242,7 @@ Deno.serve(async (req) => {
     const settingsUpdate: Record<string, any> = { doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality };
     if (typeof chatModel === "string" || chatModel === null) settingsUpdate.chat_model = chatModel || null;
     if (Array.isArray(activeReferenceIds)) settingsUpdate.active_reference_ids = activeReferenceIds;
+    if (Array.isArray(activeVideoReferenceIds)) settingsUpdate.active_video_reference_ids = activeVideoReferenceIds;
     if (canvasView && typeof canvasView === "object") {
       if (typeof canvasView.zoom === "number" && isFinite(canvasView.zoom)) settingsUpdate.canvas_zoom = canvasView.zoom;
       if (typeof canvasView.panX === "number" && isFinite(canvasView.panX)) settingsUpdate.canvas_pan_x = canvasView.panX;
@@ -1329,6 +1331,7 @@ Deno.serve(async (req) => {
   };
   if (typeof chatModel === "string") baseUpdate.chat_model = chatModel;
   if (Array.isArray(activeReferenceIds)) baseUpdate.active_reference_ids = activeReferenceIds;
+  if (Array.isArray(activeVideoReferenceIds)) baseUpdate.active_video_reference_ids = activeVideoReferenceIds;
 
   let convoRow: any = null;
   if (requestedConversationId) {
