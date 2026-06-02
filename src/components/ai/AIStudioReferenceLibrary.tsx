@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, Trash2, Check, ImagePlus, Sparkles, Trophy, Tags } from "lucide-react";
+import { Loader2, Upload, Trash2, Check, ImagePlus, Sparkles, Trophy, Tags, Image as ImageIcon, Film, Play } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 interface RefImage {
@@ -21,7 +22,54 @@ interface RefImage {
   source_creative_id: string | null;
 }
 
+interface RefVideo {
+  id: string;
+  name: string;
+  tags: string[] | null;
+  video_url: string;
+  poster_url: string | null;
+  storage_path: string | null;
+  created_by: string | null;
+  created_at: string;
+  client_id: string | null;
+  source: string | null;
+  source_creative_id: string | null;
+  aspect_ratio: string | null;
+  duration_seconds: number | null;
+}
+
 export function AIStudioReferenceLibrary({
+  activeIds, onToggle, activeVideoIds = [], onToggleVideo, clientId,
+}: {
+  activeIds: string[];
+  onToggle: (ids: string[]) => void;
+  activeVideoIds?: string[];
+  onToggleVideo?: (ids: string[]) => void;
+  clientId: string;
+}) {
+  return (
+    <Tabs defaultValue="static" className="w-full">
+      <TabsList className="grid w-full grid-cols-2 h-8">
+        <TabsTrigger value="static" className="text-[11px] gap-1.5">
+          <ImageIcon className="h-3 w-3" /> Static refs
+          {activeIds.length > 0 && <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{activeIds.length}</Badge>}
+        </TabsTrigger>
+        <TabsTrigger value="video" className="text-[11px] gap-1.5">
+          <Film className="h-3 w-3" /> Video refs
+          {activeVideoIds.length > 0 && <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{activeVideoIds.length}</Badge>}
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="static" className="mt-3">
+        <StaticReferenceLibrary activeIds={activeIds} onToggle={onToggle} clientId={clientId} />
+      </TabsContent>
+      <TabsContent value="video" className="mt-3">
+        <VideoReferenceLibrary activeIds={activeVideoIds} onToggle={onToggleVideo || (() => {})} clientId={clientId} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function StaticReferenceLibrary({
   activeIds, onToggle, clientId,
 }: {
   activeIds: string[];
@@ -221,7 +269,7 @@ export function AIStudioReferenceLibrary({
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs font-medium text-muted-foreground flex-1">
-          Reference library {activeIds.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px]">{activeIds.length} active</Badge>}
+          Static image references {activeIds.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px]">{activeIds.length} active</Badge>}
         </span>
         <Select value={industryFilter} onValueChange={setIndustryFilter}>
           <SelectTrigger className="h-7 w-[160px] text-[11px] rounded-md">
@@ -289,6 +337,308 @@ export function AIStudioReferenceLibrary({
             <div className="space-y-1.5">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
                 Global library <span className="normal-case font-normal">— shared across all clients</span>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-44 overflow-auto">
+                {library.map(renderThumb)}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ----------------- Video reference library -----------------
+
+function VideoReferenceLibrary({
+  activeIds, onToggle, clientId,
+}: {
+  activeIds: string[];
+  onToggle: (ids: string[]) => void;
+  clientId: string;
+}) {
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [importingTop, setImportingTop] = useState(false);
+  const [industryFilter, setIndustryFilter] = useState<string>("all");
+  const [tagInput, setTagInput] = useState<string>("");
+
+  const { data: refs = [], isLoading } = useQuery({
+    queryKey: ["ai_studio_reference_videos", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ai_studio_reference_videos" as any)
+        .select("*")
+        .or(`client_id.is.null,client_id.eq.${clientId}`)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as RefVideo[];
+    },
+  });
+
+  const industries = useMemo(() => {
+    const set = new Set<string>();
+    refs.forEach((r) => (r.tags || []).forEach((t) => {
+      if (t.toLowerCase().startsWith("industry:")) set.add(t.slice("industry:".length));
+    }));
+    return Array.from(set).sort();
+  }, [refs]);
+
+  const matchesIndustry = (r: RefVideo) => {
+    if (industryFilter === "all") return true;
+    return (r.tags || []).some((t) => t.toLowerCase() === `industry:${industryFilter.toLowerCase()}`);
+  };
+
+  const upload = async (files: FileList | null) => {
+    if (!files || !files.length) return;
+    setUploading(true);
+    try {
+      const { data: sess } = await supabase.auth.getUser();
+      const userId = sess.user?.id || null;
+      const extraTags = tagInput.split(",").map((t) => t.trim()).filter(Boolean);
+      for (const file of Array.from(files)) {
+        if (file.size > 100 * 1024 * 1024) {
+          toast.error(`${file.name} is over 100MB — skipped`);
+          continue;
+        }
+        const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+        const path = `ai-studio/video-references/${userId || "anon"}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("creatives").upload(path, file, { contentType: file.type || "video/mp4", upsert: false });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from("creatives").getPublicUrl(path);
+
+        // Try to derive aspect ratio + duration client-side
+        const meta = await new Promise<{ ar: string | null; dur: number | null }>((resolve) => {
+          try {
+            const v = document.createElement("video");
+            v.preload = "metadata";
+            v.muted = true;
+            v.onloadedmetadata = () => {
+              const ar = v.videoWidth && v.videoHeight
+                ? `${v.videoWidth}:${v.videoHeight}` : null;
+              resolve({ ar: ar && v.videoHeight > v.videoWidth ? "9:16" : ar && v.videoWidth > v.videoHeight ? "16:9" : "1:1", dur: v.duration || null });
+              URL.revokeObjectURL(v.src);
+            };
+            v.onerror = () => resolve({ ar: null, dur: null });
+            v.src = URL.createObjectURL(file);
+          } catch { resolve({ ar: null, dur: null }); }
+        });
+
+        const { error: insErr } = await supabase.from("ai_studio_reference_videos" as any).insert({
+          name: file.name.replace(/\.[^.]+$/, "").slice(0, 80),
+          tags: extraTags,
+          video_url: pub.publicUrl,
+          storage_path: path,
+          created_by: userId,
+          client_id: null,
+          source: "library",
+          aspect_ratio: meta.ar,
+          duration_seconds: meta.dur,
+        });
+        if (insErr) throw insErr;
+      }
+      toast.success(`Uploaded ${files.length} video reference${files.length > 1 ? "s" : ""}`);
+      qc.invalidateQueries({ queryKey: ["ai_studio_reference_videos", clientId] });
+      setTagInput("");
+    } catch (e: any) {
+      toast.error(e?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  /** Pull top-performing VIDEO creatives across clients as cross-client inspiration. */
+  const importTopPerformers = async () => {
+    setImportingTop(true);
+    try {
+      const { data: sess } = await supabase.auth.getUser();
+      const userId = sess.user?.id || null;
+      const { data: top, error } = await supabase
+        .from("creatives")
+        .select("id, title, file_url, thumbnail_url, ai_performance_score, client_id, clients(industry, name)")
+        .not("file_url", "is", null)
+        .not("ai_performance_score", "is", null)
+        .order("ai_performance_score", { ascending: false })
+        .limit(48);
+      if (error) throw error;
+      const existing = new Set(refs.filter((r) => r.source_creative_id).map((r) => r.source_creative_id as string));
+      const rows = (top || [])
+        .filter((c: any) => !existing.has(c.id) && /\.(mp4|mov|webm|m4v)(\?|$)/i.test(c.file_url || ""))
+        .slice(0, 24)
+        .map((c: any) => {
+          const industry = c.clients?.industry || "unknown";
+          const tags = [`industry:${String(industry).toLowerCase().replace(/\s+/g, "-")}`, "top-performer"];
+          return {
+            name: (c.title || c.clients?.name || "Top video").slice(0, 80),
+            tags,
+            video_url: c.file_url,
+            poster_url: c.thumbnail_url || null,
+            storage_path: null,
+            created_by: userId,
+            client_id: null,
+            source: "top_performer",
+            source_creative_id: c.id,
+          };
+        });
+      if (!rows.length) { toast.info("No new top-performing videos to import"); return; }
+      const { error: insErr } = await supabase.from("ai_studio_reference_videos" as any).insert(rows);
+      if (insErr) throw insErr;
+      toast.success(`Imported ${rows.length} top video${rows.length > 1 ? "s" : ""}`);
+      qc.invalidateQueries({ queryKey: ["ai_studio_reference_videos", clientId] });
+    } catch (e: any) {
+      toast.error(e?.message || "Import failed");
+    } finally {
+      setImportingTop(false);
+    }
+  };
+
+  const del = useMutation({
+    mutationFn: async (r: RefVideo) => {
+      if (r.storage_path) await supabase.storage.from("creatives").remove([r.storage_path]);
+      const { error } = await supabase.from("ai_studio_reference_videos" as any).delete().eq("id", r.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Deleted");
+      qc.invalidateQueries({ queryKey: ["ai_studio_reference_videos", clientId] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Delete failed"),
+  });
+
+  const toggle = (id: string) => {
+    const next = activeIds.includes(id) ? activeIds.filter(x => x !== id) : [...activeIds, id];
+    onToggle(next);
+  };
+
+  const filtered = refs.filter(matchesIndustry);
+  const topPerf = filtered.filter(r => r.source === "top_performer");
+  const library = filtered.filter(r => r.source !== "top_performer");
+
+  const renderThumb = (r: RefVideo) => {
+    const active = activeIds.includes(r.id);
+    return (
+      <div key={r.id} className="relative group">
+        <button
+          type="button"
+          onClick={() => toggle(r.id)}
+          className={`block w-full aspect-square rounded overflow-hidden border-2 bg-black ${active ? "border-primary" : "border-transparent hover:border-muted-foreground/40"}`}
+          title={r.name}
+        >
+          {r.poster_url ? (
+            <img src={r.poster_url} alt={r.name} className="w-full h-full object-cover" loading="lazy" />
+          ) : (
+            <video src={r.video_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
+          )}
+          <div className="absolute inset-0 grid place-items-center pointer-events-none">
+            <div className="rounded-full bg-black/60 p-1.5">
+              <Play className="h-3 w-3 text-white fill-white" />
+            </div>
+          </div>
+          {active && (
+            <div className="absolute top-1 right-1 bg-primary text-primary-foreground rounded-full p-0.5">
+              <Check className="h-2.5 w-2.5" />
+            </div>
+          )}
+        </button>
+        {/* Hover preview — autoplay floating video */}
+        <div className="pointer-events-none absolute z-50 left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <div className="bg-popover border border-border rounded-lg shadow-2xl p-1.5 w-64">
+            <video
+              src={r.video_url}
+              className="w-full h-auto rounded max-h-72 bg-black"
+              muted autoPlay loop playsInline
+            />
+            <div className="text-[10px] mt-1 px-1 truncate text-muted-foreground">{r.name}</div>
+            {(r.tags || []).length > 0 && (
+              <div className="flex flex-wrap gap-0.5 px-1 pb-1">
+                {(r.tags || []).slice(0, 4).map((t) => (
+                  <Badge key={t} variant="secondary" className="text-[8px] px-1 py-0">{t}</Badge>
+                ))}
+              </div>
+            )}
+            {(r.aspect_ratio || r.duration_seconds) && (
+              <div className="flex items-center gap-1 px-1 pb-1 text-[9px] text-muted-foreground">
+                {r.aspect_ratio && <span>{r.aspect_ratio}</span>}
+                {r.duration_seconds && <span>· {Math.round(r.duration_seconds)}s</span>}
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => { if (confirm(`Delete "${r.name}" from video references?`)) del.mutate(r); }}
+          className="absolute bottom-0.5 left-0.5 opacity-0 group-hover:opacity-100 bg-destructive text-destructive-foreground rounded p-0.5"
+          title="Delete reference"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-medium text-muted-foreground flex-1">
+          Video references {activeIds.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px]">{activeIds.length} active</Badge>}
+          <span className="block text-[10px] text-muted-foreground/70 normal-case font-normal">Used as pacing / style inspiration for storyboards and Veo scenes</span>
+        </span>
+        <Select value={industryFilter} onValueChange={setIndustryFilter}>
+          <SelectTrigger className="h-7 w-[160px] text-[11px] rounded-md">
+            <SelectValue placeholder="Industry" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All industries</SelectItem>
+            {industries.map((i) => (
+              <SelectItem key={i} value={i}>{i}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={importingTop} onClick={importTopPerformers} title="Pull top scoring videos across all clients">
+          {importingTop ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Trophy className="h-3 w-3 mr-1" />}
+          Top performers
+        </Button>
+        <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={uploading} onClick={() => fileRef.current?.click()}>
+          {uploading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+          Upload
+        </Button>
+        <input ref={fileRef} type="file" accept="video/*" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Tags className="h-3 w-3 text-muted-foreground" />
+        <Input
+          value={tagInput}
+          onChange={(e) => setTagInput(e.target.value)}
+          placeholder="Tags for next upload — e.g. industry:capital-raising, style:ugc, pacing:fast-cut"
+          className="h-7 text-[11px]"
+        />
+      </div>
+      {isLoading ? (
+        <div className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> loading…</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-xs text-muted-foreground flex items-center gap-1.5 py-3 px-2 rounded border border-dashed">
+          <Film className="h-3.5 w-3.5" /> No video references yet — upload clips or pull top performers.
+        </div>
+      ) : (
+        <>
+          {topPerf.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400 font-medium">
+                <Trophy className="h-3 w-3" /> Top-performing videos across clients
+                <Badge variant="secondary" className="text-[9px]">{topPerf.length}</Badge>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-44 overflow-auto">
+                {topPerf.map(renderThumb)}
+              </div>
+            </div>
+          )}
+          {library.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                Global video library <span className="normal-case font-normal">— shared across all clients</span>
               </div>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-44 overflow-auto">
                 {library.map(renderThumb)}

@@ -346,6 +346,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
+  const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
   const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number; auto_doc?: { enabled: boolean; chars: number; title?: string | null } } | null>(null);
   const [autoConnectedDoc, setAutoConnectedDoc] = useState(false);
@@ -449,6 +450,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         if (convo.image_quality === "fast" || convo.image_quality === "pro") setQuality(convo.image_quality);
         if (typeof (convo as any).chat_model === "string" && (convo as any).chat_model) setChatModel((convo as any).chat_model);
         if (Array.isArray((convo as any).active_reference_ids)) setActiveReferenceIds((convo as any).active_reference_ids as string[]);
+        if (Array.isArray((convo as any).active_video_reference_ids)) setActiveVideoReferenceIds((convo as any).active_video_reference_ids as string[]);
         setCanvasView({
           zoom: Number((convo as any).canvas_zoom ?? 1) || 1,
           panX: Number((convo as any).canvas_pan_x ?? 0) || 0,
@@ -636,6 +638,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         chatModel,
         imageModels,
         activeReferenceIds,
+        activeVideoReferenceIds,
         autoDocContext,
         agentMode,
         attachments: attSnapshot.map(a => ({ url: a.url, name: a.name, mime: a.mime, text: a.text })),
@@ -768,11 +771,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     if (!hydrated || !conversationId) return;
     const t = setTimeout(() => {
-      studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds })
+      studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, activeVideoReferenceIds })
         .catch((e) => console.error("AI Studio settings save failed", e));
     }, 500);
     return () => clearTimeout(t);
-  }, [docUrl, sheetUrl, quality, chatModel, activeReferenceIds, conversationId, hydrated, clientId, studioFetch]);
+  }, [docUrl, sheetUrl, quality, chatModel, activeReferenceIds, activeVideoReferenceIds, conversationId, hydrated, clientId, studioFetch]);
 
   // Inline edit from canvas — fire a hidden edit prompt that targets edit_static_ad
   const inlineEdit = useCallback(async (imageUrl: string, aspectRatio: string, instruction: string) => {
@@ -961,7 +964,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Select>
           </div>
           <div className="pt-2 border-t">
-            <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
+            <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} activeVideoIds={activeVideoReferenceIds} onToggleVideo={setActiveVideoReferenceIds} />
           </div>
           </div>
         </details>
@@ -1238,13 +1241,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               onViewChange={(v) => {
                 setCanvasView(v);
                 if (conversationId) {
-                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, canvasView: v }).catch(() => {});
+                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, activeVideoReferenceIds, canvasView: v }).catch(() => {});
                 }
               }}
               onFocusItem={(id) => {
                 setFocusedItemId(id);
                 if (conversationId) {
-                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, focusedCanvasItemId: id }).catch(() => {});
+                  studioFetch({ action: "settings", clientId, conversationId, docUrl: docUrl || null, sheetUrl: sheetUrl || null, quality, chatModel, activeReferenceIds, activeVideoReferenceIds, focusedCanvasItemId: id }).catch(() => {});
                 }
               }}
               onCanvasItemUpdated={(updated) => {
@@ -1330,7 +1333,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   Auto-approved client creatives also appear here.
                 </p>
               </div>
-              <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} />
+              <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} activeVideoIds={activeVideoReferenceIds} onToggleVideo={setActiveVideoReferenceIds} />
             </div>
           </TabsContent>
         </Tabs>

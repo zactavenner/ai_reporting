@@ -1102,12 +1102,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
     activeReferenceIds?: string[] | null;
+    activeVideoReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
     autoDocContext?: boolean;
@@ -1241,6 +1242,7 @@ Deno.serve(async (req) => {
     const settingsUpdate: Record<string, any> = { doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality };
     if (typeof chatModel === "string" || chatModel === null) settingsUpdate.chat_model = chatModel || null;
     if (Array.isArray(activeReferenceIds)) settingsUpdate.active_reference_ids = activeReferenceIds;
+    if (Array.isArray(activeVideoReferenceIds)) settingsUpdate.active_video_reference_ids = activeVideoReferenceIds;
     if (canvasView && typeof canvasView === "object") {
       if (typeof canvasView.zoom === "number" && isFinite(canvasView.zoom)) settingsUpdate.canvas_zoom = canvasView.zoom;
       if (typeof canvasView.panX === "number" && isFinite(canvasView.panX)) settingsUpdate.canvas_pan_x = canvasView.panX;
@@ -1329,6 +1331,7 @@ Deno.serve(async (req) => {
   };
   if (typeof chatModel === "string") baseUpdate.chat_model = chatModel;
   if (Array.isArray(activeReferenceIds)) baseUpdate.active_reference_ids = activeReferenceIds;
+  if (Array.isArray(activeVideoReferenceIds)) baseUpdate.active_video_reference_ids = activeVideoReferenceIds;
 
   let convoRow: any = null;
   if (requestedConversationId) {
@@ -1337,7 +1340,7 @@ Deno.serve(async (req) => {
       .update(baseUpdate)
       .eq("id", requestedConversationId)
       .eq("user_id", userId)
-      .select("id, cleared_at, active_reference_ids, title")
+      .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .maybeSingle();
     convoRow = data;
   }
@@ -1345,7 +1348,7 @@ Deno.serve(async (req) => {
     // Fallback: latest non-archived thread, or insert a new one
     const { data: existing } = await supa
       .from("ai_studio_conversations")
-      .select("id, cleared_at, active_reference_ids, title")
+      .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .eq("client_id", clientId)
       .eq("user_id", userId)
       .is("archived_at", null)
@@ -1365,7 +1368,7 @@ Deno.serve(async (req) => {
       const { data: created } = await supa
         .from("ai_studio_conversations")
         .insert(insertPayload)
-        .select("id, cleared_at, active_reference_ids, title")
+        .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
         .single();
       convoRow = created;
     }
@@ -1403,6 +1406,24 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (approvedRef?.image_url) defaultReferenceImageUrl = approvedRef.image_url as string;
   }
+
+  // Resolve active VIDEO references — used as style/pacing inspiration
+  // for plan_storyboard and generate_scene_video.
+  let activeVideoRefs: Array<{ name: string; tags: string[]; video_url: string; aspect_ratio: string | null }> = [];
+  const vidRefIds: string[] = Array.isArray(activeVideoReferenceIds) && activeVideoReferenceIds.length
+    ? activeVideoReferenceIds
+    : (Array.isArray((convoRow as any)?.active_video_reference_ids) ? (convoRow as any).active_video_reference_ids as string[] : []);
+  if (vidRefIds.length) {
+    const { data: vrefs } = await supa
+      .from("ai_studio_reference_videos")
+      .select("name, tags, video_url, aspect_ratio")
+      .in("id", vidRefIds)
+      .limit(6);
+    activeVideoRefs = (vrefs || []) as any[];
+  }
+  const videoRefStyleNotes = activeVideoRefs.length
+    ? `\n\nSTYLE INSPIRATION — match the pacing, framing, and energy of these reference videos (do NOT copy them, but emulate their look/feel):\n${activeVideoRefs.map((v, i) => `  ${i + 1}. "${v.name}"${v.aspect_ratio ? ` [${v.aspect_ratio}]` : ""}${v.tags?.length ? ` — tags: ${v.tags.join(", ")}` : ""} → ${v.video_url}`).join("\n")}`
+    : "";
 
   // Load history (since cleared_at, or all)
   const { data: history } = await supa
@@ -1974,7 +1995,7 @@ Deno.serve(async (req) => {
                   brief: args.brief,
                   sceneCount: Math.max(3, Math.min(8, args.scene_count || 4)),
                   aspectRatio: args.aspect_ratio || "9:16",
-                  styleNotes: args.style_notes,
+                  styleNotes: (args.style_notes || "") + videoRefStyleNotes,
                   brandContext,
                   conversationId,
                   userId: userId!,
@@ -2001,7 +2022,7 @@ Deno.serve(async (req) => {
                   sceneId: args.scene_id,
                   sceneOrder: args.scene_order,
                   imageUrl: args.image_url,
-                  videoPrompt: args.video_prompt,
+                  videoPrompt: args.video_prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
                   aspectRatio: args.aspect_ratio,
                   clientId: clientId || null,
                   conversationId,
