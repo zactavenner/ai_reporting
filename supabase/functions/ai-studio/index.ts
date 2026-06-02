@@ -839,6 +839,124 @@ async function generateSceneVideo(opts: {
   return { item: ci.data, video_url: pub.publicUrl, storage_path: path };
 }
 
+// ---------- Seedance 2.0 (OpenRouter) — 15s 1080p text-to-video / image-to-video ----------
+async function generateSeedanceVideo(opts: {
+  prompt: string;
+  aspectRatio: string;         // "16:9" | "9:16" | "1:1"
+  duration: number;            // 5..15
+  resolution: string;          // "720p" | "1080p"
+  imageUrl?: string | null;    // optional first-frame for image-to-video
+  lastFrameUrl?: string | null;
+  fast?: boolean;              // use seedance-2.0-fast
+  clientId: string | null;
+  conversationId: string;
+  userId: string;
+}) {
+  if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
+  const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+
+  const model = opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0";
+  const body: Record<string, unknown> = {
+    model,
+    prompt: opts.prompt,
+    resolution: opts.resolution,
+    aspect_ratio: opts.aspectRatio,
+    duration: Math.max(3, Math.min(15, Math.round(opts.duration || 15))),
+  };
+  const frames: any[] = [];
+  if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
+  if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
+  if (frames.length) body.frame_images = frames;
+
+  const submit = await fetch("https://openrouter.ai/api/v1/videos", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://reporting.highperformanceads.com",
+      "X-Title": "AI Studio",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!submit.ok) {
+    const t = await submit.text();
+    throw new Error(`Seedance submit [${submit.status}]: ${t.slice(0, 400)}`);
+  }
+  const sj = await submit.json();
+  const pollingUrl: string | undefined = sj.polling_url;
+  const jobId: string = sj.id || crypto.randomUUID();
+  if (!pollingUrl) throw new Error(`Seedance returned no polling_url: ${JSON.stringify(sj).slice(0, 300)}`);
+
+  // Poll up to ~5 minutes
+  let videoUrl: string | null = null;
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+    if (!p.ok) continue;
+    const pj = await p.json();
+    if (pj.status === "completed") {
+      const urls: string[] = pj.unsigned_urls || pj.urls || (pj.video?.url ? [pj.video.url] : []);
+      videoUrl = urls[0] || null;
+      break;
+    }
+    if (pj.status === "failed") throw new Error(`Seedance failed: ${pj.error || "unknown"}`);
+  }
+  if (!videoUrl) throw new Error("Seedance timed out after 5 minutes");
+
+  // Download and store in 'creatives' bucket so URL is permanent (unsigned_urls may expire)
+  let storedUrl = videoUrl;
+  let storagePath: string | null = null;
+  try {
+    const dl = await fetch(videoUrl);
+    if (dl.ok) {
+      const bytes = new Uint8Array(await dl.arrayBuffer());
+      const path = `ai-studio/${opts.clientId || "shared"}/seedance/${jobId}-${Date.now()}.mp4`;
+      const up = await supa.storage.from("creatives").upload(path, bytes, { contentType: "video/mp4", upsert: false });
+      if (!up.error) {
+        const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+        storedUrl = pub.publicUrl;
+        storagePath = path;
+      }
+    }
+  } catch (e) { console.warn("Seedance rehost failed, using unsigned url", e); }
+
+  const ci = await supa.from("ai_studio_canvas_items").insert({
+    conversation_id: opts.conversationId,
+    user_id: opts.userId,
+    kind: "scene_video",
+    payload: {
+      video_url: storedUrl,
+      storage_path: storagePath,
+      keyframe_url: opts.imageUrl || null,
+      aspect_ratio: opts.aspectRatio,
+      video_prompt: opts.prompt,
+      model,
+      provider: "openrouter",
+      duration: body.duration,
+      resolution: opts.resolution,
+      scene_order: 1,
+      mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+      job_id: jobId,
+    },
+  }).select("id, kind, payload, created_at").single();
+
+  if (opts.clientId) {
+    await supa.from("client_assets").insert({
+      client_id: opts.clientId,
+      asset_type: "scene_video",
+      title: `Seedance ${opts.imageUrl ? "image→video" : "text→video"}`,
+      status: "completed",
+      content: {
+        video_url: storedUrl, storage_path: storagePath, keyframe_url: opts.imageUrl || null,
+        aspect_ratio: opts.aspectRatio, prompt: opts.prompt, source: "ai_studio", model,
+        duration: body.duration, resolution: opts.resolution,
+      },
+    });
+  }
+
+  return { item: ci.data, video_url: storedUrl };
+}
+
 // ---------- Tool schema ----------
 const tools = [
   { type: "function", function: { name: "read_doc", description: "Read text content of the active Google Doc.", parameters: { type: "object", properties: {}, required: [] } } },
@@ -986,6 +1104,26 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "generate_seedance_video",
+      description: "Generate a single high-quality short video clip (3–15s, up to 1080p) using ByteDance Seedance 2.0 via OpenRouter. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url (and optionally last_frame_url) to animate a reference frame. Strong at character consistency, camera motion, and brand-style preservation. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Use 'fast: true' for cheap iteration drafts.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
+          aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1"], description: "Default 9:16 for reels/stories." },
+          duration: { type: "integer", minimum: 3, maximum: 15, description: "Clip length in seconds. Default 15." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p (highest supported on Seedance 2.0)." },
+          image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
+          last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
+          fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality). Default false." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "create_text_artifact",
       description: "Manus-style: write a long-form text deliverable (ad copy, video script, VSL script, caller script, email, landing-page copy, captions, outline, plan, brief, etc.) and drop it on the canvas as its own card. ALWAYS use this tool when the user asks you to WRITE, DRAFT, GENERATE, or CREATE any kind of script, copy, email, post, caption, outline, plan, or document body — instead of putting that text in your chat reply. The chat reply must only be a 1–2 sentence status (e.g. 'Drafted the 60s VSL script on the canvas.'). Render the body as Markdown.",
       parameters: {
@@ -1036,6 +1174,13 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- DOC PRECHECK: Every doc tool (read_doc, append_to_doc, replace_doc_text) auto-runs a connection test before executing. If a tool result contains `precheck_failed: true`, the operation was BLOCKED — do NOT retry the same tool. Instead, write a chat reply that surfaces the `error` field verbatim and asks the user how to proceed (e.g. tie a different doc, share the doc with the connector account, paste a session-override URL). Never silently ignore a precheck failure.",
   "- COPYWRITING / SCRIPTS: ALWAYS call create_text_artifact when the user asks you to write, draft, or generate ANY kind of script (VSL, caller, video script), ad copy, email, caption, landing page copy, outline, plan, or brief. Put the full body in the artifact (Markdown), not in your chat reply. Your chat reply must only be a 1–2 sentence summary like 'Drafted the 60s VSL script on the canvas.' Pass append_to_doc:true if the user said to put it in the doc.",
   "- VIDEO / REEL / SCENE WORKFLOW (storyboard review gate):",
+  "- SEEDANCE 2.0 (single-clip video, OpenRouter):",
+  "  • Use generate_seedance_video when the user wants ONE standalone clip (3–15s, up to 1080p): a single hero shot, animated still, product loop, short reel, or 'turn this image into a video'.",
+  "  • Text-to-video: just pass `prompt` (+ aspect_ratio, duration, resolution).",
+  "  • Image-to-video: pass `image_url` (a canvas keyframe / static ad URL) — Seedance preserves character, style, and brand from the reference. Optionally pass `last_frame_url` for precise motion endpoints.",
+  "  • Default to duration=15, resolution=1080p, aspect_ratio=9:16 unless the user says otherwise. Use fast=true only when the user explicitly asks for a quick/cheap draft.",
+  "  • Prefer Seedance for SINGLE clips and image-animation. Use the multi-scene Veo storyboard pipeline (plan_storyboard → keyframes → generate_scene_video) only when the user explicitly wants a multi-scene cut, storyboard, or video longer than 15s that needs scene-level control.",
+  "  • IMAGE→VIDEO SHORTCUT: If the user says 'animate this ad', 'turn this image into a video', 'make this move', or references a canvas image card, call generate_seedance_video with image_url = that card's image URL. Do NOT first call plan_storyboard.",
   "  • Each scene = ONE keyframe image animated into an 8-SECOND Veo 3.1 clip. Total video length = scene_count × 8s.",
   "  • Map the user's target duration to scene_count: 8s→1, 16s→2, 24s→3, 32s→4, 40s→5, 48s→6, 56s→7, 64s→8. If the user doesn't specify a duration, default to 4 scenes (~32s). The user can override by saying 'one image only', 'three scenes', etc.",
   "  Step 1: Call plan_storyboard with the computed scene_count.",
@@ -1730,6 +1875,17 @@ Deno.serve(async (req) => {
                 quality: name === "generate_scene_video" ? "veo" : "pro",
               });
             }
+            if (name === "generate_seedance_video") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Seedance 2.0 ${args.image_url ? "image→video" : "text→video"} • ${args.duration || 15}s ${args.resolution || "1080p"}: ${String(args.prompt || "").slice(0, 120)}`,
+                aspect_ratio: args.aspect_ratio || "9:16",
+                quality: "seedance",
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
@@ -2029,6 +2185,21 @@ Deno.serve(async (req) => {
                   userId: userId!,
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
+                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "generate_seedance_video") {
+                const r = await generateSeedanceVideo({
+                  prompt: String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
+                  aspectRatio: args.aspect_ratio || "9:16",
+                  duration: typeof args.duration === "number" ? args.duration : 15,
+                  resolution: args.resolution === "720p" ? "720p" : "1080p",
+                  imageUrl: args.image_url || null,
+                  lastFrameUrl: args.last_frame_url || null,
+                  fast: !!args.fast,
+                  clientId: clientId || null,
+                  conversationId,
+                  userId: userId!,
+                });
+                result = { ok: true, video_url: r.video_url, mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);
