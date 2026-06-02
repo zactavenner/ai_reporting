@@ -1236,6 +1236,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <AIStudioCanvas
               entries={canvas}
               clientId={clientId}
+              onSendMessage={(text) => send(text)}
               initialView={canvasView}
               focusedItemId={focusedItemId}
               onViewChange={(v) => {
