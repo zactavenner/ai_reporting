@@ -1407,6 +1407,24 @@ Deno.serve(async (req) => {
     if (approvedRef?.image_url) defaultReferenceImageUrl = approvedRef.image_url as string;
   }
 
+  // Resolve active VIDEO references — used as style/pacing inspiration
+  // for plan_storyboard and generate_scene_video.
+  let activeVideoRefs: Array<{ name: string; tags: string[]; video_url: string; aspect_ratio: string | null }> = [];
+  const vidRefIds: string[] = Array.isArray(activeVideoReferenceIds) && activeVideoReferenceIds.length
+    ? activeVideoReferenceIds
+    : (Array.isArray((convoRow as any)?.active_video_reference_ids) ? (convoRow as any).active_video_reference_ids as string[] : []);
+  if (vidRefIds.length) {
+    const { data: vrefs } = await supa
+      .from("ai_studio_reference_videos")
+      .select("name, tags, video_url, aspect_ratio")
+      .in("id", vidRefIds)
+      .limit(6);
+    activeVideoRefs = (vrefs || []) as any[];
+  }
+  const videoRefStyleNotes = activeVideoRefs.length
+    ? `\n\nSTYLE INSPIRATION — match the pacing, framing, and energy of these reference videos (do NOT copy them, but emulate their look/feel):\n${activeVideoRefs.map((v, i) => `  ${i + 1}. "${v.name}"${v.aspect_ratio ? ` [${v.aspect_ratio}]` : ""}${v.tags?.length ? ` — tags: ${v.tags.join(", ")}` : ""} → ${v.video_url}`).join("\n")}`
+    : "";
+
   // Load history (since cleared_at, or all)
   const { data: history } = await supa
     .from("ai_studio_messages")
