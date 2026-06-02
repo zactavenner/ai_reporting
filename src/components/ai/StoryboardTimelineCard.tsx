@@ -202,6 +202,61 @@ export function StoryboardTimelineCard({
       </div>
       {brief && <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{brief}</p>}
 
+      {/* Pipeline stages: Composition → Motion → Continuity */}
+      {(() => {
+        const total = scenes.length || 1;
+        const imgCount = Object.keys(sceneMedia.imgs).length;
+        const vidCount = Object.keys(sceneMedia.vids).length;
+        const stage1Done = imgCount >= total;
+        const stage2Done = vidCount >= total;
+        const stage3Done = false; // continuity pass is a manual trigger
+        const Stage = ({
+          icon: Icon, label, sub, done, active, pct,
+        }: { icon: any; label: string; sub: string; done: boolean; active: boolean; pct: number }) => (
+          <div className={`flex-1 rounded-md border px-2 py-1.5 ${done ? "border-emerald-500/40 bg-emerald-500/5" : active ? "border-primary/40 bg-primary/5" : "border-border bg-muted/30"}`}>
+            <div className="flex items-center gap-1.5">
+              <Icon className={`h-3 w-3 ${done ? "text-emerald-500" : active ? "text-primary" : "text-muted-foreground"}`} />
+              <span className="text-[10px] font-semibold uppercase tracking-wide truncate">{label}</span>
+              {done && <Check className="h-3 w-3 text-emerald-500 ml-auto" />}
+            </div>
+            <div className="text-[9px] text-muted-foreground truncate">{sub}</div>
+            <div className="mt-1 h-1 w-full rounded-full bg-border overflow-hidden">
+              <div className={`h-full ${done ? "bg-emerald-500" : "bg-primary"}`} style={{ width: `${Math.round(pct * 100)}%` }} />
+            </div>
+          </div>
+        );
+        return (
+          <div className="flex items-stretch gap-1.5 mb-3">
+            <Stage
+              icon={Layers}
+              label="1. Composition"
+              sub={`${imgCount}/${total} keyframes · fast image model`}
+              done={stage1Done}
+              active={!stage1Done}
+              pct={imgCount / total}
+            />
+            <ArrowRight className="h-3 w-3 text-muted-foreground self-center shrink-0" />
+            <Stage
+              icon={Film}
+              label="2. Generation"
+              sub={`${vidCount}/${total} clips · diffusion transformer`}
+              done={stage2Done}
+              active={stage1Done && !stage2Done}
+              pct={vidCount / total}
+            />
+            <ArrowRight className="h-3 w-3 text-muted-foreground self-center shrink-0" />
+            <Stage
+              icon={Sparkles}
+              label="3. Continuity"
+              sub={stage3Done ? "polished & upscaled" : stage2Done ? "ready to polish" : "waiting for clips"}
+              done={stage3Done}
+              active={stage2Done && !stage3Done}
+              pct={stage3Done ? 1 : 0}
+            />
+          </div>
+        );
+      })()}
+
       {/* Timeline strip */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
         {scenes.map((s, idx) => {
