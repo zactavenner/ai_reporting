@@ -839,7 +839,6 @@ async function generateSceneVideo(opts: {
   return { item: ci.data, video_url: pub.publicUrl, storage_path: path };
 }
 
-// ---------- Tool schema ----------
 // ---------- Seedance 2.0 (OpenRouter) — 15s 1080p text-to-video / image-to-video ----------
 async function generateSeedanceVideo(opts: {
   prompt: string;
