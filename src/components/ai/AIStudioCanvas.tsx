@@ -310,13 +310,19 @@ export function AIStudioCanvas({
         }
         if (e.kind === "scene_video") {
           const p = e.payload || {};
+          const modelLabel = p.model?.includes("seedance")
+            ? (p.model.includes("fast") ? "Seedance 2.0 Fast" : "Seedance 2.0")
+            : (p.model?.includes("veo") ? "Veo 3.1" : (p.model || "Video"));
+          const showSceneBadge = typeof p.scene_order === "number" && !p.model?.includes("seedance");
           return (
             <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Film className="h-4 w-4 text-primary" />
-                <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>
+                {showSceneBadge && <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>}
+                {p.mode && <Badge variant="outline" className="text-[10px] capitalize">{String(p.mode).replace(/_/g, "→")}</Badge>}
                 <Badge variant="secondary" className="text-[10px]">{p.aspect_ratio}</Badge>
-                <Badge variant="secondary" className="text-[10px]">Veo 3.1</Badge>
+                <Badge variant="secondary" className="text-[10px]">{modelLabel}</Badge>
+                {p.resolution && <Badge variant="secondary" className="text-[10px]">{p.resolution}</Badge>}
                 <span className="text-xs text-muted-foreground ml-auto">{p.duration || 5}s</span>
               </div>
               {p.video_url && (
