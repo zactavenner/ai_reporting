@@ -1340,7 +1340,7 @@ Deno.serve(async (req) => {
       .update(baseUpdate)
       .eq("id", requestedConversationId)
       .eq("user_id", userId)
-      .select("id, cleared_at, active_reference_ids, title")
+      .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .maybeSingle();
     convoRow = data;
   }
@@ -1348,7 +1348,7 @@ Deno.serve(async (req) => {
     // Fallback: latest non-archived thread, or insert a new one
     const { data: existing } = await supa
       .from("ai_studio_conversations")
-      .select("id, cleared_at, active_reference_ids, title")
+      .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .eq("client_id", clientId)
       .eq("user_id", userId)
       .is("archived_at", null)
@@ -1368,7 +1368,7 @@ Deno.serve(async (req) => {
       const { data: created } = await supa
         .from("ai_studio_conversations")
         .insert(insertPayload)
-        .select("id, cleared_at, active_reference_ids, title")
+        .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
         .single();
       convoRow = created;
     }
