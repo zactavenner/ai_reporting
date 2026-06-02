@@ -371,9 +371,21 @@ export function LaunchCampaignWizard({ open, onOpenChange, clientId, clientName 
           <DialogTitle className="flex items-center gap-2">
             <Rocket className="h-4 w-4 text-primary" />
             Launch Campaign — Guided · {clientName}
+            {draftRestored && (
+              <Badge variant="secondary" className="text-[10px] ml-2">Draft restored</Badge>
+            )}
           </DialogTitle>
           <DialogDescription>
             Walks through the agency's capital-raising SOP and launches in PAUSED state for review.
+            {draftRestored && (
+              <button
+                type="button"
+                onClick={clearDraft}
+                className="ml-2 text-[11px] underline text-muted-foreground hover:text-foreground"
+              >
+                Start fresh
+              </button>
+            )}
           </DialogDescription>
         </DialogHeader>
 
