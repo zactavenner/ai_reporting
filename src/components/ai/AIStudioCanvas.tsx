@@ -215,6 +215,16 @@ export function AIStudioCanvas({
                         <Wand2 className="h-3.5 w-3.5" />
                       </Button>
                     )}
+                    {onSendMessage && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Animate with Seedance 2.0 (image→video, 15s 1080p)"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          onSendMessage(`Animate this image into a 15-second 1080p cinematic clip using Seedance 2.0 image-to-video. Keep the subject, brand colors, and composition consistent. Add subtle natural camera motion and lighting. image_url: ${p.image_url} aspect_ratio: ${p.aspect_ratio || "1:1"}`);
+                          toast.success("Sending to Seedance 2.0…");
+                        }}>
+                        <Film className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
                       onClick={(ev) => { ev.stopPropagation(); navigator.clipboard.writeText(p.image_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
