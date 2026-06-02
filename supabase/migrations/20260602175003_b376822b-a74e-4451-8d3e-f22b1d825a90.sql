@@ -1,0 +1,1 @@
+ALTER TABLE public.agency_members ADD COLUMN IF NOT EXISTS phone text;
