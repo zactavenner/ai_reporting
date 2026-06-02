@@ -346,6 +346,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
+  const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
   const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number; auto_doc?: { enabled: boolean; chars: number; title?: string | null } } | null>(null);
   const [autoConnectedDoc, setAutoConnectedDoc] = useState(false);
@@ -449,6 +450,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         if (convo.image_quality === "fast" || convo.image_quality === "pro") setQuality(convo.image_quality);
         if (typeof (convo as any).chat_model === "string" && (convo as any).chat_model) setChatModel((convo as any).chat_model);
         if (Array.isArray((convo as any).active_reference_ids)) setActiveReferenceIds((convo as any).active_reference_ids as string[]);
+        if (Array.isArray((convo as any).active_video_reference_ids)) setActiveVideoReferenceIds((convo as any).active_video_reference_ids as string[]);
         setCanvasView({
           zoom: Number((convo as any).canvas_zoom ?? 1) || 1,
           panX: Number((convo as any).canvas_pan_x ?? 0) || 0,
