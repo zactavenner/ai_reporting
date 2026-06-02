@@ -610,21 +610,19 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       ? text + "\n\n" + attSnapshot.map(a => `📎 ${a.name}`).join("\n")
       : text;
     const userMsg: Msg = { role: "user", content: userContent };
-    const placeholder: Msg = { role: "assistant", content: "", tools: [] };
+    const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
-    const assistantIdx = messages.length + 1;
     setInput("");
     setPendingAttachments([]);
     setLoading(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    // ID-based update avoids index drift (history reloads, parallel state updates)
+    // which was the root cause of mid-stream flicker / wrong-message overwrites.
     const updateAssistant = (mut: (m: Msg) => Msg) => {
-      setMessages(curr => {
-        const copy = curr.slice();
-        if (copy[assistantIdx]) copy[assistantIdx] = mut(copy[assistantIdx]);
-        return copy;
-      });
+      setMessages(curr => curr.map(m => (m.id === placeholderId ? mut(m) : m)));
     };
 
     try {
