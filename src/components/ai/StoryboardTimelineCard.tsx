@@ -10,6 +10,7 @@ import {
 import {
   Clapperboard, ChevronUp, ChevronDown, Wand2, Film, Image as ImageIcon,
   Save, Loader2, Play, RotateCw, Trash2, GripVertical, Check, Eye,
+  Layers, Sparkles, Wand, ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
