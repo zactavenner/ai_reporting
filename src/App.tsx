@@ -34,6 +34,7 @@ const SheetsHealthPage = lazyRetry(() => import("./pages/SheetsHealthPage"));
 const ClientProjectsPage = lazyRetry(() => import("./pages/ClientProjectsPage"));
 const ProjectPage = lazyRetry(() => import("./pages/ProjectPage"));
 const OfferDetailPage = lazyRetry(() => import("./pages/OfferDetailPage"));
+const FundAdStudioPage = lazyRetry(() => import("./pages/FundAdStudioPage"));
 
 function PageLoader() {
   return (
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/sheets-health" element={<PasswordGate><SheetsHealthPage /></PasswordGate>} />
             <Route path="/projects" element={<PasswordGate><ClientProjectsPage /></PasswordGate>} />
             <Route path="/projects/:projectId" element={<PasswordGate><ProjectPage /></PasswordGate>} />
+            <Route path="/fundad-studio" element={<PasswordGate><FundAdStudioPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
