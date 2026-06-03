@@ -709,6 +709,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
                 isPublicView={isPublicView}
                  selectedTaskIds={selectedTaskIds}
                  onTaskSelect={handleTaskSelect}
+                 pausedClientIds={pausedClientIds}
               />
             ))}
           </div>
