@@ -26,6 +26,9 @@ Always replace with: "target return", "projected return", "potential income", "h
 
 OUTPUT: Return ONLY valid JSON matching the schema. No prose. No markdown fences.`;
 
+const UGC_REALISM_SUFFIX =
+  'Shot on iPhone 15 Pro, vertical 9:16, 1080p, 30fps, natural handheld micro-shake, real skin texture with visible pores and natural blemishes, no makeup-perfect skin, authentic lighting (window light or golden hour), shallow depth of field, ambient real-world background audio implied, no CGI look, no stock-footage look, no logo overlays, no on-screen text — pure raw user-generated content aesthetic. Subject speaks directly to camera with natural pauses, glances and micro-expressions like a real person filming a casual selfie video.';
+
 function buildUserPrompt(fund: any, frameworks: typeof CREATIVE_FRAMEWORKS, variationMode = false, existingHooks: string[] = []) {
   const variationNote = variationMode
     ? `\n\nIMPORTANT: These are NEW variations. Do NOT repeat any of these previous hooks: ${existingHooks.join(' | ')}`
@@ -59,6 +62,8 @@ Each creative must include:
 - scene_breakdown (array of EXACTLY 3 scenes; each {scene: 1|2|3, duration_seconds, visual, action})
 - captions (array of 3-5 short caption screens; each {text, start_second}; <=8 words each, lower-third style, native creator voice — e.g. "I wasn't expecting these numbers")
 - cta (short, low-friction — e.g. "Tap Learn More", "Comment INVEST", "Link in bio")
+
+Append this exact realism block to the end of every seedance_prompt: "${UGC_REALISM_SUFFIX}"
 
 Return JSON: { "creatives": [ { creative_type, ad_title, hook, script, character_desc, scene_location, seedance_prompt, scene_breakdown, captions, cta } ] }
 
