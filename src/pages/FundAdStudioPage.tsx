@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ export default function FundAdStudioPage() {
   const [loading, setLoading] = useState(false);
   const [variating, setVariating] = useState(false);
   const [renderingId, setRenderingId] = useState<string | null>(null);
+  const [batchRendering, setBatchRendering] = useState(false);
 
   // Load last batch on mount
   useEffect(() => {
@@ -159,6 +161,28 @@ export default function FundAdStudioPage() {
     }
   }
 
+  async function renderAll(fast: boolean) {
+    const targets = creatives.filter((c) => !c.is_variation && !c.video_url);
+    if (!targets.length) {
+      toast({ title: "Nothing to render", description: "All core 5 already have videos." });
+      return;
+    }
+    setBatchRendering(true);
+    setCreatives((prev) =>
+      prev.map((c) => (targets.find((t) => t.id === c.id) ? { ...c, video_status: "generating" } : c)),
+    );
+    toast({ title: `Rendering ${targets.length} videos in parallel...` });
+    await Promise.allSettled(
+      targets.map((t) =>
+        supabase.functions.invoke("fundad-render", {
+          body: { creativeId: t.id, fast, resolution: "1080p" },
+        }),
+      ),
+    );
+    setBatchRendering(false);
+    toast({ title: "Batch render complete" });
+  }
+
   const grouped = useMemo(() => {
     const initial = creatives.filter((c) => !c.is_variation);
     const variations = creatives.filter((c) => c.is_variation);
@@ -216,6 +240,25 @@ export default function FundAdStudioPage() {
                 {variating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                 Generate More Variations
               </Button>
+              <div className="border-t pt-2 mt-1 space-y-2">
+                <Button
+                  onClick={() => renderAll(false)}
+                  disabled={batchRendering || !creatives.length}
+                  className="w-full"
+                  variant="default"
+                >
+                  {batchRendering ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Film className="h-4 w-4 mr-2" />}
+                  Render All 5 (1080p)
+                </Button>
+                <Button
+                  onClick={() => renderAll(true)}
+                  disabled={batchRendering || !creatives.length}
+                  className="w-full"
+                  variant="outline"
+                >
+                  <Video className="h-4 w-4 mr-2" /> Render All — Fast Draft
+                </Button>
+              </div>
             </div>
           </Card>
 
@@ -293,7 +336,7 @@ function CreativeCard({
         </div>
         <div className="flex flex-col gap-2 shrink-0">
           {c.video_url ? (
-            <video src={c.video_url} controls className="w-32 aspect-[9/16] rounded-md bg-black object-cover" />
+            <CaptionedVideo src={c.video_url} captions={captions} className="w-40 aspect-[9/16] rounded-md bg-black overflow-hidden" />
           ) : (
             <div className="w-32 aspect-[9/16] rounded-md bg-muted grid place-items-center text-xs text-muted-foreground">
               {c.video_status === "generating" ? (
@@ -375,6 +418,60 @@ function Section({ title, children, onCopy }: any) {
         )}
       </div>
       {children}
+    </div>
+  );
+}
+
+function CaptionedVideo({
+  src,
+  captions,
+  className,
+}: {
+  src: string;
+  captions: any[];
+  className?: string;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [t, setT] = useState(0);
+  const sorted = useMemo(
+    () => [...(captions || [])].sort((a, b) => (a.start_second ?? 0) - (b.start_second ?? 0)),
+    [captions],
+  );
+  const active = useMemo(() => {
+    let cur: any = null;
+    for (const c of sorted) {
+      if (t >= (c.start_second ?? 0)) cur = c;
+      else break;
+    }
+    return cur;
+  }, [sorted, t]);
+  return (
+    <div className={`relative ${className || ""}`}>
+      <video
+        ref={ref}
+        src={src}
+        controls
+        playsInline
+        onTimeUpdate={(e) => setT((e.target as HTMLVideoElement).currentTime)}
+        className="w-full h-full object-cover"
+      />
+      {active?.text && (
+        <div className="pointer-events-none absolute inset-x-2 bottom-10 flex justify-center">
+          <span
+            className="px-2 py-1 text-[13px] font-bold leading-tight text-white text-center"
+            style={{
+              fontFamily:
+                'system-ui, -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif',
+              textShadow:
+                "0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6), 0 2px 4px rgba(0,0,0,0.8)",
+              letterSpacing: "0.01em",
+              maxWidth: "92%",
+            }}
+          >
+            {active.text}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
