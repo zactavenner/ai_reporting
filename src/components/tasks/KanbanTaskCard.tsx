@@ -33,6 +33,7 @@ interface KanbanTaskCardProps {
   isPublicView?: boolean;
   isSelected?: boolean;
   onSelectChange?: (selected: boolean) => void;
+  isPaused?: boolean;
 }
 
 export function KanbanTaskCard({ 
@@ -46,6 +47,7 @@ export function KanbanTaskCard({
   isPublicView = false,
   isSelected = false,
   onSelectChange,
+  isPaused = false,
 }: KanbanTaskCardProps) {
   const {
     attributes,
@@ -133,7 +135,9 @@ export function KanbanTaskCard({
         // Completed styling
         isCompleted && 'bg-muted/40 border-border/50',
         // Selection styling
-        isSelected && 'ring-2 ring-primary ring-offset-1 ring-offset-background border-primary shadow-md'
+        isSelected && 'ring-2 ring-primary ring-offset-1 ring-offset-background border-primary shadow-md',
+        // Paused client styling — greyed out & desaturated
+        isPaused && 'opacity-50 grayscale bg-muted/30 border-dashed'
       )}
     >
       <div onClick={onClick} className={cn(isCompleted && 'opacity-60')}>
