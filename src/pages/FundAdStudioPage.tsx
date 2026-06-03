@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -417,6 +418,60 @@ function Section({ title, children, onCopy }: any) {
         )}
       </div>
       {children}
+    </div>
+  );
+}
+
+function CaptionedVideo({
+  src,
+  captions,
+  className,
+}: {
+  src: string;
+  captions: any[];
+  className?: string;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [t, setT] = useState(0);
+  const sorted = useMemo(
+    () => [...(captions || [])].sort((a, b) => (a.start_second ?? 0) - (b.start_second ?? 0)),
+    [captions],
+  );
+  const active = useMemo(() => {
+    let cur: any = null;
+    for (const c of sorted) {
+      if (t >= (c.start_second ?? 0)) cur = c;
+      else break;
+    }
+    return cur;
+  }, [sorted, t]);
+  return (
+    <div className={`relative ${className || ""}`}>
+      <video
+        ref={ref}
+        src={src}
+        controls
+        playsInline
+        onTimeUpdate={(e) => setT((e.target as HTMLVideoElement).currentTime)}
+        className="w-full h-full object-cover"
+      />
+      {active?.text && (
+        <div className="pointer-events-none absolute inset-x-2 bottom-10 flex justify-center">
+          <span
+            className="px-2 py-1 text-[13px] font-bold leading-tight text-white text-center"
+            style={{
+              fontFamily:
+                'system-ui, -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif',
+              textShadow:
+                "0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6), 0 2px 4px rgba(0,0,0,0.8)",
+              letterSpacing: "0.01em",
+              maxWidth: "92%",
+            }}
+          >
+            {active.text}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
