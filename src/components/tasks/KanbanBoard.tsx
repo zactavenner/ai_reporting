@@ -264,6 +264,11 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     const effectiveClientId = clientId || (filterClientId && filterClientId !== 'all' ? filterClientId : '');
     if (effectiveClientId) {
       filtered = filtered.filter(t => t.client_id === effectiveClientId);
+    } else {
+      // Global/agency view: hide tasks belonging to paused clients.
+      // When a specific client is being viewed (effectiveClientId set), paused tasks
+      // remain visible but are greyed out on the board via the card styling.
+      filtered = filtered.filter(t => !t.client_id || !pausedClientIds.has(t.client_id));
     }
     
     // Filter by assignee - check both legacy assigned_to AND task_assignees junction table
