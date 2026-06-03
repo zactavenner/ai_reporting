@@ -237,6 +237,18 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     return ids;
   }, [currentMember, allTaskAssignees, agencyMembers]);
 
+  // Direct assignments only — used for "My Tasks" filter (excludes pod-level assignments)
+  const myDirectTaskIds = useMemo(() => {
+    if (!currentMember) return new Set<string>();
+    const ids = new Set<string>();
+    allTaskAssignees.forEach((ta: any) => {
+      if (ta.member_id === currentMember.id) {
+        ids.add(ta.task_id);
+      }
+    });
+    return ids;
+  }, [currentMember, allTaskAssignees]);
+
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -263,9 +275,9 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
           return !hasLegacyAssignee && !hasJunctionAssignee;
         });
       } else if (showMyTasksOnly && currentMember) {
-        // "My Tasks" mode: show tasks assigned to me directly, via pod, or via legacy field
+        // "My Tasks" mode: show tasks assigned to me directly only (not via pod)
         filtered = filtered.filter(t => 
-          t.assigned_to === currentMember.id || myTaskIds.has(t.id)
+          t.assigned_to === currentMember.id || myDirectTaskIds.has(t.id)
         );
       } else {
         // Specific assignee filter: include legacy field, direct junction assignment,
@@ -328,7 +340,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     }
     
     return filtered;
-  }, [tasks, clientId, filterClientId, filterAssigneeId, searchQuery, showCompleted, dueDateFilter, allTaskAssignees, myTaskIds, showMyTasksOnly, currentMember, isPublicView]);
+  }, [tasks, clientId, filterClientId, filterAssigneeId, searchQuery, showCompleted, dueDateFilter, allTaskAssignees, myDirectTaskIds, showMyTasksOnly, currentMember, isPublicView]);
 
   // Group by stage
   const tasksByStage = useMemo(() => {
