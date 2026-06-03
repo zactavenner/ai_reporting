@@ -237,6 +237,18 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     return ids;
   }, [currentMember, allTaskAssignees, agencyMembers]);
 
+  // Direct assignments only — used for "My Tasks" filter (excludes pod-level assignments)
+  const myDirectTaskIds = useMemo(() => {
+    if (!currentMember) return new Set<string>();
+    const ids = new Set<string>();
+    allTaskAssignees.forEach((ta: any) => {
+      if (ta.member_id === currentMember.id) {
+        ids.add(ta.task_id);
+      }
+    });
+    return ids;
+  }, [currentMember, allTaskAssignees]);
+
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
