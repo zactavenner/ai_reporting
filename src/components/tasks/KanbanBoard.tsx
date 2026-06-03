@@ -275,9 +275,9 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
           return !hasLegacyAssignee && !hasJunctionAssignee;
         });
       } else if (showMyTasksOnly && currentMember) {
-        // "My Tasks" mode: show tasks assigned to me directly, via pod, or via legacy field
+        // "My Tasks" mode: show tasks assigned to me directly only (not via pod)
         filtered = filtered.filter(t => 
-          t.assigned_to === currentMember.id || myTaskIds.has(t.id)
+          t.assigned_to === currentMember.id || myDirectTaskIds.has(t.id)
         );
       } else {
         // Specific assignee filter: include legacy field, direct junction assignment,
