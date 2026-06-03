@@ -249,6 +249,16 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     return ids;
   }, [currentMember, allTaskAssignees]);
 
+  // Paused clients — their tasks are hidden from global views and greyed out on
+  // the per-client board.
+  const pausedClientIds = useMemo(() => {
+    const ids = new Set<string>();
+    (clients || []).forEach((c: any) => {
+      if (c?.status === 'paused') ids.add(c.id);
+    });
+    return ids;
+  }, [clients]);
+
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
