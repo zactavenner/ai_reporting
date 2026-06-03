@@ -249,6 +249,16 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     return ids;
   }, [currentMember, allTaskAssignees]);
 
+  // Paused clients — their tasks are hidden from global views and greyed out on
+  // the per-client board.
+  const pausedClientIds = useMemo(() => {
+    const ids = new Set<string>();
+    (clients || []).forEach((c: any) => {
+      if (c?.status === 'paused') ids.add(c.id);
+    });
+    return ids;
+  }, [clients]);
+
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -264,6 +274,11 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     const effectiveClientId = clientId || (filterClientId && filterClientId !== 'all' ? filterClientId : '');
     if (effectiveClientId) {
       filtered = filtered.filter(t => t.client_id === effectiveClientId);
+    } else {
+      // Global/agency view: hide tasks belonging to paused clients.
+      // When a specific client is being viewed (effectiveClientId set), paused tasks
+      // remain visible but are greyed out on the board via the card styling.
+      filtered = filtered.filter(t => !t.client_id || !pausedClientIds.has(t.client_id));
     }
     
     // Filter by assignee - check both legacy assigned_to AND task_assignees junction table
@@ -340,7 +355,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     }
     
     return filtered;
-  }, [tasks, clientId, filterClientId, filterAssigneeId, searchQuery, showCompleted, dueDateFilter, allTaskAssignees, myDirectTaskIds, showMyTasksOnly, currentMember, isPublicView]);
+  }, [tasks, clientId, filterClientId, filterAssigneeId, searchQuery, showCompleted, dueDateFilter, allTaskAssignees, myDirectTaskIds, showMyTasksOnly, currentMember, isPublicView, pausedClientIds]);
 
   // Group by stage
   const tasksByStage = useMemo(() => {
@@ -694,6 +709,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
                 isPublicView={isPublicView}
                  selectedTaskIds={selectedTaskIds}
                  onTaskSelect={handleTaskSelect}
+                 pausedClientIds={pausedClientIds}
               />
             ))}
           </div>
