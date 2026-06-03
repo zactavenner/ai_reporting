@@ -4723,6 +4723,84 @@ export type Database = {
           },
         ]
       }
+      fundad_creatives: {
+        Row: {
+          ad_title: string | null
+          batch_id: string
+          captions: Json | null
+          character_desc: string | null
+          client_id: string | null
+          compliance_disclaimer: string | null
+          created_at: string
+          creative_index: number
+          creative_type: string
+          cta: string | null
+          fund_input: Json
+          fund_name: string
+          hook: string | null
+          id: string
+          is_variation: boolean
+          scene_breakdown: Json | null
+          scene_location: string | null
+          script: string | null
+          seedance_prompt: string | null
+          updated_at: string
+          user_id: string
+          video_status: string | null
+          video_url: string | null
+        }
+        Insert: {
+          ad_title?: string | null
+          batch_id: string
+          captions?: Json | null
+          character_desc?: string | null
+          client_id?: string | null
+          compliance_disclaimer?: string | null
+          created_at?: string
+          creative_index?: number
+          creative_type: string
+          cta?: string | null
+          fund_input?: Json
+          fund_name: string
+          hook?: string | null
+          id?: string
+          is_variation?: boolean
+          scene_breakdown?: Json | null
+          scene_location?: string | null
+          script?: string | null
+          seedance_prompt?: string | null
+          updated_at?: string
+          user_id: string
+          video_status?: string | null
+          video_url?: string | null
+        }
+        Update: {
+          ad_title?: string | null
+          batch_id?: string
+          captions?: Json | null
+          character_desc?: string | null
+          client_id?: string | null
+          compliance_disclaimer?: string | null
+          created_at?: string
+          creative_index?: number
+          creative_type?: string
+          cta?: string | null
+          fund_input?: Json
+          fund_name?: string
+          hook?: string | null
+          id?: string
+          is_variation?: boolean
+          scene_breakdown?: Json | null
+          scene_location?: string | null
+          script?: string | null
+          seedance_prompt?: string | null
+          updated_at?: string
+          user_id?: string
+          video_status?: string | null
+          video_url?: string | null
+        }
+        Relationships: []
+      }
       funded_investors: {
         Row: {
           approval_status: string | null
