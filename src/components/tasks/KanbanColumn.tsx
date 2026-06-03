@@ -20,6 +20,7 @@ interface KanbanColumnProps {
   isPublicView?: boolean;
    selectedTaskIds?: Set<string>;
    onTaskSelect?: (taskId: string, selected: boolean) => void;
+  pausedClientIds?: Set<string>;
 }
 
 export function KanbanColumn({ 
@@ -34,6 +35,7 @@ export function KanbanColumn({
   isPublicView = false,
    selectedTaskIds,
    onTaskSelect,
+  pausedClientIds,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
@@ -102,6 +104,7 @@ export function KanbanColumn({
                   isPublicView={isPublicView}
                    isSelected={selectedTaskIds?.has(task.id) || false}
                    onSelectChange={onTaskSelect ? (selected) => onTaskSelect(task.id, selected) : undefined}
+                  isPaused={!!(task.client_id && pausedClientIds?.has(task.client_id))}
                 />
               ))
             )}
