@@ -56,6 +56,13 @@ export function useAddTaskAssignee() {
         .single();
       
       if (error) throw error;
+      if (memberId) {
+        supabase.functions
+          .invoke('notify-task-assignee', {
+            body: { task_id: taskId, member_id: memberId, kind: 'assigned' },
+          })
+          .catch((e) => console.warn('notify-task-assignee failed', e));
+      }
       return data;
     },
     onSuccess: (_, { taskId }) => {
@@ -116,7 +123,16 @@ export function useSetTaskAssignees() {
         
         if (error) throw error;
       }
-      
+
+      // Notify newly added members (those not already there from previous insert)
+      for (const memberId of memberIds) {
+        supabase.functions
+          .invoke('notify-task-assignee', {
+            body: { task_id: taskId, member_id: memberId, kind: 'assigned' },
+          })
+          .catch((e) => console.warn('notify-task-assignee failed', e));
+      }
+
       return assignees;
     },
     onSuccess: (_, { taskId }) => {
