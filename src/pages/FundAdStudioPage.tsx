@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Sparkles, Video, Copy, RefreshCw, Wand2, Film } from "lucide-react";
+import { Loader2, Sparkles, Video, Copy, RefreshCw, Wand2, Film, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { StudioAssistantChat } from "@/components/ai/StudioAssistantChat";
 
 type Creative = {
   id: string;
@@ -204,6 +205,15 @@ export default function FundAdStudioPage() {
           </div>
         </header>
 
+        <Tabs defaultValue="studio" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="studio"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Ad Studio</TabsTrigger>
+            <TabsTrigger value="assistant"><MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Assistant</TabsTrigger>
+          </TabsList>
+          <TabsContent value="assistant">
+            <StudioAssistantChat />
+          </TabsContent>
+          <TabsContent value="studio">
         <div className="grid lg:grid-cols-[420px_1fr] gap-6">
           {/* INPUT FORM */}
           <Card className="p-5 space-y-4 h-fit sticky top-6">
@@ -290,6 +300,8 @@ export default function FundAdStudioPage() {
             )}
           </div>
         </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
