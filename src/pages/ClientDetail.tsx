@@ -35,6 +35,7 @@ import { AIAnalysisChat } from '@/components/ai/AIAnalysisChat';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { DataAuditSection } from '@/components/dashboard/DataAuditSection';
+import { ClientQuickLinksBar } from '@/components/client/ClientQuickLinksBar';
 
 import { PipelineTab } from '@/components/pipeline/PipelineTab';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
@@ -302,6 +303,7 @@ export default function ClientDetail() {
               isLoading={sheetQuery.isFetching}
               onRefresh={() => sheetQuery.refetch()}
             />
+            <ClientQuickLinksBar client={client} />
             {(client.slug || client.public_token) && (
               <Button
                 variant="outline"
