@@ -23,7 +23,7 @@ const tools = [
     type: 'function',
     function: {
       name: 'query_table',
-      description: 'Read rows from an approved table. Use filters to narrow scope. Always prefer small limits.',
+      description: 'Read rows from an approved table. Use filters to narrow scope. To count rows, pass select="id" with a large limit and read the returned "count". Do NOT use SQL aggregates like COUNT() — they are not supported.',
       parameters: {
         type: 'object',
         properties: {
