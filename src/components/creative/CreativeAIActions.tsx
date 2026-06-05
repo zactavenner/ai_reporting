@@ -25,7 +25,8 @@ import {
   Wand2,
   Trash2,
   Eraser,
-  Layers
+  Layers,
+  PlayCircle
 } from 'lucide-react';
 
 interface CreativeAIActionsProps {
@@ -64,6 +65,12 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
 
   // To-video state
   const [videoBusy, setVideoBusy] = useState(false);
+
+  // Smoke test state
+  type SmokeResult = { name: string; status: 'pending' | 'running' | 'pass' | 'fail' | 'skip'; detail?: string };
+  const [smokeOpen, setSmokeOpen] = useState(false);
+  const [smokeRunning, setSmokeRunning] = useState(false);
+  const [smokeResults, setSmokeResults] = useState<SmokeResult[]>([]);
 
   // Markup canvas refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -414,6 +421,109 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
 
   const isImageCreative = creative.type === 'image' && creative.file_url;
 
+  const runSmokeTest = async () => {
+    setSmokeOpen(true);
+    setSmokeRunning(true);
+    const initial: SmokeResult[] = [
+      { name: 'AI Audit', status: 'pending' },
+      { name: 'AI Edit / Markup', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
+      { name: 'Auto Variations', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
+      { name: 'Image → Video (Veo 3.1 kickoff)', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
+    ];
+    setSmokeResults(initial);
+    const update = (i: number, patch: Partial<SmokeResult>) =>
+      setSmokeResults(prev => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+
+    // 1) AI Audit
+    update(0, { status: 'running' });
+    try {
+      const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
+        body: {
+          action: 'audit',
+          creative: {
+            title: creative.title, type: creative.type, platform: creative.platform,
+            headline: creative.headline, body_copy: creative.body_copy,
+            cta_text: creative.cta_text, file_url: creative.file_url,
+          },
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (!data?.audit) throw new Error('No audit returned');
+      update(0, { status: 'pass', detail: `Audit ${data.audit.length} chars` });
+    } catch (e) {
+      update(0, { status: 'fail', detail: e instanceof Error ? e.message : String(e) });
+    }
+
+    // 2) AI Edit
+    if (isImageCreative) {
+      update(1, { status: 'running' });
+      try {
+        const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
+          body: {
+            action: 'ai_edit',
+            creative: { client_id: creative.client_id, file_url: creative.file_url },
+            imageUrl: creative.file_url,
+            editPrompt: 'Smoke test: subtly enhance lighting. Keep all text identical.',
+            model: EDIT_MODELS[0].id,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+        if (!data?.editedImageUrl) throw new Error('No edited image returned');
+        update(1, { status: 'pass', detail: 'Image returned' });
+      } catch (e) {
+        update(1, { status: 'fail', detail: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    // 3) Auto Variations
+    if (isImageCreative) {
+      update(2, { status: 'running' });
+      try {
+        const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
+          body: {
+            action: 'ai_variations',
+            creative: { client_id: creative.client_id, file_url: creative.file_url },
+            imageUrl: creative.file_url,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+        const count = data?.variations?.length ?? 0;
+        if (!count) throw new Error('No variations returned');
+        update(2, { status: 'pass', detail: `${count} variation(s)` });
+      } catch (e) {
+        update(2, { status: 'fail', detail: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    // 4) Image → Video (kickoff only)
+    if (isImageCreative) {
+      update(3, { status: 'running' });
+      try {
+        const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
+          body: {
+            action: 'to_video',
+            creative: { client_id: creative.client_id, file_url: creative.file_url },
+            imageUrl: creative.file_url,
+            editPrompt: 'Smoke test: subtle background motion, keep all text static.',
+            aspectRatio: creative.aspect_ratio === '1:1' ? '1:1' : creative.aspect_ratio === '16:9' ? '16:9' : '9:16',
+            duration: 5,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+        if (!data?.operationId) throw new Error('No operationId returned (Veo kickoff failed)');
+        update(3, { status: 'pass', detail: `Kickoff OK: ${String(data.operationId).slice(0, 40)}…` });
+      } catch (e) {
+        update(3, { status: 'fail', detail: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    setSmokeRunning(false);
+  };
+
   return (
     <>
       <div className="flex gap-2 flex-wrap">
@@ -526,7 +636,63 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
             Score: {score}/10
           </Button>
         )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={runSmokeTest}
+          disabled={smokeRunning}
+          className="gap-2"
+        >
+          {smokeRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+          {smokeRunning ? 'Running smoke test…' : 'Smoke Test AI Tools'}
+        </Button>
       </div>
+
+      {/* Smoke Test Modal */}
+      <Dialog open={smokeOpen} onOpenChange={setSmokeOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PlayCircle className="h-5 w-5 text-primary" />
+              AI Tools Smoke Test
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {smokeResults.map((r, i) => {
+              const icon =
+                r.status === 'pass' ? <CheckCircle className="h-4 w-4 text-green-500" /> :
+                r.status === 'fail' ? <AlertCircle className="h-4 w-4 text-red-500" /> :
+                r.status === 'running' ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> :
+                r.status === 'skip' ? <AlertCircle className="h-4 w-4 text-muted-foreground" /> :
+                <Loader2 className="h-4 w-4 text-muted-foreground opacity-40" />;
+              return (
+                <div key={i} className="flex items-start gap-3 p-3 border rounded-lg">
+                  <div className="mt-0.5">{icon}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{r.name}</p>
+                      <Badge variant="outline" className="text-[10px] uppercase">{r.status}</Badge>
+                    </div>
+                    {r.detail && (
+                      <p className={`text-xs mt-1 break-words ${r.status === 'fail' ? 'text-red-500' : 'text-muted-foreground'}`}>
+                        {r.detail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {!smokeRunning && smokeResults.length > 0 && (
+              <div className="flex justify-end pt-2">
+                <Button size="sm" variant="outline" onClick={runSmokeTest} className="gap-2">
+                  <PlayCircle className="h-4 w-4" /> Re-run
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Transcript Modal */}
       <Dialog open={transcriptOpen} onOpenChange={setTranscriptOpen}>
