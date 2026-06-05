@@ -748,6 +748,127 @@ Deno.serve(async (req) => {
           const errText = await noteRes.text();
           console.error(`[RetargetIQ] Failed to push GHL note (${noteRes.status}):`, errText.slice(0, 300));
         }
+
+        // ---- Tags ----
+        const tags: string[] = ['enriched'];
+        if (netWorthMid >= 1_000_000) tags.push('networth_1m_plus');
+        if (netWorthMid >= 5_000_000) tags.push('networth_5m_plus');
+        if (incomeMid >= 250_000) tags.push('income_250k_plus');
+        if (incomeMid >= 500_000) tags.push('income_500k_plus');
+        if (accreditedProb === 'high') tags.push('likely_accredited');
+        if (businessOwner) tags.push('business_owner');
+        try {
+          await fetch(`https://services.leadconnectorhq.com/contacts/${external_id}/tags`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-07-28',
+            },
+            body: JSON.stringify({ tags }),
+          });
+          console.log(`[RetargetIQ] ✓ Applied tags to ${external_id}:`, tags.join(','));
+        } catch (tErr) { console.error('[RetargetIQ] tag push failed:', tErr); }
+
+        // ---- Custom fields (auto-create + upsert) ----
+        try {
+          const fieldDefs: { key: string; name: string; dataType: string; value: any }[] = [
+            { key: 'estimated_net_worth', name: 'Estimated Net Worth', dataType: 'MONETORY', value: netWorthMid || null },
+            { key: 'estimated_income', name: 'Estimated Income', dataType: 'MONETORY', value: incomeMid || null },
+            { key: 'home_value', name: 'Home Value', dataType: 'MONETORY', value: homeVal || null },
+            { key: 'home_equity', name: 'Home Equity', dataType: 'MONETORY', value: homeEquity || null },
+            { key: 'investor_score', name: 'Investor Score', dataType: 'NUMERICAL', value: investorScore },
+            { key: 'accredited_probability', name: 'Accredited Probability', dataType: 'TEXT', value: accreditedProb },
+            { key: 'business_owner', name: 'Business Owner', dataType: 'TEXT', value: businessOwner ? 'Yes' : 'No' },
+            { key: 'last_enrichment_date', name: 'Last Enrichment Date', dataType: 'DATE', value: nowIso.split('T')[0] },
+          ];
+
+          const { data: cs } = await supabase
+            .from('client_settings')
+            .select('ghl_custom_field_map')
+            .eq('client_id', client_id)
+            .maybeSingle();
+          const fieldMap: Record<string, string> = ((cs as any)?.ghl_custom_field_map || {}) as any;
+
+          const missing = fieldDefs.filter(f => !fieldMap[f.key]);
+          if (missing.length > 0 && ghlClient.ghl_location_id) {
+            try {
+              const r = await fetch(`https://services.leadconnectorhq.com/locations/${ghlClient.ghl_location_id}/customFields`, {
+                headers: {
+                  'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+                  'Version': '2021-07-28',
+                },
+              });
+              if (r.ok) {
+                const j = await r.json();
+                const existing: any[] = j.customFields || [];
+                for (const f of missing) {
+                  const found = existing.find((e: any) =>
+                    (e.fieldKey || '').toLowerCase().endsWith(f.key.toLowerCase()) ||
+                    (e.name || '').toLowerCase() === f.name.toLowerCase()
+                  );
+                  if (found) {
+                    fieldMap[f.key] = found.id;
+                  } else {
+                    const cr = await fetch(`https://services.leadconnectorhq.com/locations/${ghlClient.ghl_location_id}/customFields`, {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+                        'Content-Type': 'application/json',
+                        'Version': '2021-07-28',
+                      },
+                      body: JSON.stringify({ name: f.name, dataType: f.dataType, placeholder: f.name, model: 'contact' }),
+                    });
+                    if (cr.ok) {
+                      const cj = await cr.json();
+                      if (cj.customField?.id) fieldMap[f.key] = cj.customField.id;
+                    }
+                  }
+                }
+                await supabase
+                  .from('client_settings')
+                  .update({ ghl_custom_field_map: fieldMap })
+                  .eq('client_id', client_id);
+              }
+            } catch (cfErr) { console.error('[RetargetIQ] custom fields discovery failed:', cfErr); }
+          }
+
+          const customFields = fieldDefs
+            .filter(f => f.value != null && f.value !== '' && fieldMap[f.key])
+            .map(f => ({ id: fieldMap[f.key], field_value: f.value }));
+
+          if (customFields.length > 0) {
+            await fetch(`https://services.leadconnectorhq.com/contacts/${external_id}`, {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+                'Content-Type': 'application/json',
+                'Version': '2021-07-28',
+              },
+              body: JSON.stringify({ customFields }),
+            });
+            console.log(`[RetargetIQ] ✓ Wrote ${customFields.length} custom fields to ${external_id}`);
+          }
+        } catch (cfErr) { console.error('[RetargetIQ] custom fields push failed:', cfErr); }
+
+        // ---- History row ----
+        try {
+          await supabase.from('lead_enrichment_history').insert({
+            client_id,
+            lead_id: lead_id || null,
+            external_id,
+            event_type: 'enrichment',
+            changes: {
+              investor_score: investorScore,
+              accredited_probability: accreditedProb,
+              net_worth_midpoint: netWorthMid || null,
+              home_value: homeVal || null,
+              home_equity: homeEquity || null,
+              confidence_score: confidenceScore,
+              methods: merged.methods,
+            },
+          });
+        } catch (hErr) { console.error('[RetargetIQ] history insert failed:', hErr); }
       }
     } catch (ghlErr) {
       console.error('[RetargetIQ] GHL note push error (non-fatal):', ghlErr);
