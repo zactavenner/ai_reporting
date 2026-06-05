@@ -848,6 +848,7 @@ async function generateSeedanceVideo(opts: {
   imageUrl?: string | null;    // optional first-frame for image-to-video
   lastFrameUrl?: string | null;
   fast?: boolean;              // use seedance-2.0-fast
+  model?: string | null;       // explicit OpenRouter model id (overrides `fast`)
   clientId: string | null;
   conversationId: string;
   userId: string;
@@ -855,7 +856,15 @@ async function generateSeedanceVideo(opts: {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  const model = opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0";
+  const ALLOWED = [
+    "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0",
+    "moonshotai/kling-v2.1",
+    "moonshotai/kling-v2.1-pro",
+  ];
+  const model = (opts.model && ALLOWED.includes(opts.model))
+    ? opts.model
+    : (opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0");
   const body: Record<string, unknown> = {
     model,
     prompt: opts.prompt,
