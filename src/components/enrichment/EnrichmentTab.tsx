@@ -351,9 +351,10 @@ export function EnrichmentTab() {
                           variant="outline"
                           disabled={!fullOk || bulkRunning === r.id}
                           onClick={() => runBulkEnrich(r.id, r.name)}
+                          title="Enrich leads created in the last 24 hours"
                         >
                           {bulkRunning === r.id ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <DbIcon className="h-3 w-3 mr-1" />}
-                          Bulk 50
+                          Sync 24h
                         </Button>
                       </div>
                     </TableCell>
