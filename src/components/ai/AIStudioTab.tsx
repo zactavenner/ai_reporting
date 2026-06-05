@@ -50,6 +50,14 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai"; label: string; hint: stri
   { value: "openai", label: "GPT Image 2", hint: "Highest quality finals" },
 ];
 
+// Video models (all routed through OpenRouter /v1/videos)
+const VIDEO_MODELS: { value: string; label: string; hint: string }[] = [
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast", hint: "Cheapest, quick drafts" },
+  { value: "bytedance/seedance-2.0", label: "Seedance Pro", hint: "Best Seedance quality" },
+  { value: "moonshotai/kling-v2.1", label: "Kling 2.1", hint: "Realistic motion" },
+  { value: "moonshotai/kling-v2.1-pro", label: "Kling 2.1 Pro", hint: "Highest quality Kling" },
+];
+
 // Approximate context window per model family (in tokens) for the usage meter.
 function contextLimitFor(model: string): number {
   if (/gemini-2\.5-pro|gemini-3|gemini-2\.5-flash/i.test(model)) return 1_000_000;
