@@ -551,6 +551,38 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
                 </p>
               </div>
             </div>
+
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1">Client Notification Contact</h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Where to email creative previews and SMS task updates. SMS is sent via the agency GoHighLevel account.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="notification-email">Notification Email</Label>
+                  <Input
+                    id="notification-email"
+                    type="email"
+                    value={notificationEmail}
+                    onChange={(e) => setNotificationEmail(e.target.value)}
+                    placeholder="client@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notification-phone">Notification SMS Phone</Label>
+                  <Input
+                    id="notification-phone"
+                    type="tel"
+                    value={notificationPhone}
+                    onChange={(e) => setNotificationPhone(e.target.value)}
+                    placeholder="+15551234567"
+                  />
+                  <p className="text-xs text-muted-foreground">Use E.164 format including country code.</p>
+                </div>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="data" className="space-y-4 mt-4">
