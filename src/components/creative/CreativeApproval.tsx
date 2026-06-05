@@ -28,6 +28,7 @@ import { CreativeHorizontalPreview } from './CreativeHorizontalPreview';
 import { CreativeAIActions } from './CreativeAIActions';
 import { supabase } from '@/integrations/supabase/client';
 import { Json } from '@/integrations/supabase/types';
+import { SendToClientDialog } from '@/components/client/SendToClientDialog';
 import { 
   Upload, 
   Check, 
