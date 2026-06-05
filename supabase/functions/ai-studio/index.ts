@@ -963,7 +963,7 @@ async function generateSeedanceVideo(opts: {
     });
   }
 
-  return { item: ci.data, video_url: storedUrl };
+  return { item: ci.data, video_url: storedUrl, model };
 }
 
 // ---------- Tool schema ----------
