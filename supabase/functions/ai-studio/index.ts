@@ -1676,7 +1676,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
