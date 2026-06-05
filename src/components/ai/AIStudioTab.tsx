@@ -26,7 +26,8 @@ interface Props {
 }
 
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
-type ChatImage = { url: string; aspect_ratio?: string; prompt?: string };
+type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
+type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean };
 
 const CHAT_MODELS = [
@@ -75,15 +76,27 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
   const lq = lqTool?.result;
   // Web search citations
   const wsTools = (m.tools || []).filter((t: any) => t.name === "web_search" && t.result?.sources?.length);
-  // Inline images produced this turn (from generate_static_ad / edit_static_ad / compare_image_models / generate_ad_variations / generate_scene_image)
+  // Inline images + videos produced this turn
   const inlineImages: ChatImage[] = [];
+  const inlineVideos: ChatVideo[] = [];
   for (const t of m.tools || []) {
     if (!t.result || t.result.error) continue;
     const u = t.result.url_for_internal_use_only || t.result.image_url;
-    if (u) inlineImages.push({ url: u, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt });
+    if (u) inlineImages.push({ url: u, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt, toolName: t.name, args: t.args, model: t.result.model });
     if (Array.isArray(t.result.variant_urls_internal)) {
-      for (const vu of t.result.variant_urls_internal) inlineImages.push({ url: vu, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt });
+      for (const vu of t.result.variant_urls_internal) inlineImages.push({ url: vu, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt, toolName: t.name, args: t.args, model: t.result.model });
     }
+    const vu = t.result.video_url;
+    if (vu) inlineVideos.push({
+      url: vu,
+      aspect_ratio: t.result.aspect_ratio || t.args?.aspect_ratio,
+      prompt: t.args?.prompt || t.args?.video_prompt,
+      toolName: t.name,
+      args: t.args,
+      model: t.result.model,
+      duration: t.args?.duration || t.result.duration,
+      resolution: t.args?.resolution || t.result.resolution,
+    });
   }
   return (
     <div className="text-sm text-foreground leading-relaxed">
@@ -162,6 +175,13 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
         <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
           {inlineImages.map((img, idx) => (
             <ChatImagePreview key={idx} image={img} />
+          ))}
+        </div>
+      )}
+      {inlineVideos.length > 0 && (
+        <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
+          {inlineVideos.map((vid, idx) => (
+            <ChatVideoPreview key={idx} video={vid} />
           ))}
         </div>
       )}
@@ -266,6 +286,91 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+async function downloadAsset(url: string, suggestedName: string) {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    const blob = await res.blob();
+    const obj = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = obj;
+    a.download = suggestedName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(obj);
+  } catch {
+    // CORS fallback — open in new tab
+    window.open(url, "_blank");
+  }
+}
+
+function buildRecreatePrompt(asset: { prompt?: string; toolName?: string; args?: any }, kind: "image" | "video"): string {
+  const a = asset.args || {};
+  const lines: string[] = [];
+  lines.push(`Regenerate with same params (edit anything below before sending):`);
+  if (asset.prompt) lines.push(`prompt: ${asset.prompt}`);
+  lines.push(`type: ${kind}`);
+  if (a.model) lines.push(`model: ${a.model}`);
+  if (asset.toolName === "generate_seedance_video") lines.push(`model: ${a.fast ? "seedance-2.0-fast" : "seedance-2.0"}`);
+  if (a.aspect_ratio) lines.push(`aspect_ratio: ${a.aspect_ratio}`);
+  if (a.duration) lines.push(`duration: ${a.duration}s`);
+  if (a.resolution) lines.push(`resolution: ${a.resolution}`);
+  return lines.join("\n");
+}
+
+function PreviewActionBar({
+  url,
+  prompt,
+  filename,
+  recreateText,
+  canvasPayload,
+  canvasKind,
+}: {
+  url: string;
+  prompt?: string;
+  filename: string;
+  recreateText: string;
+  canvasPayload: Record<string, any>;
+  canvasKind: "image" | "scene_video";
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={(e) => { e.stopPropagation(); downloadAsset(url, filename); }}
+        className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-primary text-primary-foreground hover:opacity-90"
+        title="Download"
+      >
+        ⬇ Download
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent("aistudio:set-prompt", { detail: { text: recreateText } }));
+          toast.success("Prompt loaded — edit and resend");
+        }}
+        className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-muted hover:bg-muted/70 text-foreground"
+        title="Load this prompt into the composer to edit and regenerate"
+      >
+        ↻ Recreate
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          window.dispatchEvent(
+            new CustomEvent("aistudio:add-canvas-asset", {
+              detail: { kind: canvasKind, payload: { ...canvasPayload, prompt } },
+            })
+          );
+        }}
+        className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-muted hover:bg-muted/70 text-foreground"
+        title="Pin to canvas"
+      >
+        + Canvas
+      </button>
+    </div>
+  );
+}
+
 function ChatImagePreview({ image }: { image: ChatImage }) {
   const [open, setOpen] = useState(false);
   const onDragStart = (e: React.DragEvent) => {
@@ -279,39 +384,80 @@ function ChatImagePreview({ image }: { image: ChatImage }) {
       e.dataTransfer.effectAllowed = "copyMove";
     } catch {}
   };
-  const useAsReference = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    window.dispatchEvent(new CustomEvent("aistudio:use-image", { detail: { url: image.url, name: `ref-${Date.now()}.png` } }));
-    toast.success("Added to composer as reference");
-  };
-  const editOnCanvas = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    window.dispatchEvent(new CustomEvent("aistudio:edit-image", { detail: { url: image.url, aspect_ratio: image.aspect_ratio || "1:1" } }));
-  };
+  const ext = (image.url.split("?")[0].split(".").pop() || "png").toLowerCase();
+  const filename = `aistudio-${Date.now()}.${ext.length <= 4 ? ext : "png"}`;
   return (
-    <>
+    <div className="shrink-0 snap-start w-56 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
       <div
         draggable
         onDragStart={onDragStart}
         onClick={() => setOpen(true)}
-        className="group relative shrink-0 snap-start h-40 w-40 cursor-grab active:cursor-grabbing overflow-hidden rounded-xl border border-border/60 bg-muted/40 hover:border-primary/40 hover:shadow-md transition"
-        title="Drag onto the composer to use as reference"
+        className="relative h-56 w-56 cursor-zoom-in bg-muted/40"
+        title="Click to expand · drag onto composer to use as reference"
       >
         <img src={image.url} alt={image.prompt || "Generated"} className="h-full w-full object-cover pointer-events-none" loading="lazy" draggable={false} />
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-1.5 py-1.5 opacity-0 group-hover:opacity-100 transition">
-          <button onClick={useAsReference} className="text-[9px] text-white bg-white/15 hover:bg-white/30 rounded px-1.5 py-0.5 backdrop-blur">+ Reference</button>
-          <button onClick={editOnCanvas} className="text-[9px] text-white bg-white/15 hover:bg-white/30 rounded px-1.5 py-0.5 backdrop-blur inline-flex items-center gap-1"><Pencil className="h-2.5 w-2.5" /> Edit</button>
-        </div>
+      </div>
+      <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40">
+        <PreviewActionBar
+          url={image.url}
+          prompt={image.prompt}
+          filename={filename}
+          recreateText={buildRecreatePrompt(image, "image")}
+          canvasPayload={{
+            image_url: image.url,
+            aspect_ratio: image.aspect_ratio || "1:1",
+            model: image.model || image.args?.model,
+            source: "chat_pin",
+          }}
+          canvasKind="image"
+        />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent("aistudio:use-image", { detail: { url: image.url, name: `ref-${Date.now()}.png` } }));
+            toast.success("Added as reference");
+          }}
+          className="text-[10px] px-1.5 py-1 rounded-md hover:bg-muted text-muted-foreground"
+          title="Use as reference"
+        >
+          + Ref
+        </button>
       </div>
       {open && (
-        <div
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm grid place-items-center p-4 cursor-zoom-out"
-        >
+        <div onClick={() => setOpen(false)} className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm grid place-items-center p-4 cursor-zoom-out">
           <img src={image.url} alt={image.prompt || "Generated"} className="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl" />
         </div>
       )}
-    </>
+    </div>
+  );
+}
+
+function ChatVideoPreview({ video }: { video: ChatVideo }) {
+  const filename = `aistudio-${Date.now()}.mp4`;
+  return (
+    <div className="shrink-0 snap-start w-72 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
+      <video src={video.url} controls playsInline className="w-full bg-black aspect-[9/16] object-contain" />
+      <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40">
+        <PreviewActionBar
+          url={video.url}
+          prompt={video.prompt}
+          filename={filename}
+          recreateText={buildRecreatePrompt(video, "video")}
+          canvasPayload={{
+            video_url: video.url,
+            aspect_ratio: video.aspect_ratio || "9:16",
+            duration: video.duration || 15,
+            resolution: video.resolution || "1080p",
+            model: video.model || (video.args?.fast ? "seedance-2.0-fast" : "seedance-2.0"),
+            video_prompt: video.prompt,
+            mode: video.args?.image_url ? "image_to_video" : "text_to_video",
+            source: "chat_pin",
+          }}
+          canvasKind="scene_video"
+        />
+        {video.duration && <span className="text-[10px] text-muted-foreground">{video.duration}s</span>}
+      </div>
+    </div>
   );
 }
 
@@ -802,11 +948,38 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     };
     window.addEventListener("aistudio:use-image", onUse);
     window.addEventListener("aistudio:edit-image", onEdit);
+    const onSetPrompt = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (typeof d.text === "string") setInput(d.text);
+    };
+    const onAddCanvas = async (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (!conversationId || !d.kind || !d.payload) return;
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u?.user?.id;
+        if (!uid) { toast.error("Sign in required"); return; }
+        const { data, error } = await supabase
+          .from("ai_studio_canvas_items")
+          .insert({ conversation_id: conversationId, user_id: uid, kind: d.kind, payload: d.payload })
+          .select()
+          .single();
+        if (error) throw error;
+        setCanvas(curr => [data as CanvasItem, ...curr]);
+        toast.success("Pinned to canvas");
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to pin to canvas");
+      }
+    };
+    window.addEventListener("aistudio:set-prompt", onSetPrompt);
+    window.addEventListener("aistudio:add-canvas-asset", onAddCanvas);
     return () => {
       window.removeEventListener("aistudio:use-image", onUse);
       window.removeEventListener("aistudio:edit-image", onEdit);
+      window.removeEventListener("aistudio:set-prompt", onSetPrompt);
+      window.removeEventListener("aistudio:add-canvas-asset", onAddCanvas);
     };
-  }, [addImageAsReference, inlineEdit]);
+  }, [addImageAsReference, inlineEdit, conversationId]);
 
   return (
     <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-3 h-full min-h-0`}>
