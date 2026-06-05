@@ -412,6 +412,52 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
           completed_at: targetStage.id === 'done' ? new Date().toISOString() : null,
         });
 
+        // When moved into Agency Review: add the client's Account Manager
+        // as an assignee (keep existing assignees) and set due date to next business day.
+        if (targetStage.id === 'agency_review') {
+          try {
+            const client: any = (clients || []).find((c: any) => c.id === task.client_id);
+            const amName: string | null = client?.account_manager || null;
+            const amMember = amName ? agencyMembers.find((m: any) => m.name === amName) : null;
+
+            // Next business day (skip Sat/Sun)
+            const next = new Date();
+            next.setHours(0, 0, 0, 0);
+            next.setDate(next.getDate() + 1);
+            while (next.getDay() === 0 || next.getDay() === 6) {
+              next.setDate(next.getDate() + 1);
+            }
+            const y = next.getFullYear();
+            const m = String(next.getMonth() + 1).padStart(2, '0');
+            const d = String(next.getDate()).padStart(2, '0');
+            const dueStr = `${y}-${m}-${d}`;
+
+            await updateTask.mutateAsync({ id: taskId, due_date: dueStr });
+
+            if (amMember) {
+              const { data: existing } = await supabase
+                .from('task_assignees')
+                .select('member_id')
+                .eq('task_id', taskId);
+              const alreadyAssigned = (existing || []).some((r: any) => r.member_id === amMember.id);
+              if (!alreadyAssigned) {
+                await supabase.from('task_assignees').insert({
+                  task_id: taskId,
+                  member_id: amMember.id,
+                  pod_id: null,
+                });
+                supabase.functions
+                  .invoke('notify-task-assignee', {
+                    body: { task_id: taskId, member_id: amMember.id, kind: 'assigned' },
+                  })
+                  .catch((e) => console.warn('notify-task-assignee failed', e));
+              }
+            }
+          } catch (err) {
+            console.error('Agency Review auto-assign failed:', err);
+          }
+        }
+
         // Fire Slack notification when task moves to review
         if (targetStage.id === 'review' && task.client_id) {
           supabase.functions.invoke('send-task-review-slack', {
