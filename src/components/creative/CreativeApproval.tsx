@@ -1167,7 +1167,28 @@ function CreativeDetailModal({
               Delete
             </Button>
           )}
+          {!isPublicView && (
+            <Button
+              variant="outline"
+              className="ml-auto"
+              onClick={() => setNotifyOpen(true)}
+            >
+              <Send className="h-4 w-4 mr-1" />
+              Notify Client (Email/SMS)
+            </Button>
+          )}
         </div>
+
+        <SendToClientDialog
+          open={notifyOpen}
+          onOpenChange={setNotifyOpen}
+          clientId={clientId}
+          clientName={clientName}
+          defaultSubject={`New creative for review: ${creative.title || ''}`.trim()}
+          defaultMessage={`Hi${clientName ? ` ${clientName}` : ''},\n\nA new creative is ready for your review: "${creative.title || 'Untitled'}".`}
+          previewUrl={creative.file_url || undefined}
+          creativeId={creative.id}
+        />
 
         {/* Version History */}
         <div className="border-t pt-4">
