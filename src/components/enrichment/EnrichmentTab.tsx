@@ -117,13 +117,13 @@ export function EnrichmentTab() {
     setBulkRunning(clientId);
     try {
       const { data, error } = await supabase.functions.invoke('bulk-enrich', {
-        body: { client_id: clientId, limit: 50, offset: 0 },
+        body: { client_id: clientId, limit: 200, offset: 0, since_hours: 24 },
       });
       if (error) throw error;
-      toast.success(`${name}: enriched ${data?.succeeded ?? 0}, failed ${data?.failed ?? 0}`);
+      toast.success(`${name}: synced last 24h — enriched ${data?.succeeded ?? 0}, failed ${data?.failed ?? 0}`);
       refetch();
     } catch (e: any) {
-      toast.error(`Bulk enrich failed: ${e.message}`);
+      toast.error(`Sync last 24h failed: ${e.message}`);
     } finally {
       setBulkRunning(null);
     }
@@ -351,9 +351,10 @@ export function EnrichmentTab() {
                           variant="outline"
                           disabled={!fullOk || bulkRunning === r.id}
                           onClick={() => runBulkEnrich(r.id, r.name)}
+                          title="Enrich leads created in the last 24 hours"
                         >
                           {bulkRunning === r.id ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <DbIcon className="h-3 w-3 mr-1" />}
-                          Bulk 50
+                          Sync 24h
                         </Button>
                       </div>
                     </TableCell>

@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { client_id, limit, offset } = await req.json();
+    const { client_id, limit, offset, since_hours } = await req.json();
     if (!client_id) throw new Error('client_id required');
 
     const supabaseUrl = Deno.env.get('ORIGINAL_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
@@ -24,11 +24,17 @@ serve(async (req) => {
     const batchOffset = offset || 0;
 
     // Get leads
-    const { data: leads, error: leadsErr } = await supabase
+    let query = supabase
       .from('leads')
       .select('id, external_id, name, email, phone')
-      .eq('client_id', client_id)
-      .order('created_at', { ascending: true })
+      .eq('client_id', client_id);
+    if (since_hours && Number(since_hours) > 0) {
+      const sinceIso = new Date(Date.now() - Number(since_hours) * 3600_000).toISOString();
+      query = query.gte('created_at', sinceIso).order('created_at', { ascending: false });
+    } else {
+      query = query.order('created_at', { ascending: true });
+    }
+    const { data: leads, error: leadsErr } = await query
       .range(batchOffset, batchOffset + batchLimit - 1);
 
     if (leadsErr) throw leadsErr;
