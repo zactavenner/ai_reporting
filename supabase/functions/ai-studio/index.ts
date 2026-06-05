@@ -2219,6 +2219,7 @@ Deno.serve(async (req) => {
                   imageUrl: args.image_url || null,
                   lastFrameUrl: args.last_frame_url || null,
                   fast: !!args.fast,
+                  model: (typeof args.model === "string" && args.model) ? args.model : selectedVideoModel,
                   clientId: clientId || null,
                   conversationId,
                   userId: userId!,
