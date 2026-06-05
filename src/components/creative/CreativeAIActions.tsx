@@ -341,12 +341,18 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
     if (!creative.file_url) return;
     setVideoBusy(true);
     try {
+      // Strong default prompt: animate the scene/background only — keep ALL text,
+      // tables, numbers, logos and typography perfectly static and identical.
+      const preserveTextPrompt = (editPrompt && editPrompt.trim().length > 0)
+        ? editPrompt
+        : 'Animate this static ad image with subtle, professional motion in the background and scene elements only (gentle parallax, soft camera push-in, natural ambient motion like light/shadow shifts, equipment, smoke, dust, or environment). CRITICAL: Do NOT modify, animate, warp, redraw, re-render, distort, or change ANY text, headlines, captions, numbers, tables, charts, logos, badges, or typography in any way — keep every word, letter, number and graphic element pixel-identical and perfectly static throughout the entire video. Preserve the exact layout, colors and composition.';
+
       const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
         body: {
           action: 'to_video',
           creative: { client_id: creative.client_id, file_url: creative.file_url },
           imageUrl: creative.file_url,
-          editPrompt,
+          editPrompt: preserveTextPrompt,
           aspectRatio: creative.aspect_ratio === '1:1' ? '1:1' : creative.aspect_ratio === '16:9' ? '16:9' : '9:16',
           duration: 5,
         },
