@@ -948,11 +948,38 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     };
     window.addEventListener("aistudio:use-image", onUse);
     window.addEventListener("aistudio:edit-image", onEdit);
+    const onSetPrompt = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (typeof d.text === "string") setInput(d.text);
+    };
+    const onAddCanvas = async (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (!conversationId || !d.kind || !d.payload) return;
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u?.user?.id;
+        if (!uid) { toast.error("Sign in required"); return; }
+        const { data, error } = await supabase
+          .from("ai_studio_canvas_items")
+          .insert({ conversation_id: conversationId, user_id: uid, kind: d.kind, payload: d.payload })
+          .select()
+          .single();
+        if (error) throw error;
+        setCanvas(curr => [data as CanvasItem, ...curr]);
+        toast.success("Pinned to canvas");
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to pin to canvas");
+      }
+    };
+    window.addEventListener("aistudio:set-prompt", onSetPrompt);
+    window.addEventListener("aistudio:add-canvas-asset", onAddCanvas);
     return () => {
       window.removeEventListener("aistudio:use-image", onUse);
       window.removeEventListener("aistudio:edit-image", onEdit);
+      window.removeEventListener("aistudio:set-prompt", onSetPrompt);
+      window.removeEventListener("aistudio:add-canvas-asset", onAddCanvas);
     };
-  }, [addImageAsReference, inlineEdit]);
+  }, [addImageAsReference, inlineEdit, conversationId]);
 
   return (
     <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-3 h-full min-h-0`}>
