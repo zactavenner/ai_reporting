@@ -371,6 +371,12 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
       if (metaAdAccountId !== ((client as any).meta_ad_account_id || '')) {
         clientUpdates.meta_ad_account_id = metaAdAccountId || null;
       }
+      if (notificationEmail !== ((client as any).notification_email || '')) {
+        clientUpdates.notification_email = notificationEmail.trim() || null;
+      }
+      if (notificationPhone !== ((client as any).notification_phone || '')) {
+        clientUpdates.notification_phone = notificationPhone.trim() || null;
+      }
 
       if (Object.keys(clientUpdates).length > 0) {
         await supabase
