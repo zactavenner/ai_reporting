@@ -2224,7 +2224,7 @@ Deno.serve(async (req) => {
                   conversationId,
                   userId: userId!,
                 });
-                result = { ok: true, video_url: r.video_url, mode: args.image_url ? "image_to_video" : "text_to_video" };
+                result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: args.resolution === "720p" ? "720p" : "1080p", mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);
