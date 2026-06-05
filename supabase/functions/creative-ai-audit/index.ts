@@ -314,9 +314,11 @@ ${creativeDetails}`;
         },
       });
       if (vErr) {
-        return new Response(JSON.stringify({ error: vErr.message || 'Video kickoff failed' }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        console.error('to_video kickoff failed:', vErr);
+        return new Response(
+          JSON.stringify({ error: vErr.message || 'Video kickoff failed', fallback: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
       return new Response(JSON.stringify(vData || {}), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
