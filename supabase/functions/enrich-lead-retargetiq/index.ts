@@ -572,6 +572,33 @@ Deno.serve(async (req) => {
       }, ...spouseIdentities];
     }
 
+    // Derived V2 scores
+    const netWorthMid = Number(dataFields.net_worth_midpoint || 0);
+    const incomeMid = Number(dataFields.household_income_midpoint || 0)
+      || Number(dataFields.median_income || 0);
+    const homeVal = Number(dataFields.home_value || 0);
+    const mortgageVal = Number(dataFields.mortgage_amount || 0);
+    const homeEquity = homeVal && mortgageVal ? Math.max(0, homeVal - mortgageVal) : (homeVal || null);
+
+    // Investor score (0-100)
+    const nwNorm = Math.min(1, netWorthMid / 5_000_000);
+    const incNorm = Math.min(1, incomeMid / 500_000);
+    const accreditedFlag = (netWorthMid >= 1_000_000 || incomeMid >= 200_000) ? 1 : 0;
+    const investmentsFlag = dataFields.owns_investments || dataFields.is_investor || dataFields.owns_stocks_bonds ? 1 : 0;
+    const businessFlag = (identity.companies?.length || merged.companies.length) > 0 ? 1 : 0;
+    const investorScore = Math.round(Math.min(100,
+      (0.35 * nwNorm + 0.25 * incNorm + 0.20 * accreditedFlag + 0.10 * investmentsFlag + 0.10 * businessFlag) * 100
+    ));
+    const accreditedProb = investorScore >= 75 ? 'high' : investorScore >= 50 ? 'medium' : 'low';
+    const businessOwner = businessFlag === 1 && investorScore >= 40;
+
+    // Confidence score
+    const methodBonus = merged.methods.length * 15;
+    const identityBonus = Math.min(30, merged.allIdentities.length * 10);
+    const contactBonus = (identity.phones?.length ? 15 : 0) + (identity.emails?.length ? 15 : 0) + (identity.address ? 10 : 0);
+    const confidenceScore = Math.min(100, methodBonus + identityBonus + contactBonus);
+
+    const nowIso = new Date().toISOString();
     // Build enrichment record — use known contact name if primary doesn't match
     const enrichRecord: any = {
       lead_id: lead_id || null,
@@ -593,7 +620,15 @@ Deno.serve(async (req) => {
       enriched_phones: identity.phones || [],
       enriched_emails: identity.emails || [],
       vehicles: identity.vehicles || [],
-      enriched_at: new Date().toISOString(),
+      enriched_at: nowIso,
+      last_enriched_at: nowIso,
+      enrichment_version: 2,
+      confidence_score: confidenceScore,
+      estimated_income: incomeMid || null,
+      home_equity: homeEquity,
+      investor_score: investorScore,
+      accredited_probability: accreditedProb,
+      business_owner: businessOwner,
       ...dataFields,
       companies: merged.companies.length > 0 ? merged.companies : null,
       spouse_data: spouseIdentities.length > 0 ? spouseIdentities : null,
