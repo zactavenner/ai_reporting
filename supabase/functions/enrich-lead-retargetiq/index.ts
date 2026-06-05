@@ -572,6 +572,33 @@ Deno.serve(async (req) => {
       }, ...spouseIdentities];
     }
 
+    // Derived V2 scores
+    const netWorthMid = Number(dataFields.net_worth_midpoint || 0);
+    const incomeMid = Number(dataFields.household_income_midpoint || 0)
+      || Number(dataFields.median_income || 0);
+    const homeVal = Number(dataFields.home_value || 0);
+    const mortgageVal = Number(dataFields.mortgage_amount || 0);
+    const homeEquity = homeVal && mortgageVal ? Math.max(0, homeVal - mortgageVal) : (homeVal || null);
+
+    // Investor score (0-100)
+    const nwNorm = Math.min(1, netWorthMid / 5_000_000);
+    const incNorm = Math.min(1, incomeMid / 500_000);
+    const accreditedFlag = (netWorthMid >= 1_000_000 || incomeMid >= 200_000) ? 1 : 0;
+    const investmentsFlag = dataFields.owns_investments || dataFields.is_investor || dataFields.owns_stocks_bonds ? 1 : 0;
+    const businessFlag = (identity.companies?.length || merged.companies.length) > 0 ? 1 : 0;
+    const investorScore = Math.round(Math.min(100,
+      (0.35 * nwNorm + 0.25 * incNorm + 0.20 * accreditedFlag + 0.10 * investmentsFlag + 0.10 * businessFlag) * 100
+    ));
+    const accreditedProb = investorScore >= 75 ? 'high' : investorScore >= 50 ? 'medium' : 'low';
+    const businessOwner = businessFlag === 1 && investorScore >= 40;
+
+    // Confidence score
+    const methodBonus = merged.methods.length * 15;
+    const identityBonus = Math.min(30, merged.allIdentities.length * 10);
+    const contactBonus = (identity.phones?.length ? 15 : 0) + (identity.emails?.length ? 15 : 0) + (identity.address ? 10 : 0);
+    const confidenceScore = Math.min(100, methodBonus + identityBonus + contactBonus);
+
+    const nowIso = new Date().toISOString();
     // Build enrichment record — use known contact name if primary doesn't match
     const enrichRecord: any = {
       lead_id: lead_id || null,
@@ -593,7 +620,15 @@ Deno.serve(async (req) => {
       enriched_phones: identity.phones || [],
       enriched_emails: identity.emails || [],
       vehicles: identity.vehicles || [],
-      enriched_at: new Date().toISOString(),
+      enriched_at: nowIso,
+      last_enriched_at: nowIso,
+      enrichment_version: 2,
+      confidence_score: confidenceScore,
+      estimated_income: incomeMid || null,
+      home_equity: homeEquity,
+      investor_score: investorScore,
+      accredited_probability: accreditedProb,
+      business_owner: businessOwner,
       ...dataFields,
       companies: merged.companies.length > 0 ? merged.companies : null,
       spouse_data: spouseIdentities.length > 0 ? spouseIdentities : null,
@@ -680,45 +715,20 @@ Deno.serve(async (req) => {
         };
 
         const lines: string[] = [];
-        lines.push('📊 RETARGETIQ ENRICHMENT');
-        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('💎 FINANCIAL SNAPSHOT');
         lines.push('');
-        lines.push('💰 FINANCIAL PROFILE');
-        if (dataFields.net_worth)          lines.push(`  • Net Worth:          ${dataFields.net_worth}`);
-        if (dataFields.household_income)   lines.push(`  • Household Income:   ${dataFields.household_income}`);
-        if (dataFields.discretionary_income) lines.push(`  • Discretionary Inc:  ${dataFields.discretionary_income}`);
-        if (dataFields.financial_power != null) lines.push(`  • Financial Power:    ${dataFields.financial_power}`);
-        if (dataFields.credit_range)       lines.push(`  • Credit Range:       ${dataFields.credit_range}`);
-        if (dataFields.is_investor)        lines.push(`  • Active Investor:    Yes`);
-        if (dataFields.owns_stocks_bonds)  lines.push(`  • Owns Stocks/Bonds:  Yes`);
-        if (dataFields.owns_investments)   lines.push(`  • Owns Investments:   Yes`);
+        if (netWorthMid) lines.push(`• Estimated Net Worth: ${fmtMoney(netWorthMid)}`);
+        else if (dataFields.net_worth) lines.push(`• Estimated Net Worth: ${dataFields.net_worth}`);
+        if (incomeMid) lines.push(`• Estimated Household Income: ${fmtMoney(incomeMid)}`);
+        else if (dataFields.household_income) lines.push(`• Estimated Household Income: ${dataFields.household_income}`);
+        if (homeVal) lines.push(`• Primary Residence Value: ${fmtMoney(homeVal)}`);
+        if (homeEquity) lines.push(`• Estimated Home Equity: ${fmtMoney(homeEquity)}`);
+        lines.push(`• Accredited Investor Probability: ${accreditedProb.charAt(0).toUpperCase() + accreditedProb.slice(1)}`);
+        lines.push(`• Investor Profile Score: ${investorScore}/100`);
+        lines.push(`• Business Ownership: ${businessOwner ? 'Likely' : 'Unknown'}`);
         lines.push('');
-        lines.push('🏡 PROPERTY & HOME');
-        if (dataFields.home_ownership)     lines.push(`  • Ownership:          ${dataFields.home_ownership}`);
-        if (dataFields.home_value)         lines.push(`  • Home Value:         ${fmtMoney(dataFields.home_value)}`);
-        if (dataFields.median_home_value)  lines.push(`  • Median Home Value:  ${fmtMoney(dataFields.median_home_value)}`);
-        if (dataFields.mortgage_amount)    lines.push(`  • Mortgage:           ${fmtMoney(dataFields.mortgage_amount)}`);
-        if (er.address)                    lines.push(`  • Address:            ${er.address}`);
-        lines.push('');
-        lines.push('👤 DEMOGRAPHICS');
-        if (dataFields.age)                lines.push(`  • Age:                ${dataFields.age}`);
-        if (er.gender)                     lines.push(`  • Gender:             ${er.gender}`);
-        if (dataFields.marital_status)     lines.push(`  • Marital Status:     ${dataFields.marital_status}`);
-        if (dataFields.education)          lines.push(`  • Education:          ${dataFields.education}`);
-        if (dataFields.occupation)         lines.push(`  • Occupation:         ${dataFields.occupation}`);
-        if (er.company_name)               lines.push(`  • Company:            ${er.company_name}${er.company_title ? ` (${er.company_title})` : ''}`);
-        if (er.linkedin_url)               lines.push(`  • LinkedIn:           ${er.linkedin_url}`);
-        if (spouseIdentities.length > 0) {
-          lines.push('');
-          lines.push('👥 HOUSEHOLD');
-          for (const sp of spouseIdentities) {
-            const nm = `${sp.firstName || ''} ${sp.lastName || ''}`.trim() || '(unnamed)';
-            lines.push(`  • ${nm}${sp.occupation ? ` — ${sp.occupation}` : ''}`);
-          }
-        }
-        lines.push('');
-        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━');
-        lines.push(`Enriched ${new Date().toLocaleDateString()} via ${merged.methods.join('+')} (${merged.allIdentities.length} identities)`);
+        lines.push(`Last Updated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`);
+        lines.push('Generated by RetargetIQ');
 
         const noteBody = lines.join('\n');
 
@@ -738,6 +748,127 @@ Deno.serve(async (req) => {
           const errText = await noteRes.text();
           console.error(`[RetargetIQ] Failed to push GHL note (${noteRes.status}):`, errText.slice(0, 300));
         }
+
+        // ---- Tags ----
+        const tags: string[] = ['enriched'];
+        if (netWorthMid >= 1_000_000) tags.push('networth_1m_plus');
+        if (netWorthMid >= 5_000_000) tags.push('networth_5m_plus');
+        if (incomeMid >= 250_000) tags.push('income_250k_plus');
+        if (incomeMid >= 500_000) tags.push('income_500k_plus');
+        if (accreditedProb === 'high') tags.push('likely_accredited');
+        if (businessOwner) tags.push('business_owner');
+        try {
+          await fetch(`https://services.leadconnectorhq.com/contacts/${external_id}/tags`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-07-28',
+            },
+            body: JSON.stringify({ tags }),
+          });
+          console.log(`[RetargetIQ] ✓ Applied tags to ${external_id}:`, tags.join(','));
+        } catch (tErr) { console.error('[RetargetIQ] tag push failed:', tErr); }
+
+        // ---- Custom fields (auto-create + upsert) ----
+        try {
+          const fieldDefs: { key: string; name: string; dataType: string; value: any }[] = [
+            { key: 'estimated_net_worth', name: 'Estimated Net Worth', dataType: 'MONETORY', value: netWorthMid || null },
+            { key: 'estimated_income', name: 'Estimated Income', dataType: 'MONETORY', value: incomeMid || null },
+            { key: 'home_value', name: 'Home Value', dataType: 'MONETORY', value: homeVal || null },
+            { key: 'home_equity', name: 'Home Equity', dataType: 'MONETORY', value: homeEquity || null },
+            { key: 'investor_score', name: 'Investor Score', dataType: 'NUMERICAL', value: investorScore },
+            { key: 'accredited_probability', name: 'Accredited Probability', dataType: 'TEXT', value: accreditedProb },
+            { key: 'business_owner', name: 'Business Owner', dataType: 'TEXT', value: businessOwner ? 'Yes' : 'No' },
+            { key: 'last_enrichment_date', name: 'Last Enrichment Date', dataType: 'DATE', value: nowIso.split('T')[0] },
+          ];
+
+          const { data: cs } = await supabase
+            .from('client_settings')
+            .select('ghl_custom_field_map')
+            .eq('client_id', client_id)
+            .maybeSingle();
+          const fieldMap: Record<string, string> = ((cs as any)?.ghl_custom_field_map || {}) as any;
+
+          const missing = fieldDefs.filter(f => !fieldMap[f.key]);
+          if (missing.length > 0 && ghlClient.ghl_location_id) {
+            try {
+              const r = await fetch(`https://services.leadconnectorhq.com/locations/${ghlClient.ghl_location_id}/customFields`, {
+                headers: {
+                  'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+                  'Version': '2021-07-28',
+                },
+              });
+              if (r.ok) {
+                const j = await r.json();
+                const existing: any[] = j.customFields || [];
+                for (const f of missing) {
+                  const found = existing.find((e: any) =>
+                    (e.fieldKey || '').toLowerCase().endsWith(f.key.toLowerCase()) ||
+                    (e.name || '').toLowerCase() === f.name.toLowerCase()
+                  );
+                  if (found) {
+                    fieldMap[f.key] = found.id;
+                  } else {
+                    const cr = await fetch(`https://services.leadconnectorhq.com/locations/${ghlClient.ghl_location_id}/customFields`, {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+                        'Content-Type': 'application/json',
+                        'Version': '2021-07-28',
+                      },
+                      body: JSON.stringify({ name: f.name, dataType: f.dataType, placeholder: f.name, model: 'contact' }),
+                    });
+                    if (cr.ok) {
+                      const cj = await cr.json();
+                      if (cj.customField?.id) fieldMap[f.key] = cj.customField.id;
+                    }
+                  }
+                }
+                await supabase
+                  .from('client_settings')
+                  .update({ ghl_custom_field_map: fieldMap })
+                  .eq('client_id', client_id);
+              }
+            } catch (cfErr) { console.error('[RetargetIQ] custom fields discovery failed:', cfErr); }
+          }
+
+          const customFields = fieldDefs
+            .filter(f => f.value != null && f.value !== '' && fieldMap[f.key])
+            .map(f => ({ id: fieldMap[f.key], field_value: f.value }));
+
+          if (customFields.length > 0) {
+            await fetch(`https://services.leadconnectorhq.com/contacts/${external_id}`, {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${ghlClient.ghl_api_key}`,
+                'Content-Type': 'application/json',
+                'Version': '2021-07-28',
+              },
+              body: JSON.stringify({ customFields }),
+            });
+            console.log(`[RetargetIQ] ✓ Wrote ${customFields.length} custom fields to ${external_id}`);
+          }
+        } catch (cfErr) { console.error('[RetargetIQ] custom fields push failed:', cfErr); }
+
+        // ---- History row ----
+        try {
+          await supabase.from('lead_enrichment_history').insert({
+            client_id,
+            lead_id: lead_id || null,
+            external_id,
+            event_type: 'enrichment',
+            changes: {
+              investor_score: investorScore,
+              accredited_probability: accreditedProb,
+              net_worth_midpoint: netWorthMid || null,
+              home_value: homeVal || null,
+              home_equity: homeEquity || null,
+              confidence_score: confidenceScore,
+              methods: merged.methods,
+            },
+          });
+        } catch (hErr) { console.error('[RetargetIQ] history insert failed:', hErr); }
       }
     } catch (ghlErr) {
       console.error('[RetargetIQ] GHL note push error (non-fatal):', ghlErr);
