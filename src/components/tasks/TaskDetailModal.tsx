@@ -928,6 +928,19 @@ export function TaskDetailModal({ task, open, onOpenChange, clientName, clientId
           onSuccess={() => setSelectedFileForCreative(null)}
         />
       )}
+
+      {/* Notify Client (Email + SMS) Modal */}
+      {resolvedClientId && task && (
+        <SendToClientDialog
+          open={notifyClientOpen}
+          onOpenChange={setNotifyClientOpen}
+          clientId={resolvedClientId}
+          clientName={clientName}
+          defaultSubject={`Task update: ${task.title}`}
+          defaultMessage={`Hi${clientName ? ` ${clientName}` : ''},\n\nQuick update on your task: "${task.title}".${task.description ? `\n\n${task.description}` : ''}`}
+          taskId={task.id}
+        />
+      )}
     </>
   );
 }
