@@ -94,10 +94,14 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
   // General client fields (name, slug)
   const [clientName, setClientName] = useState('');
   const [clientSlug, setClientSlug] = useState('');
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [notificationPhone, setNotificationPhone] = useState('');
   useEffect(() => {
     if (client) {
       setClientName(client.name || '');
       setClientSlug((client as any).slug || '');
+      setNotificationEmail((client as any).notification_email || '');
+      setNotificationPhone((client as any).notification_phone || '');
     }
   }, [client]);
   
