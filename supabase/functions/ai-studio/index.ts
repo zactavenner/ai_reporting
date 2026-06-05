@@ -1268,6 +1268,16 @@ Deno.serve(async (req) => {
     ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
     : [];
 
+  const ALLOWED_VIDEO_MODELS = [
+    "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0",
+    "moonshotai/kling-v2.1",
+    "moonshotai/kling-v2.1-pro",
+  ];
+  const selectedVideoModel = (typeof videoModel === "string" && ALLOWED_VIDEO_MODELS.includes(videoModel))
+    ? videoModel
+    : "bytedance/seedance-2.0-fast";
+
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
 
   // Route chat completions through OpenRouter when the model id is prefixed
