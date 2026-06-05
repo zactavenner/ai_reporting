@@ -499,7 +499,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
-  const [videoModel, setVideoModel] = useState<string>("bytedance/seedance-2.0-fast");
+  const [videoModel, setVideoModel] = useState<string>(() => {
+    try { return localStorage.getItem("ai-studio:video-model") || "bytedance/seedance-2.0-fast"; }
+    catch { return "bytedance/seedance-2.0-fast"; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:video-model", videoModel); } catch {} }, [videoModel]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
