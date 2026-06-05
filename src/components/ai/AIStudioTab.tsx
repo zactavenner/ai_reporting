@@ -178,6 +178,13 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
           ))}
         </div>
       )}
+      {inlineVideos.length > 0 && (
+        <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
+          {inlineVideos.map((vid, idx) => (
+            <ChatVideoPreview key={idx} video={vid} />
+          ))}
+        </div>
+      )}
       {wsTools.length > 0 && (
         <div className="mt-3 space-y-2">
           {wsTools.map((t: any, i: number) => (
