@@ -140,18 +140,46 @@ Deno.serve(async (req) => {
 
     const clientName = (task as any).clients?.name || 'No client';
     const taskUrl = `${APP_URL}/?task=${task.id}`;
-    const dueStr = task.due_date
-      ? new Date(task.due_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-      : 'No due date';
+
+    let dueStr = 'No due date';
+    let daysUntilStr = '';
+    if (task.due_date) {
+      const due = new Date(task.due_date);
+      dueStr = due.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueMid = new Date(due);
+      dueMid.setHours(0, 0, 0, 0);
+      const days = Math.round((dueMid.getTime() - today.getTime()) / msPerDay);
+      if (days === 0) daysUntilStr = 'today';
+      else if (days === 1) daysUntilStr = 'tomorrow';
+      else if (days === -1) daysUntilStr = '1 day overdue';
+      else if (days < 0) daysUntilStr = `${Math.abs(days)} days overdue`;
+      else daysUntilStr = `in ${days} days`;
+    }
+
+    const descSnippet = task.description
+      ? String(task.description).replace(/\s+/g, ' ').trim().slice(0, 200)
+      : '';
 
     const heading =
       kind === 'assigned'
         ? `New task assigned: ${task.title}`
         : `Task due today: ${task.title}`;
-    const smsBody =
-      kind === 'assigned'
-        ? `📋 ${heading}\nClient: ${clientName}\nDue: ${dueStr}\n${taskUrl}`
-        : `⏰ ${heading}\nClient: ${clientName}\n${taskUrl}`;
+
+    const icon = kind === 'assigned' ? '📋' : '⏰';
+    const dueLine = task.due_date
+      ? `Due: ${dueStr}${daysUntilStr ? ` (${daysUntilStr})` : ''}`
+      : 'Due: —';
+    const smsLines = [
+      `${icon} ${heading}`,
+      `Client: ${clientName}`,
+      dueLine,
+    ];
+    if (descSnippet) smsLines.push(`Details: ${descSnippet}`);
+    smsLines.push(`Open: ${taskUrl}`);
+    const smsBody = smsLines.join('\n');
 
     const emailSubject = `[${clientName}] ${heading}`;
     const emailHtml = `
