@@ -848,6 +848,7 @@ async function generateSeedanceVideo(opts: {
   imageUrl?: string | null;    // optional first-frame for image-to-video
   lastFrameUrl?: string | null;
   fast?: boolean;              // use seedance-2.0-fast
+  model?: string | null;       // explicit OpenRouter model id (overrides `fast`)
   clientId: string | null;
   conversationId: string;
   userId: string;
@@ -855,7 +856,15 @@ async function generateSeedanceVideo(opts: {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  const model = opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0";
+  const ALLOWED = [
+    "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0",
+    "moonshotai/kling-v2.1",
+    "moonshotai/kling-v2.1-pro",
+  ];
+  const model = (opts.model && ALLOWED.includes(opts.model))
+    ? opts.model
+    : (opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0");
   const body: Record<string, unknown> = {
     model,
     prompt: opts.prompt,
@@ -954,7 +963,7 @@ async function generateSeedanceVideo(opts: {
     });
   }
 
-  return { item: ci.data, video_url: storedUrl };
+  return { item: ci.data, video_url: storedUrl, model };
 }
 
 // ---------- Tool schema ----------
@@ -1116,6 +1125,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality). Default false." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "moonshotai/kling-v2.1", "moonshotai/kling-v2.1-pro"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
@@ -1145,7 +1155,7 @@ const tools = [
   },
 ];
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[] }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
@@ -1200,6 +1210,9 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   (ctx.imageModels && ctx.imageModels.length > 1)
     ? `IMAGE MODEL PREFERENCE: The user selected MULTIPLE image models [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] for side-by-side outputs. For ANY new ad generation request, call compare_image_models with models: [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] so the user gets one variant per selected model on the canvas.`
     : null,
+  ctx.videoModel
+    ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance or Kling, depending on the chosen model id).`
+    : null,
   ctx.brandSummary,
   "BRAND LOCK: Always respect the client's brand colors and fonts from Company Info. Do NOT invent new palettes or fonts. When calling generate_static_ad / edit_static_ad / generate_scene_image, the server already injects strict brand adherence from the client record — never override brand colors with arbitrary hexes unless the user explicitly says so.",
   ctx.docId ? `Active Google Doc: ${ctx.docUrl} (id ${ctx.docId})` : "No active Google Doc.",
@@ -1247,11 +1260,12 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
+    videoModel?: string | null;
     activeReferenceIds?: string[] | null;
     activeVideoReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
@@ -1266,6 +1280,16 @@ Deno.serve(async (req) => {
   const selectedImageModels = Array.isArray(imageModels)
     ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
     : [];
+
+  const ALLOWED_VIDEO_MODELS = [
+    "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0",
+    "moonshotai/kling-v2.1",
+    "moonshotai/kling-v2.1-pro",
+  ];
+  const selectedVideoModel = (typeof videoModel === "string" && ALLOWED_VIDEO_MODELS.includes(videoModel))
+    ? videoModel
+    : "bytedance/seedance-2.0-fast";
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
 
@@ -1662,7 +1686,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
@@ -2195,11 +2219,12 @@ Deno.serve(async (req) => {
                   imageUrl: args.image_url || null,
                   lastFrameUrl: args.last_frame_url || null,
                   fast: !!args.fast,
+                  model: (typeof args.model === "string" && args.model) ? args.model : selectedVideoModel,
                   clientId: clientId || null,
                   conversationId,
                   userId: userId!,
                 });
-                result = { ok: true, video_url: r.video_url, mode: args.image_url ? "image_to_video" : "text_to_video" };
+                result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: args.resolution === "720p" ? "720p" : "1080p", mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);

@@ -50,6 +50,14 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai"; label: string; hint: stri
   { value: "openai", label: "GPT Image 2", hint: "Highest quality finals" },
 ];
 
+// Video models (all routed through OpenRouter /v1/videos)
+const VIDEO_MODELS: { value: string; label: string; hint: string }[] = [
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast", hint: "Cheapest, quick drafts" },
+  { value: "bytedance/seedance-2.0", label: "Seedance Pro", hint: "Best Seedance quality" },
+  { value: "moonshotai/kling-v2.1", label: "Kling 2.1", hint: "Realistic motion" },
+  { value: "moonshotai/kling-v2.1-pro", label: "Kling 2.1 Pro", hint: "Highest quality Kling" },
+];
+
 // Approximate context window per model family (in tokens) for the usage meter.
 function contextLimitFor(model: string): number {
   if (/gemini-2\.5-pro|gemini-3|gemini-2\.5-flash/i.test(model)) return 1_000_000;
@@ -491,6 +499,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
+  const [videoModel, setVideoModel] = useState<string>(() => {
+    try { return localStorage.getItem("ai-studio:video-model") || "bytedance/seedance-2.0-fast"; }
+    catch { return "bytedance/seedance-2.0-fast"; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:video-model", videoModel); } catch {} }, [videoModel]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
@@ -783,6 +796,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel,
         imageModels,
+        videoModel,
         activeReferenceIds,
         activeVideoReferenceIds,
         autoDocContext,
@@ -1339,6 +1353,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   {imageModels.length > 1 && (
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{imageModels.length}</Badge>
                   )}
+                </div>
+                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
+                  <Select value={videoModel} onValueChange={setVideoModel}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VIDEO_MODELS.map(m => (
+                        <SelectItem key={m.value} value={m.value} className="text-xs">
+                          {m.label}<span className="text-muted-foreground ml-1">— {m.hint}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="absolute bottom-2 right-2">
