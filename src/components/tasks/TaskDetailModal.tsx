@@ -67,6 +67,7 @@ import { FilePreviewLightbox, FileThumbnail, MiniThumbnail } from './FilePreview
 import { InlineFilePreview } from './InlineFilePreview';
 import { SendToCreativeModal } from './SendToCreativeModal';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
+import { SendToClientDialog } from '@/components/client/SendToClientDialog';
 
 interface TaskDetailModalProps {
   task: Task | null;
