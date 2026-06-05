@@ -976,6 +976,7 @@ function CreativeDetailModal({
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string } | null>(null);
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionText, setRevisionText] = useState('');
+  const [notifyOpen, setNotifyOpen] = useState(false);
 
   const submitRevision = () => {
     if (!revisionText.trim()) {
