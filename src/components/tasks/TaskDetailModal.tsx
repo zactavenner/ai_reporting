@@ -67,6 +67,7 @@ import { FilePreviewLightbox, FileThumbnail, MiniThumbnail } from './FilePreview
 import { InlineFilePreview } from './InlineFilePreview';
 import { SendToCreativeModal } from './SendToCreativeModal';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
+import { SendToClientDialog } from '@/components/client/SendToClientDialog';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -123,6 +124,8 @@ export function TaskDetailModal({ task, open, onOpenChange, clientName, clientId
   
   // Send to Creative modal state
   const [sendToCreativeOpen, setSendToCreativeOpen] = useState(false);
+  // Send to Client (Email/SMS) modal state
+  const [notifyClientOpen, setNotifyClientOpen] = useState(false);
   const [selectedFileForCreative, setSelectedFileForCreative] = useState<TaskFile | null>(null);
   
   const [dueDatePopoverOpen, setDueDatePopoverOpen] = useState(false);
@@ -511,6 +514,16 @@ export function TaskDetailModal({ task, open, onOpenChange, clientName, clientId
                   <Trash2 className="h-4 w-4" />
                 )}
               </Button>
+              {resolvedClientId && !isPublicView && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setNotifyClientOpen(true)}
+                >
+                  <Send className="h-4 w-4 mr-1" />
+                  Notify Client
+                </Button>
+              )}
             </div>
             
             {/* MeetGeek Reference Link */}
@@ -913,6 +926,19 @@ export function TaskDetailModal({ task, open, onOpenChange, clientName, clientId
           open={sendToCreativeOpen}
           onOpenChange={setSendToCreativeOpen}
           onSuccess={() => setSelectedFileForCreative(null)}
+        />
+      )}
+
+      {/* Notify Client (Email + SMS) Modal */}
+      {resolvedClientId && task && (
+        <SendToClientDialog
+          open={notifyClientOpen}
+          onOpenChange={setNotifyClientOpen}
+          clientId={resolvedClientId}
+          clientName={clientName}
+          defaultSubject={`Task update: ${task.title}`}
+          defaultMessage={`Hi${clientName ? ` ${clientName}` : ''},\n\nQuick update on your task: "${task.title}".${task.description ? `\n\n${task.description}` : ''}`}
+          taskId={task.id}
         />
       )}
     </>

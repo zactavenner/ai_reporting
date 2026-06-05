@@ -3605,6 +3605,8 @@ export type Database = {
           meta_ad_account_id: string | null
           meta_ad_account_ids: string[] | null
           name: string
+          notification_email: string | null
+          notification_phone: string | null
           offer_description: string | null
           product_images: Json | null
           product_url: string | null
@@ -3650,6 +3652,8 @@ export type Database = {
           meta_ad_account_id?: string | null
           meta_ad_account_ids?: string[] | null
           name: string
+          notification_email?: string | null
+          notification_phone?: string | null
           offer_description?: string | null
           product_images?: Json | null
           product_url?: string | null
@@ -3695,6 +3699,8 @@ export type Database = {
           meta_ad_account_id?: string | null
           meta_ad_account_ids?: string[] | null
           name?: string
+          notification_email?: string | null
+          notification_phone?: string | null
           offer_description?: string | null
           product_images?: Json | null
           product_url?: string | null
