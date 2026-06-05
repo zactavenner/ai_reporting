@@ -1247,11 +1247,12 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
+    videoModel?: string | null;
     activeReferenceIds?: string[] | null;
     activeVideoReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
