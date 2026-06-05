@@ -91,6 +91,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ad_iterations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "ad_iterations_creative_id_fkey"
             columns: ["creative_id"]
             isOneToOne: false
@@ -270,6 +277,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ad_spend_reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       ad_styles: {
@@ -332,6 +346,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_styles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -431,6 +452,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_meetings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -711,6 +739,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "agent_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       agent_tasks: {
@@ -848,6 +883,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -1121,6 +1163,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ai_studio_reference_images_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       ai_studio_reference_videos: {
@@ -1187,6 +1236,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ai_studio_reference_videos_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       alert_configs: {
@@ -1237,6 +1293,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_configs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -1328,6 +1391,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "api_usage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       apify_settings: {
@@ -1387,6 +1457,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apify_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -1615,6 +1692,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "avatars_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       batch_jobs: {
@@ -1677,6 +1761,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -1766,6 +1857,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "browser_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "browser_tasks_fulfillment_run_id_fkey"
             columns: ["fulfillment_run_id"]
             isOneToOne: false
@@ -1823,6 +1921,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "calendar_mappings_funnel_id_fkey"
@@ -1914,6 +2019,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_analysis_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -2018,6 +2130,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "calls_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -2065,6 +2184,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -2141,6 +2267,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_ad_assignments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "client_ad_assignments_creative_id_fkey"
             columns: ["creative_id"]
             isOneToOne: false
@@ -2197,6 +2330,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "client_assets_offer_id_fkey"
@@ -2313,6 +2453,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_custom_tabs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_decisions: {
@@ -2411,6 +2558,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_file_uploads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "client_file_uploads_folder_id_fkey"
@@ -2515,6 +2669,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_funnel_steps_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_live_ads: {
@@ -2618,6 +2779,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_live_ads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_offer_files: {
@@ -2671,6 +2839,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_offer_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "client_offer_files_offer_id_fkey"
@@ -2835,6 +3010,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_offers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_onboarding_tasks: {
@@ -2886,6 +3068,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_onboarding_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_pipelines: {
@@ -2931,6 +3120,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_pipelines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_pod_assignments: {
@@ -2969,6 +3165,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_pod_assignments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "client_pod_assignments_pod_id_fkey"
@@ -3013,6 +3216,7 @@ export type Database = {
           funded_pipeline_id: string | null
           funded_stage_ids: string[] | null
           funded_tag_pattern: string | null
+          ghl_custom_field_map: Json | null
           ghl_last_calls_sync: string | null
           ghl_last_contacts_sync: string | null
           ghl_sync_calls_enabled: boolean | null
@@ -3098,6 +3302,7 @@ export type Database = {
           funded_pipeline_id?: string | null
           funded_stage_ids?: string[] | null
           funded_tag_pattern?: string | null
+          ghl_custom_field_map?: Json | null
           ghl_last_calls_sync?: string | null
           ghl_last_contacts_sync?: string | null
           ghl_sync_calls_enabled?: boolean | null
@@ -3183,6 +3388,7 @@ export type Database = {
           funded_pipeline_id?: string | null
           funded_stage_ids?: string[] | null
           funded_tag_pattern?: string | null
+          ghl_custom_field_map?: Json | null
           ghl_last_calls_sync?: string | null
           ghl_last_contacts_sync?: string | null
           ghl_sync_calls_enabled?: boolean | null
@@ -3292,6 +3498,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_team_members_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_voice_notes: {
@@ -3348,6 +3561,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_voice_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -3545,6 +3765,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contact_timeline_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "contact_timeline_events_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -3626,6 +3853,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "content_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       copy_library: {
@@ -3676,6 +3910,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copy_library_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -3856,6 +4097,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "creatives_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       csv_import_logs: {
@@ -3903,6 +4151,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "csv_import_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -3975,6 +4230,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_ads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -4153,6 +4415,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "daily_metrics_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       daily_reports: {
@@ -4246,6 +4515,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "dashboard_preferences_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       data_discrepancies: {
@@ -4314,6 +4590,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_discrepancies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "data_discrepancies_sync_log_id_fkey"
@@ -4429,6 +4712,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "deals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       email_parsed_investors: {
@@ -4511,11 +4801,198 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "email_parsed_investors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "email_parsed_investors_funded_investor_id_fkey"
             columns: ["funded_investor_id"]
             isOneToOne: false
             referencedRelation: "funded_investors"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      enrichment_alerts: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          message: string | null
+          resolved_at: string | null
+          severity: string
+          type: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          resolved_at?: string | null
+          severity?: string
+          type: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          resolved_at?: string | null
+          severity?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrichment_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "enrichment_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrichment_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      enrichment_jobs: {
+        Row: {
+          client_id: string
+          created_at: string
+          error: string | null
+          failed: number
+          finished_at: string | null
+          id: string
+          last_offset: number
+          processed: number
+          started_at: string | null
+          status: string
+          succeeded: number
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          error?: string | null
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          last_offset?: number
+          processed?: number
+          started_at?: string | null
+          status?: string
+          succeeded?: number
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          error?: string | null
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          last_offset?: number
+          processed?: number
+          started_at?: string | null
+          status?: string
+          succeeded?: number
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrichment_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "enrichment_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrichment_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      enrichment_run_log: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          duration_ms: number | null
+          failed: number
+          id: string
+          processed: number
+          run_date: string
+          skipped_recent: number
+          succeeded: number
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          failed?: number
+          id?: string
+          processed?: number
+          run_date?: string
+          skipped_recent?: number
+          succeeded?: number
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          failed?: number
+          id?: string
+          processed?: number
+          run_date?: string
+          skipped_recent?: number
+          succeeded?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrichment_run_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "enrichment_run_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrichment_run_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -4570,6 +5047,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flowboards_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -4639,6 +5123,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fulfillment_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "fulfillment_runs_offer_id_fkey"
@@ -4866,6 +5357,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "funded_investors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "funded_investors_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -5004,6 +5502,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funnel_campaigns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -5148,6 +5653,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "funnel_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "funnel_snapshots_stage_id_fkey"
             columns: ["stage_id"]
             isOneToOne: false
@@ -5201,6 +5713,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funnel_stages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -5344,6 +5863,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "funnels_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       ghl_outbound_log: {
@@ -5423,6 +5949,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ghl_outbound_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "ghl_outbound_log_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -5485,6 +6018,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ghl_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -5656,6 +6196,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "instagram_creatives_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       instagram_scrape_jobs: {
@@ -5719,6 +6266,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "instagram_scrape_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       integration_status: {
@@ -5778,6 +6332,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_status_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -5879,6 +6440,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lead_change_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "lead_change_log_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
@@ -5896,6 +6464,7 @@ export type Database = {
       }
       lead_enrichment: {
         Row: {
+          accredited_probability: string | null
           address: string | null
           affinities: Json | null
           age: number | null
@@ -5904,11 +6473,13 @@ export type Database = {
           birth_date: string | null
           birth_year: number | null
           blue_collar: boolean | null
+          business_owner: boolean | null
           city: string | null
           client_id: string
           companies: Json | null
           company_name: string | null
           company_title: string | null
+          confidence_score: number | null
           congressional_district: string | null
           county_name: string | null
           created_at: string
@@ -5925,6 +6496,8 @@ export type Database = {
           enriched_phones: Json | null
           enrichment_match_count: number | null
           enrichment_methods_used: string[] | null
+          enrichment_version: number | null
+          estimated_income: number | null
           ethnicity: string | null
           ethnicity_detail: string | null
           external_id: string
@@ -5933,6 +6506,7 @@ export type Database = {
           gender: string | null
           generation: string | null
           has_children: boolean | null
+          home_equity: number | null
           home_ownership: string | null
           home_purchased_years_ago: number | null
           home_value: number | null
@@ -5943,10 +6517,12 @@ export type Database = {
           id: string
           income_level: string | null
           interests: Json | null
+          investor_score: number | null
           is_investor: boolean | null
           is_primary_identity: boolean | null
           is_veteran: boolean | null
           language: string | null
+          last_enriched_at: string | null
           last_name: string | null
           latitude: number | null
           lead_id: string | null
@@ -5991,6 +6567,7 @@ export type Database = {
           zip: string | null
         }
         Insert: {
+          accredited_probability?: string | null
           address?: string | null
           affinities?: Json | null
           age?: number | null
@@ -5999,11 +6576,13 @@ export type Database = {
           birth_date?: string | null
           birth_year?: number | null
           blue_collar?: boolean | null
+          business_owner?: boolean | null
           city?: string | null
           client_id: string
           companies?: Json | null
           company_name?: string | null
           company_title?: string | null
+          confidence_score?: number | null
           congressional_district?: string | null
           county_name?: string | null
           created_at?: string
@@ -6020,6 +6599,8 @@ export type Database = {
           enriched_phones?: Json | null
           enrichment_match_count?: number | null
           enrichment_methods_used?: string[] | null
+          enrichment_version?: number | null
+          estimated_income?: number | null
           ethnicity?: string | null
           ethnicity_detail?: string | null
           external_id: string
@@ -6028,6 +6609,7 @@ export type Database = {
           gender?: string | null
           generation?: string | null
           has_children?: boolean | null
+          home_equity?: number | null
           home_ownership?: string | null
           home_purchased_years_ago?: number | null
           home_value?: number | null
@@ -6038,10 +6620,12 @@ export type Database = {
           id?: string
           income_level?: string | null
           interests?: Json | null
+          investor_score?: number | null
           is_investor?: boolean | null
           is_primary_identity?: boolean | null
           is_veteran?: boolean | null
           language?: string | null
+          last_enriched_at?: string | null
           last_name?: string | null
           latitude?: number | null
           lead_id?: string | null
@@ -6086,6 +6670,7 @@ export type Database = {
           zip?: string | null
         }
         Update: {
+          accredited_probability?: string | null
           address?: string | null
           affinities?: Json | null
           age?: number | null
@@ -6094,11 +6679,13 @@ export type Database = {
           birth_date?: string | null
           birth_year?: number | null
           blue_collar?: boolean | null
+          business_owner?: boolean | null
           city?: string | null
           client_id?: string
           companies?: Json | null
           company_name?: string | null
           company_title?: string | null
+          confidence_score?: number | null
           congressional_district?: string | null
           county_name?: string | null
           created_at?: string
@@ -6115,6 +6702,8 @@ export type Database = {
           enriched_phones?: Json | null
           enrichment_match_count?: number | null
           enrichment_methods_used?: string[] | null
+          enrichment_version?: number | null
+          estimated_income?: number | null
           ethnicity?: string | null
           ethnicity_detail?: string | null
           external_id?: string
@@ -6123,6 +6712,7 @@ export type Database = {
           gender?: string | null
           generation?: string | null
           has_children?: boolean | null
+          home_equity?: number | null
           home_ownership?: string | null
           home_purchased_years_ago?: number | null
           home_value?: number | null
@@ -6133,10 +6723,12 @@ export type Database = {
           id?: string
           income_level?: string | null
           interests?: Json | null
+          investor_score?: number | null
           is_investor?: boolean | null
           is_primary_identity?: boolean | null
           is_veteran?: boolean | null
           language?: string | null
+          last_enriched_at?: string | null
           last_name?: string | null
           latitude?: number | null
           lead_id?: string | null
@@ -6196,11 +6788,70 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lead_enrichment_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "lead_enrichment_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_enrichment_history: {
+        Row: {
+          changes: Json | null
+          client_id: string
+          created_at: string
+          event_type: string
+          external_id: string | null
+          id: string
+          lead_id: string | null
+        }
+        Insert: {
+          changes?: Json | null
+          client_id: string
+          created_at?: string
+          event_type: string
+          external_id?: string | null
+          id?: string
+          lead_id?: string | null
+        }
+        Update: {
+          changes?: Json | null
+          client_id?: string
+          created_at?: string
+          event_type?: string
+          external_id?: string | null
+          id?: string
+          lead_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_enrichment_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "lead_enrichment_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_enrichment_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -6312,6 +6963,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -6538,6 +7196,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "meta_ad_sets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       meta_ads: {
@@ -6707,6 +7372,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "meta_ads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       meta_api_calls: {
@@ -6760,6 +7432,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_api_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -6893,6 +7572,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "meta_campaigns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       monitoring_status: {
@@ -6985,6 +7671,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "monitoring_targets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       onboarding_notifications: {
@@ -7035,6 +7728,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_notifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -7125,6 +7825,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_meeting_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "pending_meeting_tasks_meeting_id_fkey"
@@ -7335,6 +8042,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pixel_verifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "pixel_verifications_step_id_fkey"
             columns: ["step_id"]
             isOneToOne: false
@@ -7391,6 +8105,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -7543,6 +8264,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reconciliation_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "reconciliation_items_run_id_fkey"
@@ -7705,6 +8433,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "scraped_ads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "scraped_ads_monitoring_target_id_fkey"
             columns: ["monitoring_target_id"]
             isOneToOne: false
@@ -7776,6 +8511,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scraping_schedule_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -7890,6 +8632,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sheet_audit_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       slack_activity_log: {
@@ -7950,6 +8699,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "slack_activity_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       slack_channel_mappings: {
@@ -8000,6 +8756,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slack_channel_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -8086,6 +8849,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "swipe_file_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "swipe_file_scraped_ad_id_fkey"
             columns: ["scraped_ad_id"]
             isOneToOne: false
@@ -8143,6 +8913,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sync_accuracy_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       sync_errors: {
@@ -8190,6 +8967,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_errors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -8260,6 +9044,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sync_health_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       sync_logs: {
@@ -8307,6 +9098,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -8373,6 +9171,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_outbound_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -8470,6 +9275,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sync_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       sync_runs: {
@@ -8524,6 +9336,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sync_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       sync_warnings: {
@@ -8565,6 +9384,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_warnings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -8875,6 +9701,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "tasks_meeting_id_fkey"
             columns: ["meeting_id"]
             isOneToOne: false
@@ -8961,6 +9794,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "top_performer_uploads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       video_projects: {
@@ -9031,6 +9871,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "video_projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "video_projects_script_id_fkey"
             columns: ["script_id"]
             isOneToOne: false
@@ -9087,6 +9934,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "viral_tracking_targets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -9159,6 +10013,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "viral_videos_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -9251,6 +10112,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "webhook_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "webhook_events_enqueued_job_id_fkey"
             columns: ["enqueued_job_id"]
             isOneToOne: false
@@ -9301,6 +10169,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -9381,6 +10256,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "weekly_syncs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "weekly_syncs_meeting_id_fkey"
             columns: ["meeting_id"]
             isOneToOne: false
@@ -9418,6 +10300,20 @@ export type Database = {
         }
         Relationships: []
       }
+      v_agency_enrichment_kpis: {
+        Row: {
+          accredited_found: number | null
+          coverage_pct: number | null
+          daily_enrichments: number | null
+          estimated_prospect_value: number | null
+          last_sync_at: string | null
+          millionaires_found: number | null
+          total_clients: number | null
+          total_contacts: number | null
+          total_enriched: number | null
+        }
+        Relationships: []
+      }
       v_agency_performance_monthly: {
         Row: {
           ad_spend: number | null
@@ -9446,6 +10342,20 @@ export type Database = {
           cost_of_capital_pct: number | null
           funded_dollars: number | null
           week_start: string | null
+        }
+        Relationships: []
+      }
+      v_client_enrichment_coverage: {
+        Row: {
+          client_id: string | null
+          client_name: string | null
+          coverage_pct: number | null
+          enriched_contacts: number | null
+          failed_matches: number | null
+          last_24h: number | null
+          last_7d: number | null
+          last_run_at: string | null
+          total_contacts: number | null
         }
         Relationships: []
       }
@@ -9492,6 +10402,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "daily_metrics_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       v_client_performance_monthly: {
@@ -9535,6 +10452,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "daily_metrics_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       v_client_performance_weekly: {
@@ -9577,6 +10501,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_metrics_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
