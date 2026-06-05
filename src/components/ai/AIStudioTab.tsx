@@ -76,15 +76,27 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
   const lq = lqTool?.result;
   // Web search citations
   const wsTools = (m.tools || []).filter((t: any) => t.name === "web_search" && t.result?.sources?.length);
-  // Inline images produced this turn (from generate_static_ad / edit_static_ad / compare_image_models / generate_ad_variations / generate_scene_image)
+  // Inline images + videos produced this turn
   const inlineImages: ChatImage[] = [];
+  const inlineVideos: ChatVideo[] = [];
   for (const t of m.tools || []) {
     if (!t.result || t.result.error) continue;
     const u = t.result.url_for_internal_use_only || t.result.image_url;
-    if (u) inlineImages.push({ url: u, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt });
+    if (u) inlineImages.push({ url: u, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt, toolName: t.name, args: t.args, model: t.result.model });
     if (Array.isArray(t.result.variant_urls_internal)) {
-      for (const vu of t.result.variant_urls_internal) inlineImages.push({ url: vu, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt });
+      for (const vu of t.result.variant_urls_internal) inlineImages.push({ url: vu, aspect_ratio: t.result.aspect_ratio, prompt: t.args?.prompt, toolName: t.name, args: t.args, model: t.result.model });
     }
+    const vu = t.result.video_url;
+    if (vu) inlineVideos.push({
+      url: vu,
+      aspect_ratio: t.result.aspect_ratio || t.args?.aspect_ratio,
+      prompt: t.args?.prompt || t.args?.video_prompt,
+      toolName: t.name,
+      args: t.args,
+      model: t.result.model,
+      duration: t.args?.duration || t.result.duration,
+      resolution: t.args?.resolution || t.result.resolution,
+    });
   }
   return (
     <div className="text-sm text-foreground leading-relaxed">
