@@ -1,63 +1,82 @@
-## Goal
-Rebuild AI Studio with a Manus-style chat UX: in-chat previews for every generation, Download + Recreate (loads prompt back into composer with all params), and an "Add to Canvas" action that pins outputs into a side Canvas panel. All generation routed through OpenRouter (images: `openai/gpt-image-2` + `google/gemini-3-flash-image-preview` (Nano Banana 2); video: `bytedance/seedance-2.0` / `seedance-2.0-fast` + `moonshotai/kling-v2.1` / `kling-v2.1-pro`). Full conversation + asset history persisted to DB.
+# RetargetIQ V2 — Enrichment Platform Overhaul
 
-## Pricing summary (delivered)
-- **Video:** OpenRouter is the only path for Seedance/Kling (Lovable doesn't host them).
-- **Images:** OpenRouter Gemini ~20% cheaper than Lovable. GPT-Image-2 is also on OpenRouter (`openai/gpt-image-2`), so we can drop Lovable entirely.
-- **Net:** going 100% OpenRouter is ~10–25% cheaper across the board and gives one billing surface.
+Rebuilds the Lead Enrichment feature into an automated, observable system with an executive dashboard. Coverage % (Enriched / Total) is the headline KPI throughout.
 
-## Scope
+## 1. Database (single migration)
 
-### 1. Backend
-- New edge function `ai-studio-generate` — single dispatcher that accepts `{ kind: 'image'|'video', model, prompt, params, ref_images?, conversation_id }`, hits OpenRouter, rehosts result to `creatives` storage bucket, returns `{ asset_url, asset_id }`.
-- Reuse Seedance polling pattern from `fundad-render`. Add Kling support (same `/v1/videos` endpoint, different model id).
-- Images use OpenRouter `/v1/images/generations`.
-- New edge function `ai-studio-chat` — streams text responses via Lovable AI Gateway (gemini-3-flash-preview) when user is just chatting; falls back to generation dispatch when tool-call detects an image/video request. Uses AI SDK `streamText` + tools (`generate_image`, `generate_video`).
+New columns on `lead_enrichment`:
+- `last_enriched_at timestamptz` (defaults to `enriched_at` for existing rows)
+- `enrichment_version int default 2`
+- `confidence_score numeric` (0–100)
+- Derived numerics (already mostly present): keep `net_worth_midpoint`, `home_value`, `median_home_value`, `household_income`, plus new `estimated_income numeric`, `home_equity numeric`, `investor_score int`, `accredited_probability text` ('low'|'medium'|'high'), `business_owner bool`.
 
-### 2. DB (one migration)
-- `ai_studio_conversations` — id, user_id, client_id (nullable), title, created_at, updated_at
-- `ai_studio_messages` — id, conversation_id, role (user|assistant|tool), parts JSONB (UIMessage parts), created_at
-- `ai_studio_assets` — id, conversation_id, message_id, kind (image|video), model, prompt TEXT, params JSONB, asset_url, thumbnail_url, on_canvas BOOL DEFAULT false, canvas_order INT, created_at
-- RLS scoped to `user_id` via conversation join. GRANTs to authenticated + service_role.
+New tables:
+- `lead_enrichment_history` — append-only audit (id, client_id, lead_id, external_id, event_type ['initial','refresh','field_update'], changes jsonb, created_at). RLS: authenticated read; service_role write.
+- `enrichment_run_log` — per-client per-day rollup (client_id, run_date, processed, succeeded, failed, skipped_recent, duration_ms). Powers charts.
+- `enrichment_alerts` — (client_id, type ['ghl_disconnected','no_runs_24h','low_success','api_error_spike'], severity, message, resolved_at).
 
-### 3. Frontend — `/ai-studio` rebuild
-- **Three-pane layout** (Manus-style):
-  - Left: conversation list (collapsible)
-  - Center: chat transcript using AI Elements (`Conversation`, `Message`, `MessageContent`, `MessageResponse`, `PromptInput`, `Tool`, `Shimmer`)
-  - Right: **Canvas panel** — vertical list of pinned assets, drag-to-reorder, "remove from canvas" button. Empty state shows hint.
-- **Per-asset chat card** renders:
-  - Inline preview (img or `<video controls>`)
-  - Action row: `Download` (direct), `Recreate` (loads prompt + model + params into composer), `Add to Canvas` (toggles `on_canvas`), `Predict Virality` (placeholder, future), drag handle
-  - Collapsed "Show prompt" details
-- **Composer** (`PromptInput`): model selector (image/video models), aspect ratio, duration (video), reference image upload chip. Selected values persist per-conversation.
-- **Recreate** = populate composer state from asset's `params` + `prompt` (does not auto-submit).
+Views:
+- `v_client_enrichment_coverage` — per client: total_contacts (leads count), enriched_contacts, coverage_pct, failed_matches, last_24h, last_7d, last_run_at.
+- `v_agency_enrichment_kpis` — global totals: clients, total_contacts, total_enriched, coverage_pct, accredited_found, millionaires_found, daily_enrichments, last_sync_at, estimated_prospect_value (sum of net_worth_midpoint for accredited/high-networth bucket).
 
-### 4. Routing & history
-- `/ai-studio` redirects to `/ai-studio/:conversationId` (creates new if missing).
-- Conversation list shows title (auto-generated from first prompt via Lovable AI), updated_at.
-- Messages persist via `onFinish` after stream completes.
+Grants + RLS on all new tables.
 
-### 5. Migration of existing AI Studio
-- Keep existing routes intact for legacy access (rename to `/ai-studio-legacy`). New `/ai-studio` is the chat UX.
+## 2. Edge functions
 
-## Technical details
+### `enrich-lead-retargetiq` (modify)
+- After successful match, compute & store `confidence_score`, `home_equity` (home_value − mortgage_amount), `investor_score` (weighted: net worth, income, accredited flags, investments, business), `accredited_probability`, `business_owner`.
+- Set `last_enriched_at = now()`, bump `enrichment_version = 2`.
+- Push to GHL:
+  - **Custom fields**: `estimated_net_worth`, `estimated_income`, `home_value`, `home_equity`, `investor_score`, `accredited_probability`, `business_owner`, `last_enrichment_date`. Auto-create missing custom fields via GHL `customFields` API (cache field IDs on `client_settings.ghl_custom_field_map jsonb`).
+  - **Tags**: always `enriched`; conditional `networth_1m_plus`, `networth_5m_plus`, `income_250k_plus`, `income_500k_plus`, `likely_accredited`, `business_owner`.
+  - **Note**: new "Financial Snapshot" markdown formatted with bullets/spacing.
+- Insert `lead_enrichment_history` row.
 
-**OpenRouter endpoints**
-- Images: `POST https://openrouter.ai/api/v1/images/generations` with `{ model, prompt, size, n }`. Returns `data[].b64_json` or `data[].url`.
-- Videos: `POST https://openrouter.ai/api/v1/videos` (already in use in `fundad-render`) — returns `{ id, polling_url }`; poll until `completed`.
+### `auto-enrich-all` (rewrite)
+- Run for every eligible client (no longer requires `retargetiq_auto_enrich` opt-in — daily for all connected). Setting flag now means "skip".
+- For each client, pull leads where `last_enriched_at IS NULL OR last_enriched_at < now() - 30 days OR missing key fields`. Skip rows enriched within 30 days.
+- Process up to `per_client` (default 50) per cron tick to stay within timeout; record `enrichment_run_log`.
+- Emit alerts: GHL disconnected, success rate < 50%, no successful runs in 24h, error spike.
 
-**Models exposed in UI**
-- Image: `openai/gpt-image-2` (default), `google/gemini-3-flash-image-preview` (Nano Banana 2)
-- Video: `bytedance/seedance-2.0-fast` (default), `bytedance/seedance-2.0`, `moonshotai/kling-v2.1`, `moonshotai/kling-v2.1-pro`
+### `bulk-enrich-account` (new)
+- Body: `{ client_id }`. Creates a `sync_queue`-style job that the worker chews through in 50-lead batches until complete, resumable. Returns a `job_id`. Progress polled via new `enrichment_jobs` table (id, client_id, total, processed, succeeded, failed, status, started_at, finished_at).
+- A second function `bulk-enrich-account-worker` ticks the next batch (called by cron every minute).
 
-**Secrets**
-- `OPENROUTER_API_KEY` already configured (used by `fundad-render`).
-- `LOVABLE_API_KEY` used only for the lightweight chat/intent layer.
+### `enrichment-monitor` (new, cron hourly)
+- Computes alerts and inserts/resolves rows in `enrichment_alerts`.
 
-**Storage**
-- Rehost OpenRouter output to `creatives` bucket under `ai-studio/{user_id}/{asset_id}.{ext}` so links don't expire.
+### Cron (via supabase--insert pg_cron)
+- `auto-enrich-all` every hour (it self-limits per client/day).
+- `bulk-enrich-account-worker` every minute.
+- `enrichment-monitor` every hour.
 
-## Out of scope (this build)
-- Reordering canvas by drag (will add basic up/down arrows; full DnD later).
-- Virality prediction (button shown but disabled).
-- Exporting canvas as a deck.
+## 3. Frontend (`src/components/admin/LeadsTab.tsx` → real implementation)
+
+Replace stub with a full Enrichment Dashboard. New components under `src/components/enrichment/`:
+
+- `ExecutiveDashboard.tsx` — top KPI strip: Total Clients, Total Contacts, Total Enriched, **Coverage %** (hero), Accredited Found, Millionaires Found, Daily Enrichments, Last Sync.
+- `CoverageCharts.tsx` — 30-day enrichment volume line + coverage donut (recharts, already in project).
+- `ClientLeaderboard.tsx` — sortable table by coverage %; highlight top 5 green, bottom 5 red. Columns: Client, Contacts, Enriched, Coverage %, Last Run, Status badge.
+- `AlertsPanel.tsx` — red badges from `enrichment_alerts` with one-click "View client".
+- `BulkBackfillPanel.tsx` — per-client "Bulk Enrich Entire Account" button → starts job, shows progress bar with live updates via `enrichment_jobs` realtime subscription.
+- `AgencyLeadSearch.tsx` — cross-client filterable search: Net Worth ≥, Income ≥, Home Value ≥, Investor Score ≥, Accredited (any/likely), Business Owner. Paginated results with client column.
+- `ContactTimeline.tsx` — drop-in to existing contact drawer: reads `lead_enrichment_history` and renders dated list.
+- `AgencyRevenuePanel.tsx` — "Estimated prospect value" from `v_agency_enrichment_kpis`.
+
+Hooks under `src/hooks/`:
+- `useEnrichmentKpis`, `useClientCoverage`, `useEnrichmentAlerts`, `useEnrichmentJob`, `useAgencyLeadSearch`, `useEnrichmentHistory`.
+
+Tabs inside LeadsTab: Overview | Leaderboard | Search | Alerts.
+
+Coverage % shown in the page header and in `AdminSidebar` Leads label as a badge.
+
+## 4. Out of scope (this pass)
+- Per-contact webhook ingestion (already covered by existing GHL sync).
+- Custom field mapping UI (auto-created/cached; manual mapping deferred).
+- Multi-currency, internationalization.
+
+## Technical notes
+- Confidence score formula: weighted sum of method count, identity count, presence of phone+email+address. Clamp 0–100.
+- Investor score: `min(100, 0.35*networth_norm + 0.25*income_norm + 0.20*accredited + 0.10*investments + 0.10*business)`.
+- Coverage denominator excludes spam leads (`is_spam = false`) and requires non-empty email+phone (matches existing eligibility rule in memory).
+- Existing `lead_enrichment` rows backfilled with `last_enriched_at = enriched_at`, `enrichment_version = 1` so the 30-day refresh logic kicks in naturally.
