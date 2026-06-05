@@ -124,6 +124,8 @@ export function TaskDetailModal({ task, open, onOpenChange, clientName, clientId
   
   // Send to Creative modal state
   const [sendToCreativeOpen, setSendToCreativeOpen] = useState(false);
+  // Send to Client (Email/SMS) modal state
+  const [notifyClientOpen, setNotifyClientOpen] = useState(false);
   const [selectedFileForCreative, setSelectedFileForCreative] = useState<TaskFile | null>(null);
   
   const [dueDatePopoverOpen, setDueDatePopoverOpen] = useState(false);
