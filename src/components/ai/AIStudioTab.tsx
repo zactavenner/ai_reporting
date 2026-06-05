@@ -1354,6 +1354,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{imageModels.length}</Badge>
                   )}
                 </div>
+                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
+                  <Select value={videoModel} onValueChange={setVideoModel}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VIDEO_MODELS.map(m => (
+                        <SelectItem key={m.value} value={m.value} className="text-xs">
+                          {m.label}<span className="text-muted-foreground ml-1">— {m.hint}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="absolute bottom-2 right-2">
                 {loading ? (
