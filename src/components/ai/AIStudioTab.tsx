@@ -792,6 +792,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel,
         imageModels,
+        videoModel,
         activeReferenceIds,
         activeVideoReferenceIds,
         autoDocContext,
