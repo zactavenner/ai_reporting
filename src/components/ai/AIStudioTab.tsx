@@ -1204,17 +1204,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               const pct = Math.min(100, Math.round((used / limit) * 100));
               const barColor = pct > 85 ? "bg-destructive" : pct > 60 ? "bg-amber-500" : "bg-primary";
               return (
-                <div className="mb-2 flex items-center gap-3 text-[10px] text-muted-foreground">
-                  <div className="flex-1 flex items-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-muted-foreground">
+                  <div className="flex-1 min-w-[180px] flex items-center gap-2">
                     <BookOpenCheck className="h-3 w-3" />
                     <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                       <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="tabular-nums">
+                    <span className="tabular-nums whitespace-nowrap">
                       {used.toLocaleString()} / {limit.toLocaleString()} tok ({pct}%)
                     </span>
                   </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0" title="Auto-load the tied Google Doc into context on every turn">
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap" title="Auto-load the tied Google Doc into context on every turn">
                     <Switch checked={autoDocContext} onCheckedChange={setAutoDocContext} className="scale-75" />
                     Auto Doc context
                     {contextUsage?.auto_doc?.enabled && contextUsage.auto_doc.chars > 0 && (
@@ -1228,17 +1228,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             })()}
             {/* Cost analysis based on model + usage for this client/conversation */}
             {messages.length > 0 && (
-              <div className="mb-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                 <DollarSign className="h-3 w-3" />
-                <span className="tabular-nums">
+                <span className="tabular-nums whitespace-nowrap">
                   ~${usageStats.cost.toFixed(4)} this convo
                 </span>
-                <span className="text-muted-foreground/60">·</span>
-                <span className="tabular-nums">
+                <span className="text-muted-foreground/60 hidden sm:inline">·</span>
+                <span className="tabular-nums whitespace-nowrap">
                   in {usageStats.inTok.toLocaleString()} · out {usageStats.outTok.toLocaleString()} tok
                 </span>
-                <span className="text-muted-foreground/60">·</span>
-                <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{chatModel.split("/").pop()}</Badge>
+                <span className="text-muted-foreground/60 hidden sm:inline">·</span>
+                <Badge variant="secondary" className="text-[9px] h-4 px-1.5 whitespace-nowrap">{chatModel.split("/").pop()}</Badge>
               </div>
             )}
             <div
