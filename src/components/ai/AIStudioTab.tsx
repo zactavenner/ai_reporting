@@ -1204,17 +1204,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               const pct = Math.min(100, Math.round((used / limit) * 100));
               const barColor = pct > 85 ? "bg-destructive" : pct > 60 ? "bg-amber-500" : "bg-primary";
               return (
-                <div className="mb-2 flex items-center gap-3 text-[10px] text-muted-foreground">
-                  <div className="flex-1 flex items-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-muted-foreground">
+                  <div className="flex-1 min-w-[180px] flex items-center gap-2">
                     <BookOpenCheck className="h-3 w-3" />
                     <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                       <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="tabular-nums">
+                    <span className="tabular-nums whitespace-nowrap">
                       {used.toLocaleString()} / {limit.toLocaleString()} tok ({pct}%)
                     </span>
                   </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0" title="Auto-load the tied Google Doc into context on every turn">
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap" title="Auto-load the tied Google Doc into context on every turn">
                     <Switch checked={autoDocContext} onCheckedChange={setAutoDocContext} className="scale-75" />
                     Auto Doc context
                     {contextUsage?.auto_doc?.enabled && contextUsage.auto_doc.chars > 0 && (
@@ -1228,17 +1228,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             })()}
             {/* Cost analysis based on model + usage for this client/conversation */}
             {messages.length > 0 && (
-              <div className="mb-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                 <DollarSign className="h-3 w-3" />
-                <span className="tabular-nums">
+                <span className="tabular-nums whitespace-nowrap">
                   ~${usageStats.cost.toFixed(4)} this convo
                 </span>
-                <span className="text-muted-foreground/60">·</span>
-                <span className="tabular-nums">
+                <span className="text-muted-foreground/60 hidden sm:inline">·</span>
+                <span className="tabular-nums whitespace-nowrap">
                   in {usageStats.inTok.toLocaleString()} · out {usageStats.outTok.toLocaleString()} tok
                 </span>
-                <span className="text-muted-foreground/60">·</span>
-                <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{chatModel.split("/").pop()}</Badge>
+                <span className="text-muted-foreground/60 hidden sm:inline">·</span>
+                <Badge variant="secondary" className="text-[9px] h-4 px-1.5 whitespace-nowrap">{chatModel.split("/").pop()}</Badge>
               </div>
             )}
             <div
@@ -1299,10 +1299,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   if (files.length) { e.preventDefault(); uploadFiles(files); }
                 }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
-                className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-14 pt-3 text-sm"
+                className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 pt-3 pb-2 text-sm"
                 rows={1}
               />
-              <div className="absolute bottom-2 left-2 right-14 flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
+                <div className="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -1369,8 +1370,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div className="absolute bottom-2 right-2">
+                </div>
+                <div className="shrink-0">
                 {loading ? (
                   <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
                     <Square className="h-4 w-4" />
@@ -1393,6 +1394,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </Button>
                   </div>
                 )}
+                </div>
               </div>
             </div>
             {followups.length > 0 && !loading && (
