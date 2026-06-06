@@ -1299,10 +1299,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   if (files.length) { e.preventDefault(); uploadFiles(files); }
                 }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
-                className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-14 pb-14 pt-3 text-sm"
+                className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 pt-3 pb-2 text-sm"
                 rows={1}
               />
-              <div className="absolute bottom-2 left-2 right-14 flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
+                <div className="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -1369,8 +1370,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div className="absolute bottom-2 right-2">
+                </div>
+                <div className="shrink-0">
                 {loading ? (
                   <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
                     <Square className="h-4 w-4" />
@@ -1393,6 +1394,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </Button>
                   </div>
                 )}
+                </div>
               </div>
             </div>
             {followups.length > 0 && !loading && (
