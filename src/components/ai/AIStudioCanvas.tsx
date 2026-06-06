@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +46,46 @@ export function AIStudioCanvas({
   const draggingRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const focusScrolledRef = useRef<string | null>(null);
+  const [sendingApproval, setSendingApproval] = useState(false);
+
+  const approvalCandidates = entries.filter(
+    (e) =>
+      !("__placeholder" in e) &&
+      (e.kind === "image" || e.kind === "scene_image" || e.kind === "scene_video") &&
+      (e.payload?.image_url || e.payload?.video_url),
+  ) as CanvasItem[];
+
+  const sendToCreatives = async () => {
+    if (!clientId) { toast.error("No client selected"); return; }
+    if (approvalCandidates.length === 0) { toast.error("Nothing on the canvas to send"); return; }
+    setSendingApproval(true);
+    try {
+      const rows = approvalCandidates.map((it) => {
+        const p: any = it.payload || {};
+        const isVideo = it.kind === "scene_video" || !!p.video_url;
+        const url = isVideo ? p.video_url : p.image_url;
+        const promptText: string = p.prompt || p.video_prompt || "AI Studio asset";
+        return {
+          client_id: clientId,
+          title: `AI Studio — ${promptText.slice(0, 80)}`,
+          type: isVideo ? "video" : "image",
+          platform: "meta",
+          file_url: url,
+          status: "draft" as const,
+          aspect_ratio: p.aspect_ratio || null,
+          comments: [],
+          source: "ai_studio_canvas",
+        };
+      });
+      const { error } = await supabase.from("creatives").insert(rows as any);
+      if (error) throw error;
+      toast.success(`Sent ${rows.length} asset${rows.length === 1 ? "" : "s"} to Creatives for agency review`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send to Creatives");
+    } finally {
+      setSendingApproval(false);
+    }
+  };
 
   // Hydrate when initialView arrives (after async load)
   useEffect(() => {
@@ -127,6 +167,19 @@ export function AIStudioCanvas({
           <Maximize2 className="h-3.5 w-3.5" />
         </Button>
         <span className="text-[10px] text-muted-foreground ml-2">Ctrl/⌘+wheel to zoom · drag empty area to pan · click image to edit</span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">{approvalCandidates.length} ready</span>
+          <Button
+            size="sm"
+            className="h-7 gap-1"
+            disabled={sendingApproval || approvalCandidates.length === 0 || !clientId}
+            onClick={sendToCreatives}
+            title="Push every image/video on the canvas into the Creatives section as drafts for agency review"
+          >
+            {sendingApproval ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            Send to Creatives for Approval
+          </Button>
+        </div>
       </div>
       <div
         ref={viewportRef}
