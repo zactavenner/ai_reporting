@@ -299,7 +299,7 @@ export function AIStudioCanvas({
         if (e.kind === "doc_edit") {
           const p = e.payload || {};
           return (
-            <Card key={e.id} data-canvas-card className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3 col-span-full">
               <div className="flex items-center gap-2 mb-1">
                 <FileText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Doc {p.action === "replace" ? "find & replace" : "append"}</span>
@@ -321,7 +321,7 @@ export function AIStudioCanvas({
         if (e.kind === "sheet_edit") {
           const p = e.payload || {};
           return (
-            <Card key={e.id} data-canvas-card className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3 col-span-full">
               <div className="flex items-center gap-2 mb-1">
                 <TableIcon className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Sheet {p.action === "append" ? "row append" : "range update"}</span>
@@ -339,17 +339,18 @@ export function AIStudioCanvas({
           );
         }
         if (e.kind === "variation_set") {
-          return <VariationSetCard key={e.id} item={e} clientId={clientId} onUpdated={onCanvasItemUpdated} />;
+          return <div key={e.id} className="col-span-full"><VariationSetCard item={e} clientId={clientId} onUpdated={onCanvasItemUpdated} /></div>;
         }
         if (e.kind === "storyboard") {
           return (
-            <StoryboardTimelineCard
-              key={e.id}
-              item={e}
-              entries={entries}
-              onUpdated={onCanvasItemUpdated}
-              onSendMessage={onSendMessage}
-            />
+            <div key={e.id} className="col-span-full">
+              <StoryboardTimelineCard
+                item={e}
+                entries={entries}
+                onUpdated={onCanvasItemUpdated}
+                onSendMessage={onSendMessage}
+              />
+            </div>
           );
         }
         if (e.kind === "scene_image") {
@@ -407,7 +408,7 @@ export function AIStudioCanvas({
           const p = e.payload || {};
           const typeLabel = String(p.artifact_type || "text").replace(/_/g, " ");
           return (
-            <Card key={e.id} data-canvas-card className="p-3">
+            <Card key={e.id} data-canvas-card className="p-3 col-span-full">
               <div className="flex items-center gap-2 mb-2">
                 <ScrollText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium truncate flex-1" title={p.title}>{p.title || "Untitled"}</span>
