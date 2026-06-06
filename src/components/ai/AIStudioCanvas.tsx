@@ -191,7 +191,7 @@ export function AIStudioCanvas({
         onWheel={onWheel}
       >
         <div
-          className="p-4 space-y-3 origin-top-left transition-transform duration-75"
+          className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 origin-top-left transition-transform duration-75 auto-rows-min items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
         >
       {entries.map((e, i) => {
