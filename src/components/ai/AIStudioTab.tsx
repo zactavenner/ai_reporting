@@ -1343,6 +1343,44 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               />
               <div className="flex items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
                 <div className="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
+                <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
+                  <Select value={adFormat} onValueChange={setAdFormat}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AD_FORMATS.map(f => (
+                        <SelectItem key={f.value} value={f.value} className="text-xs">
+                          {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Hook:</span>
+                  <Select value={hookFramework} onValueChange={setHookFramework}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HOOK_FRAMEWORKS.map(f => (
+                        <SelectItem key={f.value} value={f.value} className="text-xs">
+                          {f.label}<span className="text-muted-foreground ml-1">— {f.desc}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBurnCaptions(v => !v)}
+                  title="When on, AI burns styled subtitles into any generated video so it converts with sound off."
+                  className={`h-7 px-2 rounded-lg text-[10px] border transition flex items-center gap-1 ${burnCaptions ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                >
+                  CC {burnCaptions ? "on" : "off"}
+                </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
