@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { callOpenRouter } from '../_shared/openrouter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,14 +20,6 @@ serve(async (req) => {
 
   try {
     const { productInfo, frameworks = ['hormozi', 'pas'] } = await req.json();
-
-    const apiKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     const frameworkDescriptions = frameworks
       .map((f: string) => `- ${f}: ${FRAMEWORKS[f] || f}`)
@@ -61,32 +54,17 @@ Respond ONLY with valid JSON:
   ]
 }`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.8,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
+    let content = '';
+    try {
+      const result = await callOpenRouter([{ role: 'user', content: prompt }], { temperature: 0.8 });
+      content = result.text;
+    } catch (err) {
+      console.error('OpenRouter error:', err);
       return new Response(
-        JSON.stringify({ error: 'Failed to generate scripts', details: errorText }),
+        JSON.stringify({ error: 'Failed to generate scripts', details: String(err) }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const aiData = await response.json();
-    const content = aiData.choices?.[0]?.message?.content || '';
 
     let parsed: any;
     try {
