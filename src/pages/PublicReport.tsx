@@ -125,7 +125,7 @@ function PublicReportContent() {
 
       <main className="p-3 sm:p-6 max-w-7xl mx-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <div className="-mx-3 sm:mx-0 overflow-x-auto scrollbar-none">
+          <div className="-mx-3 sm:mx-0 overflow-x-auto">
           <TabsList className="bg-muted/50 inline-flex w-max min-w-full px-3 sm:px-1">
             <TabsTrigger value="sheet-stats" className="gap-2 whitespace-nowrap">
               <BarChart3 className="h-4 w-4" />
