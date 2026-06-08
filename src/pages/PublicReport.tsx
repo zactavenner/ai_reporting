@@ -116,59 +116,61 @@ function PublicReportContent() {
 
   const reportContent = (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card/80 apple-blur sticky top-0 z-30 px-6 py-4">
+      <header className="border-b border-border bg-card/80 apple-blur sticky top-0 z-30 px-4 sm:px-6 py-3 sm:py-4">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">{client.name}</h1>
-          <p className="text-xs text-muted-foreground">Client performance & management</p>
+          <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">{client.name}</h1>
+          <p className="text-xs text-muted-foreground truncate">Client performance & management</p>
         </div>
       </header>
 
-      <main className="p-6 max-w-7xl mx-auto">
+      <main className="p-3 sm:p-6 max-w-7xl mx-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-muted/50 flex-wrap">
-            <TabsTrigger value="sheet-stats" className="gap-2">
+          <div className="-mx-3 sm:mx-0 overflow-x-auto">
+          <TabsList className="bg-muted/50 inline-flex w-max min-w-full px-3 sm:px-1">
+            <TabsTrigger value="sheet-stats" className="gap-2 whitespace-nowrap">
               <BarChart3 className="h-4 w-4" />
               Reporting
             </TabsTrigger>
-            <TabsTrigger value="tasks" className="gap-2">
+            <TabsTrigger value="tasks" className="gap-2 whitespace-nowrap">
               <CheckSquare className="h-4 w-4" />
               Tasks
             </TabsTrigger>
-            <TabsTrigger value="creatives" className="gap-2">
+            <TabsTrigger value="creatives" className="gap-2 whitespace-nowrap">
               <Palette className="h-4 w-4" />
               Creatives
             </TabsTrigger>
-            <TabsTrigger value="master-doc" className="gap-2">
+            <TabsTrigger value="master-doc" className="gap-2 whitespace-nowrap">
               <FileText className="h-4 w-4" />
               Master Doc
             </TabsTrigger>
-            <TabsTrigger value="reporting-sheet" className="gap-2">
+            <TabsTrigger value="reporting-sheet" className="gap-2 whitespace-nowrap">
               <FileText className="h-4 w-4" />
               Reporting Sheet
             </TabsTrigger>
-            <TabsTrigger value="onboarding-info" className="gap-2">
+            <TabsTrigger value="onboarding-info" className="gap-2 whitespace-nowrap">
               <CheckSquare className="h-4 w-4" />
               Onboarding Info
             </TabsTrigger>
-            <TabsTrigger value="funnel" className="gap-2">
+            <TabsTrigger value="funnel" className="gap-2 whitespace-nowrap">
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
-            <TabsTrigger value="activity" className="gap-2">
+            <TabsTrigger value="activity" className="gap-2 whitespace-nowrap">
               <ActivityIcon className="h-4 w-4" />
               Activity
             </TabsTrigger>
-            <TabsTrigger value="upload" className="gap-2">
+            <TabsTrigger value="upload" className="gap-2 whitespace-nowrap">
               <UploadIcon className="h-4 w-4" />
               Upload
             </TabsTrigger>
             {customTabs.map((tab: any) => (
-              <TabsTrigger key={tab.id} value={`custom-${tab.id}`} className="gap-2">
+              <TabsTrigger key={tab.id} value={`custom-${tab.id}`} className="gap-2 whitespace-nowrap">
                 <ExternalLink className="h-3 w-3" />
                 {tab.name}
               </TabsTrigger>
             ))}
           </TabsList>
+          </div>
 
           <TabsContent value="sheet-stats" className="space-y-4">
             <SectionErrorBoundary sectionName="Reporting">
