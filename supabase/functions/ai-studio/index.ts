@@ -2016,6 +2016,17 @@ Deno.serve(async (req) => {
                 quality: "seedance",
               });
             }
+            if (name === "image_to_reel") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Image → Reel • ${args.duration || 8}s ${args.resolution || "1080p"}: ${String(args.brief || args.motion_prompt || "").slice(0, 120)}`,
+                aspect_ratio: args.aspect_ratio || "9:16",
+                quality: "seedance",
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
