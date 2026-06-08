@@ -891,6 +891,24 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             setCanvas(curr =>
               curr.map(c => "__placeholder" in c && c.placeholder_id === evt.placeholder_id ? { ...c, failed: evt.error } : c),
             );
+          } else if (evt.type === "canvas_placeholder_progress") {
+            setCanvas(curr =>
+              curr.map(c => {
+                if (!("__placeholder" in c) || c.placeholder_id !== evt.placeholder_id) return c;
+                return {
+                  ...c,
+                  progress: {
+                    stage: evt.stage,
+                    label: evt.label,
+                    percent: typeof evt.percent === "number" ? evt.percent : c.progress?.percent,
+                    attempt: evt.attempt,
+                    max_attempts: evt.max_attempts,
+                    elapsed_s: evt.elapsed_s,
+                    phase: evt.phase,
+                  },
+                };
+              }),
+            );
           } else if (evt.type === "canvas_item") {
             setCanvas(curr => {
               const filtered = evt.replace_placeholder_id

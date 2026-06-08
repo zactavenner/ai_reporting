@@ -852,6 +852,16 @@ async function generateSeedanceVideo(opts: {
   clientId: string | null;
   conversationId: string;
   userId: string;
+  onProgress?: (p: {
+    stage: "submitting" | "queued" | "polling" | "downloading" | "rehosting" | "completed" | "failed";
+    label: string;
+    attempt?: number;
+    max_attempts?: number;
+    elapsed_s?: number;
+    percent?: number;
+    job_id?: string;
+    model?: string;
+  }) => void;
 }) {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -877,6 +887,10 @@ async function generateSeedanceVideo(opts: {
   if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
   if (frames.length) body.frame_images = frames;
 
+  const t0 = Date.now();
+  const emit = opts.onProgress || (() => {});
+  emit({ stage: "submitting", label: "Submitting to Seedance…", model, percent: 2 });
+
   const submit = await fetch("https://openrouter.ai/api/v1/videos", {
     method: "POST",
     headers: {
@@ -889,28 +903,50 @@ async function generateSeedanceVideo(opts: {
   });
   if (!submit.ok) {
     const t = await submit.text();
+    emit({ stage: "failed", label: `Submit failed (${submit.status})`, model, elapsed_s: (Date.now() - t0) / 1000 });
     throw new Error(`Seedance submit [${submit.status}]: ${t.slice(0, 400)}`);
   }
   const sj = await submit.json();
   const pollingUrl: string | undefined = sj.polling_url;
   const jobId: string = sj.id || crypto.randomUUID();
   if (!pollingUrl) throw new Error(`Seedance returned no polling_url: ${JSON.stringify(sj).slice(0, 300)}`);
+  emit({ stage: "queued", label: "Queued — waiting for GPU…", job_id: jobId, model, percent: 8 });
 
   // Poll up to ~5 minutes
   let videoUrl: string | null = null;
-  for (let i = 0; i < 60; i++) {
+  const MAX = 60;
+  for (let i = 0; i < MAX; i++) {
     await new Promise(r => setTimeout(r, 5000));
     const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
-    if (!p.ok) continue;
+    if (!p.ok) {
+      emit({ stage: "polling", label: `Polling (${i + 1}/${MAX})…`, attempt: i + 1, max_attempts: MAX, elapsed_s: (Date.now() - t0) / 1000, job_id: jobId, model, percent: Math.min(85, 10 + (i + 1) * 1.2) });
+      continue;
+    }
     const pj = await p.json();
+    const stat = String(pj.status || "");
+    emit({
+      stage: "polling",
+      label: stat === "processing" ? `Rendering (${i + 1}/${MAX})…` : `${stat || "polling"} (${i + 1}/${MAX})…`,
+      attempt: i + 1, max_attempts: MAX,
+      elapsed_s: (Date.now() - t0) / 1000,
+      job_id: jobId, model,
+      percent: Math.min(85, 10 + (i + 1) * 1.2),
+    });
     if (pj.status === "completed") {
       const urls: string[] = pj.unsigned_urls || pj.urls || (pj.video?.url ? [pj.video.url] : []);
       videoUrl = urls[0] || null;
       break;
     }
-    if (pj.status === "failed") throw new Error(`Seedance failed: ${pj.error || "unknown"}`);
+    if (pj.status === "failed") {
+      emit({ stage: "failed", label: `Generation failed: ${String(pj.error || "unknown").slice(0, 140)}`, job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
+      throw new Error(`Seedance failed: ${pj.error || "unknown"}`);
+    }
   }
-  if (!videoUrl) throw new Error("Seedance timed out after 5 minutes");
+  if (!videoUrl) {
+    emit({ stage: "failed", label: "Timed out after 5 min", job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
+    throw new Error("Seedance timed out after 5 minutes");
+  }
+  emit({ stage: "downloading", label: "Downloading reel…", job_id: jobId, model, percent: 90, elapsed_s: (Date.now() - t0) / 1000 });
 
   // Download and store in 'creatives' bucket so URL is permanent (unsigned_urls may expire)
   let storedUrl = videoUrl;
@@ -920,6 +956,7 @@ async function generateSeedanceVideo(opts: {
     if (dl.ok) {
       const bytes = new Uint8Array(await dl.arrayBuffer());
       const path = `ai-studio/${opts.clientId || "shared"}/seedance/${jobId}-${Date.now()}.mp4`;
+      emit({ stage: "rehosting", label: "Saving to permanent storage…", job_id: jobId, model, percent: 96, elapsed_s: (Date.now() - t0) / 1000 });
       const up = await supa.storage.from("creatives").upload(path, bytes, { contentType: "video/mp4", upsert: false });
       if (!up.error) {
         const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
@@ -928,6 +965,7 @@ async function generateSeedanceVideo(opts: {
       }
     }
   } catch (e) { console.warn("Seedance rehost failed, using unsigned url", e); }
+  emit({ stage: "completed", label: "Reel ready", job_id: jobId, model, percent: 100, elapsed_s: (Date.now() - t0) / 1000 });
 
   const ci = await supa.from("ai_studio_canvas_items").insert({
     conversation_id: opts.conversationId,
@@ -1978,6 +2016,17 @@ Deno.serve(async (req) => {
                 quality: "seedance",
               });
             }
+            if (name === "image_to_reel") {
+              canvasPlaceholderId = crypto.randomUUID();
+              send({
+                type: "canvas_placeholder",
+                placeholder_id: canvasPlaceholderId,
+                kind: "image",
+                prompt: `Image → Reel • ${args.duration || 8}s ${args.resolution || "1080p"}: ${String(args.brief || args.motion_prompt || "").slice(0, 120)}`,
+                aspect_ratio: args.aspect_ratio || "9:16",
+                quality: "seedance",
+              });
+            }
 
             send({ type: "tool_start", id: tc.id, name, args });
             let result: any;
@@ -2291,6 +2340,9 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   conversationId,
                   userId: userId!,
+                  onProgress: (p) => {
+                    if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, ...p });
+                  },
                 });
                 result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: args.resolution === "720p" ? "720p" : "1080p", mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
@@ -2353,6 +2405,7 @@ Deno.serve(async (req) => {
                 if (!imageUrl) {
                   if (!args.brief) { result = { error: "image_to_reel needs either image_url or brief" }; }
                   else {
+                    if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, stage: "submitting", label: "Generating keyframe…", percent: 5, phase: "keyframe" });
                     staticImg = await generateStaticAd({
                       prompt: args.brief,
                       aspectRatio: aspect,
@@ -2363,6 +2416,7 @@ Deno.serve(async (req) => {
                       model: "openai",
                     });
                     imageUrl = staticImg.url;
+                    if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, stage: "queued", label: "Keyframe ready — starting Seedance…", percent: 15, phase: "keyframe" });
                     const ciStatic = await supa.from("ai_studio_canvas_items").insert({
                       conversation_id: conversationId, user_id: userId, kind: "image",
                       payload: {
@@ -2389,6 +2443,9 @@ Deno.serve(async (req) => {
                     clientId: clientId || null,
                     conversationId,
                     userId: userId!,
+                    onProgress: (p) => {
+                      if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, ...p, phase: "animation" });
+                    },
                   });
                   if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
                   result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution, aspect_ratio: aspect };
