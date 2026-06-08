@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const AI_GATEWAY_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 async function callAI(apiKey: string, prompt: string, options?: { temperature?: number; maxTokens?: number; model?: string }) {
   const response = await fetch(AI_GATEWAY_URL, {
@@ -49,9 +49,9 @@ serve(async (req) => {
     const body = await req.json();
     const { action, creative, videoUrl, transcript, imageUrl, editPrompt, model, annotatedImageUrl, aspectRatio, duration } = body;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -354,6 +354,7 @@ ${creativeDetails}`;
             },
             body: JSON.stringify({
               model: "google/gemini-3.1-flash-image-preview",
+        models: ["google/gemini-3.1-flash-image-preview", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
               messages: [{
                 role: "user",
                 content: [

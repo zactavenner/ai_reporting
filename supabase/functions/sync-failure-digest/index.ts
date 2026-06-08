@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
       if (reconIssues.length) message += `\n\n*Reconciliation mismatches (${reconIssues.length}):*\n${reconIssues.slice(0, 10).join("\n")}`;
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
     const SLACK_API_KEY = Deno.env.get("SLACK_API_KEY");
     if (!LOVABLE_API_KEY || !SLACK_API_KEY) {
       console.warn("[sync-failure-digest] Slack not configured — digest:\n" + message);

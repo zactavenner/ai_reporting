@@ -48,7 +48,7 @@ serve(async (req) => {
       if (clientRow?.name) clientName = clientRow.name;
     }
 
-     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+     const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
      if (!LOVABLE_API_KEY) {
       return new Response(
          JSON.stringify({ error: "AI API key not configured" }),
@@ -59,7 +59,7 @@ serve(async (req) => {
     console.log("Processing voice note for client:", clientId);
 
     // Step 1: Transcribe audio using Gemini API
-     const transcriptResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+     const transcriptResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
        method: "POST",
        headers: {
          Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -67,6 +67,7 @@ serve(async (req) => {
        },
        body: JSON.stringify({
          model: "google/gemini-2.5-flash",
+        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
          messages: [
            {
              role: "user",
@@ -119,7 +120,7 @@ serve(async (req) => {
     console.log("Transcript:", transcript.substring(0, 100) + "...");
 
     // Step 2: Generate summary and extract action items
-     const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+     const analysisResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
        method: "POST",
        headers: {
          Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -127,6 +128,7 @@ serve(async (req) => {
        },
        body: JSON.stringify({
          model: "google/gemini-2.5-flash",
+        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
          messages: [
            {
              role: "system",
@@ -278,7 +280,7 @@ Return ONLY valid JSON in this exact shape:
 
 // Helper function for transcribe_only action
 async function handleTranscribeOnly(audioUrl: string) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   if (!LOVABLE_API_KEY) {
     return new Response(
       JSON.stringify({ error: "AI API key not configured" }),
@@ -292,7 +294,7 @@ async function handleTranscribeOnly(audioUrl: string) {
     const audioBlob = await audioResponse.arrayBuffer();
     const base64Audio = base64Encode(audioBlob);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -300,6 +302,7 @@ async function handleTranscribeOnly(audioUrl: string) {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
+        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           {
             role: "user",
@@ -354,7 +357,7 @@ async function handleExtractTaskDetails(
   agencyMembers?: Array<{ id: string; name: string; pod_id?: string }>,
   agencyPods?: Array<{ id: string; name: string }>
 ) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   if (!LOVABLE_API_KEY) {
     return new Response(
       JSON.stringify({ error: "AI API key not configured" }),
@@ -369,7 +372,7 @@ async function handleExtractTaskDetails(
     const base64Audio = base64Encode(audioBlob);
 
     // Step 1: Transcribe
-    const transcribeResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const transcribeResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -377,6 +380,7 @@ async function handleExtractTaskDetails(
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
+        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           {
             role: "user",
@@ -422,7 +426,7 @@ async function handleExtractTaskDetails(
     const membersList = agencyMembers?.map(m => m.name).join(", ") || "";
     const podsList = agencyPods?.map(p => p.name).join(", ") || "";
 
-    const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const extractResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -430,6 +434,7 @@ async function handleExtractTaskDetails(
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
+        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           {
             role: "system",

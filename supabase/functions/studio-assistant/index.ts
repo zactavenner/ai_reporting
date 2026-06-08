@@ -1,10 +1,10 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const GATEWAY_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -120,10 +120,11 @@ async function runGenerateImage(args: any) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Lovable-API-Key': LOVABLE_API_KEY,
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
     },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash-image-preview',
+        models: ['google/gemini-2.5-flash-image-preview', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [{ role: 'user', content: prompt }],
       modalities: ['image', 'text'],
     }),
@@ -248,10 +249,11 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Lovable-API-Key': LOVABLE_API_KEY,
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         },
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash',
+        models: ['google/gemini-2.5-flash', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
           messages: convo,
           tools,
           tool_choice: 'auto',
