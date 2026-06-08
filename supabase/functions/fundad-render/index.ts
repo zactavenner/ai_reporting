@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
     await supa.from('fundad_creatives').update({ video_status: 'generating' }).eq('id', creativeId);
 
     const model = fast ? 'bytedance/seedance-2.0-fast' : 'bytedance/seedance-2.0';
+    const effectiveResolution = fast && resolution === '1080p' ? '720p' : resolution;
     const submit = await fetch('https://openrouter.ai/api/v1/videos', {
       method: 'POST',
       headers: {
@@ -50,7 +51,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model,
         prompt: creative.seedance_prompt,
-        resolution,
+        resolution: effectiveResolution,
         aspect_ratio: '9:16',
         duration: 15,
       }),

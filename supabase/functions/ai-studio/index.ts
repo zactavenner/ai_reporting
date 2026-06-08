@@ -875,12 +875,15 @@ async function generateSeedanceVideo(opts: {
   const model = (opts.model && ALLOWED.includes(opts.model))
     ? opts.model
     : (opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0");
+  const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
+  const effectiveResolution = isSeedanceFast && opts.resolution === "1080p" ? "720p" : opts.resolution;
+  const effectiveDuration = Math.max(4, Math.min(15, Math.round(opts.duration || 15)));
   const body: Record<string, unknown> = {
     model,
     prompt: opts.prompt,
-    resolution: opts.resolution,
+    resolution: effectiveResolution,
     aspect_ratio: opts.aspectRatio,
-    duration: Math.max(3, Math.min(15, Math.round(opts.duration || 15))),
+    duration: effectiveDuration,
   };
   const frames: any[] = [];
   if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
@@ -980,7 +983,7 @@ async function generateSeedanceVideo(opts: {
       model,
       provider: "openrouter",
       duration: body.duration,
-      resolution: opts.resolution,
+      resolution: effectiveResolution,
       scene_order: 1,
       mode: opts.imageUrl ? "image_to_video" : "text_to_video",
       job_id: jobId,
@@ -996,7 +999,7 @@ async function generateSeedanceVideo(opts: {
       content: {
         video_url: storedUrl, storage_path: storagePath, keyframe_url: opts.imageUrl || null,
         aspect_ratio: opts.aspectRatio, prompt: opts.prompt, source: "ai_studio", model,
-        duration: body.duration, resolution: opts.resolution,
+        duration: body.duration, resolution: effectiveResolution,
       },
     });
   }
