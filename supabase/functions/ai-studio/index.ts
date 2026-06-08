@@ -1153,6 +1153,45 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "explode_ad_variants",
+      description: "VARIANT EXPLOSION (Phase 2): from ONE creative brief, generate a matrix of static ad variants in parallel — cross-product of HOOKS × VISUAL STYLES. Use whenever the user asks to 'explode variants', 'give me a matrix', 'test multiple hooks', 'A/B 6 ideas', or wants a batch of ad ideas at once. All variants render in parallel and land on the canvas as a variation_set card. Cap at 12 total (e.g. 3 hooks × 4 styles, 6 hooks × 2 styles). Use 'fast' quality (nano-banana) by default for speed.",
+      parameters: {
+        type: "object",
+        properties: {
+          brief: { type: "string", description: "Core offer / value prop the ad must communicate (the constant across all variants)." },
+          hooks: { type: "array", items: { type: "string" }, description: "Distinct headline / hook lines to test (2–6). Each becomes one row of the matrix." },
+          visual_styles: { type: "array", items: { type: "string" }, description: "Distinct visual treatments to test (1–4). e.g. 'UGC selfie phone shot', 'editorial dark studio', 'bold typographic flat', 'magazine cover gold + green'." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "Default 1:1." },
+          reference_image_url: { type: "string", description: "Optional reference image (winning ad to riff on)." },
+          quality: { type: "string", enum: ["fast", "pro"], description: "Default 'fast' (Nano Banana 2) for batch speed. Use 'pro' (GPT Image 2) only for final picks." },
+        },
+        required: ["brief", "hooks", "visual_styles"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "image_to_reel",
+      description: "ONE-CLICK PIPELINE (Phase 2): take a brief OR an existing image URL and produce a finished short-form REEL end-to-end. Step 1: if no image_url is provided, generate a 9:16 static ad keyframe with generate_static_ad logic. Step 2: animate that keyframe with Seedance 2.0 (image-to-video) into a 5–15s reel. Returns the static ad AND the final mp4 on the canvas. Use whenever the user says 'image to reel', 'make this image into an ad video', 'one-click reel', 'static + reel', or 'animate this ad'.",
+      parameters: {
+        type: "object",
+        properties: {
+          brief: { type: "string", description: "What the reel should communicate. Required if no image_url is passed." },
+          image_url: { type: "string", description: "Optional existing canvas keyframe / static ad URL. If provided, skips static generation." },
+          motion_prompt: { type: "string", description: "Optional explicit camera/motion description for Seedance. If omitted, one will be auto-derived from the brief." },
+          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
+          duration: { type: "integer", minimum: 5, maximum: 15, description: "Reel length in seconds. Default 8." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p." },
+          fast: { type: "boolean", description: "If true, uses seedance-2.0-fast for cheaper draft. Default false." },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 const AD_FORMAT_RULES: Record<string, string> = {
@@ -1194,6 +1233,9 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- APPROVED REFERENCES: This client's approved creatives are auto-loaded as visual references for new generations. You can mention this if helpful (e.g. 'Riffed on the approved ad style from earlier this week').",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
+  "- VARIANT EXPLOSION (Phase 2): When the user asks to 'explode variants', 'matrix', 'A/B 6 ideas', 'test multiple hooks', or wants a BATCH of static ads at once, call explode_ad_variants with arrays of hooks (2–6) and visual_styles (1–4). All variants render in parallel. Default quality='fast' (Nano Banana 2). Use this instead of looping generate_static_ad N times.",
+  "- IMAGE → AD → REEL (Phase 2 one-click pipeline): When the user says 'image to reel', 'static + reel', 'one-click reel', 'turn this brief into a video ad', or 'animate this ad into a reel', call image_to_reel. Pass `image_url` when riffing on an existing canvas card; pass `brief` to generate the keyframe from scratch first. The tool handles BOTH the static keyframe (GPT Image 2) AND the Seedance image-to-video animation in one call.",
+  "- PARALLEL STORYBOARDS: After plan_storyboard returns, IMMEDIATELY fire one generate_scene_image call per scene IN THE SAME tool-calls batch (parallel). After keyframes return, fire one generate_scene_video per scene IN THE SAME batch (parallel). Never serialize scenes.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
   "- SHEET AUDITING (agentic, Manus-style): When the user asks to audit, summarize, review, or analyze the Google Sheet, you MUST cover EVERY tab — never stop after one. Step 1: call list_sheet_tabs. Step 2: call batch_read_sheet with one range per tab (e.g. 'TabTitle!A1:Z200'). Step 3: if any tab returned data that needs deeper inspection, call read_sheet again on a wider range for that tab. Step 4: write a clear markdown report covering EVERY tab found (per-tab section + cross-tab insights, trends, anomalies, recommendations). Keep iterating tool calls until the audit is complete — don't ask the user to confirm mid-audit. Long-form findings (>400 words) should go in a create_text_artifact card; short summaries can stay in chat.",
   "- DOC AUDITING: Same pattern for Google Docs — call read_doc, then produce a structured summary (key sections, action items, gaps) and drop any long-form deliverable on the canvas via create_text_artifact.",
@@ -2252,6 +2294,105 @@ Deno.serve(async (req) => {
                 });
                 result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: args.resolution === "720p" ? "720p" : "1080p", mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "explode_ad_variants") {
+                const hooks: string[] = Array.isArray(args.hooks) ? args.hooks.filter(Boolean).map(String).slice(0, 6) : [];
+                const styles: string[] = Array.isArray(args.visual_styles) ? args.visual_styles.filter(Boolean).map(String).slice(0, 4) : [];
+                if (!hooks.length || !styles.length) {
+                  result = { error: "explode_ad_variants requires non-empty hooks[] and visual_styles[]" };
+                } else {
+                  const aspect = args.aspect_ratio || "1:1";
+                  const quality: "pro" | "fast" = args.quality === "pro" ? "pro" : "fast";
+                  const combos: Array<{ hook: string; style: string }> = [];
+                  for (const h of hooks) for (const s of styles) {
+                    if (combos.length < 12) combos.push({ hook: h, style: s });
+                  }
+                  const settled = await Promise.all(combos.map(async (c) => {
+                    try {
+                      const fullPrompt = `${args.brief}\n\nHEADLINE / HOOK: ${c.hook}\n\nVISUAL STYLE: ${c.style}`;
+                      const img = await generateStaticAd({
+                        prompt: fullPrompt,
+                        aspectRatio: aspect,
+                        referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
+                        clientId: clientId || null,
+                        brandContext,
+                        quality,
+                        model: quality === "pro" ? "openai" : "nano-banana",
+                      });
+                      return { ok: true, url: img.url, storage_path: img.storage_path, mime: img.mime, model: img.model, aspect_ratio: img.aspect_ratio, hook: c.hook, style: c.style };
+                    } catch (e: any) {
+                      return { ok: false, error: e?.message || String(e), hook: c.hook, style: c.style };
+                    }
+                  }));
+                  const variants = settled.filter((x: any) => x.ok);
+                  const errors = settled.filter((x: any) => !x.ok);
+                  const ci = await supa.from("ai_studio_canvas_items").insert({
+                    conversation_id: conversationId, user_id: userId, kind: "variation_set",
+                    payload: {
+                      prompt: `Variant matrix: ${hooks.length} hooks × ${styles.length} styles`,
+                      aspect_ratio: aspect,
+                      source_image_url: args.reference_image_url || null,
+                      saved_indices: [] as number[],
+                      matrix: { hooks, styles },
+                      variants: variants.map((x: any) => ({
+                        image_url: x.url, storage_path: x.storage_path, mime: x.mime,
+                        model: x.model, aspect_ratio: x.aspect_ratio,
+                        hint: `${x.hook} — ${x.style}`,
+                        hook: x.hook, style: x.style,
+                      })),
+                    },
+                  }).select("id, payload, kind, created_at").single();
+                  if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+                  result = { ok: true, generated: variants.length, failed: errors.length, errors: errors.slice(0, 5), aspect_ratio: aspect };
+                }
+              } else if (name === "image_to_reel") {
+                const aspect = args.aspect_ratio || "9:16";
+                const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 8;
+                const resolution = args.resolution === "720p" ? "720p" : "1080p";
+                let imageUrl: string | null = args.image_url || null;
+                let staticImg: any = null;
+                if (!imageUrl) {
+                  if (!args.brief) { result = { error: "image_to_reel needs either image_url or brief" }; }
+                  else {
+                    staticImg = await generateStaticAd({
+                      prompt: args.brief,
+                      aspectRatio: aspect,
+                      referenceImageUrl: defaultReferenceImageUrl || undefined,
+                      clientId: clientId || null,
+                      brandContext,
+                      quality: "pro",
+                      model: "openai",
+                    });
+                    imageUrl = staticImg.url;
+                    const ciStatic = await supa.from("ai_studio_canvas_items").insert({
+                      conversation_id: conversationId, user_id: userId, kind: "image",
+                      payload: {
+                        image_url: staticImg.url, storage_path: staticImg.storage_path, mime: staticImg.mime,
+                        model: staticImg.model, aspect_ratio: staticImg.aspect_ratio,
+                        prompt: `[image→reel keyframe] ${String(args.brief).slice(0, 200)}`,
+                        pipeline: "image_to_reel:keyframe",
+                      },
+                    }).select("id, payload, kind, created_at").single();
+                    if (ciStatic.data) send({ type: "canvas_item", item: ciStatic.data });
+                  }
+                }
+                if (imageUrl && !result?.error) {
+                  const motion = String(args.motion_prompt || `Subtle cinematic motion bringing this ad to life: gentle camera push-in, soft parallax on the subject, brand colors holding steady, on-screen text remains crisp and readable, end frame matches start frame for a clean loop. Hook concept: ${String(args.brief || "").slice(0, 280)}`);
+                  const r = await generateSeedanceVideo({
+                    prompt: motion + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
+                    aspectRatio: aspect,
+                    duration,
+                    resolution,
+                    imageUrl,
+                    lastFrameUrl: null,
+                    fast: !!args.fast,
+                    model: selectedVideoModel,
+                    clientId: clientId || null,
+                    conversationId,
+                    userId: userId!,
+                  });
+                  if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+                  result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution, aspect_ratio: aspect };
+                }
               } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);
                 const artifactType = String(args.artifact_type || "other");
