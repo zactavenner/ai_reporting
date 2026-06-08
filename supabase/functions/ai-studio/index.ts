@@ -1153,6 +1153,45 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "explode_ad_variants",
+      description: "VARIANT EXPLOSION (Phase 2): from ONE creative brief, generate a matrix of static ad variants in parallel — cross-product of HOOKS × VISUAL STYLES. Use whenever the user asks to 'explode variants', 'give me a matrix', 'test multiple hooks', 'A/B 6 ideas', or wants a batch of ad ideas at once. All variants render in parallel and land on the canvas as a variation_set card. Cap at 12 total (e.g. 3 hooks × 4 styles, 6 hooks × 2 styles). Use 'fast' quality (nano-banana) by default for speed.",
+      parameters: {
+        type: "object",
+        properties: {
+          brief: { type: "string", description: "Core offer / value prop the ad must communicate (the constant across all variants)." },
+          hooks: { type: "array", items: { type: "string" }, description: "Distinct headline / hook lines to test (2–6). Each becomes one row of the matrix." },
+          visual_styles: { type: "array", items: { type: "string" }, description: "Distinct visual treatments to test (1–4). e.g. 'UGC selfie phone shot', 'editorial dark studio', 'bold typographic flat', 'magazine cover gold + green'." },
+          aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "Default 1:1." },
+          reference_image_url: { type: "string", description: "Optional reference image (winning ad to riff on)." },
+          quality: { type: "string", enum: ["fast", "pro"], description: "Default 'fast' (Nano Banana 2) for batch speed. Use 'pro' (GPT Image 2) only for final picks." },
+        },
+        required: ["brief", "hooks", "visual_styles"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "image_to_reel",
+      description: "ONE-CLICK PIPELINE (Phase 2): take a brief OR an existing image URL and produce a finished short-form REEL end-to-end. Step 1: if no image_url is provided, generate a 9:16 static ad keyframe with generate_static_ad logic. Step 2: animate that keyframe with Seedance 2.0 (image-to-video) into a 5–15s reel. Returns the static ad AND the final mp4 on the canvas. Use whenever the user says 'image to reel', 'make this image into an ad video', 'one-click reel', 'static + reel', or 'animate this ad'.",
+      parameters: {
+        type: "object",
+        properties: {
+          brief: { type: "string", description: "What the reel should communicate. Required if no image_url is passed." },
+          image_url: { type: "string", description: "Optional existing canvas keyframe / static ad URL. If provided, skips static generation." },
+          motion_prompt: { type: "string", description: "Optional explicit camera/motion description for Seedance. If omitted, one will be auto-derived from the brief." },
+          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
+          duration: { type: "integer", minimum: 5, maximum: 15, description: "Reel length in seconds. Default 8." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p." },
+          fast: { type: "boolean", description: "If true, uses seedance-2.0-fast for cheaper draft. Default false." },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 const AD_FORMAT_RULES: Record<string, string> = {
