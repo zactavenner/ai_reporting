@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { callOpenRouterJSON } from '../_shared/openrouter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, model, apiKey: clientKey } = await req.json();
+    const { prompt, model } = await req.json();
 
     if (!prompt) {
       return new Response(
@@ -20,63 +21,20 @@ serve(async (req) => {
       );
     }
 
-    // Use client-provided key first, then env var directly
-    // (skip DB lookup since that key may be expired)
-    const geminiKey = clientKey?.trim() || Deno.env.get('GEMINI_API_KEY');
-    if (!geminiKey) {
-      return new Response(
-        JSON.stringify({ error: 'No Gemini API key configured. Add GEMINI_API_KEY in settings.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    const selectedModel = model || 'gemini-2.5-flash';
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini error:', response.status, errorText);
-      return new Response(
-        JSON.stringify({ error: 'Gemini API error', details: errorText }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    const data = await response.json();
-    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!textContent) {
-      return new Response(
-        JSON.stringify({ error: 'No text in Gemini response' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    let parsed;
     try {
-      parsed = JSON.parse(textContent);
-    } catch {
+      const { data } = await callOpenRouterJSON([{ role: 'user', content: prompt }], {
+        models: model ? [model] : undefined,
+      });
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      console.error('OpenRouter error:', err);
       return new Response(
-        JSON.stringify({ result: textContent }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        JSON.stringify({ error: 'AI request failed', details: String(err) }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
-
-    return new Response(
-      JSON.stringify(parsed),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    );
   } catch (error) {
     console.error('Generate ad script error:', error);
     return new Response(
