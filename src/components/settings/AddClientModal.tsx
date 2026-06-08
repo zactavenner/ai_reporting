@@ -27,6 +27,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Globe, Sparkles, Plus, X } from 'lucide-react';
 import { getOnboardingTemplate, type OnboardingTemplateKey } from '@/lib/onboardingTaskTemplates';
+import { seedOnboardingTasksIntoPM } from '@/lib/onboardingTaskSeeder';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const addClientSchema = z.object({
@@ -139,17 +140,10 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
       // Auto-seed onboarding tasks based on selected client type
       try {
         const templateTasks = getOnboardingTemplate(values.client_type as OnboardingTemplateKey);
-        const rows = templateTasks.map(t => ({
-          client_id: client.id,
-          category: t.category,
-          title: t.title,
-          sort_order: t.sort_order,
-          completed: false,
-        }));
-        const { error: seedError } = await supabase
-          .from('client_onboarding_tasks' as any)
-          .insert(rows as any);
-        if (seedError) console.error('Error seeding onboarding tasks:', seedError);
+        // Seeds into the regular PM tasks system:
+        // creates an "Onboarding" project, one parent task per category,
+        // and a subtask under each parent for every template item.
+        await seedOnboardingTasksIntoPM(client.id, templateTasks);
       } catch (seedErr) {
         console.error('Error seeding onboarding tasks:', seedErr);
       }
