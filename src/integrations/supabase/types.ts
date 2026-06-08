@@ -7749,6 +7749,7 @@ export type Database = {
           category: string
           created_at: string
           id: string
+          parent_title: string | null
           sort_order: number
           template_key: string
           title: string
@@ -7758,6 +7759,7 @@ export type Database = {
           category: string
           created_at?: string
           id?: string
+          parent_title?: string | null
           sort_order?: number
           template_key: string
           title: string
@@ -7767,6 +7769,7 @@ export type Database = {
           category?: string
           created_at?: string
           id?: string
+          parent_title?: string | null
           sort_order?: number
           template_key?: string
           title?: string

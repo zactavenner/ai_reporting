@@ -1,0 +1,83 @@
+ALTER TABLE public.onboarding_template_items ADD COLUMN IF NOT EXISTS parent_title text;
+CREATE INDEX IF NOT EXISTS onboarding_template_items_key_cat_parent_idx ON public.onboarding_template_items (template_key, category, parent_title, sort_order);
+
+-- Reset capital template with new structure matching the SOP screenshots
+DELETE FROM public.onboarding_template_items WHERE template_key = 'capital';
+
+INSERT INTO public.onboarding_template_items (template_key, category, parent_title, title, sort_order) VALUES
+-- Client Setup / Requests
+('capital','Client Setup / Requests', NULL, 'Add team members to GHL based on emails & numbers provided', 1),
+('capital','Client Setup / Requests', NULL, 'Meta Ad account Access', 2),
+('capital','Client Setup / Requests', 'Meta Ad account Access', 'Page Created', 3),
+('capital','Client Setup / Requests', 'Meta Ad account Access', 'Pixel Created', 4),
+('capital','Client Setup / Requests', 'Meta Ad account Access', 'Audience / LLA Audience Created', 5),
+('capital','Client Setup / Requests', 'Meta Ad account Access', 'Credit Card Added', 6),
+('capital','Client Setup / Requests', NULL, 'Domain DNS Access', 7),
+('capital','Client Setup / Requests', NULL, 'Connect Calendar with GHL', 8),
+('capital','Client Setup / Requests', NULL, 'Download Phone App for GoHighLevel', 9),
+('capital','Client Setup / Requests', NULL, 'Setup Availability', 10),
+('capital','Client Setup / Requests', NULL, 'Purchase Phone Number with Person Identification', 11),
+('capital','Client Setup / Requests', NULL, 'Ad / FAQ Videos', 12),
+('capital','Client Setup / Requests', 'Ad / FAQ Videos', 'Edit Videos', 13),
+('capital','Client Setup / Requests', 'Ad / FAQ Videos', 'Get Approval', 14),
+('capital','Client Setup / Requests', NULL, 'Add $97/month Subscription to NK Account (If they are using our platform)', 15),
+('capital','Client Setup / Requests', NULL, 'Client to Purchase Phone Number & ID Verification', 16),
+
+-- Ads
+('capital','Ads', NULL, 'Setup Business Portfolio or Get Access', 17),
+('capital','Ads', NULL, 'Setup Ad Account with Billing', 18),
+('capital','Ads', NULL, 'Credit Card is on File (spending limit is good)', 19),
+('capital','Ads', NULL, 'Ad Account Warm Up Completed', 20),
+('capital','Ads', 'Ad Account Warm Up Completed', '$25/day Engagment Likes Campaign (no images or text)', 21),
+('capital','Ads', 'Ad Account Warm Up Completed', 'Wait Until $5 is spent then move to next campaign', 22),
+('capital','Ads', NULL, 'Setup Audiences on Meta', 23),
+('capital','Ads', 'Setup Audiences on Meta', 'LLA - Funded Investors', 24),
+('capital','Ads', 'Setup Audiences on Meta', 'LLA - Investor Leads', 25),
+('capital','Ads', NULL, 'Pixel is Setup on Funnel', 26),
+('capital','Ads', NULL, 'Setup Lead Form - DQ Non Accredited', 27),
+('capital','Ads', NULL, 'Review Copy & Creatives', 28),
+('capital','Ads', NULL, 'Create Ad Campaign with Copy & Creatives', 29),
+('capital','Ads', NULL, 'Launch Final Lead Gen - Ad Campaign After Approval', 30),
+('capital','Ads', NULL, 'API Meta Ads Setup', 31),
+('capital','Ads', NULL, 'Make Sure Comment Guard is setup with MODERATION & AGENT to reply to comments', 32),
+
+-- CRM
+('capital','CRM', NULL, 'Set-Up For A2P & Phone Number', 33),
+('capital','CRM', 'Set-Up For A2P & Phone Number', 'Submit A2P', 34),
+('capital','CRM', 'Set-Up For A2P & Phone Number', 'Purchase Phone Numbers (1 For Each Location)', 35),
+('capital','CRM', NULL, 'Reporting Setup - Google Sheets', 36),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Add sheet to Current Clients Tab under Client Name', 37),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Shared with Client', 38),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Leads Connected', 39),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Funded Connected', 40),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Committed Connected', 41),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Booked Calls Connected', 42),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Call Transcript > Sheet Connected', 43),
+('capital','CRM', 'Reporting Setup - Google Sheets', 'Make > Ad Spend Reporting Tab', 44),
+('capital','CRM', NULL, 'Funnel Setup', 45),
+('capital','CRM', 'Funnel Setup', 'Link sub-domain to Funnel or purchase domain', 46),
+('capital','CRM', 'Funnel Setup', 'Calendar Page', 47),
+('capital','CRM', 'Funnel Setup', 'Use CHATGPT TO REVIEW IT FOR FEEDBACK', 48),
+('capital','CRM', 'Funnel Setup', 'Get Approval from Manager', 49),
+('capital','CRM', 'Funnel Setup', 'Setup Thank You Page with Video using AI or from Client (Include Pitch Deck Here to Download)', 50),
+('capital','CRM', NULL, 'Communicate Status of Setup Completion', 51),
+('capital','CRM', NULL, 'Phase 2 (1 Week Out After Launch)', 52),
+('capital','CRM', 'Phase 2 (1 Week Out After Launch)', 'AI Setter (Use Prompt)', 53),
+('capital','CRM', 'Phase 2 (1 Week Out After Launch)', 'AI Caller', 54),
+('capital','CRM', 'Phase 2 (1 Week Out After Launch)', 'AI Transcript > Google Sheet', 55),
+('capital','CRM', 'Phase 2 (1 Week Out After Launch)', 'AI Video with VEO3', 56),
+('capital','CRM', 'Phase 2 (1 Week Out After Launch)', 'Customer File of Old Leads', 57),
+('capital','CRM', 'Phase 2 (1 Week Out After Launch)', 'Google Ads Account', 58),
+('capital','CRM', NULL, 'VSL Creation (ONLY IF NOT PROVIDED)', 59),
+('capital','CRM', 'VSL Creation (ONLY IF NOT PROVIDED)', 'Take Survey, Website and Create VSL Script', 60),
+('capital','CRM', 'VSL Creation (ONLY IF NOT PROVIDED)', 'Upload to GAMMA.APP', 61),
+('capital','CRM', 'VSL Creation (ONLY IF NOT PROVIDED)', 'Export as PDF > Canva', 62),
+('capital','CRM', 'VSL Creation (ONLY IF NOT PROVIDED)', 'Share Embed Code of Slides & Put onto GHL Funnel', 63),
+
+-- Creatives
+('capital','Creatives', NULL, 'Create 20 Creatives for Fund', 64),
+('capital','Creatives', NULL, 'Create 4 - 30 second Video Ads', 65),
+('capital','Creatives', 'Create 4 - 30 second Video Ads', 'Podcast Style', 66),
+('capital','Creatives', 'Create 4 - 30 second Video Ads', 'Deal Overview with Numbers as Hook', 67),
+('capital','Creatives', 'Create 4 - 30 second Video Ads', 'UGC STYLE (Rv Park = Scence is selfie style at RV park talking about fund)', 68),
+('capital','Creatives', 'Create 4 - 30 second Video Ads', 'Market Trend Hook, Body, CTA', 69);
