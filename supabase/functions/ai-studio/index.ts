@@ -2292,6 +2292,112 @@ Deno.serve(async (req) => {
                 result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: args.resolution === "720p" ? "720p" : "1080p", mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "create_text_artifact") {
+                // (handled below)
+                // placeholder marker — actual handler still runs
+                // (kept for diff anchor)
+                result = result; // no-op
+              }
+              // Inserted Phase 2 handlers
+              if (name === "explode_ad_variants") {
+                const hooks: string[] = Array.isArray(args.hooks) ? args.hooks.filter(Boolean).map(String).slice(0, 6) : [];
+                const styles: string[] = Array.isArray(args.visual_styles) ? args.visual_styles.filter(Boolean).map(String).slice(0, 4) : [];
+                if (!hooks.length || !styles.length) {
+                  result = { error: "explode_ad_variants requires non-empty hooks[] and visual_styles[]" };
+                } else {
+                  const aspect = args.aspect_ratio || "1:1";
+                  const quality: "pro" | "fast" = args.quality === "pro" ? "pro" : "fast";
+                  const combos: Array<{ hook: string; style: string }> = [];
+                  for (const h of hooks) for (const s of styles) {
+                    if (combos.length < 12) combos.push({ hook: h, style: s });
+                  }
+                  const settled = await Promise.all(combos.map(async (c) => {
+                    try {
+                      const fullPrompt = `${args.brief}\n\nHEADLINE / HOOK: ${c.hook}\n\nVISUAL STYLE: ${c.style}`;
+                      const img = await generateStaticAd({
+                        prompt: fullPrompt,
+                        aspectRatio: aspect,
+                        referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
+                        clientId: clientId || null,
+                        brandContext,
+                        quality,
+                        model: quality === "pro" ? "openai" : "nano-banana",
+                      });
+                      return { ok: true, url: img.url, storage_path: img.storage_path, mime: img.mime, model: img.model, aspect_ratio: img.aspect_ratio, hook: c.hook, style: c.style };
+                    } catch (e: any) {
+                      return { ok: false, error: e?.message || String(e), hook: c.hook, style: c.style };
+                    }
+                  }));
+                  const variants = settled.filter((x: any) => x.ok);
+                  const errors = settled.filter((x: any) => !x.ok);
+                  const ci = await supa.from("ai_studio_canvas_items").insert({
+                    conversation_id: conversationId, user_id: userId, kind: "variation_set",
+                    payload: {
+                      prompt: `Variant matrix: ${hooks.length} hooks × ${styles.length} styles`,
+                      aspect_ratio: aspect,
+                      source_image_url: args.reference_image_url || null,
+                      saved_indices: [] as number[],
+                      matrix: { hooks, styles },
+                      variants: variants.map((x: any) => ({
+                        image_url: x.url, storage_path: x.storage_path, mime: x.mime,
+                        model: x.model, aspect_ratio: x.aspect_ratio,
+                        hint: `${x.hook} — ${x.style}`,
+                        hook: x.hook, style: x.style,
+                      })),
+                    },
+                  }).select("id, payload, kind, created_at").single();
+                  if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
+                  result = { ok: true, generated: variants.length, failed: errors.length, errors: errors.slice(0, 5), aspect_ratio: aspect };
+                }
+              } else if (name === "image_to_reel") {
+                const aspect = args.aspect_ratio || "9:16";
+                const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 8;
+                const resolution = args.resolution === "720p" ? "720p" : "1080p";
+                let imageUrl: string | null = args.image_url || null;
+                let staticImg: any = null;
+                if (!imageUrl) {
+                  if (!args.brief) { result = { error: "image_to_reel needs either image_url or brief" }; }
+                  else {
+                    staticImg = await generateStaticAd({
+                      prompt: args.brief,
+                      aspectRatio: aspect,
+                      referenceImageUrl: defaultReferenceImageUrl || undefined,
+                      clientId: clientId || null,
+                      brandContext,
+                      quality: "pro",
+                      model: "openai",
+                    });
+                    imageUrl = staticImg.url;
+                    const ciStatic = await supa.from("ai_studio_canvas_items").insert({
+                      conversation_id: conversationId, user_id: userId, kind: "image",
+                      payload: {
+                        image_url: staticImg.url, storage_path: staticImg.storage_path, mime: staticImg.mime,
+                        model: staticImg.model, aspect_ratio: staticImg.aspect_ratio,
+                        prompt: `[image→reel keyframe] ${String(args.brief).slice(0, 200)}`,
+                        pipeline: "image_to_reel:keyframe",
+                      },
+                    }).select("id, payload, kind, created_at").single();
+                    if (ciStatic.data) send({ type: "canvas_item", item: ciStatic.data });
+                  }
+                }
+                if (imageUrl && !result?.error) {
+                  const motion = String(args.motion_prompt || `Subtle cinematic motion bringing this ad to life: gentle camera push-in, soft parallax on the subject, brand colors holding steady, on-screen text remains crisp and readable, end frame matches start frame for a clean loop. Hook concept: ${String(args.brief || "").slice(0, 280)}`);
+                  const r = await generateSeedanceVideo({
+                    prompt: motion + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
+                    aspectRatio: aspect,
+                    duration,
+                    resolution,
+                    imageUrl,
+                    lastFrameUrl: null,
+                    fast: !!args.fast,
+                    model: selectedVideoModel,
+                    clientId: clientId || null,
+                    conversationId,
+                    userId: userId!,
+                  });
+                  if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+                  result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution, aspect_ratio: aspect };
+                }
+              } else if (name === "__phase2_anchor_unused__") {
                 const title = String(args.title || "Untitled").slice(0, 200);
                 const artifactType = String(args.artifact_type || "other");
                 const content = String(args.content || "");
