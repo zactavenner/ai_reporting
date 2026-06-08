@@ -42,8 +42,32 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const dateStart = startDate ? `${startDate}T00:00:00.000Z` : null;
-    const dateEnd = endDate ? `${endDate}T23:59:59.999Z` : null;
+    // Load per-client attribution config (UTM field mapping + window).
+    // Saved by AttributionSettings UI under webhook_mappings.attribution.
+    const { data: settingsRow } = await supabase
+      .from("client_settings")
+      .select("webhook_mappings")
+      .eq("client_id", clientId)
+      .maybeSingle();
+    const attrCfg = (settingsRow?.webhook_mappings as any)?.attribution || {};
+    const utmSourceField: string = attrCfg.utm_source_field || "utm_source";
+    const utmMediumField: string = attrCfg.utm_medium_field || "utm_medium";
+    const utmCampaignField: string = attrCfg.utm_campaign_field || "utm_campaign";
+    const utmContentField: string = attrCfg.utm_content_field || "utm_content";
+    const windowDays: number = Number(attrCfg.attribution_window_days) || 0;
+
+    // If caller didn't supply a window and config has one, derive endDate=now, startDate=now-windowDays.
+    let effStart = startDate;
+    let effEnd = endDate;
+    if (!effStart && !effEnd && windowDays > 0) {
+      const end = new Date();
+      const start = new Date(end.getTime() - windowDays * 86400000);
+      effStart = start.toISOString().slice(0, 10);
+      effEnd = end.toISOString().slice(0, 10);
+    }
+    const dateStart = effStart ? `${effStart}T00:00:00.000Z` : null;
+    const dateEnd = effEnd ? `${effEnd}T23:59:59.999Z` : null;
+    console.log(`Attribution config: window=${windowDays}d, utmFields=${utmSourceField}/${utmMediumField}/${utmCampaignField}/${utmContentField}, range=${dateStart}..${dateEnd}`);
 
     // 1. Get meta entities
     const { data: metaCampaigns } = await supabase.from("meta_campaigns").select("id, name, spend, meta_campaign_id").eq("client_id", clientId);
@@ -139,7 +163,7 @@ Deno.serve(async (req) => {
       let attributed = false;
 
       // Campaign matching: campaign_name or utm_campaign
-      const campaignName = lead.campaign_name || lead.utm_campaign;
+      const campaignName = lead.campaign_name || lead[utmCampaignField] || lead.utm_campaign;
       if (campaignName) {
         if (campaignByName.has(campaignName)) {
           addStats(campaignStats, campaignName, lead.id, isSpam);
@@ -152,7 +176,11 @@ Deno.serve(async (req) => {
       }
 
       // Ad set matching: ad_set_name or utm_medium
-      const adSetName = lead.ad_set_name || lead.utm_medium;
+      // NOTE: utm_medium is commonly normalized to a platform name elsewhere
+      // (e.g. "Facebook"), so prefer the configured field; only fall back to
+      // utm_medium if it actually matches a known ad-set name.
+      const cfgMedium = lead[utmMediumField];
+      const adSetName = lead.ad_set_name || cfgMedium || lead.utm_medium;
       if (adSetName) {
         if (adSetByName.has(adSetName)) {
           addStats(adSetStats, adSetName, lead.id, isSpam);
@@ -165,7 +193,7 @@ Deno.serve(async (req) => {
 
       // Ad matching: ad_id or utm_content
       let matchedAdId: string | null = null;
-      const adIdToMatch = lead.ad_id || lead.utm_content;
+      const adIdToMatch = lead.ad_id || lead[utmContentField] || lead.utm_content;
       if (adIdToMatch) {
         const directAd = metaAdByMetaId.get(adIdToMatch);
         if (directAd) matchedAdId = directAd.id;
