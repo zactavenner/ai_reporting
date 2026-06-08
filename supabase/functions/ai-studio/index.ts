@@ -2405,6 +2405,7 @@ Deno.serve(async (req) => {
                 if (!imageUrl) {
                   if (!args.brief) { result = { error: "image_to_reel needs either image_url or brief" }; }
                   else {
+                    if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, stage: "submitting", label: "Generating keyframe…", percent: 5, phase: "keyframe" });
                     staticImg = await generateStaticAd({
                       prompt: args.brief,
                       aspectRatio: aspect,
@@ -2415,6 +2416,7 @@ Deno.serve(async (req) => {
                       model: "openai",
                     });
                     imageUrl = staticImg.url;
+                    if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, stage: "queued", label: "Keyframe ready — starting Seedance…", percent: 15, phase: "keyframe" });
                     const ciStatic = await supa.from("ai_studio_canvas_items").insert({
                       conversation_id: conversationId, user_id: userId, kind: "image",
                       payload: {
