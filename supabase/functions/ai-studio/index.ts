@@ -2441,6 +2441,9 @@ Deno.serve(async (req) => {
                     clientId: clientId || null,
                     conversationId,
                     userId: userId!,
+                    onProgress: (p) => {
+                      if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, ...p, phase: "animation" });
+                    },
                   });
                   if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
                   result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution, aspect_ratio: aspect };
