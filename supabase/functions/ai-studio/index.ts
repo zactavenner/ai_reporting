@@ -1004,7 +1004,7 @@ async function generateSeedanceVideo(opts: {
     });
   }
 
-  return { item: ci.data, video_url: storedUrl, model };
+  return { item: ci.data, video_url: storedUrl, model, resolution: effectiveResolution };
 }
 
 // ---------- Tool schema ----------
@@ -1155,17 +1155,17 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality short video clip (3–15s, up to 1080p) using ByteDance Seedance 2.0 via OpenRouter. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url (and optionally last_frame_url) to animate a reference frame. Strong at character consistency, camera motion, and brand-style preservation. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Use 'fast: true' for cheap iteration drafts.",
+      description: "Generate a single high-quality short video clip (4–15s) using ByteDance Seedance 2.0 via OpenRouter. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url (and optionally last_frame_url) to animate a reference frame. Strong at character consistency, camera motion, and brand-style preservation. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Use 'fast: true' for cheap iteration drafts; Seedance 2.0 Fast supports 720p max, while standard Seedance 2.0 supports 1080p.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1"], description: "Default 9:16 for reels/stories." },
           duration: { type: "integer", minimum: 3, maximum: 15, description: "Clip length in seconds. Default 15." },
-          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p (highest supported on Seedance 2.0)." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p on standard Seedance 2.0. Use 720p when fast=true or model is bytedance/seedance-2.0-fast." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
-          fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality). Default false." },
+          fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality, 720p max). Default false." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "moonshotai/kling-v2.1", "moonshotai/kling-v2.1-pro"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
