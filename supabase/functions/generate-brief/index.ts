@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callOpenRouterJSON } from "../_shared/openrouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,51 +15,15 @@ const SYSTEM_PROMPT = `You are a senior performance media buyer at a top ad agen
 - recommended_variations: array of 3 objects, each with: variation_name, concept, hook_draft, body_direction, cta_suggestion, format (static/video/carousel)
 - brief_summary: 2-3 sentence summary of what's working and what to try next`;
 
-async function callAI(topAds: any[], retryCount = 0): Promise<any> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
+async function callAI(topAds: any[]): Promise<any> {
+  const { data } = await callOpenRouterJSON([
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `Here are the top performing ads:\n\n${JSON.stringify(topAds, null, 2)}\n\nAnalyze these and produce the creative brief as JSON.`,
     },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Here are the top performing ads:\n\n${JSON.stringify(topAds, null, 2)}\n\nAnalyze these and produce the creative brief as JSON.`,
-        },
-      ],
-      max_tokens: 2000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    if (response.status === 429) throw new Error("Rate limited — please try again later.");
-    if (response.status === 402) throw new Error("AI credits exhausted — please add funds.");
-    throw new Error(`AI gateway error ${response.status}: ${errText}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || "";
-
-  // Strip markdown fences if present
-  const cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
-
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    if (retryCount < 1) {
-      console.warn("Failed to parse AI JSON, retrying...", cleaned.substring(0, 200));
-      return callAI(topAds, retryCount + 1);
-    }
-    throw new Error(`AI returned invalid JSON after retry. Raw: ${cleaned.substring(0, 500)}`);
-  }
+  ], { max_tokens: 2000 });
+  return data;
 }
 
 serve(async (req) => {
