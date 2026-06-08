@@ -5,6 +5,7 @@ export interface OnboardingTemplateItem {
   category: string;
   title: string;
   sort_order: number;
+  parent_title?: string | null;
 }
 
 /**
@@ -101,7 +102,12 @@ export async function seedOnboardingTasksIntoPM(
   }
 
   // 5. Insert subtasks under each parent.
-  const subtaskRows = templateTasks.map(t => ({
+  // First insert top-level subtasks (no parent_title) under their category parent,
+  // capture their IDs, then insert nested sub-subtasks parented to those.
+  const topItems = templateTasks.filter(t => !t.parent_title);
+  const nestedItems = templateTasks.filter(t => !!t.parent_title);
+
+  const topRows = topItems.map(t => ({
     client_id: clientId,
     project_id: projectId,
     parent_task_id: parentByCategory.get(t.category) ?? null,
@@ -113,13 +119,51 @@ export async function seedOnboardingTasksIntoPM(
     stage: 'todo',
     priority: 'medium',
     visible_to_client: true,
+    show_subtasks_to_client: true,
   }));
-  const { error: subErr } = await supabase.from('tasks').insert(subtaskRows as any);
-  if (subErr) throw subErr;
+  const { data: insertedTop, error: topErr } = await supabase
+    .from('tasks')
+    .insert(topRows as any)
+    .select('id, title, category');
+  if (topErr) throw topErr;
+
+  // Build lookup: (category|title) -> top subtask id
+  const topByKey = new Map<string, string>();
+  (insertedTop ?? []).forEach((row: any) => {
+    topByKey.set(`${row.category}::${row.title}`, row.id);
+  });
+
+  let nestedCount = 0;
+  if (nestedItems.length) {
+    const nestedRows = nestedItems
+      .map(t => {
+        const parentId = topByKey.get(`${t.category}::${t.parent_title}`);
+        if (!parentId) return null;
+        return {
+          client_id: clientId,
+          project_id: projectId,
+          parent_task_id: parentId,
+          title: t.title,
+          description: `Onboarding · ${t.category} · ${t.parent_title}`,
+          category: t.category,
+          sort_order: t.sort_order,
+          status: 'todo',
+          stage: 'todo',
+          priority: 'medium',
+          visible_to_client: true,
+        };
+      })
+      .filter(Boolean) as any[];
+    if (nestedRows.length) {
+      const { error: nestedErr } = await supabase.from('tasks').insert(nestedRows);
+      if (nestedErr) throw nestedErr;
+      nestedCount = nestedRows.length;
+    }
+  }
 
   return {
     projectId: projectId!,
     parentCount: parentRows.length,
-    subtaskCount: subtaskRows.length,
+    subtaskCount: topRows.length + nestedCount,
   };
 }
