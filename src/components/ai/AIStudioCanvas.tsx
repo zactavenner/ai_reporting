@@ -205,6 +205,8 @@ export function AIStudioCanvas({
         >
       {entries.map((e, i) => {
         if ("__placeholder" in e) {
+          const pr = e.progress;
+          const pct = pr?.percent ?? (pr?.stage === "completed" ? 100 : pr?.stage === "queued" ? 8 : pr?.stage === "submitting" ? 2 : 0);
           return (
             <Card key={`ph-${e.placeholder_id}`} data-canvas-card className="p-4 border-dashed">
               <div className="flex items-start gap-3">
@@ -215,9 +217,21 @@ export function AIStudioCanvas({
                   <div className="flex items-center gap-2 mb-1">
                     <Badge variant="outline" className="text-[10px]">{e.aspect_ratio}</Badge>
                     <Badge variant="secondary" className="text-[10px]">{e.quality === "fast" ? "fast" : "pro"}</Badge>
-                    <span className="text-xs text-muted-foreground">{e.failed ? "failed" : "building on canvas…"}</span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {e.failed ? "failed" : (pr?.label || "building on canvas…")}
+                      {pr?.elapsed_s ? ` · ${Math.round(pr.elapsed_s)}s` : ""}
+                      {pr?.phase ? ` · ${pr.phase}` : ""}
+                    </span>
                   </div>
                   <p className="text-sm line-clamp-2">{e.prompt}</p>
+                  {!e.failed && pr && (
+                    <div className="mt-2 h-1.5 w-full rounded bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-500"
+                        style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+                      />
+                    </div>
+                  )}
                   {e.failed && <p className="text-xs text-destructive mt-1">{e.failed}</p>}
                 </div>
               </div>
