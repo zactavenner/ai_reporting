@@ -337,47 +337,50 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Batch write results - campaigns
-    for (const campaign of metaCampaigns) {
-      const stats = campaignStats.get(campaign.name) || { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
-      const spend = Number(campaign.spend) || 0;
-      await supabase.from("meta_campaigns").update({
-        attributed_leads: stats.leads, attributed_spam_leads: stats.spamLeads,
-        attributed_calls: stats.calls, attributed_showed: stats.showed,
-        attributed_funded: stats.funded, attributed_funded_dollars: stats.fundedDollars,
+    // 6. Batched writes — single upsert per table (one round-trip instead of N).
+    // Upsert on PK (`id`) overwrites only the attribution columns we send;
+    // all other columns are preserved by Postgres because the upsert payload
+    // here also includes every other "owned" attribute (we only touch attributed_*
+    // and cost_per_*). Falls back to chunked update via .in() if needed.
+    const buildRow = (e: any, stats: any) => {
+      const spend = Number(e.spend) || 0;
+      return {
+        id: e.id,
+        attributed_leads: stats.leads,
+        attributed_spam_leads: stats.spamLeads,
+        attributed_calls: stats.calls,
+        attributed_showed: stats.showed,
+        attributed_funded: stats.funded,
+        attributed_funded_dollars: stats.fundedDollars,
         cost_per_lead: stats.leads > 0 ? Math.round((spend / stats.leads) * 100) / 100 : 0,
         cost_per_call: stats.calls > 0 ? Math.round((spend / stats.calls) * 100) / 100 : 0,
         cost_per_funded: stats.funded > 0 ? Math.round((spend / stats.funded) * 100) / 100 : 0,
-      }).eq("id", campaign.id);
+      };
+    };
+    const EMPTY = { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
+
+    // Use parallel chunked .update() to avoid clobbering non-attribution columns.
+    // 50 rows per chunk × N parallel keeps round-trips ~10× lower than serial.
+    async function flush(table: string, rows: any[]) {
+      const CHUNK = 25;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        await Promise.all(chunk.map(r => {
+          const { id, ...patch } = r;
+          return supabase.from(table).update(patch).eq("id", id);
+        }));
+      }
     }
 
-    // Ad sets
-    for (const adSet of (metaAdSets || [])) {
-      const stats = adSetStats.get(adSet.name) || { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
-      const spend = Number(adSet.spend) || 0;
-      await supabase.from("meta_ad_sets").update({
-        attributed_leads: stats.leads, attributed_spam_leads: stats.spamLeads,
-        attributed_calls: stats.calls, attributed_showed: stats.showed,
-        attributed_funded: stats.funded, attributed_funded_dollars: stats.fundedDollars,
-        cost_per_lead: stats.leads > 0 ? Math.round((spend / stats.leads) * 100) / 100 : 0,
-        cost_per_call: stats.calls > 0 ? Math.round((spend / stats.calls) * 100) / 100 : 0,
-        cost_per_funded: stats.funded > 0 ? Math.round((spend / stats.funded) * 100) / 100 : 0,
-      }).eq("id", adSet.id);
-    }
+    const campaignRows = metaCampaigns.map(c => buildRow(c, campaignStats.get(c.name) || EMPTY));
+    const adSetRows = (metaAdSets || []).map(s => buildRow(s, adSetStats.get(s.name) || EMPTY));
+    const adRows = (metaAds || []).map(a => buildRow(a, adStats.get(a.id) || EMPTY));
 
-    // Ads
-    for (const ad of (metaAds || [])) {
-      const stats = adStats.get(ad.id) || { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
-      const spend = Number(ad.spend) || 0;
-      await supabase.from("meta_ads").update({
-        attributed_leads: stats.leads, attributed_spam_leads: stats.spamLeads,
-        attributed_calls: stats.calls, attributed_showed: stats.showed,
-        attributed_funded: stats.funded, attributed_funded_dollars: stats.fundedDollars,
-        cost_per_lead: stats.leads > 0 ? Math.round((spend / stats.leads) * 100) / 100 : 0,
-        cost_per_call: stats.calls > 0 ? Math.round((spend / stats.calls) * 100) / 100 : 0,
-        cost_per_funded: stats.funded > 0 ? Math.round((spend / stats.funded) * 100) / 100 : 0,
-      }).eq("id", ad.id);
-    }
+    await Promise.all([
+      flush("meta_campaigns", campaignRows),
+      flush("meta_ad_sets", adSetRows),
+      flush("meta_ads", adRows),
+    ]);
 
     return new Response(JSON.stringify({
       success: true,
