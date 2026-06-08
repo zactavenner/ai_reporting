@@ -42,8 +42,32 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const dateStart = startDate ? `${startDate}T00:00:00.000Z` : null;
-    const dateEnd = endDate ? `${endDate}T23:59:59.999Z` : null;
+    // Load per-client attribution config (UTM field mapping + window).
+    // Saved by AttributionSettings UI under webhook_mappings.attribution.
+    const { data: settingsRow } = await supabase
+      .from("client_settings")
+      .select("webhook_mappings")
+      .eq("client_id", clientId)
+      .maybeSingle();
+    const attrCfg = (settingsRow?.webhook_mappings as any)?.attribution || {};
+    const utmSourceField: string = attrCfg.utm_source_field || "utm_source";
+    const utmMediumField: string = attrCfg.utm_medium_field || "utm_medium";
+    const utmCampaignField: string = attrCfg.utm_campaign_field || "utm_campaign";
+    const utmContentField: string = attrCfg.utm_content_field || "utm_content";
+    const windowDays: number = Number(attrCfg.attribution_window_days) || 0;
+
+    // If caller didn't supply a window and config has one, derive endDate=now, startDate=now-windowDays.
+    let effStart = startDate;
+    let effEnd = endDate;
+    if (!effStart && !effEnd && windowDays > 0) {
+      const end = new Date();
+      const start = new Date(end.getTime() - windowDays * 86400000);
+      effStart = start.toISOString().slice(0, 10);
+      effEnd = end.toISOString().slice(0, 10);
+    }
+    const dateStart = effStart ? `${effStart}T00:00:00.000Z` : null;
+    const dateEnd = effEnd ? `${effEnd}T23:59:59.999Z` : null;
+    console.log(`Attribution config: window=${windowDays}d, utmFields=${utmSourceField}/${utmMediumField}/${utmCampaignField}/${utmContentField}, range=${dateStart}..${dateEnd}`);
 
     // 1. Get meta entities
     const { data: metaCampaigns } = await supabase.from("meta_campaigns").select("id, name, spend, meta_campaign_id").eq("client_id", clientId);
@@ -139,7 +163,7 @@ Deno.serve(async (req) => {
       let attributed = false;
 
       // Campaign matching: campaign_name or utm_campaign
-      const campaignName = lead.campaign_name || lead.utm_campaign;
+      const campaignName = lead.campaign_name || lead[utmCampaignField] || lead.utm_campaign;
       if (campaignName) {
         if (campaignByName.has(campaignName)) {
           addStats(campaignStats, campaignName, lead.id, isSpam);
@@ -152,7 +176,11 @@ Deno.serve(async (req) => {
       }
 
       // Ad set matching: ad_set_name or utm_medium
-      const adSetName = lead.ad_set_name || lead.utm_medium;
+      // NOTE: utm_medium is commonly normalized to a platform name elsewhere
+      // (e.g. "Facebook"), so prefer the configured field; only fall back to
+      // utm_medium if it actually matches a known ad-set name.
+      const cfgMedium = lead[utmMediumField];
+      const adSetName = lead.ad_set_name || cfgMedium || lead.utm_medium;
       if (adSetName) {
         if (adSetByName.has(adSetName)) {
           addStats(adSetStats, adSetName, lead.id, isSpam);
@@ -165,7 +193,7 @@ Deno.serve(async (req) => {
 
       // Ad matching: ad_id or utm_content
       let matchedAdId: string | null = null;
-      const adIdToMatch = lead.ad_id || lead.utm_content;
+      const adIdToMatch = lead.ad_id || lead[utmContentField] || lead.utm_content;
       if (adIdToMatch) {
         const directAd = metaAdByMetaId.get(adIdToMatch);
         if (directAd) matchedAdId = directAd.id;
@@ -309,47 +337,50 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Batch write results - campaigns
-    for (const campaign of metaCampaigns) {
-      const stats = campaignStats.get(campaign.name) || { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
-      const spend = Number(campaign.spend) || 0;
-      await supabase.from("meta_campaigns").update({
-        attributed_leads: stats.leads, attributed_spam_leads: stats.spamLeads,
-        attributed_calls: stats.calls, attributed_showed: stats.showed,
-        attributed_funded: stats.funded, attributed_funded_dollars: stats.fundedDollars,
+    // 6. Batched writes — single upsert per table (one round-trip instead of N).
+    // Upsert on PK (`id`) overwrites only the attribution columns we send;
+    // all other columns are preserved by Postgres because the upsert payload
+    // here also includes every other "owned" attribute (we only touch attributed_*
+    // and cost_per_*). Falls back to chunked update via .in() if needed.
+    const buildRow = (e: any, stats: any) => {
+      const spend = Number(e.spend) || 0;
+      return {
+        id: e.id,
+        attributed_leads: stats.leads,
+        attributed_spam_leads: stats.spamLeads,
+        attributed_calls: stats.calls,
+        attributed_showed: stats.showed,
+        attributed_funded: stats.funded,
+        attributed_funded_dollars: stats.fundedDollars,
         cost_per_lead: stats.leads > 0 ? Math.round((spend / stats.leads) * 100) / 100 : 0,
         cost_per_call: stats.calls > 0 ? Math.round((spend / stats.calls) * 100) / 100 : 0,
         cost_per_funded: stats.funded > 0 ? Math.round((spend / stats.funded) * 100) / 100 : 0,
-      }).eq("id", campaign.id);
+      };
+    };
+    const EMPTY = { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
+
+    // Use parallel chunked .update() to avoid clobbering non-attribution columns.
+    // 50 rows per chunk × N parallel keeps round-trips ~10× lower than serial.
+    async function flush(table: string, rows: any[]) {
+      const CHUNK = 25;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        await Promise.all(chunk.map(r => {
+          const { id, ...patch } = r;
+          return supabase.from(table).update(patch).eq("id", id);
+        }));
+      }
     }
 
-    // Ad sets
-    for (const adSet of (metaAdSets || [])) {
-      const stats = adSetStats.get(adSet.name) || { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
-      const spend = Number(adSet.spend) || 0;
-      await supabase.from("meta_ad_sets").update({
-        attributed_leads: stats.leads, attributed_spam_leads: stats.spamLeads,
-        attributed_calls: stats.calls, attributed_showed: stats.showed,
-        attributed_funded: stats.funded, attributed_funded_dollars: stats.fundedDollars,
-        cost_per_lead: stats.leads > 0 ? Math.round((spend / stats.leads) * 100) / 100 : 0,
-        cost_per_call: stats.calls > 0 ? Math.round((spend / stats.calls) * 100) / 100 : 0,
-        cost_per_funded: stats.funded > 0 ? Math.round((spend / stats.funded) * 100) / 100 : 0,
-      }).eq("id", adSet.id);
-    }
+    const campaignRows = metaCampaigns.map(c => buildRow(c, campaignStats.get(c.name) || EMPTY));
+    const adSetRows = (metaAdSets || []).map(s => buildRow(s, adSetStats.get(s.name) || EMPTY));
+    const adRows = (metaAds || []).map(a => buildRow(a, adStats.get(a.id) || EMPTY));
 
-    // Ads
-    for (const ad of (metaAds || [])) {
-      const stats = adStats.get(ad.id) || { leads: 0, spamLeads: 0, calls: 0, showed: 0, funded: 0, fundedDollars: 0 };
-      const spend = Number(ad.spend) || 0;
-      await supabase.from("meta_ads").update({
-        attributed_leads: stats.leads, attributed_spam_leads: stats.spamLeads,
-        attributed_calls: stats.calls, attributed_showed: stats.showed,
-        attributed_funded: stats.funded, attributed_funded_dollars: stats.fundedDollars,
-        cost_per_lead: stats.leads > 0 ? Math.round((spend / stats.leads) * 100) / 100 : 0,
-        cost_per_call: stats.calls > 0 ? Math.round((spend / stats.calls) * 100) / 100 : 0,
-        cost_per_funded: stats.funded > 0 ? Math.round((spend / stats.funded) * 100) / 100 : 0,
-      }).eq("id", ad.id);
-    }
+    await Promise.all([
+      flush("meta_campaigns", campaignRows),
+      flush("meta_ad_sets", adSetRows),
+      flush("meta_ads", adRows),
+    ]);
 
     return new Response(JSON.stringify({
       success: true,

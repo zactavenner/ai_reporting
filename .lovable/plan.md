@@ -1,82 +1,112 @@
-# RetargetIQ V2 — Enrichment Platform Overhaul
 
-Rebuilds the Lead Enrichment feature into an automated, observable system with an executive dashboard. Coverage % (Enriched / Total) is the headline KPI throughout.
+# Ads Manager — Optimization & Tracking Plan
 
-## 1. Database (single migration)
+Goal: turn the Ads Manager into a true operations + automation tool with trustworthy attribution. Audit found a solid foundation (Meta sync, toggle, budget edit, AI insights, attribution) but critical accuracy gaps and zero automation.
 
-New columns on `lead_enrichment`:
-- `last_enriched_at timestamptz` (defaults to `enriched_at` for existing rows)
-- `enrichment_version int default 2`
-- `confidence_score numeric` (0–100)
-- Derived numerics (already mostly present): keep `net_worth_midpoint`, `home_value`, `median_home_value`, `household_income`, plus new `estimated_income numeric`, `home_equity numeric`, `investor_score int`, `accredited_probability text` ('low'|'medium'|'high'), `business_owner bool`.
+---
 
-New tables:
-- `lead_enrichment_history` — append-only audit (id, client_id, lead_id, external_id, event_type ['initial','refresh','field_update'], changes jsonb, created_at). RLS: authenticated read; service_role write.
-- `enrichment_run_log` — per-client per-day rollup (client_id, run_date, processed, succeeded, failed, skipped_recent, duration_ms). Powers charts.
-- `enrichment_alerts` — (client_id, type ['ghl_disconnected','no_runs_24h','low_success','api_error_spike'], severity, message, resolved_at).
+## Phase 0 — Quick Wins (1 day, ship first)
 
-Views:
-- `v_client_enrichment_coverage` — per client: total_contacts (leads count), enriched_contacts, coverage_pct, failed_matches, last_24h, last_7d, last_run_at.
-- `v_agency_enrichment_kpis` — global totals: clients, total_contacts, total_enriched, coverage_pct, accredited_found, millionaires_found, daily_enrichments, last_sync_at, estimated_prospect_value (sum of net_worth_midpoint for accredited/high-networth bucket).
+1. **Fix attribution settings disconnect** — `run-attribution` ignores the UTM mapping + window saved in `AttributionSettings`. Read `client_settings.webhook_mappings.attribution` and apply it.
+2. **Show zero-spend / paused ads** — remove implicit `spend > 0` filter in `AdsManagerTab` (replace with a toggle, default off) so freshly launched ads aren't invisible.
+3. **Add ROAS + Attribution-Quality % columns** to both client and admin tables.
+4. **Add Frequency column + fatigue badge** (orange ≥3.5, red ≥4.5).
+5. **Batch attribution DB writes** — replace serial `.update().eq()` loops with `upsert([…])` for ~10× faster runs.
+6. **Dedupe attribution logic** — move `attributeCRMData()` into `supabase/functions/_shared/`; remove the drifted copy in `sync-meta-ads`.
+7. **Bump `scrape-fb-ads` Graph API to v21.0**; fix `EditableBudgetCell` cents/dollars optimistic bug; fix `sourceUtils` vs run-attribution UTM normalization mismatch.
 
-Grants + RLS on all new tables.
+---
 
-## 2. Edge functions
+## Phase 1 — Tracking Accuracy (largest ROI)
 
-### `enrich-lead-retargetiq` (modify)
-- After successful match, compute & store `confidence_score`, `home_equity` (home_value − mortgage_amount), `investor_score` (weighted: net worth, income, accredited flags, investments, business), `accredited_probability`, `business_owner`.
-- Set `last_enriched_at = now()`, bump `enrichment_version = 2`.
-- Push to GHL:
-  - **Custom fields**: `estimated_net_worth`, `estimated_income`, `home_value`, `home_equity`, `investor_score`, `accredited_probability`, `business_owner`, `last_enrichment_date`. Auto-create missing custom fields via GHL `customFields` API (cache field IDs on `client_settings.ghl_custom_field_map jsonb`).
-  - **Tags**: always `enriched`; conditional `networth_1m_plus`, `networth_5m_plus`, `income_250k_plus`, `income_500k_plus`, `likely_accredited`, `business_owner`.
-  - **Note**: new "Financial Snapshot" markdown formatted with bullets/spacing.
-- Insert `lead_enrichment_history` row.
+### 1A. Click-ID Capture (`fbclid`, `gclid`, `_fbc`, `_fbp`)
+- Add columns to `leads`: `fbclid`, `fbc`, `fbp`, `gclid`, `click_id_captured_at`.
+- Update `webhook-ingest` + `process-lead-upsert` edge functions to extract from URL params / posted payload.
+- Update funnel landing pages to persist `fbclid`/`gclid` to hidden form fields and `_fbc` cookie on first touch.
+- Extend `run-attribution` to match `lead.fbclid → meta_ads.meta_ad_id` first, before name/UTM fallback.
 
-### `auto-enrich-all` (rewrite)
-- Run for every eligible client (no longer requires `retargetiq_auto_enrich` opt-in — daily for all connected). Setting flag now means "skip".
-- For each client, pull leads where `last_enriched_at IS NULL OR last_enriched_at < now() - 30 days OR missing key fields`. Skip rows enriched within 30 days.
-- Process up to `per_client` (default 50) per cron tick to stay within timeout; record `enrichment_run_log`.
-- Emit alerts: GHL disconnected, success rate < 50%, no successful runs in 24h, error spike.
+### 1B. Meta Conversions API (CAPI)
+- New edge function `send-meta-capi-event` (Lead / Schedule / Purchase) with SHA-256 hashed PII, `event_id` dedup, `fbc`/`fbp` passthrough.
+- Trigger from: `process-lead-upsert` (Lead), GHL appointment webhook (Schedule), funded reconciliation (Purchase).
+- Per-client secrets: `META_PIXEL_ID_{client}`, `META_CAPI_TOKEN_{client}` (or store in `client_settings`).
 
-### `bulk-enrich-account` (new)
-- Body: `{ client_id }`. Creates a `sync_queue`-style job that the worker chews through in 50-lead batches until complete, resumable. Returns a `job_id`. Progress polled via new `enrichment_jobs` table (id, client_id, total, processed, succeeded, failed, status, started_at, finished_at).
-- A second function `bulk-enrich-account-worker` ticks the next batch (called by cron every minute).
+### 1C. UTM Builder in Launch Wizard
+- `LaunchCampaignWizard` auto-injects `utm_source=facebook&utm_medium={{adset.name}}&utm_campaign={{campaign.name}}&utm_content={{ad.id}}` into ad link URLs at creation time.
 
-### `enrichment-monitor` (new, cron hourly)
-- Computes alerts and inserts/resolves rows in `enrichment_alerts`.
+### 1D. Discrepancy Monitoring
+- Banner in `AdminAdsManagerTab` when `|metaLeads − crmLeads| / metaLeads > 0.5` per client, linking to Attribution Settings.
 
-### Cron (via supabase--insert pg_cron)
-- `auto-enrich-all` every hour (it self-limits per client/day).
-- `bulk-enrich-account-worker` every minute.
-- `enrichment-monitor` every hour.
+---
 
-## 3. Frontend (`src/components/admin/LeadsTab.tsx` → real implementation)
+## Phase 2 — Automation Engine
 
-Replace stub with a full Enrichment Dashboard. New components under `src/components/enrichment/`:
+### 2A. Rules Engine (`ad_automation_rules` table + `evaluate-ad-rules` edge function)
+Rule types:
+- `spend_no_leads` — pause/alert when spend ≥ $X and leads = 0 over N days.
+- `high_cpl` — pause/alert when CPL > $X over N days with min spend.
+- `high_frequency` — pause when frequency > X and CTR drops > Y% week-over-week.
+- `budget_shift` — increase top-ROAS campaign budget by Y% (capped) and reduce bottom-ROAS by same dollars.
+- `creative_refresh` — when fatigue triggers, auto-create a "Refresh creative" task (reuse `VariationTaskModal` task path) + Slack ping.
 
-- `ExecutiveDashboard.tsx` — top KPI strip: Total Clients, Total Contacts, Total Enriched, **Coverage %** (hero), Accredited Found, Millionaires Found, Daily Enrichments, Last Sync.
-- `CoverageCharts.tsx` — 30-day enrichment volume line + coverage donut (recharts, already in project).
-- `ClientLeaderboard.tsx` — sortable table by coverage %; highlight top 5 green, bottom 5 red. Columns: Client, Contacts, Enriched, Coverage %, Last Run, Status badge.
-- `AlertsPanel.tsx` — red badges from `enrichment_alerts` with one-click "View client".
-- `BulkBackfillPanel.tsx` — per-client "Bulk Enrich Entire Account" button → starts job, shows progress bar with live updates via `enrichment_jobs` realtime subscription.
-- `AgencyLeadSearch.tsx` — cross-client filterable search: Net Worth ≥, Income ≥, Home Value ≥, Investor Score ≥, Accredited (any/likely), Business Owner. Paginated results with client column.
-- `ContactTimeline.tsx` — drop-in to existing contact drawer: reads `lead_enrichment_history` and renders dated list.
-- `AgencyRevenuePanel.tsx` — "Estimated prospect value" from `v_agency_enrichment_kpis`.
+Execution:
+- `pg_cron` daily after master sync.
+- Actions call existing `toggle-meta-status` / `update-meta-budget`.
+- Every action logged to `ad_automation_log` with before/after snapshot and reversible undo window.
+- New `AutomationRulesPanel.tsx` per-client settings UI with rule templates + dry-run mode.
 
-Hooks under `src/hooks/`:
-- `useEnrichmentKpis`, `useClientCoverage`, `useEnrichmentAlerts`, `useEnrichmentJob`, `useAgencyLeadSearch`, `useEnrichmentHistory`.
+### 2B. Scheduled AI Insights + Slack Alerts
+- New `daily-ads-alert` cron calls existing `ads-insights` for each active client; pushes `severity: critical` findings to Slack with deep-links.
 
-Tabs inside LeadsTab: Overview | Leaderboard | Search | Alerts.
+---
 
-Coverage % shown in the page header and in `AdminSidebar` Leads label as a badge.
+## Phase 3 — UX & Reporting
 
-## 4. Out of scope (this pass)
-- Per-contact webhook ingestion (already covered by existing GHL sync).
-- Custom field mapping UI (auto-created/cached; manual mapping deferred).
-- Multi-currency, internationalization.
+- **Column chooser** (persisted in localStorage) on the metric tables.
+- **Spend / CPL sparklines** per row, backed by a new `meta_ad_daily_stats` snapshot table populated during sync.
+- **Extended RowActionsMenu**: Archive, Rename, Copy-as-template (feeds Launch Wizard).
+- **Pagination** for `AdminAdsManagerTab` (remove hidden 2000-row cap).
+- **Side-by-side compare** for 2–3 selected ads.
+- **Lifetime budget editing** in `EditableBudgetCell`.
+- **Fix divergent winner logic** — unify `isWinningAd` and `getAdHealth` on `healthSignals.ts`.
 
-## Technical notes
-- Confidence score formula: weighted sum of method count, identity count, presence of phone+email+address. Clamp 0–100.
-- Investor score: `min(100, 0.35*networth_norm + 0.25*income_norm + 0.20*accredited + 0.10*investments + 0.10*business)`.
-- Coverage denominator excludes spam leads (`is_spam = false`) and requires non-empty email+phone (matches existing eligibility rule in memory).
-- Existing `lead_enrichment` rows backfilled with `last_enriched_at = enriched_at`, `enrichment_version = 1` so the 30-day refresh logic kicks in naturally.
+---
+
+## Phase 4 — Google Ads (optional, after Meta is solid)
+- `sync-google-ads` edge function (Google Ads API v17), `google_campaigns` / `google_ads` tables.
+- `gclid` matching mirrors `fbclid` path from Phase 1A.
+- Surface in `AdminAdsManagerTab` via the existing (currently unused) `platform` filter prop.
+
+---
+
+## Technical Details
+
+**New tables**
+- `ad_automation_rules` (client_id, rule_type, thresholds, action, is_active, dry_run)
+- `ad_automation_log` (rule_id, ad_id, action_taken, before/after JSONB, reverted_at)
+- `meta_ad_daily_stats` (ad_id, date, spend, impressions, clicks, leads, frequency)
+- `google_campaigns`, `google_ads` (Phase 4)
+
+**New / modified edge functions**
+- New: `send-meta-capi-event`, `evaluate-ad-rules`, `daily-ads-alert`, `_shared/attributeCRMData.ts`, `rename-meta-object`, `sync-google-ads`
+- Modified: `run-attribution`, `sync-meta-ads`, `webhook-ingest`, `process-lead-upsert`, `scrape-fb-ads`, `create-meta-ad`
+
+**Lead table migration**
+- Add `fbclid`, `fbc`, `fbp`, `gclid`, `click_id_captured_at`.
+
+**Secrets** (per Lovable Cloud)
+- Meta CAPI tokens per client (store encrypted in `client_settings` JSONB rather than 100-secret cap).
+
+**Compliance** — keep existing "targeted returns" / SEC disclaimer guards on any AI-generated copy in the rules engine outputs (per project memory).
+
+---
+
+## Suggested Build Order
+1. Phase 0 quick wins (1 PR)
+2. Phase 1A click-ID capture + 1C UTM builder
+3. Phase 1B CAPI
+4. Phase 2A rules engine (MVP: `spend_no_leads` + `high_cpl` + alert-only)
+5. Phase 2A full actions + Phase 2B alerts
+6. Phase 3 UX polish
+7. Phase 4 Google Ads (gated on user demand)
+
+Want me to proceed with Phase 0 first, or jump straight into Phase 1 tracking accuracy?
