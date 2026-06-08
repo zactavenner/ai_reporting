@@ -13,6 +13,7 @@ type Row = {
   id?: string;
   template_key: OnboardingTemplateKey;
   category: string;
+  parent_title?: string | null;
   title: string;
   sort_order: number;
   _dirty?: boolean;
@@ -30,7 +31,7 @@ export function OnboardingTemplatesSection() {
     setLoading(true);
     const { data, error } = await supabase
       .from('onboarding_template_items' as any)
-      .select('id, template_key, category, title, sort_order')
+      .select('id, template_key, category, parent_title, title, sort_order')
       .eq('template_key', key)
       .order('sort_order', { ascending: true });
     setLoading(false);
@@ -107,6 +108,7 @@ export function OnboardingTemplatesSection() {
       const inserts = rows.filter(r => r._new && r.title.trim()).map(r => ({
         template_key: r.template_key,
         category: r.category,
+        parent_title: r.parent_title || null,
         title: r.title,
         sort_order: r.sort_order,
       }));
@@ -119,7 +121,7 @@ export function OnboardingTemplatesSection() {
       for (const r of updates) {
         const { error } = await supabase
           .from('onboarding_template_items' as any)
-          .update({ category: r.category, title: r.title, sort_order: r.sort_order })
+          .update({ category: r.category, parent_title: r.parent_title || null, title: r.title, sort_order: r.sort_order })
           .eq('id', r.id!);
         if (error) throw error;
       }
@@ -235,6 +237,12 @@ export function OnboardingTemplatesSection() {
                         value={row.sort_order}
                         onChange={(e) => update(idx, { sort_order: parseInt(e.target.value || '0', 10) })}
                         className="h-8 w-16"
+                      />
+                      <Input
+                        value={row.parent_title || ''}
+                        onChange={(e) => update(idx, { parent_title: e.target.value })}
+                        placeholder="Nest under (optional)"
+                        className="h-8 w-48"
                       />
                       <Input
                         value={row.title}
