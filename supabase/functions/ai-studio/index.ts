@@ -2340,6 +2340,9 @@ Deno.serve(async (req) => {
                   clientId: clientId || null,
                   conversationId,
                   userId: userId!,
+                  onProgress: (p) => {
+                    if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, ...p });
+                  },
                 });
                 result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: args.resolution === "720p" ? "720p" : "1080p", mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
