@@ -1,0 +1,2 @@
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS ghl_firebase_refresh_token text;
+COMMENT ON COLUMN public.clients.ghl_firebase_refresh_token IS 'Firebase refresh token captured via the GHL Chrome extension. Used by the ghl-internal edge function to call backend.leadconnectorhq.com (workflow create/edit endpoints not exposed by the public API).';
