@@ -58,6 +58,30 @@ const VIDEO_MODELS: { value: string; label: string; hint: string }[] = [
   { value: "moonshotai/kling-v2.1-pro", label: "Kling 2.1 Pro", hint: "Highest quality Kling" },
 ];
 
+// Conversion-focused ad format presets. Each preset is injected into the
+// AI Studio system prompt so the model picks the right dims, safe zones,
+// text-overlay placement, and platform-native look automatically.
+const AD_FORMATS: { value: string; label: string; aspect: "1:1" | "9:16" | "16:9"; hint: string }[] = [
+  { value: "none", label: "Auto", aspect: "1:1", hint: "Let the AI choose" },
+  { value: "meta_feed_1x1", label: "Meta Feed 1:1", aspect: "1:1", hint: "1080×1080 · headline top, CTA bottom" },
+  { value: "meta_reel_9x16", label: "Meta Reel 9:16", aspect: "9:16", hint: "1080×1920 · keep text in middle 60% safe-zone" },
+  { value: "story_9x16", label: "Story 9:16", aspect: "9:16", hint: "1080×1920 · top 250px / bottom 250px reserved for UI" },
+  { value: "youtube_16x9", label: "YouTube 16:9", aspect: "16:9", hint: "1920×1080 · cinematic hook" },
+  { value: "tiktok_9x16", label: "TikTok 9:16", aspect: "9:16", hint: "1080×1920 · UGC, native, captions baked in" },
+];
+
+// Proven direct-response copy frameworks. The picker tells the AI which
+// structure to use for both on-image text and any scripts it writes.
+const HOOK_FRAMEWORKS: { value: string; label: string; desc: string }[] = [
+  { value: "auto", label: "Auto", desc: "Let the AI pick the best framework" },
+  { value: "pas", label: "PAS", desc: "Problem → Agitate → Solution" },
+  { value: "aida", label: "AIDA", desc: "Attention → Interest → Desire → Action" },
+  { value: "hppc", label: "Hook-Promise-Proof-CTA", desc: "1s hook, big promise, proof point, single CTA" },
+  { value: "pattern_interrupt", label: "Pattern Interrupt", desc: "Stop-scroll visual + contrarian claim" },
+  { value: "testimonial", label: "Testimonial", desc: "Real-voice quote + specific result" },
+  { value: "curiosity_gap", label: "Curiosity Gap", desc: "Open loop → tease payoff → CTA" },
+];
+
 // Approximate context window per model family (in tokens) for the usage meter.
 function contextLimitFor(model: string): number {
   if (/gemini-2\.5-pro|gemini-3|gemini-2\.5-flash/i.test(model)) return 1_000_000;
@@ -504,6 +528,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     catch { return "bytedance/seedance-2.0-fast"; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:video-model", videoModel); } catch {} }, [videoModel]);
+  const [adFormat, setAdFormat] = useState<string>(() => {
+    try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:ad-format", adFormat); } catch {} }, [adFormat]);
+  const [hookFramework, setHookFramework] = useState<string>(() => {
+    try { return localStorage.getItem("ai-studio:hook-framework") || "auto"; } catch { return "auto"; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:hook-framework", hookFramework); } catch {} }, [hookFramework]);
+  const [burnCaptions, setBurnCaptions] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:burn-captions") === "1"; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:burn-captions", burnCaptions ? "1" : "0"); } catch {} }, [burnCaptions]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
@@ -797,6 +833,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         chatModel,
         imageModels,
         videoModel,
+        adFormat: adFormat === "none" ? undefined : adFormat,
+        hookFramework: hookFramework === "auto" ? undefined : hookFramework,
+        burnCaptions,
         activeReferenceIds,
         activeVideoReferenceIds,
         autoDocContext,
@@ -1304,6 +1343,44 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               />
               <div className="flex items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
                 <div className="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
+                <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
+                  <Select value={adFormat} onValueChange={setAdFormat}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AD_FORMATS.map(f => (
+                        <SelectItem key={f.value} value={f.value} className="text-xs">
+                          {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Hook:</span>
+                  <Select value={hookFramework} onValueChange={setHookFramework}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HOOK_FRAMEWORKS.map(f => (
+                        <SelectItem key={f.value} value={f.value} className="text-xs">
+                          {f.label}<span className="text-muted-foreground ml-1">— {f.desc}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBurnCaptions(v => !v)}
+                  title="When on, AI burns styled subtitles into any generated video so it converts with sound off."
+                  className={`h-7 px-2 rounded-lg text-[10px] border transition flex items-center gap-1 ${burnCaptions ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                >
+                  CC {burnCaptions ? "on" : "off"}
+                </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}

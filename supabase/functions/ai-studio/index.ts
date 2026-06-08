@@ -1155,7 +1155,24 @@ const tools = [
   },
 ];
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string }) => [
+const AD_FORMAT_RULES: Record<string, string> = {
+  meta_feed_1x1: "AD FORMAT: Meta Feed 1:1 (1080×1080). Headline in the top third, single CTA pill bottom-center, generous safe padding (~80px) on all sides. Sound-off-friendly — use bold on-image text. Aspect ratio MUST be '1:1'.",
+  meta_reel_9x16: "AD FORMAT: Meta Reel 9:16 (1080×1920). Keep ALL text/logos in the middle 60% safe zone — top ~250px is covered by the profile UI, bottom ~400px by caption + CTA. Lead with a 1-second pattern-interrupt hook in the first frame. Aspect ratio MUST be '9:16'.",
+  story_9x16: "AD FORMAT: Story 9:16 (1080×1920). Top 250px and bottom 250px are RESERVED for platform UI — keep them clean. Vertical center stack: hook → visual → CTA. Aspect ratio MUST be '9:16'.",
+  youtube_16x9: "AD FORMAT: YouTube 16:9 (1920×1080). Cinematic framing, headline as left-aligned lower-third, brand mark top-right. Aspect ratio MUST be '16:9'.",
+  tiktok_9x16: "AD FORMAT: TikTok 9:16 (1080×1920). UGC / native look — handheld feel, no agency polish, baked-in captions. Hook in first 0.8s. Aspect ratio MUST be '9:16'.",
+};
+
+const HOOK_FRAMEWORK_RULES: Record<string, string> = {
+  pas: "COPY FRAMEWORK: PAS — Problem → Agitate → Solution. The on-image headline (and any script) must name the specific pain in line 1, twist the knife in line 2, present the solution in line 3, end with one CTA.",
+  aida: "COPY FRAMEWORK: AIDA — Attention → Interest → Desire → Action. Hook line grabs attention with a number or contrarian claim, body sparks interest, builds desire with a specific outcome, single CTA.",
+  hppc: "COPY FRAMEWORK: Hook → Promise → Proof → CTA. 1-second scroll-stopper hook, one bold quantified promise, one proof point (number/testimonial/credential), one CTA. Cut every word that is not one of those four.",
+  pattern_interrupt: "COPY FRAMEWORK: Pattern Interrupt. Lead with a contrarian or unexpected visual + claim that breaks the user's scroll rhythm. Headline must contradict a common belief in the niche.",
+  testimonial: "COPY FRAMEWORK: Testimonial. Lead with a real-voice quote in quotation marks, attribute to a name + role, anchor with one specific number (e.g. 'closed $1.4M in 90 days'), single CTA.",
+  curiosity_gap: "COPY FRAMEWORK: Curiosity Gap. Open an information loop in the hook ('The 1 thing 90% of investors miss…'), tease the payoff visually, withhold the full answer — CTA promises to deliver it.",
+};
+
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
@@ -1213,6 +1230,12 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   ctx.videoModel
     ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance or Kling, depending on the chosen model id).`
     : null,
+  ctx.adFormat && AD_FORMAT_RULES[ctx.adFormat] ? AD_FORMAT_RULES[ctx.adFormat] : null,
+  ctx.hookFramework && HOOK_FRAMEWORK_RULES[ctx.hookFramework] ? HOOK_FRAMEWORK_RULES[ctx.hookFramework] : null,
+  ctx.burnCaptions
+    ? "CAPTIONS: The user wants captions burned into any generated video. When you generate any reel/clip (generate_seedance_video or generate_scene_video), include in the prompt: 'Burn-in styled subtitles for every spoken line — Inter Bold ~64px, white fill with 4px black stroke, anchored in the bottom-third safe zone, one short line at a time, no overlap with logos or CTAs.' Also note this in your chat status."
+    : null,
+  "BRAND GUARD (CRITICAL): Every generated ad must (a) use ONLY brand colors and fonts from the Company Info above, (b) include the client logo unless the user explicitly says no-logo, (c) include the required compliance disclaimer for investment / capital-raising clients ('Past performance is not indicative of future results. All investments carry risk.'), (d) never use the word 'guaranteed'. After generating, do a silent self-check; if any rule is violated, immediately call edit_static_ad with a corrective edit_instruction (max 1 retry).",
   ctx.brandSummary,
   "BRAND LOCK: Always respect the client's brand colors and fonts from Company Info. Do NOT invent new palettes or fonts. When calling generate_static_ad / edit_static_ad / generate_scene_image, the server already injects strict brand adherence from the client record — never override brand colors with arbitrary hexes unless the user explicitly says so.",
   ctx.docId ? `Active Google Doc: ${ctx.docUrl} (id ${ctx.docId})` : "No active Google Doc.",
@@ -1260,12 +1283,15 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
     videoModel?: string | null;
+    adFormat?: string | null;
+    hookFramework?: string | null;
+    burnCaptions?: boolean;
     activeReferenceIds?: string[] | null;
     activeVideoReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
@@ -1686,7 +1712,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
