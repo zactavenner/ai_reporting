@@ -58,6 +58,30 @@ const VIDEO_MODELS: { value: string; label: string; hint: string }[] = [
   { value: "moonshotai/kling-v2.1-pro", label: "Kling 2.1 Pro", hint: "Highest quality Kling" },
 ];
 
+// Conversion-focused ad format presets. Each preset is injected into the
+// AI Studio system prompt so the model picks the right dims, safe zones,
+// text-overlay placement, and platform-native look automatically.
+const AD_FORMATS: { value: string; label: string; aspect: "1:1" | "9:16" | "16:9"; hint: string }[] = [
+  { value: "none", label: "Auto", aspect: "1:1", hint: "Let the AI choose" },
+  { value: "meta_feed_1x1", label: "Meta Feed 1:1", aspect: "1:1", hint: "1080×1080 · headline top, CTA bottom" },
+  { value: "meta_reel_9x16", label: "Meta Reel 9:16", aspect: "9:16", hint: "1080×1920 · keep text in middle 60% safe-zone" },
+  { value: "story_9x16", label: "Story 9:16", aspect: "9:16", hint: "1080×1920 · top 250px / bottom 250px reserved for UI" },
+  { value: "youtube_16x9", label: "YouTube 16:9", aspect: "16:9", hint: "1920×1080 · cinematic hook" },
+  { value: "tiktok_9x16", label: "TikTok 9:16", aspect: "9:16", hint: "1080×1920 · UGC, native, captions baked in" },
+];
+
+// Proven direct-response copy frameworks. The picker tells the AI which
+// structure to use for both on-image text and any scripts it writes.
+const HOOK_FRAMEWORKS: { value: string; label: string; desc: string }[] = [
+  { value: "auto", label: "Auto", desc: "Let the AI pick the best framework" },
+  { value: "pas", label: "PAS", desc: "Problem → Agitate → Solution" },
+  { value: "aida", label: "AIDA", desc: "Attention → Interest → Desire → Action" },
+  { value: "hppc", label: "Hook-Promise-Proof-CTA", desc: "1s hook, big promise, proof point, single CTA" },
+  { value: "pattern_interrupt", label: "Pattern Interrupt", desc: "Stop-scroll visual + contrarian claim" },
+  { value: "testimonial", label: "Testimonial", desc: "Real-voice quote + specific result" },
+  { value: "curiosity_gap", label: "Curiosity Gap", desc: "Open loop → tease payoff → CTA" },
+];
+
 // Approximate context window per model family (in tokens) for the usage meter.
 function contextLimitFor(model: string): number {
   if (/gemini-2\.5-pro|gemini-3|gemini-2\.5-flash/i.test(model)) return 1_000_000;
