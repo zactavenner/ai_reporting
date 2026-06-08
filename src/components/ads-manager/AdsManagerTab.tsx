@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
 import { AdsConnectionHealthPanel } from './shared/AdsConnectionHealthPanel';
 import { AgentMcpPanel } from './shared/AgentMcpPanel';
+import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 
 interface AdsManagerTabProps {
   clientId: string;
@@ -89,17 +90,13 @@ function fmtPct(val: number | null) {
 }
 
 function isWinningAd(ad: any): boolean {
-  const spend = Number(ad.spend) || 0;
-  const fundedDollars = Number(ad.attributed_funded_dollars) || 0;
-  const ctr = Number(ad.ctr) || 0;
-  const roas = spend > 0 ? fundedDollars / spend : 0;
-  return roas > 3 || (spend > 1000 && ctr > 1);
+  // Unified definition lives in healthSignals so chips, badges, and task
+  // priority always agree.
+  return sharedIsWinningAd(ad);
 }
 
 function calcROAS(ad: any): number {
-  const spend = Number(ad.spend) || 0;
-  const fundedDollars = Number(ad.attributed_funded_dollars) || 0;
-  return spend > 0 ? fundedDollars / spend : 0;
+  return calcRoas(ad);
 }
 
 function buildVariationBrief(ad: any): string {
@@ -135,6 +132,7 @@ function useSort(defaultCol = 'spend') {
 const METRIC_HEADERS = [
   { column: 'spend', label: 'Spend' },
   { column: 'impressions', label: 'Impr' },
+  { column: 'frequency', label: 'Freq' },
   { column: 'cpm', label: 'CPM' },
   { column: 'clicks', label: 'Clicks' },
   { column: 'ctr', label: 'CTR' },
@@ -147,14 +145,27 @@ const METRIC_HEADERS = [
   { column: 'attributed_funded', label: 'Funded' },
   { column: 'attributed_funded_dollars', label: 'Funded $' },
   { column: 'cost_per_funded', label: 'CPA' },
+  { column: 'roas', label: 'ROAS' },
+  { column: 'attribution_quality', label: 'Attr%' },
 ];
 
 function MetricCells({ row }: { row: any }) {
   const spamCount = Number(row.attributed_spam_leads) || 0;
+  const freq = Number(row.frequency) || 0;
+  const fatigue = fatigueLevel(freq);
+  const fatigueClass =
+    fatigue === 'fatigued' ? 'text-destructive font-semibold'
+    : fatigue === 'warn' ? 'text-orange-500 font-semibold'
+    : fatigue === 'watch' ? 'text-yellow-600' : '';
+  const roas = calcRoas(row);
+  const attrPct = attributionQualityPct(row);
   return (
     <>
       <TableCell className="text-center tabular-nums font-medium">{fmt$(row.spend)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmtN(row.impressions)}</TableCell>
+      <TableCell className={`text-center tabular-nums ${fatigueClass}`} title={`Creative frequency: ${freq.toFixed(2)}`}>
+        {freq > 0 ? freq.toFixed(2) : '—'}
+      </TableCell>
       <TableCell className="text-center tabular-nums">{fmt$(row.cpm)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmtN(row.clicks)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmtPct(row.ctr)}</TableCell>
@@ -169,6 +180,12 @@ function MetricCells({ row }: { row: any }) {
       <TableCell className="text-center tabular-nums">{fmtN(row.attributed_funded)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmt$(row.attributed_funded_dollars)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmt$(row.cost_per_funded)}</TableCell>
+      <TableCell className={`text-center tabular-nums ${roas >= 3 ? 'text-emerald-500 font-semibold' : ''}`}>
+        {roas > 0 ? `${roas.toFixed(2)}x` : '—'}
+      </TableCell>
+      <TableCell className="text-center tabular-nums" title="CRM-attributed leads as % of Meta-reported leads">
+        {attrPct == null ? '—' : `${Math.round(attrPct)}%`}
+      </TableCell>
     </>
   );
 }
