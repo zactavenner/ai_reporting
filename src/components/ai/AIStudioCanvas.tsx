@@ -16,6 +16,15 @@ export type CanvasPlaceholder = {
   aspect_ratio: string;
   quality: string;
   failed?: string;
+  progress?: {
+    stage: "submitting" | "queued" | "polling" | "downloading" | "rehosting" | "completed" | "failed";
+    label: string;
+    percent?: number;
+    attempt?: number;
+    max_attempts?: number;
+    elapsed_s?: number;
+    phase?: "keyframe" | "animation";
+  };
 };
 export type CanvasItem = {
   id: string;
