@@ -2291,14 +2291,7 @@ Deno.serve(async (req) => {
                 });
                 result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: args.resolution === "720p" ? "720p" : "1080p", mode: args.image_url ? "image_to_video" : "text_to_video" };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
-              } else if (name === "create_text_artifact") {
-                // (handled below)
-                // placeholder marker — actual handler still runs
-                // (kept for diff anchor)
-                result = result; // no-op
-              }
-              // Inserted Phase 2 handlers
-              if (name === "explode_ad_variants") {
+              } else if (name === "explode_ad_variants") {
                 const hooks: string[] = Array.isArray(args.hooks) ? args.hooks.filter(Boolean).map(String).slice(0, 6) : [];
                 const styles: string[] = Array.isArray(args.visual_styles) ? args.visual_styles.filter(Boolean).map(String).slice(0, 4) : [];
                 if (!hooks.length || !styles.length) {
@@ -2397,7 +2390,7 @@ Deno.serve(async (req) => {
                   if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
                   result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution, aspect_ratio: aspect };
                 }
-              } else if (name === "__phase2_anchor_unused__") {
+              } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);
                 const artifactType = String(args.artifact_type || "other");
                 const content = String(args.content || "");
