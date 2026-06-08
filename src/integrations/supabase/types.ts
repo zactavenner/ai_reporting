@@ -9615,6 +9615,7 @@ export type Database = {
         Row: {
           assigned_client_name: string | null
           assigned_to: string | null
+          category: string | null
           client_id: string | null
           completed_at: string | null
           created_at: string
@@ -9625,11 +9626,13 @@ export type Database = {
           meeting_id: string | null
           parent_task_id: string | null
           priority: string
+          project_id: string | null
           recurrence_interval: number | null
           recurrence_next_at: string | null
           recurrence_parent_id: string | null
           recurrence_type: string | null
           show_subtasks_to_client: boolean | null
+          sort_order: number | null
           stage: string
           status: string
           title: string
@@ -9639,6 +9642,7 @@ export type Database = {
         Insert: {
           assigned_client_name?: string | null
           assigned_to?: string | null
+          category?: string | null
           client_id?: string | null
           completed_at?: string | null
           created_at?: string
@@ -9649,11 +9653,13 @@ export type Database = {
           meeting_id?: string | null
           parent_task_id?: string | null
           priority?: string
+          project_id?: string | null
           recurrence_interval?: number | null
           recurrence_next_at?: string | null
           recurrence_parent_id?: string | null
           recurrence_type?: string | null
           show_subtasks_to_client?: boolean | null
+          sort_order?: number | null
           stage?: string
           status?: string
           title: string
@@ -9663,6 +9669,7 @@ export type Database = {
         Update: {
           assigned_client_name?: string | null
           assigned_to?: string | null
+          category?: string | null
           client_id?: string | null
           completed_at?: string | null
           created_at?: string
@@ -9673,11 +9680,13 @@ export type Database = {
           meeting_id?: string | null
           parent_task_id?: string | null
           priority?: string
+          project_id?: string | null
           recurrence_interval?: number | null
           recurrence_next_at?: string | null
           recurrence_parent_id?: string | null
           recurrence_type?: string | null
           show_subtasks_to_client?: boolean | null
+          sort_order?: number | null
           stage?: string
           status?: string
           title?: string
@@ -9725,6 +9734,13 @@ export type Database = {
             columns: ["parent_task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
