@@ -3584,6 +3584,7 @@ export type Database = {
           description: string | null
           ghl_account_url: string | null
           ghl_api_key: string | null
+          ghl_firebase_refresh_token: string | null
           ghl_location_id: string | null
           ghl_sync_error: string | null
           ghl_sync_status: string | null
@@ -3631,6 +3632,7 @@ export type Database = {
           description?: string | null
           ghl_account_url?: string | null
           ghl_api_key?: string | null
+          ghl_firebase_refresh_token?: string | null
           ghl_location_id?: string | null
           ghl_sync_error?: string | null
           ghl_sync_status?: string | null
@@ -3678,6 +3680,7 @@ export type Database = {
           description?: string | null
           ghl_account_url?: string | null
           ghl_api_key?: string | null
+          ghl_firebase_refresh_token?: string | null
           ghl_location_id?: string | null
           ghl_sync_error?: string | null
           ghl_sync_status?: string | null
