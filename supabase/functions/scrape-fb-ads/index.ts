@@ -7,7 +7,6 @@ const corsHeaders = {
 
 // Meta Marketing API configuration
 const META_APP_ID = "815113834838322";
-const META_GRAPH_API_VERSION = "v18.0";
 const META_GRAPH_API_URL = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 
 interface MetaAd {
