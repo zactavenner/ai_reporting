@@ -528,6 +528,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     catch { return "bytedance/seedance-2.0-fast"; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:video-model", videoModel); } catch {} }, [videoModel]);
+  const [adFormat, setAdFormat] = useState<string>(() => {
+    try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:ad-format", adFormat); } catch {} }, [adFormat]);
+  const [hookFramework, setHookFramework] = useState<string>(() => {
+    try { return localStorage.getItem("ai-studio:hook-framework") || "auto"; } catch { return "auto"; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:hook-framework", hookFramework); } catch {} }, [hookFramework]);
+  const [burnCaptions, setBurnCaptions] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:burn-captions") === "1"; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:burn-captions", burnCaptions ? "1" : "0"); } catch {} }, [burnCaptions]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
