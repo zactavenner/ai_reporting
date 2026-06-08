@@ -328,6 +328,9 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
   const [activeTab, setActiveTab] = useState('campaigns');
   const [filterCampaignId, setFilterCampaignId] = useState<string | null>(null);
   const [filterAdSetId, setFilterAdSetId] = useState<string | null>(null);
+  // Default ON so freshly launched / paused ads are visible. Off = legacy
+  // behaviour of hiding any row that has not yet accrued spend.
+  const [showZeroSpend, setShowZeroSpend] = useState(true);
   const lastSyncedRange = useRef<string | null>(null);
   const isMobile = useIsMobile();
 
@@ -357,15 +360,19 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
     ? formatDistanceToNow(new Date((settings as any).meta_ads_last_sync), { addSuffix: true })
     : null;
 
-  const activeCampaigns = useMemo(() => campaigns.filter((c: any) => c.spend && Number(c.spend) > 0), [campaigns]);
+  const hasSpend = (r: any) => r.spend && Number(r.spend) > 0;
+  const activeCampaigns = useMemo(
+    () => showZeroSpend ? campaigns : campaigns.filter(hasSpend),
+    [campaigns, showZeroSpend],
+  );
   const adSets = useMemo(() => {
     const filtered = filterCampaignId ? allAdSets.filter((a: any) => a.campaign_id === filterCampaignId) : allAdSets;
-    return filtered.filter((a: any) => a.spend && Number(a.spend) > 0);
-  }, [allAdSets, filterCampaignId]);
+    return showZeroSpend ? filtered : filtered.filter(hasSpend);
+  }, [allAdSets, filterCampaignId, showZeroSpend]);
   const ads = useMemo(() => {
     const filtered = filterAdSetId ? allAds.filter((a: any) => a.ad_set_id === filterAdSetId) : allAds;
-    return filtered.filter((a: any) => a.spend && Number(a.spend) > 0);
-  }, [allAds, filterAdSetId]);
+    return showZeroSpend ? filtered : filtered.filter(hasSpend);
+  }, [allAds, filterAdSetId, showZeroSpend]);
 
   const filterCampaignName = filterCampaignId ? campaigns.find((c: any) => c.id === filterCampaignId)?.name : null;
   const filterAdSetName = filterAdSetId ? allAdSets.find((a: any) => a.id === filterAdSetId)?.name : null;
@@ -396,6 +403,10 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           ) : null}
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground select-none cursor-pointer pr-1">
+            <Switch checked={showZeroSpend} onCheckedChange={setShowZeroSpend} className="scale-75" />
+            <span>Show 0-spend</span>
+          </label>
           <Badge variant="secondary" className="text-xs gap-1.5">
             <Calendar className="h-3 w-3" />
             {startDate} → {endDate}
