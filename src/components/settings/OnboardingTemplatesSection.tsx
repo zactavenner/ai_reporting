@@ -63,6 +63,19 @@ export function OnboardingTemplatesSection() {
     }]);
   };
 
+  const addSubtask = (category: string, parentTitle: string) => {
+    const maxSort = rows.reduce((m, r) => Math.max(m, r.sort_order || 0), 0);
+    setRows(prev => [...prev, {
+      template_key: templateKey,
+      category,
+      parent_title: parentTitle,
+      title: '',
+      sort_order: maxSort + 1,
+      _new: true,
+      _dirty: true,
+    }]);
+  };
+
   const addCategory = () => {
     const name = prompt('New section name?');
     if (!name) return;
@@ -164,6 +177,62 @@ export function OnboardingTemplatesSection() {
     return Array.from(map.entries());
   }, [rows]);
 
+  // Within a category, organize as: main task → its subtasks underneath.
+  const buildTree = (items: { row: Row; idx: number }[]) => {
+    const mains = items.filter(i => !i.row.parent_title);
+    const subsByParent = new Map<string, { row: Row; idx: number }[]>();
+    const orphans: { row: Row; idx: number }[] = [];
+    for (const it of items) {
+      if (!it.row.parent_title) continue;
+      const hasMain = mains.some(m => m.row.title === it.row.parent_title);
+      if (!hasMain) { orphans.push(it); continue; }
+      const arr = subsByParent.get(it.row.parent_title!) ?? [];
+      arr.push(it);
+      subsByParent.set(it.row.parent_title!, arr);
+    }
+    return { mains, subsByParent, orphans };
+  };
+
+  const renderRow = (row: Row, idx: number, isSub: boolean) => (
+    <div
+      key={row.id ?? `new-${idx}`}
+      className={`flex items-center gap-2 ${isSub ? 'pl-8 border-l-2 border-primary/30 ml-3 bg-muted/30 rounded' : ''}`}
+    >
+      <Badge variant={isSub ? 'outline' : 'default'} className="text-[10px] w-14 justify-center">
+        {isSub ? 'subtask' : 'TASK'}
+      </Badge>
+      <Input
+        type="number"
+        value={row.sort_order}
+        onChange={(e) => update(idx, { sort_order: parseInt(e.target.value || '0', 10) })}
+        className="h-8 w-16"
+      />
+      {isSub && (
+        <Input
+          value={row.parent_title || ''}
+          onChange={(e) => update(idx, { parent_title: e.target.value })}
+          placeholder="Parent task title"
+          className="h-8 w-56"
+        />
+      )}
+      <Input
+        value={row.title}
+        onChange={(e) => update(idx, { title: e.target.value })}
+        placeholder={isSub ? 'Subtask title' : 'Main task title'}
+        className={`h-8 flex-1 ${!isSub ? 'font-medium' : ''}`}
+      />
+      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => move(idx, -1)}>
+        <ArrowUp className="h-3 w-3" />
+      </Button>
+      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => move(idx, 1)}>
+        <ArrowDown className="h-3 w-3" />
+      </Button>
+      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => removeRow(idx)}>
+        <Trash2 className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -213,57 +282,61 @@ export function OnboardingTemplatesSection() {
           </div>
         ) : (
           <div className="space-y-6">
-            {grouped.map(([cat, items]) => (
-              <div key={cat} className="border rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={cat}
-                    onChange={(e) => {
-                      const newCat = e.target.value;
-                      setRows(prev => prev.map(r => r.category === cat ? { ...r, category: newCat, _dirty: true } : r));
-                    }}
-                    className="h-8 font-semibold w-[280px]"
-                  />
-                  <Badge variant="secondary">{items.length}</Badge>
-                  <Button size="sm" variant="ghost" className="ml-auto" onClick={() => addRow(cat)}>
-                    <Plus className="h-3 w-3 mr-1" /> Add item
-                  </Button>
+            {grouped.map(([cat, items]) => {
+              const { mains, subsByParent, orphans } = buildTree(items);
+              const mainCount = mains.length;
+              const subCount = items.length - mainCount;
+              return (
+                <div key={cat} className="border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={cat}
+                      onChange={(e) => {
+                        const newCat = e.target.value;
+                        setRows(prev => prev.map(r => r.category === cat ? { ...r, category: newCat, _dirty: true } : r));
+                      }}
+                      className="h-8 font-semibold w-[280px]"
+                    />
+                    <Badge variant="secondary">{mainCount} tasks</Badge>
+                    <Badge variant="outline">{subCount} subtasks</Badge>
+                    <Button size="sm" variant="ghost" className="ml-auto" onClick={() => addRow(cat)}>
+                      <Plus className="h-3 w-3 mr-1" /> Add main task
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    {mains.map(({ row, idx }) => {
+                      const subs = subsByParent.get(row.title) ?? [];
+                      return (
+                        <div key={row.id ?? `new-${idx}`} className="space-y-1">
+                          {renderRow(row, idx, false)}
+                          {subs.map(s => renderRow(s.row, s.idx, true))}
+                          {row.title && (
+                            <div className="pl-8 ml-3">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 text-xs text-muted-foreground"
+                                onClick={() => addSubtask(cat, row.title)}
+                              >
+                                <Plus className="h-3 w-3 mr-1" /> Add subtask
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {orphans.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        <div className="text-xs text-destructive font-medium">
+                          ⚠ Orphan subtasks (parent title doesn't match any main task):
+                        </div>
+                        {orphans.map(o => renderRow(o.row, o.idx, true))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  {items.map(({ row, idx }) => (
-                    <div key={row.id ?? `new-${idx}`} className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        value={row.sort_order}
-                        onChange={(e) => update(idx, { sort_order: parseInt(e.target.value || '0', 10) })}
-                        className="h-8 w-16"
-                      />
-                      <Input
-                        value={row.parent_title || ''}
-                        onChange={(e) => update(idx, { parent_title: e.target.value })}
-                        placeholder="Nest under (optional)"
-                        className="h-8 w-48"
-                      />
-                      <Input
-                        value={row.title}
-                        onChange={(e) => update(idx, { title: e.target.value })}
-                        placeholder="Task title"
-                        className="h-8 flex-1"
-                      />
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => move(idx, -1)}>
-                        <ArrowUp className="h-3 w-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => move(idx, 1)}>
-                        <ArrowDown className="h-3 w-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => removeRow(idx)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>
