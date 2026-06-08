@@ -25,10 +25,8 @@ serve(async (req) => {
     await supabase.from("top_performer_uploads")
       .update({ transcription_status: "processing" }).eq("id", uploadId);
 
-    const { data: settings } = await supabase
-      .from("agency_settings").select("gemini_api_key").limit(1).maybeSingle();
-    const GEMINI_API_KEY = settings?.gemini_api_key || Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     // Download the file and base64-encode
     const fileRes = await fetch(fileUrl);
@@ -43,18 +41,22 @@ serve(async (req) => {
     const mt = mimeType || fileRes.headers.get("content-type") || "video/mp4";
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        },
         body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: "Transcribe the spoken audio in this ad. Return ONLY the verbatim script — no labels, timestamps, or commentary. If there is no spoken audio, return 'No spoken audio.'" },
-              { inline_data: { mime_type: mt, data: base64 } },
+          model: "google/gemini-2.5-flash",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: "Transcribe the spoken audio in this ad. Return ONLY the verbatim script — no labels, timestamps, or commentary. If there is no spoken audio, return 'No spoken audio.'" },
+              { type: "image_url", image_url: { url: `data:${mt};base64,${base64}` } },
             ],
           }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
         }),
       }
     );
@@ -64,11 +66,11 @@ serve(async (req) => {
       await supabase.from("top_performer_uploads")
         .update({ transcription_status: "failed", transcript: `Error: ${txt.slice(0, 300)}` })
         .eq("id", uploadId);
-      throw new Error(`Gemini error: ${txt}`);
+      throw new Error(`AI gateway error: ${txt}`);
     }
 
     const result = await geminiRes.json();
-    const transcript = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const transcript = result.choices?.[0]?.message?.content || "";
 
     await supabase.from("top_performer_uploads")
       .update({ transcript, transcription_status: "completed" }).eq("id", uploadId);
