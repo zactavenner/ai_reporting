@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callOpenRouter, AUDIO_MODELS } from "../_shared/openrouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,9 +26,6 @@ serve(async (req) => {
     await supabase.from("top_performer_uploads")
       .update({ transcription_status: "processing" }).eq("id", uploadId);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
     // Download the file and base64-encode
     const fileRes = await fetch(fileUrl);
     if (!fileRes.ok) throw new Error(`Failed to fetch file: ${fileRes.status}`);
@@ -40,37 +38,23 @@ serve(async (req) => {
     const base64 = btoa(binary);
     const mt = mimeType || fileRes.headers.get("content-type") || "video/mp4";
 
-    const geminiRes = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: "Transcribe the spoken audio in this ad. Return ONLY the verbatim script — no labels, timestamps, or commentary. If there is no spoken audio, return 'No spoken audio.'" },
-              { type: "image_url", image_url: { url: `data:${mt};base64,${base64}` } },
-            ],
-          }],
-        }),
-      }
-    );
-
-    if (!geminiRes.ok) {
-      const txt = await geminiRes.text();
+    let transcript = "";
+    try {
+      const result = await callOpenRouter([{
+        role: "user",
+        content: [
+          { type: "text", text: "Transcribe the spoken audio in this ad. Return ONLY the verbatim script — no labels, timestamps, or commentary. If there is no spoken audio, return 'No spoken audio.'" },
+          { type: "image_url", image_url: { url: `data:${mt};base64,${base64}` } },
+        ],
+      }], { models: AUDIO_MODELS });
+      transcript = result.text;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       await supabase.from("top_performer_uploads")
-        .update({ transcription_status: "failed", transcript: `Error: ${txt.slice(0, 300)}` })
+        .update({ transcription_status: "failed", transcript: `Error: ${msg.slice(0, 300)}` })
         .eq("id", uploadId);
-      throw new Error(`AI gateway error: ${txt}`);
+      throw e;
     }
-
-    const result = await geminiRes.json();
-    const transcript = result.choices?.[0]?.message?.content || "";
 
     await supabase.from("top_performer_uploads")
       .update({ transcript, transcription_status: "completed" }).eq("id", uploadId);
