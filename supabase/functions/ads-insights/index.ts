@@ -3,7 +3,7 @@
 // Uses Lovable AI Gateway (no client-side keys).
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
 interface AdRow {
   id: string;
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    if (!LOVABLE_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
     const body = await req.json().catch(() => ({}));
     const ads: AdRow[] = Array.isArray(body.ads) ? body.ads : [];
     const campaigns: CampaignRow[] = Array.isArray(body.campaigns) ? body.campaigns : [];
@@ -151,7 +151,7 @@ ${JSON.stringify(payload.campaigns)}
 ADS:
 ${JSON.stringify(payload.ads)}`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -159,6 +159,7 @@ ${JSON.stringify(payload.ads)}`;
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
+        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: "system", content: SYSTEM },
           { role: "user", content: userMsg },

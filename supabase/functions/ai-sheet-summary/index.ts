@@ -51,8 +51,8 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+    if (!LOVABLE_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const body = await req.json().catch(() => ({}));
@@ -111,11 +111,12 @@ Be specific with numbers. Skip filler.`;
       clients: packs,
     };
 
-    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
+        models: ['google/gemini-2.5-flash', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: JSON.stringify(userPayload) },

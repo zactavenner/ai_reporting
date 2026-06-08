@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY')!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
 const OPENAI_API_KEY_ENV = Deno.env.get("OPENAI_API_KEY");
@@ -300,6 +300,7 @@ async function generateStaticAd(opts: {
         headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
         body: JSON.stringify({
           model: "openai/gpt-image-2",
+        models: ["openai/gpt-image-2", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
           prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
           size: sz,
           n: 1,
@@ -321,7 +322,7 @@ async function generateStaticAd(opts: {
   } else {
     // Nano Banana 2 via AI Gateway
     modelUsed = "google/gemini-3.1-flash-image-preview";
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -439,7 +440,7 @@ async function editStaticAd(opts: {
   {
     // All edits use Nano Banana 2 (image+text) via Lovable AI Gateway.
     modelUsed = "google/gemini-3.1-flash-image-preview";
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -534,7 +535,7 @@ async function generateOneVariation(opts: {
       ]
     : basePrompt;
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: modelUsed, messages: [{ role: "user", content: userContent }], modalities: ["image", "text"] }),
@@ -604,11 +605,12 @@ async function planStoryboard(opts: {
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
   const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (8 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~8s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "google/gemini-2.5-pro",
+        models: ["google/gemini-2.5-pro", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [
         { role: "system", content: sys },
         { role: "user", content: opts.brief },
@@ -686,7 +688,8 @@ async function generateSceneImage(opts: {
       : await fetch("https://openrouter.ai/api/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
-          body: JSON.stringify({ model: "openai/gpt-image-2", prompt: fullPrompt, size: sz, n: 1, response_format: "b64_json" }),
+          body: JSON.stringify({ model: "openai/gpt-image-2",
+        models: ["openai/gpt-image-2", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"], prompt: fullPrompt, size: sz, n: 1, response_format: "b64_json" }),
         });
     if (!res.ok) throw new Error(`Scene image [${res.status}]: ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();
@@ -699,7 +702,7 @@ async function generateSceneImage(opts: {
     } else throw new Error("OpenAI returned no scene image data");
   } else {
     modelUsed = "google/gemini-3.1-flash-image-preview";
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model: modelUsed, messages: [{ role: "user", content: fullPrompt }], modalities: ["image", "text"] }),
@@ -1407,7 +1410,7 @@ Deno.serve(async (req) => {
   const USE_OPENROUTER = CHAT_MODEL.startsWith("openrouter/");
   const CHAT_API_URL = USE_OPENROUTER
     ? "https://openrouter.ai/api/v1/chat/completions"
-    : "https://ai.gateway.lovable.dev/v1/chat/completions";
+    : "https://openrouter.ai/api/v1/chat/completions";
   const CHAT_API_KEY = USE_OPENROUTER ? (OPENROUTER_API_KEY || "") : LOVABLE_API_KEY;
   const CHAT_MODEL_ID = USE_OPENROUTER ? CHAT_MODEL.replace(/^openrouter\//, "") : CHAT_MODEL;
   if (USE_OPENROUTER && !OPENROUTER_API_KEY) {
@@ -2524,11 +2527,12 @@ Deno.serve(async (req) => {
         // Suggested follow-ups — quick lightweight call
         try {
           if (cleaned && cleaned.length > 20) {
-            const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST",
               headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
               body: JSON.stringify({
                 model: "google/gemini-3-flash-preview",
+        models: ["google/gemini-3-flash-preview", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
                 messages: [
                   { role: "system", content: "Given the user's last request and the assistant's reply, propose 3 short, concrete next-step prompts the user is most likely to want next. Reply with ONLY a JSON array of 3 strings, max 70 chars each. No prose." },
                   { role: "user", content: `USER: ${(userText || "").slice(0, 800)}\n\nASSISTANT: ${cleaned.slice(0, 1500)}` },

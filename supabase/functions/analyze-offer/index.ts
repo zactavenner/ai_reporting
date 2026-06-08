@@ -12,8 +12,8 @@ serve(async (req) => {
   try {
     const { offer_id, client_id, client_name, file_urls, file_names, current_description } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+    if (!LOVABLE_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
 
     // Build context from files
     let fileContext = "";
@@ -36,7 +36,7 @@ Based on the company name, any existing description, and the attached file names
 
 Write 2-3 detailed paragraphs. Be specific and compelling. If file names suggest pitch decks, investment docs, or marketing materials, infer the offer details from context.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -44,6 +44,7 @@ Write 2-3 detailed paragraphs. Be specific and compelling. If file names suggest
       },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
+        models: ["google/gemini-3-flash-preview", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: "system", content: "You are an expert copywriter. Generate compelling offer descriptions based on available context. Be specific, avoid generic filler. Return ONLY the description text, no JSON wrapping." },
           { role: "user", content: userPrompt },

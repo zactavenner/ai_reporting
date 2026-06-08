@@ -65,8 +65,8 @@ serve(async (req) => {
       description: p.description,
     }));
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+    if (!LOVABLE_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
 
     const prompt = `You are a project manager routing a task to the right people.
 
@@ -94,7 +94,7 @@ Return ONLY a JSON object with this shape:
 }
 At least one of member_ids or pod_ids must be non-empty unless nothing fits.`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -102,6 +102,7 @@ At least one of member_ids or pod_ids must be non-empty unless nothing fits.`;
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
+        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
       }),

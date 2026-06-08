@@ -205,8 +205,8 @@ serve(async (req) => {
   try {
     const { client_id, asset_type, client_data, existing_research, existing_angles, offer_id } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+    if (!LOVABLE_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
 
     const baseSystemPrompt = SYSTEM_PROMPTS[asset_type];
     if (!baseSystemPrompt) throw new Error(`Unknown asset type: ${asset_type}`);
@@ -218,7 +218,7 @@ serve(async (req) => {
     const userPrompt = buildUserPrompt(client_data, asset_type, existing_research, existing_angles);
 
     // Use Lovable AI Gateway with Gemini
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -226,6 +226,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-3.1-pro-preview",
+        models: ["google/gemini-3.1-pro-preview", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },

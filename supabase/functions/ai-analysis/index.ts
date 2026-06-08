@@ -249,15 +249,9 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data: settings } = await supabase
-      .from('agency_settings')
-      .select('gemini_api_key')
-      .limit(1)
-      .maybeSingle();
-
-    const GEMINI_API_KEY = settings?.gemini_api_key || Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured. Please add it in Agency Settings.");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is not configured.");
     }
 
     const systemPrompt = buildSystemPrompt(context);
@@ -290,22 +284,28 @@ serve(async (req) => {
       }
     }
 
-    const geminiContents = convertToGeminiMessages(userMessages, systemPrompt);
+    const orMessages = [
+      { role: "system", content: systemPrompt },
+      ...userMessages.map(m => ({ role: m.role, content: m.content })),
+    ];
 
-    // Use streaming with Gemini API
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "HTTP-Referer": "https://reporting.highperformanceads.com",
+          "X-Title": "HPA Reporting",
         },
         body: JSON.stringify({
-          contents: geminiContents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 8192,
-          },
+          model: "google/gemini-2.5-flash",
+          models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+          messages: orMessages,
+          temperature: 0.7,
+          max_tokens: 8192,
+          stream: true,
         }),
       }
     );
@@ -320,55 +320,14 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
       return new Response(
-        JSON.stringify({ error: "Gemini API error" }),
+        JSON.stringify({ error: "OpenRouter API error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Transform Gemini SSE to OpenAI-compatible SSE format
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk);
-        const lines = text.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
-              continue;
-            }
-            
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              
-              if (content) {
-                const openAIFormat = {
-                  choices: [{
-                    delta: { content },
-                    index: 0,
-                    finish_reason: null
-                  }]
-                };
-                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAIFormat)}\n\n`));
-              }
-              
-              // Check for finish reason
-              if (parsed.candidates?.[0]?.finishReason) {
-                controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
-              }
-            } catch (e) {
-              // Skip malformed JSON
-            }
-          }
-        }
-      }
-    });
-
-    return new Response(response.body?.pipeThrough(transformStream), {
+    // OpenRouter returns OpenAI-compatible SSE — pass through directly
+    return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {
