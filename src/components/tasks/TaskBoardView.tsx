@@ -16,6 +16,7 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
+import { FileStack } from 'lucide-react';
 import { useAllTasks, Task } from '@/hooks/useTasks';
 import { useClients, Client } from '@/hooks/useClients';
 import { useTaskMetrics } from '@/hooks/useTaskMetrics';
@@ -25,6 +26,7 @@ import { useCreatives } from '@/hooks/useCreatives';
 import { KanbanBoard } from './KanbanBoard';
 import { AgencyTaskSummary } from './AgencyTaskSummary';
 import { CreateTaskModal } from './CreateTaskModal';
+import { LoadTemplateDialog } from './LoadTemplateDialog';
 import { TaskHistoryTab } from './TaskHistoryTab';
 import { NotificationsTab, useNotifications } from './NotificationsTab';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
@@ -44,6 +46,7 @@ export function TaskBoardView({ clientId, onClose, isPublicView = false }: TaskB
   const { data: notifications = [] } = useNotifications(currentMember?.id);
   const unreadCount = Array.isArray(notifications) ? notifications.filter(n => !n.is_read).length : 0;
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [showLoadTemplate, setShowLoadTemplate] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   // Deep-link: if ?task= is present, ensure we're on kanban view so KanbanBoard picks it up
@@ -161,6 +164,12 @@ export function TaskBoardView({ clientId, onClose, isPublicView = false }: TaskB
               <Plus className="h-4 w-4 mr-1" />
               Add Task
             </Button>
+            {clientId && !isPublicView && (
+              <Button size="sm" variant="outline" onClick={() => setShowLoadTemplate(true)}>
+                <FileStack className="h-4 w-4 mr-1" />
+                Load Template
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -189,6 +198,12 @@ export function TaskBoardView({ clientId, onClose, isPublicView = false }: TaskB
         clients={filteredClients}
         defaultClientId={clientId}
         isPublicView={isPublicView}
+      />
+
+      <LoadTemplateDialog
+        open={showLoadTemplate}
+        onOpenChange={setShowLoadTemplate}
+        clientId={clientId}
       />
     </Card>
   );
