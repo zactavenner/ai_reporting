@@ -206,32 +206,64 @@ Deno.serve(async (req) => {
       // Non-fatal — continue
     }
 
-    // Seed onboarding tasks (only if none exist yet)
-    const { data: existingTasks } = await supabase
-      .from('client_onboarding_tasks')
-      .select('id')
-      .eq('client_id', clientId)
-      .limit(1);
+    // Seed onboarding checklist into the regular PM `tasks` system:
+    // creates an "Onboarding" project, one parent task per category,
+    // and a subtask under each parent for every template item.
+    try {
+      const { data: existingProject } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('type', 'onboarding')
+        .maybeSingle();
 
-    if (!existingTasks || existingTasks.length === 0) {
-      const templates = resolvedClientType === 'ECOM' ? ECOM_TASKS : CAPITAL_RAISING_TASKS;
-      const taskRows = templates.map(t => ({
-        client_id: clientId,
-        category: t.category,
-        title: t.title,
-        sort_order: t.sort_order,
-        completed: false,
-      }));
+      let projectId = existingProject?.id as string | undefined;
+      if (!projectId) {
+        const { data: project, error: pErr } = await supabase
+          .from('projects')
+          .insert({
+            client_id: clientId,
+            name: 'Onboarding',
+            type: 'onboarding',
+            description: 'Auto-generated onboarding checklist',
+          })
+          .select('id')
+          .single();
+        if (pErr) throw pErr;
+        projectId = project!.id;
 
-      const { error: taskError } = await supabase
-        .from('client_onboarding_tasks')
-        .insert(taskRows);
-
-      if (taskError) {
-        console.error('Task seeding error:', taskError);
-      } else {
-        console.log(`Seeded ${taskRows.length} onboarding tasks for ${company_name}`);
+        const templates = resolvedClientType === 'ECOM' ? ECOM_TASKS : CAPITAL_RAISING_TASKS;
+        const categoryOrder: string[] = [];
+        const itemsByCat = new Map<string, typeof templates>();
+        for (const t of templates) {
+          if (!itemsByCat.has(t.category)) { categoryOrder.push(t.category); itemsByCat.set(t.category, []); }
+          itemsByCat.get(t.category)!.push(t);
+        }
+        const parentRows = categoryOrder.map((category, idx) => ({
+          client_id: clientId, project_id: projectId, title: category,
+          description: 'Onboarding section', category, sort_order: (idx + 1) * 100,
+          status: 'todo', stage: 'todo', priority: 'medium',
+          visible_to_client: true, show_subtasks_to_client: true,
+        }));
+        const { data: parents, error: pTaskErr } = await supabase
+          .from('tasks').insert(parentRows).select('id, category, title');
+        if (pTaskErr) throw pTaskErr;
+        const parentByCat = new Map<string, string>();
+        (parents ?? []).forEach((r: any) => parentByCat.set(r.category || r.title, r.id));
+        const subRows = templates.map(t => ({
+          client_id: clientId, project_id: projectId,
+          parent_task_id: parentByCat.get(t.category) ?? null,
+          title: t.title, description: `Onboarding · ${t.category}`,
+          category: t.category, sort_order: t.sort_order,
+          status: 'todo', stage: 'todo', priority: 'medium',
+          visible_to_client: true,
+        }));
+        const { error: sErr } = await supabase.from('tasks').insert(subRows);
+        if (sErr) throw sErr;
+        console.log(`Seeded ${parentRows.length} sections + ${subRows.length} subtasks for ${company_name}`);
       }
+    } catch (seedErr) {
+      console.error('Onboarding seed error:', seedErr);
     }
 
     // Also create initial project management tasks
