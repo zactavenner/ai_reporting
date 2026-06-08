@@ -79,6 +79,27 @@ export function getTemplatesForClientType(clientType?: string | null) {
   return STANDARD_TASKS;
 }
 
+/**
+ * Load an onboarding template from the database (admin-editable).
+ * Falls back to the bundled defaults if no rows are configured for the key.
+ */
+export async function fetchOnboardingTemplate(
+  key: OnboardingTemplateKey,
+): Promise<{ category: string; title: string; sort_order: number }[]> {
+  const { supabase } = await import('@/integrations/supabase/client');
+  const { data, error } = await supabase
+    .from('onboarding_template_items' as any)
+    .select('category, title, sort_order')
+    .eq('template_key', key)
+    .order('sort_order', { ascending: true });
+  if (error) {
+    console.warn('[onboarding-template] fetch failed, using bundled default', error);
+    return getOnboardingTemplate(key);
+  }
+  if (!data || data.length === 0) return getOnboardingTemplate(key);
+  return data as any;
+}
+
 // Map onboarding categories → agency pod name so seeded PM tasks are
 // auto-routed to the right department on creation.
 export const CATEGORY_TO_POD: Record<string, string> = {
