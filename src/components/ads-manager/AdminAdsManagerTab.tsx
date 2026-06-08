@@ -15,7 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import {
   RefreshCw, Search, Image as ImageIcon, Video, Play,
   TrendingUp, MousePointerClick, Eye, DollarSign, Target, ExternalLink,
-  Layers, Megaphone, FileImage, ChevronRight, Calendar as CalIcon, Plus, Upload, Download, Rocket
+  Layers, Megaphone, FileImage, ChevronRight, Calendar as CalIcon, Plus, Upload, Download, Rocket, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -373,6 +373,28 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
         </div>
 
         {/* KPI bar */}
+        {/* Attribution-quality alert: fires when CRM-attributed leads diverge
+            >50% from Meta-reported leads, signalling a tracking gap. */}
+        {kpis.totalMetaLeads > 0 && (() => {
+          const diff = Math.abs(kpis.totalMetaLeads - kpis.totalCrmLeads);
+          const ratio = diff / kpis.totalMetaLeads;
+          if (ratio <= 0.5) return null;
+          return (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs">
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-medium">
+                  Attribution gap: Meta reports {fmtN(kpis.totalMetaLeads)} leads but only {fmtN(kpis.totalCrmLeads)} matched in CRM
+                  ({Math.round(ratio * 100)}% discrepancy).
+                </div>
+                <div className="text-muted-foreground mt-0.5">
+                  Check UTM tagging on ad URLs and review Attribution Settings for this client.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2">
           <KpiCell icon={DollarSign} label="Spend" value={fmt$(kpis.totalSpend)} />
           <KpiCell icon={Eye} label="Impressions" value={fmtN(kpis.totalImpr)} />
