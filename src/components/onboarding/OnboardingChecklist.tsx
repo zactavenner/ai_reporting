@@ -83,16 +83,8 @@ export function OnboardingChecklist({ clientId, clientType }: OnboardingChecklis
               await seedTasks.mutateAsync({
                 clientId,
                 tasks: templates,
-                // Capital raising clients also get the full checklist
-                // mirrored into the PM task board (To Do) with each task
-                // auto-routed to the owning department pod.
-                createPmTasks: templateKey === 'capital',
               });
-              toast.success(
-                templateKey === 'capital'
-                  ? 'Capital Raising onboarding loaded — tasks added to PM board & assigned to pods'
-                  : 'Onboarding tasks created'
-              );
+              toast.success('Onboarding tasks added to project board — grouped by section & assigned to pods');
             }}
             disabled={seedTasks.isPending}
           >
