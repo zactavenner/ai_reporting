@@ -6,6 +6,7 @@ import { useOnboardingTasks, useToggleOnboardingTask, useSeedOnboardingTasks } f
 import {
   getTemplatesForClientType,
   getOnboardingTemplate,
+  fetchOnboardingTemplate,
   ONBOARDING_TEMPLATE_OPTIONS,
   type OnboardingTemplateKey,
 } from '@/lib/onboardingTaskTemplates';
@@ -78,7 +79,8 @@ export function OnboardingChecklist({ clientId, clientType }: OnboardingChecklis
             variant="outline"
             size="sm"
             onClick={async () => {
-              const templates = getOnboardingTemplate(templateKey)
+              const templates = (await fetchOnboardingTemplate(templateKey))
+                ?? getOnboardingTemplate(templateKey)
                 ?? getTemplatesForClientType(clientType);
               await seedTasks.mutateAsync({
                 clientId,

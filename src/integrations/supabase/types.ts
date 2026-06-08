@@ -7744,6 +7744,36 @@ export type Database = {
           },
         ]
       }
+      onboarding_template_items: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          sort_order: number
+          template_key: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+          template_key: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+          template_key?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pagespeed_cache: {
         Row: {
           fetched_at: string
