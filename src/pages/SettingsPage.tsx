@@ -36,6 +36,7 @@ import {
   Palette,
   Globe,
   Plug,
+  ListChecks,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,7 @@ import {
 import { UsageDashboard } from '@/components/settings/UsageDashboard';
 import { StyleSettingsView } from '@/components/project/StyleSettingsView';
 import { ApiKeysSection } from '@/components/settings/ApiKeysSection';
+import { OnboardingTemplatesSection } from '@/components/settings/OnboardingTemplatesSection';
 
 interface Reference {
   id: string;
@@ -428,6 +430,10 @@ export default function SettingsPage() {
               <Globe className="h-4 w-4" />
               API Access
             </TabsTrigger>
+            <TabsTrigger value="onboarding-templates" className="gap-2">
+              <ListChecks className="h-4 w-4" />
+              Onboarding Templates
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="api-keys" className="space-y-4">
@@ -672,6 +678,9 @@ export default function SettingsPage() {
           </TabsContent>
           <TabsContent value="api-access" className="space-y-4">
             <ApiKeysSection />
+          </TabsContent>
+          <TabsContent value="onboarding-templates" className="space-y-4">
+            <OnboardingTemplatesSection />
           </TabsContent>
         </Tabs>
       </div>
