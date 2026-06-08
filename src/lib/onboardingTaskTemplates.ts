@@ -26,46 +26,89 @@ const STANDARD_TASKS = [
     { category: 'Launch', title: 'Launch ads', sort_order: 18 },
 ];
 
-// Capital Raising SOP template — modeled after the AI Capital Raising pipeline
-// (compliance, PPM, accredited investor funnel, capital creative ads, investor close).
-const CAPITAL_TASKS = [
-  { category: 'Compliance & Legal', title: 'Confirm Reg D 506(b) or 506(c) exemption', sort_order: 1 },
-  { category: 'Compliance & Legal', title: 'Upload Private Placement Memorandum (PPM)', sort_order: 2 },
-  { category: 'Compliance & Legal', title: 'Add subscription agreement & operating agreement', sort_order: 3 },
-  { category: 'Compliance & Legal', title: 'Approve mandatory risk disclaimer + “Targeted returns” copy rules', sort_order: 4 },
-  { category: 'Compliance & Legal', title: 'Set accredited investor verification process', sort_order: 5 },
+// Capital Raising SOP template — mirrors the official SOP board exactly.
+// Items with `parent_title` are nested as sub-subtasks under that parent item
+// inside the same category.
+const CAPITAL_TASKS: TemplateItem[] = [
+  // Client Setup / Requests
+  { category: 'Client Setup / Requests', title: 'Add team members to GHL based on emails & numbers provided', sort_order: 1 },
+  { category: 'Client Setup / Requests', title: 'Meta Ad account Access', sort_order: 2 },
+  { category: 'Client Setup / Requests', parent_title: 'Meta Ad account Access', title: 'Page Created', sort_order: 3 },
+  { category: 'Client Setup / Requests', parent_title: 'Meta Ad account Access', title: 'Pixel Created', sort_order: 4 },
+  { category: 'Client Setup / Requests', parent_title: 'Meta Ad account Access', title: 'Audience / LLA Audience Created', sort_order: 5 },
+  { category: 'Client Setup / Requests', parent_title: 'Meta Ad account Access', title: 'Credit Card Added', sort_order: 6 },
+  { category: 'Client Setup / Requests', title: 'Domain DNS Access', sort_order: 7 },
+  { category: 'Client Setup / Requests', title: 'Connect Calendar with GHL', sort_order: 8 },
+  { category: 'Client Setup / Requests', title: 'Download Phone App for GoHighLevel', sort_order: 9 },
+  { category: 'Client Setup / Requests', title: 'Setup Availability', sort_order: 10 },
+  { category: 'Client Setup / Requests', title: 'Purchase Phone Number with Person Identification', sort_order: 11 },
+  { category: 'Client Setup / Requests', title: 'Ad / FAQ Videos', sort_order: 12 },
+  { category: 'Client Setup / Requests', parent_title: 'Ad / FAQ Videos', title: 'Edit Videos', sort_order: 13 },
+  { category: 'Client Setup / Requests', parent_title: 'Ad / FAQ Videos', title: 'Get Approval', sort_order: 14 },
+  { category: 'Client Setup / Requests', title: 'Add $97/month Subscription to NK Account (If they are using our platform)', sort_order: 15 },
+  { category: 'Client Setup / Requests', title: 'Client to Purchase Phone Number & ID Verification', sort_order: 16 },
 
-  { category: 'Offer Setup', title: 'Define target return %, hold period, and minimum investment', sort_order: 6 },
-  { category: 'Offer Setup', title: 'Document fund/asset thesis and track record', sort_order: 7 },
-  { category: 'Offer Setup', title: 'Upload investor deck & one-pager', sort_order: 8 },
-  { category: 'Offer Setup', title: 'Generate AI offer summary in client_assets', sort_order: 9 },
+  // Ads
+  { category: 'Ads', title: 'Setup Business Portfolio or Get Access', sort_order: 17 },
+  { category: 'Ads', title: 'Setup Ad Account with Billing', sort_order: 18 },
+  { category: 'Ads', title: 'Credit Card is on File (spending limit is good)', sort_order: 19 },
+  { category: 'Ads', title: 'Ad Account Warm Up Completed', sort_order: 20 },
+  { category: 'Ads', parent_title: 'Ad Account Warm Up Completed', title: '$25/day Engagment Likes Campaign (no images or text)', sort_order: 21 },
+  { category: 'Ads', parent_title: 'Ad Account Warm Up Completed', title: 'Wait Until $5 is spent then move to next campaign', sort_order: 22 },
+  { category: 'Ads', title: 'Setup Audiences on Meta', sort_order: 23 },
+  { category: 'Ads', parent_title: 'Setup Audiences on Meta', title: 'LLA - Funded Investors', sort_order: 24 },
+  { category: 'Ads', parent_title: 'Setup Audiences on Meta', title: 'LLA - Investor Leads', sort_order: 25 },
+  { category: 'Ads', title: 'Pixel is Setup on Funnel', sort_order: 26 },
+  { category: 'Ads', title: 'Setup Lead Form - DQ Non Accredited', sort_order: 27 },
+  { category: 'Ads', title: 'Review Copy & Creatives', sort_order: 28 },
+  { category: 'Ads', title: 'Create Ad Campaign with Copy & Creatives', sort_order: 29 },
+  { category: 'Ads', title: 'Launch Final Lead Gen - Ad Campaign After Approval', sort_order: 30 },
+  { category: 'Ads', title: 'API Meta Ads Setup', sort_order: 31 },
+  { category: 'Ads', title: 'Make Sure Comment Guard is setup with MODERATION & AGENT to reply to comments', sort_order: 32 },
 
-  { category: 'Brand & Creative', title: 'Load Capital Creative ad style (Deep Green / Gold / Playfair)', sort_order: 10 },
-  { category: 'Brand & Creative', title: 'Generate hero return statics (15% / 18% targeted return)', sort_order: 11 },
-  { category: 'Brand & Creative', title: 'Generate VSL script + caller script via generate-asset', sort_order: 12 },
-  { category: 'Brand & Creative', title: 'Produce 3 avatar ad variations (Veo 3.1)', sort_order: 13 },
-  { category: 'Brand & Creative', title: 'Compliance review — no “guaranteed”, disclaimer present', sort_order: 14 },
+  // CRM
+  { category: 'CRM', title: 'Set-Up For A2P & Phone Number', sort_order: 33 },
+  { category: 'CRM', parent_title: 'Set-Up For A2P & Phone Number', title: 'Submit A2P', sort_order: 34 },
+  { category: 'CRM', parent_title: 'Set-Up For A2P & Phone Number', title: 'Purchase Phone Numbers (1 For Each Location)', sort_order: 35 },
+  { category: 'CRM', title: 'Reporting Setup - Google Sheets', sort_order: 36 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Add sheet to Current Clients Tab under Client Name', sort_order: 37 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Shared with Client', sort_order: 38 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Leads Connected', sort_order: 39 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Funded Connected', sort_order: 40 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Committed Connected', sort_order: 41 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Booked Calls Connected', sort_order: 42 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Call Transcript > Sheet Connected', sort_order: 43 },
+  { category: 'CRM', parent_title: 'Reporting Setup - Google Sheets', title: 'Make > Ad Spend Reporting Tab', sort_order: 44 },
+  { category: 'CRM', title: 'Funnel Setup', sort_order: 45 },
+  { category: 'CRM', parent_title: 'Funnel Setup', title: 'Link sub-domain to Funnel or purchase domain', sort_order: 46 },
+  { category: 'CRM', parent_title: 'Funnel Setup', title: 'Calendar Page', sort_order: 47 },
+  { category: 'CRM', parent_title: 'Funnel Setup', title: 'Use CHATGPT TO REVIEW IT FOR FEEDBACK', sort_order: 48 },
+  { category: 'CRM', parent_title: 'Funnel Setup', title: 'Get Approval from Manager', sort_order: 49 },
+  { category: 'CRM', parent_title: 'Funnel Setup', title: 'Setup Thank You Page with Video using AI or from Client (Include Pitch Deck Here to Download)', sort_order: 50 },
+  { category: 'CRM', title: 'Communicate Status of Setup Completion', sort_order: 51 },
+  { category: 'CRM', title: 'Phase 2 (1 Week Out After Launch)', sort_order: 52 },
+  { category: 'CRM', parent_title: 'Phase 2 (1 Week Out After Launch)', title: 'AI Setter (Use Prompt)', sort_order: 53 },
+  { category: 'CRM', parent_title: 'Phase 2 (1 Week Out After Launch)', title: 'AI Caller', sort_order: 54 },
+  { category: 'CRM', parent_title: 'Phase 2 (1 Week Out After Launch)', title: 'AI Transcript > Google Sheet', sort_order: 55 },
+  { category: 'CRM', parent_title: 'Phase 2 (1 Week Out After Launch)', title: 'AI Video with VEO3', sort_order: 56 },
+  { category: 'CRM', parent_title: 'Phase 2 (1 Week Out After Launch)', title: 'Customer File of Old Leads', sort_order: 57 },
+  { category: 'CRM', parent_title: 'Phase 2 (1 Week Out After Launch)', title: 'Google Ads Account', sort_order: 58 },
+  { category: 'CRM', title: 'VSL Creation (ONLY IF NOT PROVIDED)', sort_order: 59 },
+  { category: 'CRM', parent_title: 'VSL Creation (ONLY IF NOT PROVIDED)', title: 'Take Survey, Website and Create VSL Script', sort_order: 60 },
+  { category: 'CRM', parent_title: 'VSL Creation (ONLY IF NOT PROVIDED)', title: 'Upload to GAMMA.APP', sort_order: 61 },
+  { category: 'CRM', parent_title: 'VSL Creation (ONLY IF NOT PROVIDED)', title: 'Export as PDF > Canva', sort_order: 62 },
+  { category: 'CRM', parent_title: 'VSL Creation (ONLY IF NOT PROVIDED)', title: 'Share Embed Code of Slides & Put onto GHL Funnel', sort_order: 63 },
 
-  { category: 'Funnel', title: 'Build accredited investor opt-in landing page', sort_order: 15 },
-  { category: 'Funnel', title: 'Add accreditation qualifier quiz/form', sort_order: 16 },
-  { category: 'Funnel', title: 'Set up investor booking calendar (45-min discovery)', sort_order: 17 },
-  { category: 'Funnel', title: 'Configure nurture email/SMS sequence with PPM delivery', sort_order: 18 },
-
-  { category: 'Ads', title: 'Connect Meta ad account & install pixel', sort_order: 19 },
-  { category: 'Ads', title: 'Create CBO campaign with accredited audience targeting', sort_order: 20 },
-  { category: 'Ads', title: 'Upload Capital Creative statics & video ads', sort_order: 21 },
-  { category: 'Ads', title: 'Set CPL / CoC% target thresholds & alerts', sort_order: 22 },
-
-  { category: 'CRM & Pipeline', title: 'Connect GHL sub-account & map investor pipeline stages', sort_order: 23 },
-  { category: 'CRM & Pipeline', title: 'Set stages: Lead → Qualified → Booked → Showed → Committed → Funded', sort_order: 24 },
-  { category: 'CRM & Pipeline', title: 'Wire webhook ingest for accreditation form', sort_order: 25 },
-  { category: 'CRM & Pipeline', title: 'Enable Slack channel mapping (creatives + approvals)', sort_order: 26 },
-
-  { category: 'Launch', title: 'Investor kickoff call completed', sort_order: 27 },
-  { category: 'Launch', title: 'Verify pixel + lead/call tracking end-to-end', sort_order: 28 },
-  { category: 'Launch', title: 'Launch ads & enable daily reporting', sort_order: 29 },
-  { category: 'Launch', title: 'Schedule weekly investor pipeline review', sort_order: 30 },
+  // Creatives
+  { category: 'Creatives', title: 'Create 20 Creatives for Fund', sort_order: 64 },
+  { category: 'Creatives', title: 'Create 4 - 30 second Video Ads', sort_order: 65 },
+  { category: 'Creatives', parent_title: 'Create 4 - 30 second Video Ads', title: 'Podcast Style', sort_order: 66 },
+  { category: 'Creatives', parent_title: 'Create 4 - 30 second Video Ads', title: 'Deal Overview with Numbers as Hook', sort_order: 67 },
+  { category: 'Creatives', parent_title: 'Create 4 - 30 second Video Ads', title: 'UGC STYLE (Rv Park = Scence is selfie style at RV park talking about fund)', sort_order: 68 },
+  { category: 'Creatives', parent_title: 'Create 4 - 30 second Video Ads', title: 'Market Trend Hook, Body, CTA', sort_order: 69 },
 ];
+
+export type TemplateItem = { category: string; title: string; sort_order: number; parent_title?: string | null };
 
 export function getOnboardingTemplate(key: OnboardingTemplateKey) {
   return key === 'capital' ? CAPITAL_TASKS : STANDARD_TASKS;
@@ -85,11 +128,11 @@ export function getTemplatesForClientType(clientType?: string | null) {
  */
 export async function fetchOnboardingTemplate(
   key: OnboardingTemplateKey,
-): Promise<{ category: string; title: string; sort_order: number }[]> {
+): Promise<TemplateItem[]> {
   const { supabase } = await import('@/integrations/supabase/client');
   const { data, error } = await supabase
     .from('onboarding_template_items' as any)
-    .select('category, title, sort_order')
+    .select('category, parent_title, title, sort_order')
     .eq('template_key', key)
     .order('sort_order', { ascending: true });
   if (error) {
@@ -103,12 +146,14 @@ export async function fetchOnboardingTemplate(
 // Map onboarding categories → agency pod name so seeded PM tasks are
 // auto-routed to the right department on creation.
 export const CATEGORY_TO_POD: Record<string, string> = {
+  'Client Setup / Requests': 'Account Management',
+  'Ads': 'Media Buying',
+  'CRM': 'CRM',
+  'Creatives': 'Creatives',
   'Compliance & Legal': 'Account Management',
   'Offer Setup': 'Account Management',
   'Brand & Creative': 'Creatives',
   'Funnel': 'Media Buying',
-  'Ads': 'Media Buying',
-  'CRM & Pipeline': 'CRM',
   'Setup': 'Account Management',
   'Fulfillment': 'Creatives',
   'Launch': 'Account Management',
