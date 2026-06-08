@@ -35,6 +35,7 @@ const ClientProjectsPage = lazyRetry(() => import("./pages/ClientProjectsPage"))
 const ProjectPage = lazyRetry(() => import("./pages/ProjectPage"));
 const OfferDetailPage = lazyRetry(() => import("./pages/OfferDetailPage"));
 const FundAdStudioPage = lazyRetry(() => import("./pages/FundAdStudioPage"));
+const GhlWorkflowsPage = lazyRetry(() => import("./pages/GhlWorkflowsPage"));
 
 function PageLoader() {
   return (
@@ -74,6 +75,7 @@ const App = () => (
             <Route path="/projects" element={<PasswordGate><ClientProjectsPage /></PasswordGate>} />
             <Route path="/projects/:projectId" element={<PasswordGate><ProjectPage /></PasswordGate>} />
             <Route path="/fundad-studio" element={<PasswordGate><FundAdStudioPage /></PasswordGate>} />
+            <Route path="/ghl-workflows" element={<PasswordGate><GhlWorkflowsPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
