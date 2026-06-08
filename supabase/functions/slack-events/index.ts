@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-slack-signature, x-slack-request-timestamp, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const AI_GATEWAY = "https://openrouter.ai/api/v1/chat/completions";
 const SLACK_GATEWAY_URL = "https://connector-gateway.lovable.dev/slack/api";
 
 serve(async (req) => {
@@ -17,13 +17,13 @@ serve(async (req) => {
   }
 
   const SLACK_SIGNING_SECRET = Deno.env.get("SLACK_SIGNING_SECRET");
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   const SLACK_API_KEY = Deno.env.get("SLACK_API_KEY");
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   if (!SLACK_SIGNING_SECRET) throw new Error("SLACK_SIGNING_SECRET not configured");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+  if (!LOVABLE_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   if (!SLACK_API_KEY) throw new Error("SLACK_API_KEY not configured");
 
   const rawBody = await req.text();
@@ -166,6 +166,7 @@ async function detectIntent(text: string, apiKey: string): Promise<{ action: str
     },
     body: JSON.stringify({
       model: "google/gemini-2.5-flash-lite",
+        models: ["google/gemini-2.5-flash-lite", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [
         {
           role: "system",
@@ -483,6 +484,7 @@ async function handleCreateTask(
         },
         body: JSON.stringify({
           model: "google/gemini-2.5-flash-lite",
+        models: ["google/gemini-2.5-flash-lite", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
           messages: [
             {
               role: "system",
@@ -543,6 +545,7 @@ Clients: ${clientNames}`,
     },
     body: JSON.stringify({
       model: "google/gemini-3-flash-preview",
+        models: ["google/gemini-3-flash-preview", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [
         {
           role: "system",

@@ -39,17 +39,17 @@ serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get('LOVABLE_API_KEY');
+    const apiKey = Deno.env.get('OPENROUTER_API_KEY');
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
+        JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log('AI Edit request:', { editPrompt: editPrompt.slice(0, 100), aspectRatio });
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -57,6 +57,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'google/gemini-3.1-flash-image-preview',
+        models: ['google/gemini-3.1-flash-image-preview', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           {
             role: 'user',
