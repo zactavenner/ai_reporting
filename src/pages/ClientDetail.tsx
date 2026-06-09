@@ -395,6 +395,8 @@ export default function ClientDetail() {
             </TabsTrigger>
           </TabsList>
 
+          {/* Lazy-loaded tab contents wrapped in a single Suspense — only one renders at a time */}
+          <Suspense fallback={<div className="py-12 flex justify-center"><CashBagLoader message="Loading…" /></div>}>
           {/* ─── PROPERTIES TAB (LEASING) ─── */}
           {isLeasing && (
             <TabsContent value="properties" className="space-y-6">
