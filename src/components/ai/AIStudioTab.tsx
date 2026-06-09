@@ -1135,6 +1135,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         )}
         {aiStudioTab === "chat" && (
+        <>
         <details className="group border-b border-border/60 bg-muted/20">
           <summary className="flex items-center gap-2 px-5 py-2 cursor-pointer text-xs text-muted-foreground hover:bg-muted/40 select-none [&::-webkit-details-marker]:hidden">
             <Settings2 className="h-3.5 w-3.5" />
@@ -1550,9 +1551,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 ))}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter newline · 🎤 voice · 🌐 web search built-in</p>
           </div>
         </div>
+        </>
         )}
       </Card>
       )}
