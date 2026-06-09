@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, lazy, Suspense, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil } from 'lucide-react';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
@@ -27,30 +27,31 @@ import { CSVImportModal, ImportType } from '@/components/import/CSVImportModal';
 import { ImportHistoryModal } from '@/components/import/ImportHistoryModal';
 import { AddCustomTabModal } from '@/components/import/AddCustomTabModal';
 import { AgencySettingsModal } from '@/components/settings/AgencySettingsModal';
-import { CreativesSection } from '@/components/creative/CreativesSection';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { useUpdateAgencySettings } from '@/hooks/useAgencySettings';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { AIAnalysisChat } from '@/components/ai/AIAnalysisChat';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
-import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { DataAuditSection } from '@/components/dashboard/DataAuditSection';
 import { ClientQuickLinksBar } from '@/components/client/ClientQuickLinksBar';
 
-import { PipelineTab } from '@/components/pipeline/PipelineTab';
-import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
 import { Input } from '@/components/ui/input';
 import { InlineUrlEmbed } from '@/components/settings/InlineUrlEmbed';
-import { SheetStatsTab } from '@/components/sheet-stats/SheetStatsTab';
-import { PropertyManagerTab } from '@/components/properties/PropertyManagerTab';
 import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMappingSection';
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
 import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { OnboardingIntake } from '@/components/onboarding/OnboardingIntake';
-import { AIStudioTab } from '@/components/ai/AIStudioTab';
-import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
-import ConnectionsTab from '@/components/client/ConnectionsTab';
+
+// Heavy per-tab views are lazy-loaded so they don't block the initial client page render.
+const CreativesSection = lazy(() => import('@/components/creative/CreativesSection').then(m => ({ default: m.CreativesSection })));
+const TaskBoardView = lazy(() => import('@/components/tasks/TaskBoardView').then(m => ({ default: m.TaskBoardView })));
+const FunnelPreviewTab = lazy(() => import('@/components/funnel/FunnelPreviewTab').then(m => ({ default: m.FunnelPreviewTab })));
+const SheetStatsTab = lazy(() => import('@/components/sheet-stats/SheetStatsTab').then(m => ({ default: m.SheetStatsTab })));
+const PropertyManagerTab = lazy(() => import('@/components/properties/PropertyManagerTab').then(m => ({ default: m.PropertyManagerTab })));
+const AIStudioTab = lazy(() => import('@/components/ai/AIStudioTab').then(m => ({ default: m.AIStudioTab })));
+const ClientFolderTab = lazy(() => import('@/components/folder/ClientFolderTab').then(m => ({ default: m.ClientFolderTab })));
+const ConnectionsTab = lazy(() => import('@/components/client/ConnectionsTab'));
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
 import { useClient } from '@/hooks/useClients';
