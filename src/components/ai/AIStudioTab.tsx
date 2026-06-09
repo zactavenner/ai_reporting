@@ -471,9 +471,17 @@ function ChatImagePreview({ image }: { image: ChatImage }) {
 
 function ChatVideoPreview({ video }: { video: ChatVideo }) {
   const filename = `aistudio-${Date.now()}.mp4`;
+  const aspect = video.aspect_ratio === "16:9" ? "16/9" : video.aspect_ratio === "1:1" ? "1/1" : "9/16";
+  const hasUrl = !!video.url;
   return (
     <div className="shrink-0 snap-start w-72 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
-      <video src={video.url} controls playsInline className="w-full bg-black aspect-[9/16] object-contain" />
+      <VideoPlayerCard
+        src={video.url}
+        aspect={aspect as any}
+        status={hasUrl ? "ready" : "failed"}
+        errorMessage={!hasUrl ? "The video URL could not be returned. Try Recreate." : undefined}
+        className="rounded-none border-0"
+      />
       <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40">
         <PreviewActionBar
           url={video.url}
