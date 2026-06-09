@@ -565,6 +565,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [canvasView, setCanvasView] = useState<{ zoom: number; panX: number; panY: number } | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents">("chat");
+  const [videoRefs, setVideoRefs] = useState<VideoReference[]>([]);
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [showCanvas, setShowCanvas] = useState<boolean>(() => {
