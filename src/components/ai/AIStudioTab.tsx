@@ -846,8 +846,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         conversationId: conversationId || undefined,
         userText: (() => {
           const mentioned = extractAgentMentions(text, clientAgents as any);
-          if (!mentioned.length) return text;
-          return buildAgentContextBlock(mentioned) + text;
+          const agentBlock = mentioned.length ? buildAgentContextBlock(mentioned) : "";
+          const refBlock = buildReferenceContextBlock(videoRefs);
+          return agentBlock + refBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
