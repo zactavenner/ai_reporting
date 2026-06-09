@@ -7,7 +7,7 @@ import { Bot, ChevronRight } from "lucide-react";
 import { ClientAgentsManager } from "./ClientAgentsManager";
 import { useClientAgents, useClientAgentProfile } from "@/hooks/useClientAgents";
 
-export function AgentFolderInline({ clientId, clientName }: { clientId: string; clientName: string }) {
+export function AgentFolderInline({ clientId, clientName, compact = false }: { clientId: string; clientName: string; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const { data: agents = [] } = useClientAgents(clientId);
   const { data: profile } = useClientAgentProfile(clientId);
@@ -15,7 +15,19 @@ export function AgentFolderInline({ clientId, clientName }: { clientId: string; 
 
   return (
     <>
-      <Card className="p-4 bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
+      {compact ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 gap-1"
+          onClick={() => setOpen(true)}
+          title="Agent Folder"
+        >
+          <Bot className="h-3.5 w-3.5" />
+          <span className="text-xs">{agents.length}</span>
+        </Button>
+      ) : (
+        <Card className="p-4 bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-primary/10 grid place-items-center">
             <Bot className="h-5 w-5 text-primary" />
@@ -38,7 +50,8 @@ export function AgentFolderInline({ clientId, clientName }: { clientId: string; 
             Manage <ChevronRight className="h-3.5 w-3.5 ml-1" />
           </Button>
         </div>
-      </Card>
+        </Card>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
