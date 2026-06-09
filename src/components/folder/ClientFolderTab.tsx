@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { AgentFolderInline } from '@/components/agents/AgentFolderInline';
 
 interface ClientFolderTabProps {
   clientId: string;
@@ -333,6 +334,7 @@ export function ClientFolderTab({ clientId, clientName }: ClientFolderTabProps) 
 
   return (
     <div className="space-y-4">
+      <AgentFolderInline clientId={clientId} clientName={clientName} />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold">Folders — {clientName}</h2>

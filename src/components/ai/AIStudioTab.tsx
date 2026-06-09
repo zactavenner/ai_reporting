@@ -19,6 +19,8 @@ import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlacehold
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
+import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
+import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 
 interface Props {
   clientId: string;
@@ -587,6 +589,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
 
+  // --- Per-client agents (@mention support in AI Studio) ---
+  const { data: clientAgents = [] } = useClientAgents(clientId);
+
   const getStudioAuth = useCallback(async (requireIdentity = false) => {
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token || null;
@@ -826,7 +831,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const res = await studioFetch({
         clientId,
         conversationId: conversationId || undefined,
-        userText: text,
+        userText: (() => {
+          const mentioned = extractAgentMentions(text, clientAgents as any);
+          if (!mentioned.length) return text;
+          return buildAgentContextBlock(mentioned) + text;
+        })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
         quality,
@@ -1083,6 +1092,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowThreads(v => !v)} title={showThreads ? "Hide threads" : "Show threads"}>
               <History className="h-3.5 w-3.5" />
             </Button>
+            <AgentFolderInline clientId={clientId} clientName={clientName} compact />
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
               {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
