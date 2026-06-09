@@ -2282,6 +2282,122 @@ export type Database = {
           },
         ]
       }
+      client_agent_profiles: {
+        Row: {
+          brand_kit: Json | null
+          client_id: string
+          created_at: string
+          notes: string | null
+          profile_md: string | null
+          updated_at: string
+        }
+        Insert: {
+          brand_kit?: Json | null
+          client_id: string
+          created_at?: string
+          notes?: string | null
+          profile_md?: string | null
+          updated_at?: string
+        }
+        Update: {
+          brand_kit?: Json | null
+          client_id?: string
+          created_at?: string
+          notes?: string | null
+          profile_md?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_agent_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_agent_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agent_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      client_agents: {
+        Row: {
+          agent_type: string
+          client_id: string
+          created_at: string
+          enabled: boolean
+          handle: string
+          id: string
+          knowledge_md: string | null
+          model: string | null
+          name: string
+          reference_files: Json | null
+          system_prompt: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_type?: string
+          client_id: string
+          created_at?: string
+          enabled?: boolean
+          handle: string
+          id?: string
+          knowledge_md?: string | null
+          model?: string | null
+          name: string
+          reference_files?: Json | null
+          system_prompt?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_type?: string
+          client_id?: string
+          created_at?: string
+          enabled?: boolean
+          handle?: string
+          id?: string
+          knowledge_md?: string | null
+          model?: string | null
+          name?: string
+          reference_files?: Json | null
+          system_prompt?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_agents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_agents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_assets: {
         Row: {
           asset_type: string
