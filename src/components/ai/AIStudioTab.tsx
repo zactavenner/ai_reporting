@@ -1553,6 +1553,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter newline · 🎤 voice · 🌐 web search built-in</p>
           </div>
         </div>
+        )}
       </Card>
       )}
 
