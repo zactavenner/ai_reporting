@@ -1431,6 +1431,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
+                <AIStudioReferencePicker
+                  clientId={clientId}
+                  selected={videoRefs}
+                  onChange={setVideoRefs}
+                />
                 <button
                   type="button"
                   onClick={() => setAgentMode(v => !v)}
