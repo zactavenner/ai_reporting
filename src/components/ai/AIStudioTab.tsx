@@ -19,6 +19,8 @@ import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlacehold
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
+import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
+import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 
 interface Props {
   clientId: string;
