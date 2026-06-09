@@ -954,23 +954,36 @@ async function generateSeedanceVideo(opts: {
   }
   emit({ stage: "downloading", label: "Downloading reel…", job_id: jobId, model, percent: 90, elapsed_s: (Date.now() - t0) / 1000 });
 
-  // Download and store in 'creatives' bucket so URL is permanent (unsigned_urls may expire)
-  let storedUrl = videoUrl;
+  // Download and store in 'creatives' bucket so URL is permanent (unsigned_urls expire fast).
+  // Mandatory: if rehost or HEAD-check fails, mark this run failed instead of returning a broken URL.
+  let storedUrl: string | null = null;
   let storagePath: string | null = null;
   try {
+    emit({ stage: "downloading", label: "Downloading reel…", job_id: jobId, model, percent: 92, elapsed_s: (Date.now() - t0) / 1000 });
     const dl = await fetch(videoUrl);
-    if (dl.ok) {
-      const bytes = new Uint8Array(await dl.arrayBuffer());
-      const path = `ai-studio/${opts.clientId || "shared"}/seedance/${jobId}-${Date.now()}.mp4`;
-      emit({ stage: "rehosting", label: "Saving to permanent storage…", job_id: jobId, model, percent: 96, elapsed_s: (Date.now() - t0) / 1000 });
-      const up = await supa.storage.from("creatives").upload(path, bytes, { contentType: "video/mp4", upsert: false });
-      if (!up.error) {
-        const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
-        storedUrl = pub.publicUrl;
-        storagePath = path;
-      }
+    if (!dl.ok) throw new Error(`Download failed [${dl.status}]`);
+    const bytes = new Uint8Array(await dl.arrayBuffer());
+    if (bytes.byteLength < 1024) throw new Error("Downloaded file is too small to be a valid video");
+    const path = `ai-studio/${opts.clientId || "shared"}/seedance/${jobId}-${Date.now()}.mp4`;
+    emit({ stage: "rehosting", label: "Saving to permanent storage…", job_id: jobId, model, percent: 96, elapsed_s: (Date.now() - t0) / 1000 });
+    const up = await supa.storage.from("creatives").upload(path, bytes, { contentType: "video/mp4", upsert: false });
+    if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
+    const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+    storedUrl = pub.publicUrl;
+    storagePath = path;
+    // HEAD-check the rehosted URL so we never return something unplayable.
+    try {
+      const head = await fetch(storedUrl, { method: "HEAD" });
+      if (!head.ok) throw new Error(`Rehosted URL HEAD failed [${head.status}]`);
+    } catch (e) {
+      throw new Error(`Rehosted URL is unreachable: ${String((e as any)?.message || e)}`);
     }
-  } catch (e) { console.warn("Seedance rehost failed, using unsigned url", e); }
+  } catch (e) {
+    const msg = String((e as any)?.message || e);
+    console.error("Seedance rehost failed", msg);
+    emit({ stage: "failed", label: `Rehost failed: ${msg.slice(0, 140)}`, job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
+    throw new Error(`Seedance rehost failed: ${msg}`);
+  }
   emit({ stage: "completed", label: "Reel ready", job_id: jobId, model, percent: 100, elapsed_s: (Date.now() - t0) / 1000 });
 
   const ci = await supa.from("ai_studio_canvas_items").insert({

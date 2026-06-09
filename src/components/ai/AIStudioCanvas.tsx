@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { StoryboardTimelineCard } from "./StoryboardTimelineCard";
+import { VideoPlayerCard } from "./VideoPlayerCard";
 
 export type CanvasPlaceholder = {
   __placeholder: true;
@@ -412,9 +413,12 @@ export function AIStudioCanvas({
                 {p.resolution && <Badge variant="secondary" className="text-[10px]">{p.resolution}</Badge>}
                 <span className="text-xs text-muted-foreground ml-auto">{p.duration || 5}s</span>
               </div>
-              {p.video_url && (
-                <video src={p.video_url} controls playsInline className="w-full rounded-md border bg-black" />
-              )}
+              <VideoPlayerCard
+                src={p.video_url}
+                aspect={p.aspect_ratio === "16:9" ? "16/9" : p.aspect_ratio === "1:1" ? "1/1" : "9/16"}
+                status={p.video_url ? "ready" : "failed"}
+                errorMessage={!p.video_url ? "Generation finished but no video URL was returned." : undefined}
+              />
               <div className="flex items-center gap-2 mt-2">
                 <p className="text-[10px] text-muted-foreground line-clamp-2 flex-1">{p.video_prompt}</p>
                 {p.video_url && (

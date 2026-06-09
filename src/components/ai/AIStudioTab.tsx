@@ -21,6 +21,9 @@ import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
+import { AIStudioAgentsTab } from "./AIStudioAgentsTab";
+import { AIStudioReferencePicker, buildReferenceContextBlock, type VideoReference } from "./AIStudioReferencePicker";
+import { VideoPlayerCard } from "./VideoPlayerCard";
 
 interface Props {
   clientId: string;
@@ -468,9 +471,17 @@ function ChatImagePreview({ image }: { image: ChatImage }) {
 
 function ChatVideoPreview({ video }: { video: ChatVideo }) {
   const filename = `aistudio-${Date.now()}.mp4`;
+  const aspect = video.aspect_ratio === "16:9" ? "16/9" : video.aspect_ratio === "1:1" ? "1/1" : "9/16";
+  const hasUrl = !!video.url;
   return (
     <div className="shrink-0 snap-start w-72 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
-      <video src={video.url} controls playsInline className="w-full bg-black aspect-[9/16] object-contain" />
+      <VideoPlayerCard
+        src={video.url}
+        aspect={aspect as any}
+        status={hasUrl ? "ready" : "failed"}
+        errorMessage={!hasUrl ? "The video URL could not be returned. Try Recreate." : undefined}
+        className="rounded-none border-0"
+      />
       <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40">
         <PreviewActionBar
           url={video.url}
@@ -554,6 +565,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [canvasView, setCanvasView] = useState<{ zoom: number; panX: number; panY: number } | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents">("chat");
+  const [videoRefs, setVideoRefs] = useState<VideoReference[]>([]);
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [showCanvas, setShowCanvas] = useState<boolean>(() => {
@@ -833,8 +846,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         conversationId: conversationId || undefined,
         userText: (() => {
           const mentioned = extractAgentMentions(text, clientAgents as any);
-          if (!mentioned.length) return text;
-          return buildAgentContextBlock(mentioned) + text;
+          const agentBlock = mentioned.length ? buildAgentContextBlock(mentioned) : "";
+          const refBlock = buildReferenceContextBlock(videoRefs);
+          return agentBlock + refBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
@@ -1102,6 +1116,26 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </div>
 
+        <div className="flex items-center gap-1 px-3 py-1 border-b border-border/60 bg-muted/10">
+          <button
+            type="button"
+            onClick={() => setAiStudioTab("chat")}
+            className={`text-xs px-3 py-1 rounded-md transition ${aiStudioTab === "chat" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+          >Chat</button>
+          <button
+            type="button"
+            onClick={() => setAiStudioTab("agents")}
+            className={`text-xs px-3 py-1 rounded-md transition inline-flex items-center gap-1 ${aiStudioTab === "agents" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+          ><Bot className="h-3 w-3" /> Agents</button>
+        </div>
+
+        {aiStudioTab === "agents" && (
+          <div className="flex-1 min-h-0">
+            <AIStudioAgentsTab clientId={clientId} clientName={clientName} />
+          </div>
+        )}
+        {aiStudioTab === "chat" && (
+        <>
         <details className="group border-b border-border/60 bg-muted/20">
           <summary className="flex items-center gap-2 px-5 py-2 cursor-pointer text-xs text-muted-foreground hover:bg-muted/40 select-none [&::-webkit-details-marker]:hidden">
             <Settings2 className="h-3.5 w-3.5" />
@@ -1417,6 +1451,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
+                <AIStudioReferencePicker
+                  clientId={clientId}
+                  selected={videoRefs}
+                  onChange={setVideoRefs}
+                />
                 <button
                   type="button"
                   onClick={() => setAgentMode(v => !v)}
@@ -1512,9 +1551,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 ))}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Enter to send · Shift+Enter newline · 🎤 voice · 🌐 web search built-in</p>
           </div>
         </div>
+        </>
+        )}
       </Card>
       )}
 
