@@ -589,6 +589,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
 
+  // --- Per-client agents (@mention support in AI Studio) ---
+  const { data: clientAgents = [] } = useClientAgents(clientId);
+
   const getStudioAuth = useCallback(async (requireIdentity = false) => {
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token || null;
