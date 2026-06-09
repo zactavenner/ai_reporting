@@ -223,6 +223,20 @@ export default function ClientDetail() {
   const isLeasing = (client as any)?.client_type === 'LEASING' || ((client?.name || '').toLowerCase().includes('lscre') && (client?.name || '').toLowerCase().includes('leasing'));
   const defaultTab = isLeasing ? 'properties' : 'tasks';
   const resolvedTab = activeTab || defaultTab;
+
+  // Sync tab changes to the URL so the page is shareable / refresh-safe
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', tab);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
   const isLoading = clientLoading || metricsLoading;
 
   if (isLoading) {
@@ -327,7 +341,7 @@ export default function ClientDetail() {
         <div className="p-6 space-y-6">
 
         {/* Grouped Tabs - matching 6.0 */}
-        <Tabs value={resolvedTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs value={resolvedTab} onValueChange={handleTabChange} className="space-y-6">
           <TabsList className="bg-muted/50 flex-wrap">
             {isLeasing && (
               <TabsTrigger value="properties" className="gap-2">
