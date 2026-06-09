@@ -256,6 +256,7 @@ serve(async (req) => {
       .from('sync_queue')
       .select('*')
       .eq('status', 'pending')
+      .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
       .order('priority', { ascending: true })
       .order('created_at', { ascending: true })
       .limit(1);
