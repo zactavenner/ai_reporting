@@ -1116,6 +1116,25 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </div>
 
+        <div className="flex items-center gap-1 px-3 py-1 border-b border-border/60 bg-muted/10">
+          <button
+            type="button"
+            onClick={() => setAiStudioTab("chat")}
+            className={`text-xs px-3 py-1 rounded-md transition ${aiStudioTab === "chat" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+          >Chat</button>
+          <button
+            type="button"
+            onClick={() => setAiStudioTab("agents")}
+            className={`text-xs px-3 py-1 rounded-md transition inline-flex items-center gap-1 ${aiStudioTab === "agents" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+          ><Bot className="h-3 w-3" /> Agents</button>
+        </div>
+
+        {aiStudioTab === "agents" && (
+          <div className="flex-1 min-h-0">
+            <AIStudioAgentsTab clientId={clientId} clientName={clientName} />
+          </div>
+        )}
+        {aiStudioTab === "chat" && (
         <details className="group border-b border-border/60 bg-muted/20">
           <summary className="flex items-center gap-2 px-5 py-2 cursor-pointer text-xs text-muted-foreground hover:bg-muted/40 select-none [&::-webkit-details-marker]:hidden">
             <Settings2 className="h-3.5 w-3.5" />
