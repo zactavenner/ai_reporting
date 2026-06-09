@@ -145,15 +145,94 @@ export function useAssignPodToClient() {
         .single();
       
       if (error) throw error;
+
+      // Auto round-robin assign a Media Buyer / Account Manager based on the pod type.
+      try {
+        await autoAssignRoleFromPod(clientId, podId);
+      } catch (e) {
+        console.warn('auto round-robin assignment failed', e);
+      }
+
       return data;
     },
     onSuccess: (_, { clientId }) => {
       queryClient.invalidateQueries({ queryKey: ['client-pod-assignments', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
     },
     onError: (error: Error) => {
       toast.error('Failed to assign pod: ' + error.message);
     },
   });
+}
+
+// ----- Round-robin auto-assignment helpers -----
+
+function detectRole(podName: string): 'media_buyer' | 'account_manager' | null {
+  const n = (podName || '').toLowerCase();
+  if (n.includes('media') && n.includes('buy')) return 'media_buyer';
+  if (n.includes('account') && (n.includes('manage') || n.includes('mgmt'))) return 'account_manager';
+  return null;
+}
+
+async function autoAssignRoleFromPod(clientId: string, podId: string) {
+  // Look up the pod we just assigned
+  const { data: pod } = await supabase
+    .from('agency_pods')
+    .select('id, name')
+    .eq('id', podId)
+    .maybeSingle();
+  if (!pod) return;
+
+  const role = detectRole(pod.name);
+  if (!role) return;
+
+  // Don't overwrite an existing assignment
+  const { data: existing } = await supabase
+    .from('client_assignments')
+    .select('media_buyer, account_manager')
+    .eq('client_id', clientId)
+    .maybeSingle();
+  if (existing && (existing as any)[role]) return;
+
+  // Members in this pod (the eligible pool)
+  const { data: members } = await supabase
+    .from('agency_members')
+    .select('id, name')
+    .eq('pod_id', podId);
+  if (!members || members.length === 0) return;
+
+  // Current load: how many active clients each member already owns for this role
+  const { data: loadRows } = await supabase
+    .from('client_assignments')
+    .select(role);
+  const counts: Record<string, number> = {};
+  for (const m of members) counts[m.name] = 0;
+  for (const row of (loadRows || []) as any[]) {
+    const who = row?.[role];
+    if (who && who in counts) counts[who] += 1;
+  }
+
+  // Pick the member with fewest assignments, ties broken alphabetically for stable rotation
+  const sorted = [...members].sort((a, b) => {
+    const ca = counts[a.name] ?? 0;
+    const cb = counts[b.name] ?? 0;
+    if (ca !== cb) return ca - cb;
+    return a.name.localeCompare(b.name);
+  });
+  const chosen = sorted[0];
+  if (!chosen) return;
+
+  // Upsert into client_assignments + mirror onto clients table
+  const upsertPayload: Record<string, any> = { client_id: clientId };
+  upsertPayload[role] = chosen.name;
+  await supabase.from('client_assignments').upsert(upsertPayload as any, { onConflict: 'client_id' });
+
+  const clientPatch: Record<string, any> = {};
+  clientPatch[role] = chosen.name;
+  await supabase.from('clients').update(clientPatch).eq('id', clientId);
+
+  toast.success(`Auto-assigned ${role === 'media_buyer' ? 'Media Buyer' : 'Account Manager'}: ${chosen.name}`);
 }
 
 // Remove pod from client
