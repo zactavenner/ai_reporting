@@ -86,7 +86,7 @@ import { TopPerformerUploadsSection } from '@/components/creative/TopPerformerUp
 
 const Index = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentMember, logout } = useTeamMember();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -122,7 +122,7 @@ const Index = () => {
     }
   }, []);
 
-  // Deep-link: if ?tab= or ?task= is present, auto-switch
+  // Deep-link: keep activeTab in sync with ?tab= (and ?task= shortcut)
   useEffect(() => {
     const tab = searchParams.get('tab');
     const taskId = searchParams.get('task');
@@ -274,9 +274,18 @@ const Index = () => {
     updateClientOrder.mutate(orderedIds);
   };
 
-  // Handle sidebar navigation for utility pages
+  // Handle sidebar navigation for utility pages — sync to URL so the tab is shareable
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (tab && tab !== 'dashboard') next.set('tab', tab);
+        else next.delete('tab');
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   const isLoading = clientsLoading || metricsLoading;
