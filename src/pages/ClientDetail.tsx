@@ -761,6 +761,7 @@ export default function ClientDetail() {
               </div>
             </div>
           </TabsContent>
+        </Suspense>
         </Tabs>
         </div>
       </main>
