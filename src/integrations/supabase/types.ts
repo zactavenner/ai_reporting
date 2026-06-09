@@ -4115,6 +4115,39 @@ export type Database = {
           },
         ]
       }
+      cron_run_log: {
+        Row: {
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          job_name: string
+          ran_at: string
+          response_body: string | null
+          status: string
+          status_code: number | null
+        }
+        Insert: {
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          job_name: string
+          ran_at?: string
+          response_body?: string | null
+          status?: string
+          status_code?: number | null
+        }
+        Update: {
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          job_name?: string
+          ran_at?: string
+          response_body?: string | null
+          status?: string
+          status_code?: number | null
+        }
+        Relationships: []
+      }
       csv_import_logs: {
         Row: {
           client_id: string
@@ -10632,6 +10665,17 @@ export type Database = {
           spend: number
           thumbnail_url: string
         }[]
+      }
+      log_cron_run: {
+        Args: {
+          p_duration_ms?: number
+          p_error_message?: string
+          p_job_name: string
+          p_response_body?: string
+          p_status: string
+          p_status_code?: number
+        }
+        Returns: string
       }
       queue_client_sync: {
         Args: { p_client_id: string; p_days_back?: number }
