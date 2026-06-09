@@ -1,94 +1,100 @@
-# Platform Improvement Plan
+## Goal
 
-Synthesized from 4 parallel audits: **Frontend**, **Backend/Edge Functions**, **Integrations & AI**, **Security & Reliability**.
-
-The plan is phased from "stop the bleeding" (security) -> "stop the silent failures" (reliability) -> "ship the missing loops" (product) -> "polish".
+Make video generation in AI Studio work reliably for every client, give it a real player, let users attach avatars / products / PDFs as inputs, and add a first-class place to manage agents.
 
 ---
 
-## Phase 1 — P0 Security (1–2 days, do first)
+## 1. Fix the video pipeline end-to-end
 
-Critical issues that expose all client data to the public internet.
+**Symptoms (from screenshot):** two `<video>` cards rendered with no playable source (0:00, black). The current chat path posts a Seedance "result" before/without a valid rehosted URL.
 
-1. **Enable RLS on `public.sync_queue`** with a service-role-only policy. This table currently leaks lead PII for all clients.
-2. **Rotate the 7 hardcoded anon JWTs in old migrations** — replace with `current_setting('app.settings.anon_key', true)`.
-3. **Tighten blanket `USING (true)` policies** on `agency_members`, `leads`, `tasks`, `task_comments`, `member_activity_log`. Restrict mutations to `service_role` + scoped authenticated SELECT.
-4. **Strip plaintext password logging + "HPA" backdoor from `verify-password`**; sign dashboard tokens with a dedicated `DASHBOARD_JWT_SECRET`, not the service-role key. *(Note: keeping the HPA1234$ edge-auth pattern as-is per user request)*
-5. **Move `PublicLinkPasswordGate` verification server-side** — never ship the correct password to the browser as a prop; gate via server-issued token.
-6. **Remove hardcoded `HPA1234$` from `external-data-api`** — replace with `EXTERNAL_API_SECRET` env var + constant-time compare; scope to anon key + RLS instead of service-role. *(Note: keeping the HPA1234$ edge-auth pattern as-is per user request)*
+**Backend (`supabase/functions/ai-studio/index.ts` — `generateSeedanceVideo` + caller):**
+- Always rehost the final mp4 into the `creatives` bucket under `ai-studio/{client_id}/seedance/{jobId}.mp4`. Today rehost is a try/catch that silently falls back to the (often expired / signed) provider URL — make rehost mandatory; if it fails, surface a clear `failed` status to the canvas instead of returning a broken URL.
+- Emit a placeholder canvas row at `submitting` and update it through `queued → polling → downloading → rehosting → completed/failed` (the placeholder type already exists for images — extend for video).
+- HEAD-check the final URL before returning; if non-2xx, mark failed.
+- Validate `image_url` is reachable when in image→video mode; if not, return a typed error the chat surfaces.
 
-## Phase 2 — Reliability & Silent Failures (2–4 days)
+**Frontend:**
+- In `ChatVideoPreview`, hide the `<video>` element if `video.url` is empty / failed and render a "Generating…" or "Failed — retry" state tied to the placeholder progress.
+- After completion swap to the new player.
 
-Stop syncs, crons and integrations from failing invisibly.
+## 2. Upgrade the in-chat video player
 
-7. **Unschedule the duplicate GHL cron** (`sync-ghl-all-clients-4h` overlaps `-2h` six times a day -> double-leads risk + wasted GHL quota).
-8. **Add cron failure visibility** — wrap every `net.http_post` cron call in PL/pgSQL that logs non-2xx into a `cron_run_log` table and notifies `sync-failure-digest`.
-9. **Add retry + DLQ to `sync-queue-worker`** — `attempt_count` / `max_attempts` columns, exponential backoff, Slack alert on final failure.
-10. **Add Slack signature verification to `slack-events`** (HMAC of `X-Slack-Signature` + timestamp).
-11. **Add HubSpot rate-limit retry** + schedule `sync-hubspot-all-clients` cron (currently only on-demand).
-12. **Schedule `sync-meta-ads-daily` independently** so a `daily-master-sync` timeout doesn't take Meta sync down with it.
-13. **Fix idempotency key collisions in `enqueue-sync-job.ts`** — bucket by date (`YYYY-MM-DD`) so `cursor_sync` and `master_sync` dedupe correctly per day.
-14. **Add page-level `<ErrorBoundary>`** around `Index`, `DatabaseView`, `AdScrapingPage` and other heavy pages so one render crash doesn't blank the app.
-15. **Strip `console.log` in production builds** via `vite-plugin-remove-console` (102 logs currently leaking query shapes and API responses).
+Replace the bare `<video controls>` in `ChatVideoPreview` (and `AIStudioCanvas` `scene_video`) with a new `VideoPlayerCard` component:
 
-## Phase 3 — Frontend Performance & UX (3–5 days)
+- Play / pause, large play overlay on first frame
+- Frame-accurate scrubber bar with elapsed / total time
+- Speed selector: 0.5× · 0.75× · 1× · 1.5× · 2×
+- Mute toggle + volume
+- Fullscreen + Picture-in-Picture buttons
+- Keeps existing Download / Recreate / + Canvas action bar
 
-16. **Sync `activeTab` <-> URL** in `src/pages/Index.tsx` — `setSearchParams` on tab change. Restores Back button + deep-link + shareable URLs across 25 tabs.
-17. **Lazy-load per-tab data** — move the 12 `useQuery` hooks currently firing on every page load into their own tab components. ~80% reduction in initial API calls.
-18. **Fix the duplicate `avatar-ad-gen` branch** at `Index.tsx:556` vs `676` (second is dead code).
-19. **Audit the 40+ orphaned page files** — either register routes or delete; eliminates bundle weight and confusion.
-20. **Split & virtualize `InlineRecordsView`** (2,167 lines) and `DraggableClientTable` (1,382 lines) — add `@tanstack/react-virtual` for lists >200 rows.
-21. **Move Google Fonts** from blocking `@import` in `index.css` to a preconnect `<link>` in `index.html` with `font-display: swap`.
-22. **Wire up dark mode toggle** — CSS variables already exist, no toggle attached to `<html>`.
+Shared component so canvas cards and chat cards look identical.
 
-## Phase 4 — AI Gateway Consolidation (1–2 days)
+## 3. Avatar / Product / PDF picker for video generation
 
-23. **Migrate the last 4 direct-Gemini functions** to the shared OpenRouter helper with auto-fallback: `generate-avatar`, `generate-broll`, `generate-video-from-image`, `poll-video-status`.
-24. **Remove `ai-studio`'s bespoke OpenAI/OpenRouter fork** — use the shared `generateImage()` helper that already handles fallback.
-25. **Extract `_shared/cors.ts`** — one canonical 8-header object; replace inline copies across 137 functions.
-26. **Move Veo3 API keys out of localStorage** into agency settings (server-side) — current setup breaks across browsers/incognito.
+Two surfaces, same data source:
 
-## Phase 5 — High-ROI Product Loops (1–2 weeks)
+**A. Composer picker (inline)** — new "+ Reference" menu next to the composer in `AIStudioTab` with three tabs:
+- **Avatars** — pulls from existing `avatars` table for the client (+ stock). Selecting one sets `avatar_image_url` on the next message.
+- **Products** — pulls from `client_assets` where type is image/product, plus uploaded refs from `ai_studio_reference_images`.
+- **PDFs** — pulls from `client_offer_files` + `client_file_uploads` where mime is `application/pdf`. Up to 3 PDFs attached; passed as `pdf_context_urls`.
 
-The single biggest product gap: **the platform generates ads but has zero awareness of which ones convert**.
+Selected references become structured attachments on the user message and are appended to the system prompt as:
+```
+ATTACHED REFERENCES:
+- Avatar: <url> (use this person's face/identity in the video)
+- Product: <url>
+- PDF context: <url>  (extract offer details, compliance, value props)
+```
 
-27. **Automated Meta sync every 6h** + a dedicated cron, removing the daily manual sync ritual.
-28. **Creative performance feedback loop** — surface ad-level CTR/ROAS inside the Avatar Ad Generator and Static Ad Studio as "what's working for this client" context for the AI.
-29. **Bidirectional GHL pipeline sync** — webhook in for stage changes -> update internal lead + Slack alert.
-30. **HubSpot OAuth refresh + webhook listener** for deal-stage changes.
-31. **Stripe webhook listener** writing to `stripe_events` + Slack alert on failed charges (silent churn prevention).
-32. **MeetGeek webhook auto-ingest** + Slack ping to AM with action items for review.
-33. **Slack Events API subscription** (replace 30s polling) + auto-assign on auto-created tasks.
-34. **Replace dashboard "object count" widgets** with a live portfolio table: client x spend x ROAS x leads x MRR x churn risk.
-35. **Embed a real calendar picker** (GHL / Calendly) in the onboarding kickoff step — biggest onboarding drop-off.
-36. **Build the missing Google Ads sync** (currently a button that does nothing) — OAuth + `sync-google-ads` + reporting wired into existing dashboards.
+**B. Dedicated Video Studio panel** — a slide-over from the AI Studio header ("🎬 Video Studio") that gives a structured form:
+- Avatar select · Product image select (multi) · PDF context (multi)
+- Prompt + aspect ratio + duration + 720p/1080p + Fast/Standard
+- Big "Generate" button → calls `ai-studio` edge function directly with `generate_seedance_video` tool args wired in, then streams the placeholder → video card back into the active conversation.
 
-## Phase 6 — Code Health Cleanup (ongoing, parallel)
+**Edge function changes:**
+- Extend `generate_seedance_video` tool schema with optional `avatar_image_url`, `product_image_urls[]`, `pdf_context_urls[]`.
+- When PDFs present, fetch text via existing offer-files context loader and merge into the Seedance prompt prefix (Seedance is image+text, no PDF input — context is folded into the prompt).
+- When `avatar_image_url` is set and no `image_url`, use the avatar as the source frame (image-to-video).
 
-37. **Decompose the 10 oversized components** (>1,000 lines each) into sub-components + hooks. Start with `CreativeApproval`, `AIStudioTab`, `ClientSettingsModal`.
-38. **Consolidate `src/context/` and `src/contexts/`** into one directory. Delete duplicate `CapitalRaisingCalculator`.
-39. **Add hot-path indexes**: `meta_campaigns(client_id, status)`, `meta_ad_sets(client_id, status)`, `meta_ads(client_id, status)`, `leads(client_id, status, created_at)`, `sync_queue(status, processing_started_at)`.
-40. **Enable PITR** in Supabase dashboard + document a quarterly restore drill.
+## 4. Agents sub-tab in AI Studio
+
+Add a new tab strip at the top of AI Studio: **Chat · Agents · Canvas** (Canvas tab already exists implicitly; this just makes Agents first-class).
+
+**Agents tab** (new component `AIStudioAgentsTab.tsx`):
+- Left column: list of this client's agents + "+ New agent" + a default seed (Creatives, Copy, Strategy)
+- Right column: editor — name, handle, type, model, system prompt, knowledge base (markdown), reference files (uploader)
+- Header sub-section: edit the client Agent Folder (profile_md, brand_kit, notes)
+- Reuses existing `ClientAgentsManager` internals + `useClientAgents` hook
+
+Keep the existing "Agents" header button as a quick-access shortcut that switches to this tab instead of opening a dialog.
+
+## 5. End-to-end verification
+
+For every AI Studio client (loop through `clients` where `status in (active, onboarding, paused)`):
+- Call `ai-studio` with a fixed prompt: "Generate a 5s 9:16 720p Seedance fast test clip showing a brand-color gradient" using `fast: true`.
+- Verify a placeholder is emitted, completes, and the final URL HEAD-checks 200.
+- Write outcome to a small new table `ai_studio_video_smoke_runs(client_id, status, video_url, error, ran_at)` and surface a "Last smoke run" badge on each client in the AI Studio client picker.
+- Provide a one-click "Run smoke test for all clients" button in the new Agents tab header for admins.
 
 ---
 
-## Suggested Execution Order
+## Files touched
 
-Week 1: Phase 1 (P0 security)  ->  Phase 2 (reliability)
-Week 2: Phase 3 (frontend perf/UX)  +  Phase 4 (AI gateway)
-Week 3–4: Phase 5 (product loops — Meta auto-sync + perf feedback first)
-Ongoing: Phase 6 (cleanup, indexes, decomposition)
-
-The **single highest-ROI item** is the Phase 5 pair: **automated Meta sync + creative performance feedback into the AI generators**. It turns the studio from a content factory into an optimization engine. But it should not ship before Phase 1 security fixes — those are non-negotiable.
+- **Edit** `supabase/functions/ai-studio/index.ts` — mandatory rehost, video placeholder progress, extended seedance tool schema, PDF/avatar/product context.
+- **Edit** `src/components/ai/AIStudioTab.tsx` — composer reference picker, video player swap, tab strip, hook agents tab.
+- **Edit** `src/components/ai/AIStudioCanvas.tsx` — use new player for `scene_video`, video placeholder rendering.
+- **New** `src/components/ai/VideoPlayerCard.tsx` — full-featured player.
+- **New** `src/components/ai/AIStudioReferencePicker.tsx` — composer popover with Avatars / Products / PDFs.
+- **New** `src/components/ai/AIStudioVideoStudio.tsx` — slide-over generation panel.
+- **New** `src/components/ai/AIStudioAgentsTab.tsx` — wraps `ClientAgentsManager` as a real tab.
+- **Migration** — `ai_studio_video_smoke_runs` table + grants/RLS.
 
 ---
 
-## Notes
+## Out of scope (call out)
 
-- The `HPA1234$` edge-auth password pattern is kept as-is per user request; the `external-data-api` and `verify-password` fixes above remove hardcoded values but preserve the HPA1234$ body-password flow for other edge functions.
-- All security migrations follow the standard order: `CREATE TABLE` -> `GRANT` -> `ENABLE RLS` -> `CREATE POLICY`.
-- Cron failure logging: new `public.cron_run_log(id, job_name, status_code, body, ran_at)` table + PL/pgSQL wrapper around `net.http_post`.
-- Idempotency key new format: `lead_upsert:{client_id}:{external_id}:{source}:{YYYY-MM-DD}`.
-- AI gateway: continue with the existing `_shared/openrouter.ts` helper + `models: [...]` auto-fallback (no client-facing changes needed; client SSE parsers are model-agnostic).
-- Performance feedback loop: read from existing `meta_ads` + `v_client_performance_*` views; inject the top 5 winning ad copies/styles into the AI Studio system prompt per client.
-- Webhook secrets (Slack, Stripe, MeetGeek, HubSpot) go in `Deno.env`, verified before any DB write.
+- Veo storyboard pipeline (untouched — already separate path).
+- Lipsync/voice synthesis to PDFs (no provider chain in place — PDFs only inform the prompt text).
+- Per-end-user OAuth into HeyGen or other avatar providers — uses our existing `avatars` table only.
