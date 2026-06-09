@@ -831,7 +831,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const res = await studioFetch({
         clientId,
         conversationId: conversationId || undefined,
-        userText: text,
+        userText: (() => {
+          const mentioned = extractAgentMentions(text, clientAgents as any);
+          if (!mentioned.length) return text;
+          return buildAgentContextBlock(mentioned) + text;
+        })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
         quality,
