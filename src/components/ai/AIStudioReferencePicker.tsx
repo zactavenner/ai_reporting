@@ -69,9 +69,9 @@ export function AIStudioReferencePicker({
           ((prRes.data ?? []) as any[])
             .map((a) => {
               const url = (a.content?.image_url || a.content?.url || a.content?.file_url) as string | undefined;
-              return url ? { kind: "product" as const, id: a.id, name: a.title || "Asset", url } : null;
+              return url ? ({ kind: "product", id: a.id, name: a.title || "Asset", url } as VideoReference) : null;
             })
-            .filter((x): x is VideoReference => !!x),
+            .filter((x): x is VideoReference => x !== null),
         );
 
         setPdfs(
