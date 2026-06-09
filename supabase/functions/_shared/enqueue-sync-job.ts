@@ -35,7 +35,10 @@ export async function enqueueLeadUpsert(
   supabase: SupabaseClient,
   args: EnqueueLeadUpsertArgs,
 ): Promise<{ enqueued: boolean; job_id?: string; reason?: string }> {
-  const idempotency_key = `lead_upsert:${args.client_id}:${args.external_id}:${args.source}`;
+  // Bucket by UTC date so the same record can be re-enqueued on a different day
+  // (prevents one-shot dedupe locking out future updates to the same lead).
+  const dayBucket = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const idempotency_key = `lead_upsert:${args.client_id}:${args.external_id}:${args.source}:${dayBucket}`;
 
   const { data, error } = await supabase
     .from("sync_queue")

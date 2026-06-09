@@ -256,6 +256,7 @@ serve(async (req) => {
       .from('sync_queue')
       .select('*')
       .eq('status', 'pending')
+      .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
       .order('priority', { ascending: true })
       .order('created_at', { ascending: true })
       .limit(1);
@@ -363,22 +364,41 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Sync queue worker error:', errorMessage);
     
-    // Mark job as failed if we have a job ID
+    // Retry with exponential backoff, or dead-letter after max_attempts
     if (currentJobId) {
-      await supabase.from('sync_queue').update({
-        status: 'failed',
-        error_message: errorMessage.slice(0, 500),
-        completed_at: new Date().toISOString()
-      }).eq('id', currentJobId);
-      
-      // Also update client sync status
       const { data: jobData } = await supabase
         .from('sync_queue')
-        .select('client_id')
+        .select('client_id, attempts, max_attempts')
         .eq('id', currentJobId)
         .single();
-      
-      if (jobData?.client_id) {
+
+      const attempts = (jobData?.attempts ?? 0) + 1;
+      const maxAttempts = jobData?.max_attempts ?? 5;
+      const isFinal = attempts >= maxAttempts;
+
+      if (isFinal) {
+        await supabase.from('sync_queue').update({
+          status: 'failed',
+          error_message: errorMessage.slice(0, 500),
+          completed_at: new Date().toISOString(),
+          attempts,
+          last_attempted_at: new Date().toISOString(),
+          dead_letter: true,
+        }).eq('id', currentJobId);
+      } else {
+        // Exponential backoff: 2^attempts minutes, capped at 60min
+        const backoffMin = Math.min(Math.pow(2, attempts), 60);
+        const nextRetry = new Date(Date.now() + backoffMin * 60_000).toISOString();
+        await supabase.from('sync_queue').update({
+          status: 'pending',
+          error_message: errorMessage.slice(0, 500),
+          attempts,
+          last_attempted_at: new Date().toISOString(),
+          next_retry_at: nextRetry,
+        }).eq('id', currentJobId);
+      }
+
+      if (jobData?.client_id && isFinal) {
         await supabase.from('clients').update({
           ghl_sync_status: 'error',
           ghl_sync_error: errorMessage.slice(0, 255)
