@@ -1092,9 +1092,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowThreads(v => !v)} title={showThreads ? "Hide threads" : "Show threads"}>
               <History className="h-3.5 w-3.5" />
             </Button>
-            <div className="hidden md:flex">
-              <AgentFolderInline clientId={clientId} clientName={clientName} />
-            </div>
+            <AgentFolderInline clientId={clientId} clientName={clientName} compact />
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
               {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
