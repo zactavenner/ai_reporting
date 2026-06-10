@@ -6,6 +6,8 @@ import { Bot, MessageSquare, Image as ImageIcon, FileText, DollarSign, Network, 
 import type { Client } from "@/hooks/useClients";
 import { useAgents } from "@/hooks/useAgents";
 import { formatDistanceToNow } from "date-fns";
+import { AIStudioReferenceLibrary } from "@/components/ai/AIStudioReferenceLibrary";
+import { useState } from "react";
 
 interface Props { clients: Client[]; }
 
