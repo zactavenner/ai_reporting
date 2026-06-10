@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Copy, Check, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 
 const API_ENDPOINT = 'https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/external-data-api';
 const HERMES_ENDPOINT = 'https://jgwwmtuvjlmzapwqiabu.functions.supabase.co/hermes-orchestrator';
@@ -523,6 +524,16 @@ function ApiCallCard({ call }: { call: ApiCall }) {
 export function ApiReferenceTab() {
   const [copiedEndpoint, setCopiedEndpoint] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [showHermesKey, setShowHermesKey] = useState(false);
+  const [copiedHermesKey, setCopiedHermesKey] = useState(false);
+  const [copiedHermesUrl, setCopiedHermesUrl] = useState(false);
+  const { data: agencySettings } = useAgencySettings();
+  const hermesApiKey = (agencySettings as any)?.hermes_api_key || '';
+  const hermesCallbackUrl = (agencySettings as any)?.hermes_callback_url || '';
+  const hermesEnabled = Boolean((agencySettings as any)?.hermes_enabled);
+  const hermesKeyDisplay = hermesApiKey
+    ? (showHermesKey ? hermesApiKey : `${hermesApiKey.slice(0, 10)}${'•'.repeat(Math.max(0, hermesApiKey.length - 14))}${hermesApiKey.slice(-4)}`)
+    : '<not configured — generate in Settings → Hermes Integration>';
 
   const handleCopyEndpoint = () => {
     navigator.clipboard.writeText(API_ENDPOINT);
