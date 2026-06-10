@@ -1686,6 +1686,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               entries={canvas}
               clientId={clientId}
               onSendMessage={(text) => send(text)}
+              onSendToCreatives={async (rows) => {
+                const res = await studioFetch({ action: "send_to_creatives", clientId, creativeRows: rows });
+                if (!res.ok) {
+                  const t = await res.text().catch(() => "");
+                  throw new Error(t || `Failed (${res.status})`);
+                }
+              }}
               onEditVideo={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio })}
               initialView={canvasView}
               focusedItemId={focusedItemId}
