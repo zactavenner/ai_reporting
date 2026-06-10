@@ -1412,8 +1412,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments } = body as {
-    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread";
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
+    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
@@ -1430,6 +1430,8 @@ Deno.serve(async (req) => {
     threadUpdate?: { title?: string | null; pinned?: boolean; archived?: boolean } | null;
     agentMode?: boolean;
     attachments?: Array<{ url: string; name?: string; mime?: string; text?: string }> | null;
+    canvasItemKind?: string;
+    canvasItemPayload?: any;
   };
 
   const selectedImageModels = Array.isArray(imageModels)
