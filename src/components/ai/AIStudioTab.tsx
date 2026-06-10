@@ -20,6 +20,7 @@ import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
+import { AgentMentionPopover } from "./AgentMentionPopover";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 import { AIStudioAgentsTab } from "./AIStudioAgentsTab";
 import { VideoPlayerCard } from "./VideoPlayerCard";
@@ -571,6 +572,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [canvasView, setCanvasView] = useState<{ zoom: number; panX: number; panY: number } | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [caretPos, setCaretPos] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents">("chat");
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
@@ -1471,9 +1474,30 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.target.value = ""; }}
                 accept="image/*,application/pdf,.txt,.md,.json,.csv,.log,.tsv"
               />
-              <Textarea
+              <div className="relative">
+              <AgentMentionPopover
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                caret={caretPos}
+                agents={clientAgents as any}
+                anchorRef={textareaRef}
+                onInsert={(next, c) => {
+                  setInput(next);
+                  setCaretPos(c);
+                  requestAnimationFrame(() => {
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      ta.focus();
+                      ta.setSelectionRange(c, c);
+                    }
+                  });
+                }}
+              />
+              <Textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => { setInput(e.target.value); setCaretPos(e.target.selectionStart ?? e.target.value.length); }}
+                onKeyUp={e => setCaretPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
+                onClick={e => setCaretPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
                 onPaste={(e) => {
                   const files = Array.from(e.clipboardData.files || []);
@@ -1483,6 +1507,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 pt-3 pb-2 text-sm"
                 rows={1}
               />
+              </div>
               <div className="flex items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
                 <div className="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
