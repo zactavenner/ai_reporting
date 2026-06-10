@@ -16,6 +16,8 @@ const COST_PER_1K_TOKENS = 0.002;
 
 export function AgentsOverview({ clients }: Props) {
   const { data: agents = [] } = useAgents();
+  const [activeRefImages, setActiveRefImages] = useState<string[]>([]);
+  const [activeRefVideos, setActiveRefVideos] = useState<string[]>([]);
 
   const { data: hermesTasks = [] } = useQuery({
     queryKey: ["agents-overview", "hermes_tasks"],
