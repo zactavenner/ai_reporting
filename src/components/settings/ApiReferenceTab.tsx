@@ -725,6 +725,95 @@ export function ApiReferenceTab() {
       </div>
 
       {/* Sections */}
+      {/* Hermes Connection */}
+      <div className="border-2 border-primary/30 bg-primary/5 rounded-md p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="font-medium text-sm flex items-center gap-2">
+            🪽 Hermes Orchestrator Connection
+            <Badge variant={hermesEnabled ? 'default' : 'secondary'} className="text-[10px]">
+              {hermesEnabled ? 'Active' : 'Disabled'}
+            </Badge>
+          </h4>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Everything Hermes needs to talk to this platform. Paste these into the Hermes master agent.
+        </p>
+
+        <div className="space-y-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Base URL</div>
+            <div className="flex gap-2 items-center">
+              <code className="bg-muted border border-border rounded px-2 py-1 text-xs font-mono flex-1 truncate">
+                {HERMES_ENDPOINT}
+              </code>
+              <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={() => {
+                navigator.clipboard.writeText(HERMES_ENDPOINT);
+                setCopiedHermesUrl(true);
+                toast.success('Hermes URL copied');
+                setTimeout(() => setCopiedHermesUrl(false), 2000);
+              }}>
+                {copiedHermesUrl ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">All requests: <code>POST {'{Base URL}'}/{'{action}'}</code></p>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">API Key (Bearer token)</div>
+            <div className="flex gap-2 items-center">
+              <code className="bg-muted border border-border rounded px-2 py-1 text-xs font-mono flex-1 truncate">
+                {hermesKeyDisplay}
+              </code>
+              {hermesApiKey && (
+                <>
+                  <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={() => setShowHermesKey(v => !v)}>
+                    {showHermesKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                  <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={() => {
+                    navigator.clipboard.writeText(hermesApiKey);
+                    setCopiedHermesKey(true);
+                    toast.success('Hermes API key copied');
+                    setTimeout(() => setCopiedHermesKey(false), 2000);
+                  }}>
+                    {copiedHermesKey ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Send as <code>Authorization: Bearer {hermesApiKey ? '<key above>' : '<HERMES_API_KEY>'}</code>
+              {!hermesApiKey && ' — generate one in Settings → Hermes Integration.'}
+            </p>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Default Callback URL</div>
+            <code className="bg-muted border border-border rounded px-2 py-1 text-xs font-mono block truncate">
+              {hermesCallbackUrl || '<not set — Hermes must pass callback_url per task>'}
+            </code>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Available Actions</div>
+            <div className="flex flex-wrap gap-1">
+              {['ping', 'list_clients', 'create_task', 'complete_task', 'post_message', 'get_task', 'list_tasks'].map(a => (
+                <Badge key={a} variant="outline" className="text-[10px] font-mono">{a}</Badge>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Task Type Routing</div>
+            <ul className="text-[11px] text-muted-foreground space-y-0.5 font-mono pl-3">
+              <li>video → video / creative / content</li>
+              <li>static_ad → image / creative / static_ad</li>
+              <li>copy → copy / content / writing</li>
+              <li>research → research / analyst</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {API_SECTIONS.map((section) => (
         <div key={section.title} className="border-2 border-border rounded-md">
           <div className="px-4 py-2 border-b border-border bg-muted/30 flex items-center gap-2">
