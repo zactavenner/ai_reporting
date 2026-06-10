@@ -1654,6 +1654,35 @@ Deno.serve(async (req) => {
     });
   }
 
+  if (action === "send_to_creatives") {
+    if (!Array.isArray(creativeRows) || creativeRows.length === 0) {
+      return new Response(JSON.stringify({ error: "creativeRows[] required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Force client_id to the authenticated client scope and stamp source.
+    const rows = creativeRows.map((r: any) => ({
+      client_id: clientId,
+      title: String(r?.title || "AI Studio asset").slice(0, 200),
+      type: r?.type === "video" ? "video" : "image",
+      platform: r?.platform || "meta",
+      file_url: r?.file_url || null,
+      status: "draft",
+      aspect_ratio: r?.aspect_ratio || null,
+      comments: [],
+      source: "ai_studio_canvas",
+    }));
+    const { error, data } = await supa.from("creatives").insert(rows).select("id");
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ ok: true, count: data?.length ?? rows.length }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (action === "settings" && requestedConversationId) {
     const settingsUpdate: Record<string, any> = { doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality };
     if (typeof chatModel === "string" || chatModel === null) settingsUpdate.chat_model = chatModel || null;
