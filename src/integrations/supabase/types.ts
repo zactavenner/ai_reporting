@@ -6476,6 +6476,99 @@ export type Database = {
           },
         ]
       }
+      hermes_tasks: {
+        Row: {
+          agent_id: string | null
+          client_id: string
+          completed_at: string | null
+          conversation_id: string | null
+          created_at: string
+          delivered_at: string | null
+          error_message: string | null
+          hermes_callback_url: string | null
+          hermes_external_id: string | null
+          id: string
+          instructions: string
+          metadata: Json
+          result_assets: Json
+          status: string
+          task_type: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id?: string | null
+          client_id: string
+          completed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          hermes_callback_url?: string | null
+          hermes_external_id?: string | null
+          id?: string
+          instructions: string
+          metadata?: Json
+          result_assets?: Json
+          status?: string
+          task_type: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string | null
+          client_id?: string
+          completed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          hermes_callback_url?: string | null
+          hermes_external_id?: string | null
+          id?: string
+          instructions?: string
+          metadata?: Json
+          result_assets?: Json
+          status?: string
+          task_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hermes_tasks_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "client_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hermes_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "hermes_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hermes_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "hermes_tasks_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_studio_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instagram_creatives: {
         Row: {
           caption: string | null
