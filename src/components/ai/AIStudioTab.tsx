@@ -1126,21 +1126,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const d = (e as CustomEvent).detail || {};
       if (!conversationId || !d.kind || !d.payload) return;
       try {
-        const { data: u } = await supabase.auth.getUser();
-        const uid = u?.user?.id;
-        if (!uid) { toast.error("Sign in required"); return; }
-        const { data, error } = await supabase
-          .from("ai_studio_canvas_items")
-          .insert({ conversation_id: conversationId, user_id: uid, kind: d.kind, payload: d.payload })
-          .select()
-          .single();
-        if (error) throw error;
-        setCanvas(curr => [data as CanvasItem, ...curr]);
+        // Route through the edge function so dashboard-token users (who don't
+        // have a Supabase auth.uid) can still pin to canvas.
+        const res = await studioFetch({
+          action: "add_canvas_item",
+          clientId,
+          conversationId,
+          canvasItemKind: d.kind,
+          canvasItemPayload: d.payload,
+        });
+        if (!res.ok) throw new Error(await res.text().catch(() => "Pin failed"));
+        const { item } = await res.json();
+        if (item) setCanvas(curr => [item as CanvasItem, ...curr]);
         toast.success("Pinned to canvas");
       } catch (err: any) {
         toast.error(err?.message || "Failed to pin to canvas");
       }
     };
+    const onEditVideoEvt = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (d.url) setEditVideo({ url: d.url, prompt: d.prompt, aspect_ratio: d.aspect_ratio });
+    };
+    window.addEventListener("aistudio:edit-video", onEditVideoEvt);
     window.addEventListener("aistudio:set-prompt", onSetPrompt);
     window.addEventListener("aistudio:add-canvas-asset", onAddCanvas);
     return () => {
@@ -1148,8 +1155,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       window.removeEventListener("aistudio:edit-image", onEdit);
       window.removeEventListener("aistudio:set-prompt", onSetPrompt);
       window.removeEventListener("aistudio:add-canvas-asset", onAddCanvas);
+      window.removeEventListener("aistudio:edit-video", onEditVideoEvt);
     };
-  }, [addImageAsReference, inlineEdit, conversationId]);
+  }, [addImageAsReference, inlineEdit, conversationId, clientId, studioFetch]);
 
   return (
     <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-3 h-full min-h-0`}>
