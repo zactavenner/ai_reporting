@@ -497,8 +497,6 @@ export function AgentsTab({ clients }: Props) {
                       )}
                     </TabsContent>
 
-                    <TabsContent value="runs" className="space-y-3 mt-4">
-                    </TabsContent>
                     <TabsContent value="references" className="mt-4">
                       <AgentReferenceLibrary
                         agentTag={selectedAgent.template_key || selectedAgent.id}
