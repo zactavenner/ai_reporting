@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { CronSchedulePicker } from './CronSchedulePicker';
 import { ClientScopePicker } from './ClientScopePicker';
 import { AIAgentGenerator } from './AIAgentGenerator';
+import { AgentReferenceLibrary } from './AgentReferenceLibrary';
 
 interface Props { clients: Client[]; }
 
@@ -320,6 +321,7 @@ export function AgentsTab({ clients }: Props) {
                     <TabsList>
                       <TabsTrigger value="overview">Overview</TabsTrigger>
                       <TabsTrigger value="config">Config</TabsTrigger>
+                      <TabsTrigger value="references">References</TabsTrigger>
                       <TabsTrigger value="runs">Runs ({runs.length})</TabsTrigger>
                       <TabsTrigger value="escalations">Escalations</TabsTrigger>
                     </TabsList>
@@ -496,6 +498,14 @@ export function AgentsTab({ clients }: Props) {
                     </TabsContent>
 
                     <TabsContent value="runs" className="space-y-3 mt-4">
+                    </TabsContent>
+                    <TabsContent value="references" className="mt-4">
+                      <AgentReferenceLibrary
+                        agentTag={selectedAgent.template_key || selectedAgent.id}
+                        agentName={selectedAgent.name}
+                      />
+                    </TabsContent>
+                    <TabsContent value="runs-list" className="space-y-3 mt-4">
                       {runs.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-8">No runs yet</p>
                       ) : (
