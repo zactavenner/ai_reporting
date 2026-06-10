@@ -482,6 +482,11 @@ function ChatVideoPreview({ video }: { video: ChatVideo }) {
         status={hasUrl ? "ready" : "failed"}
         errorMessage={!hasUrl ? "The video URL could not be returned. Try Recreate." : undefined}
         className="rounded-none border-0"
+        onEdit={hasUrl ? (u) => {
+          window.dispatchEvent(new CustomEvent("aistudio:edit-video", {
+            detail: { url: u, prompt: video.prompt, aspect_ratio: video.aspect_ratio },
+          }));
+        } : undefined}
       />
       <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40">
         <PreviewActionBar
