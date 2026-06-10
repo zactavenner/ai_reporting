@@ -1048,6 +1048,44 @@ async function generateSeedanceVideo(opts: {
     } catch (e) {
       console.warn("client_videos insert failed (non-fatal)", e);
     }
+    // Auto-deliver to any queued Hermes task expecting a video for this client.
+    try {
+      const { data: pending } = await supa
+        .from("hermes_tasks")
+        .select("id, hermes_callback_url, hermes_external_id, task_type")
+        .eq("client_id", opts.clientId)
+        .eq("task_type", "video")
+        .in("status", ["queued", "in_progress"])
+        .order("created_at", { ascending: true })
+        .limit(1);
+      const task = pending?.[0];
+      if (task) {
+        const assets = [{ type: "video", title: `Seedance ${opts.aspectRatio}`, url: storedUrl, poster_url: opts.imageUrl || null, duration: body.duration }];
+        await supa.from("hermes_tasks").update({
+          status: "completed",
+          result_assets: assets,
+          completed_at: new Date().toISOString(),
+          delivered_at: new Date().toISOString(),
+        }).eq("id", task.id);
+        if (task.hermes_callback_url) {
+          fetch(task.hermes_callback_url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              event: "task.completed",
+              task_id: task.id,
+              hermes_external_id: task.hermes_external_id,
+              client_id: opts.clientId,
+              task_type: "video",
+              status: "completed",
+              assets,
+            }),
+          }).catch((e) => console.warn("hermes callback failed", e));
+        }
+      }
+    } catch (e) {
+      console.warn("hermes auto-deliver failed (non-fatal)", e);
+    }
   }
 
   return { item: ci.data, video_url: storedUrl, model, resolution: effectiveResolution };

@@ -12,6 +12,9 @@ export interface AgencySettings {
   meetgeek_webhook_secret: string | null;
   kpi_google_doc_url: string | null;
   kpi_google_sheet_url: string | null;
+  hermes_api_key?: string | null;
+  hermes_callback_url?: string | null;
+  hermes_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
