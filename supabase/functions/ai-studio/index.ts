@@ -1451,7 +1451,7 @@ Deno.serve(async (req) => {
   }
 
   const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
-    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item";
+    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
@@ -1471,6 +1471,7 @@ Deno.serve(async (req) => {
     canvasItemKind?: string;
     canvasItemPayload?: any;
   };
+  const creativeRows: any[] | undefined = (body as any).creativeRows;
 
   const selectedImageModels = Array.isArray(imageModels)
     ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
