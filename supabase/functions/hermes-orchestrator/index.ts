@@ -98,19 +98,19 @@ async function postMessage(conversationId: string, role: "user" | "assistant" | 
 }
 
 async function pickDefaultAgent(clientId: string, taskType: string) {
-  const typeToCategory: Record<string, string[]> = {
+  const typeToType: Record<string, string[]> = {
     video: ["video", "creative", "content"],
     static_ad: ["image", "creative", "static_ad"],
     copy: ["copy", "content", "writing"],
     research: ["research", "analyst"],
   };
-  const cats = typeToCategory[taskType] || [taskType];
+  const cats = typeToType[taskType] || [taskType];
   const { data } = await supa
     .from("client_agents")
-    .select("id, name, category, enabled")
+    .select("id, name, agent_type, enabled")
     .eq("client_id", clientId)
     .eq("enabled", true)
-    .in("category", cats)
+    .in("agent_type", cats)
     .limit(1);
   return data?.[0] ?? null;
 }
