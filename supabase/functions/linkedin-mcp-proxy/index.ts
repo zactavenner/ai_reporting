@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
 
     const { tool, arguments: args, password } = await req.json();
 
-    if (password !== "HPA1234$") {
+    if (password !== "hpa1234") {
       return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

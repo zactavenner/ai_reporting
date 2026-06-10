@@ -72,13 +72,13 @@ Deno.serve(async (req) => {
     const providedHash = await hashPassword(password);
     
     console.log('Password received:', password);
-    console.log('Password === HPA:', password === 'HPA');
+    console.log('Password === hpa1234:', password === 'hpa1234');
     console.log('Provided hash:', providedHash);
     console.log('Stored hash:', settings?.password_hash);
     
-    // For backward compatibility during transition, accept 'HPA' as hardcoded password
+    // For backward compatibility during transition, accept 'hpa1234' as hardcoded password
     // or compare with stored hash
-    const hardcodedMatch = password === 'HPA';
+    const hardcodedMatch = password === 'hpa1234';
     const hashMatch = settings?.password_hash && providedHash === settings.password_hash;
     const isPasswordValid = hardcodedMatch || hashMatch;
     
