@@ -533,6 +533,45 @@ export type Database = {
         }
         Relationships: []
       }
+      agency_references: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          mime: string | null
+          name: string
+          notes: string | null
+          tags: string[] | null
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          mime?: string | null
+          name: string
+          notes?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          mime?: string | null
+          name?: string
+          notes?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       agency_settings: {
         Row: {
           agent_notification_slack_dm: boolean | null
@@ -3298,6 +3337,70 @@ export type Database = {
           },
         ]
       }
+      client_references: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          mime: string | null
+          name: string
+          notes: string | null
+          tags: string[] | null
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          mime?: string | null
+          name: string
+          notes?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          mime?: string | null
+          name?: string
+          notes?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_references_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_references_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_references_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_settings: {
         Row: {
           ad_spend_fee_percent: number | null
@@ -3620,6 +3723,110 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      client_videos: {
+        Row: {
+          aspect_ratio: string | null
+          canvas_item_id: string | null
+          client_id: string
+          conversation_id: string | null
+          created_at: string
+          created_by: string | null
+          duration_seconds: number | null
+          edit_instructions: string | null
+          id: string
+          metadata: Json
+          model: string | null
+          parent_video_id: string | null
+          poster_url: string | null
+          prompt: string | null
+          resolution: string | null
+          source: string
+          source_url: string | null
+          status: string
+          storage_path: string | null
+          storage_url: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          aspect_ratio?: string | null
+          canvas_item_id?: string | null
+          client_id: string
+          conversation_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_seconds?: number | null
+          edit_instructions?: string | null
+          id?: string
+          metadata?: Json
+          model?: string | null
+          parent_video_id?: string | null
+          poster_url?: string | null
+          prompt?: string | null
+          resolution?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          storage_path?: string | null
+          storage_url: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aspect_ratio?: string | null
+          canvas_item_id?: string | null
+          client_id?: string
+          conversation_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_seconds?: number | null
+          edit_instructions?: string | null
+          id?: string
+          metadata?: Json
+          model?: string | null
+          parent_video_id?: string | null
+          poster_url?: string | null
+          prompt?: string | null
+          resolution?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          storage_path?: string | null
+          storage_url?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_videos_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_videos_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_videos_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_videos_parent_video_id_fkey"
+            columns: ["parent_video_id"]
+            isOneToOne: false
+            referencedRelation: "client_videos"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -10007,6 +10214,78 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      video_edit_messages: {
+        Row: {
+          client_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata: Json
+          result_video_id: string | null
+          role: string
+          source_video_id: string
+        }
+        Insert: {
+          client_id: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          result_video_id?: string | null
+          role: string
+          source_video_id: string
+        }
+        Update: {
+          client_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          result_video_id?: string | null
+          role?: string
+          source_video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_edit_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "video_edit_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_edit_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "video_edit_messages_result_video_id_fkey"
+            columns: ["result_video_id"]
+            isOneToOne: false
+            referencedRelation: "client_videos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_edit_messages_source_video_id_fkey"
+            columns: ["source_video_id"]
+            isOneToOne: false
+            referencedRelation: "client_videos"
+            referencedColumns: ["id"]
           },
         ]
       }
