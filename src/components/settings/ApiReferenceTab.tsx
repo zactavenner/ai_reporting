@@ -799,9 +799,27 @@ export function ApiReferenceTab() {
           </div>
 
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Available Actions</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Available Actions — Core</div>
             <div className="flex flex-wrap gap-1">
-              {['ping', 'list_clients', 'create_task', 'complete_task', 'post_message', 'get_task', 'list_tasks'].map(a => (
+              {['ping', 'list_clients', 'post_message'].map(a => (
+                <Badge key={a} variant="outline" className="text-[10px] font-mono">{a}</Badge>
+              ))}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 mt-2">Tasks</div>
+            <div className="flex flex-wrap gap-1">
+              {['create_task', 'get_task', 'list_tasks', 'update_task', 'cancel_task', 'assign_task', 'complete_task'].map(a => (
+                <Badge key={a} variant="outline" className="text-[10px] font-mono">{a}</Badge>
+              ))}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 mt-2">Agents (full CRUD)</div>
+            <div className="flex flex-wrap gap-1">
+              {['list_agents', 'get_agent', 'create_agent', 'update_agent', 'delete_agent', 'toggle_agent'].map(a => (
+                <Badge key={a} variant="outline" className="text-[10px] font-mono">{a}</Badge>
+              ))}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 mt-2">Generation (auto-runs pipeline)</div>
+            <div className="flex flex-wrap gap-1">
+              {['generate_copy', 'generate_video', 'generate_image', 'generate_static_ad', 'generate_brief'].map(a => (
                 <Badge key={a} variant="outline" className="text-[10px] font-mono">{a}</Badge>
               ))}
             </div>
