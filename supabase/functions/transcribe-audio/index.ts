@@ -21,8 +21,11 @@ serve(async (req) => {
       );
     }
 
-    // Extract base64 data and mime type from data URL
-    const matches = audio.match(/^data:([^;]+);base64,(.+)$/);
+    // Extract base64 data and mime type from data URL.
+    // Mime types can contain attributes (e.g. "audio/webm;codecs=opus") before
+    // the trailing ";base64,..." segment, so allow any chars up to the final
+    // ";base64," marker.
+    const matches = audio.match(/^data:(.+);base64,(.+)$/);
     if (!matches) {
       return new Response(
         JSON.stringify({ error: "Invalid audio format" }),

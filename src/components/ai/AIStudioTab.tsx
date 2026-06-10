@@ -482,6 +482,11 @@ function ChatVideoPreview({ video }: { video: ChatVideo }) {
         status={hasUrl ? "ready" : "failed"}
         errorMessage={!hasUrl ? "The video URL could not be returned. Try Recreate." : undefined}
         className="rounded-none border-0"
+        onEdit={hasUrl ? (u) => {
+          window.dispatchEvent(new CustomEvent("aistudio:edit-video", {
+            detail: { url: u, prompt: video.prompt, aspect_ratio: video.aspect_ratio },
+          }));
+        } : undefined}
       />
       <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40">
         <PreviewActionBar
@@ -583,6 +588,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const speechRecRef = useRef<any>(null);
+  const speechBaseInputRef = useRef<string>("");
   const [threads, setThreads] = useState<Thread[]>([]);
   const [showThreads, setShowThreads] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:show-threads") !== "false"; } catch { return true; }
@@ -967,6 +974,63 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   function stop() { abortRef.current?.abort(); }
 
   const startRecording = useCallback(async () => {
+    // Prefer the native Web Speech API for live, in-input transcription.
+    const SR: any =
+      (typeof window !== "undefined" &&
+        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
+      null;
+    if (SR) {
+      try {
+        // Surface a clear permission state before starting.
+        if (navigator.mediaDevices?.getUserMedia) {
+          await navigator.mediaDevices.getUserMedia({ audio: true }).then((s) =>
+            s.getTracks().forEach((t) => t.stop()),
+          );
+        }
+        const rec = new SR();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = (navigator.language || "en-US");
+        speechBaseInputRef.current = input;
+        let finalText = "";
+        rec.onresult = (event: any) => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const r = event.results[i];
+            if (r.isFinal) finalText += r[0].transcript;
+            else interim += r[0].transcript;
+          }
+          const base = speechBaseInputRef.current;
+          const combined =
+            (base ? base + (base.endsWith(" ") ? "" : " ") : "") +
+            (finalText + (interim ? (finalText.endsWith(" ") || !finalText ? "" : " ") + interim : ""));
+          setInput(combined);
+        };
+        rec.onerror = (e: any) => {
+          if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
+            toast.error("Microphone blocked. Enable it in browser settings.");
+          } else if (e?.error && e.error !== "no-speech" && e.error !== "aborted") {
+            toast.error(`Voice error: ${e.error}`);
+          }
+        };
+        rec.onend = () => {
+          setIsRecording(false);
+          // Commit any final text into the input — leaves the user to hit Send.
+          if (finalText.trim()) {
+            const base = speechBaseInputRef.current;
+            const merged = (base ? base + (base.endsWith(" ") ? "" : " ") : "") + finalText.trim();
+            setInput(merged);
+          }
+        };
+        speechRecRef.current = rec;
+        rec.start();
+        setIsRecording(true);
+        return;
+      } catch (e: any) {
+        console.warn("SpeechRecognition failed, falling back to MediaRecorder:", e);
+        // fall through to MediaRecorder
+      }
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recStreamRef.current = stream;
@@ -997,8 +1061,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       mr.start();
       setIsRecording(true);
     } catch (e: any) { toast.error(e?.message || "Mic permission denied"); }
+  }, [input]);
+  const stopRecording = useCallback(() => {
+    try { speechRecRef.current?.stop(); } catch {}
+    speechRecRef.current = null;
+    try { mediaRecRef.current?.stop(); } catch {}
+    setIsRecording(false);
   }, []);
-  const stopRecording = useCallback(() => { try { mediaRecRef.current?.stop(); } catch {} setIsRecording(false); }, []);
 
   async function clearConversation() {
     if (!conversationId) { setMessages([]); setCanvas([]); return; }
@@ -1053,21 +1122,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const d = (e as CustomEvent).detail || {};
       if (!conversationId || !d.kind || !d.payload) return;
       try {
-        const { data: u } = await supabase.auth.getUser();
-        const uid = u?.user?.id;
-        if (!uid) { toast.error("Sign in required"); return; }
-        const { data, error } = await supabase
-          .from("ai_studio_canvas_items")
-          .insert({ conversation_id: conversationId, user_id: uid, kind: d.kind, payload: d.payload })
-          .select()
-          .single();
-        if (error) throw error;
-        setCanvas(curr => [data as CanvasItem, ...curr]);
+        // Route through the edge function so dashboard-token users (who don't
+        // have a Supabase auth.uid) can still pin to canvas.
+        const res = await studioFetch({
+          action: "add_canvas_item",
+          clientId,
+          conversationId,
+          canvasItemKind: d.kind,
+          canvasItemPayload: d.payload,
+        });
+        if (!res.ok) throw new Error(await res.text().catch(() => "Pin failed"));
+        const { item } = await res.json();
+        if (item) setCanvas(curr => [item as CanvasItem, ...curr]);
         toast.success("Pinned to canvas");
       } catch (err: any) {
         toast.error(err?.message || "Failed to pin to canvas");
       }
     };
+    const onEditVideoEvt = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (d.url) setEditVideo({ url: d.url, prompt: d.prompt, aspect_ratio: d.aspect_ratio });
+    };
+    window.addEventListener("aistudio:edit-video", onEditVideoEvt);
     window.addEventListener("aistudio:set-prompt", onSetPrompt);
     window.addEventListener("aistudio:add-canvas-asset", onAddCanvas);
     return () => {
@@ -1075,8 +1151,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       window.removeEventListener("aistudio:edit-image", onEdit);
       window.removeEventListener("aistudio:set-prompt", onSetPrompt);
       window.removeEventListener("aistudio:add-canvas-asset", onAddCanvas);
+      window.removeEventListener("aistudio:edit-video", onEditVideoEvt);
     };
-  }, [addImageAsReference, inlineEdit, conversationId]);
+  }, [addImageAsReference, inlineEdit, conversationId, clientId, studioFetch]);
 
   return (
     <div className={`grid grid-cols-1 ${showThreads ? "lg:grid-cols-[220px,1fr]" : "lg:grid-cols-1"} gap-3 h-full min-h-0`}>
