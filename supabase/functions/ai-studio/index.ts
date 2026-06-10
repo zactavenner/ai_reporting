@@ -960,8 +960,14 @@ async function generateSeedanceVideo(opts: {
   let storagePath: string | null = null;
   try {
     emit({ stage: "downloading", label: "Downloading reel…", job_id: jobId, model, percent: 92, elapsed_s: (Date.now() - t0) / 1000 });
-    const dl = await fetch(videoUrl);
-    if (!dl.ok) throw new Error(`Download failed [${dl.status}]`);
+    // OpenRouter's `unsigned_urls` (and `urls`) still require the Bearer token
+    // — the name is misleading. Without it the download returns 401 and the
+    // whole Seedance run fails at the rehost step.
+    const dl = await fetch(videoUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+    if (!dl.ok) {
+      const errBody = await dl.text().catch(() => "");
+      throw new Error(`Download failed [${dl.status}] ${errBody.slice(0, 200)}`);
+    }
     const bytes = new Uint8Array(await dl.arrayBuffer());
     if (bytes.byteLength < 1024) throw new Error("Downloaded file is too small to be a valid video");
     const path = `ai-studio/${opts.clientId || "shared"}/seedance/${jobId}-${Date.now()}.mp4`;
