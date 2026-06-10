@@ -21,7 +21,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Bot, Plus, Trash2, Pencil, Image as ImageIcon, FileText, LineChart, Sparkles, KeyRound, Package, BookOpen,
+  Library,
 } from "lucide-react";
+import { ReferencesManager } from "./ReferencesManager";
 
 const TYPE_META: Record<AgentType, { label: string; icon: any; prompt: string }> = {
   creatives: {
@@ -109,6 +111,7 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
         <TabsList>
           <TabsTrigger value="agents"><Bot className="h-3.5 w-3.5 mr-1" />Agents</TabsTrigger>
           <TabsTrigger value="folder"><BookOpen className="h-3.5 w-3.5 mr-1" />Agent Folder</TabsTrigger>
+          <TabsTrigger value="refs"><Library className="h-3.5 w-3.5 mr-1" />References</TabsTrigger>
         </TabsList>
 
         <TabsContent value="agents" className="mt-3 space-y-3">
@@ -242,6 +245,10 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
               </ul>
             )}
           </Card>
+        </TabsContent>
+
+        <TabsContent value="refs" className="mt-3">
+          <ReferencesManager clientId={clientId} />
         </TabsContent>
       </Tabs>
 
