@@ -617,12 +617,26 @@ export function ApiReferenceTab() {
       for (const call of section.calls) {
         lines.push(`### ${call.title}`);
         lines.push(call.description);
+        if (call.endpoint) lines.push(`POST ${call.endpoint}`);
+        if (call.headers) {
+          for (const [k, v] of Object.entries(call.headers)) {
+            lines.push(`${k}: ${v}`);
+          }
+        }
         lines.push('```json');
         lines.push(JSON.stringify(call.body, null, 2));
         lines.push('```');
         lines.push('');
       }
     }
+
+    lines.push('## Hermes Orchestrator Notes');
+    lines.push(`Base URL: ${HERMES_ENDPOINT}`);
+    lines.push('Auth: Authorization: Bearer <HERMES_API_KEY> (generated in Agency Settings → Hermes Integration)');
+    lines.push('Task types auto-route by agent_type: video → video/creative/content, static_ad → image/creative/static_ad, copy → copy/content/writing, research → research/analyst.');
+    lines.push('complete_task is idempotent (delivered_at row-lock). Video tasks auto-complete via the platform.');
+    lines.push('If callback_url is omitted in create_task, the default from Agency Settings is used.');
+    lines.push('');
 
     lines.push('## All Available Tables');
     lines.push([
