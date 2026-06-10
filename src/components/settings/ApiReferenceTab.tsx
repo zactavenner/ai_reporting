@@ -5,6 +5,7 @@ import { Copy, Check, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-reac
 import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
+import { HermesIntegrationTab } from './HermesIntegrationTab';
 
 const API_ENDPOINT = 'https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/external-data-api';
 const HERMES_ENDPOINT = 'https://jgwwmtuvjlmzapwqiabu.functions.supabase.co/hermes-orchestrator';
@@ -690,6 +691,12 @@ export function ApiReferenceTab() {
 
   return (
     <div className="space-y-4">
+      {/* Hermes Integration Settings (moved into API tab) */}
+      <div className="border-2 border-border rounded-md p-4 bg-card">
+        <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">🪽 Hermes Integration</h3>
+        <HermesIntegrationTab />
+      </div>
+
       {/* Copy All Banner */}
       <div className="flex items-center justify-between border-2 border-primary/30 bg-primary/5 rounded-md p-3">
         <div>
