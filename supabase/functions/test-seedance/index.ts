@@ -10,7 +10,17 @@ Deno.serve(async (req) => {
     const p = await fetch(pollUrl, { headers: { Authorization: `Bearer ${KEY}` } });
     const pj = await p.json();
     const urls = pj?.unsigned_urls || pj?.urls || (pj?.video?.url ? [pj.video.url] : []);
-    return new Response(JSON.stringify({ status: pj?.status, error: pj?.error, videoUrl: urls[0] || null, raw: pj }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    let dlStatus: number | null = null;
+    let dlBytes: number | null = null;
+    if (urls[0]) {
+      const dl = await fetch(urls[0], { headers: { Authorization: `Bearer ${KEY}` } });
+      dlStatus = dl.status;
+      if (dl.ok) {
+        const b = new Uint8Array(await dl.arrayBuffer());
+        dlBytes = b.byteLength;
+      }
+    }
+    return new Response(JSON.stringify({ status: pj?.status, error: pj?.error, videoUrl: urls[0] || null, dlStatus, dlBytes, raw: pj }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   const body = {
     model: 'bytedance/seedance-2.0-fast',
