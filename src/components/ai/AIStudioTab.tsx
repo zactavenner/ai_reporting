@@ -1584,6 +1584,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               entries={canvas}
               clientId={clientId}
               onSendMessage={(text) => send(text)}
+              onEditVideo={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio })}
               initialView={canvasView}
               focusedItemId={focusedItemId}
               onViewChange={(v) => {
