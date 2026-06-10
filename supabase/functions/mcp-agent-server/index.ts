@@ -311,7 +311,7 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         body: JSON.stringify({
           agent_id: args.agent_id,
           client_id: args.client_id,
-          password: 'hpa1234',
+          password: 'HPA1234$',
         }),
       });
       return await res.json();
@@ -498,7 +498,7 @@ async function invokeEdge(fnName: string, payload: Record<string, any>): Promise
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
     },
-    body: JSON.stringify({ ...payload, password: 'hpa1234' }),
+    body: JSON.stringify({ ...payload, password: 'HPA1234$' }),
   });
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { status: res.status, body: text }; }
