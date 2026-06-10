@@ -1,0 +1,1 @@
+DELETE FROM public.ai_studio_reference_images WHERE name = 'test-anon-insert';
