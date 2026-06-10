@@ -36,7 +36,7 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, onEditVideo, clientId, onCanvasItemUpdated, onSendMessage,
+  entries, onEditImage, onInlineEdit, onEditVideo, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
@@ -46,6 +46,8 @@ export function AIStudioCanvas({
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
   onSendMessage?: (text: string) => void;
+  /** Routes "Send to Creatives" through the ai-studio edge function (handles auth + RLS bypass). */
+  onSendToCreatives?: (rows: any[]) => Promise<void>;
   initialView?: { zoom?: number; panX?: number; panY?: number } | null;
   focusedItemId?: string | null;
   onViewChange?: (view: { zoom: number; panX: number; panY: number }) => void;
@@ -88,8 +90,13 @@ export function AIStudioCanvas({
           source: "ai_studio_canvas",
         };
       });
-      const { error } = await supabase.from("creatives").insert(rows as any);
-      if (error) throw error;
+      if (onSendToCreatives) {
+        await onSendToCreatives(rows);
+      } else {
+        // Fallback: direct insert (only works for Supabase-JWT users)
+        const { error } = await supabase.from("creatives").insert(rows as any);
+        if (error) throw error;
+      }
       toast.success(`Sent ${rows.length} asset${rows.length === 1 ? "" : "s"} to Creatives for agency review`);
     } catch (err: any) {
       toast.error(err?.message || "Failed to send to Creatives");
