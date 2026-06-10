@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize2, PictureInPicture2, Loader2, AlertCircle } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, PictureInPicture2, Loader2, AlertCircle, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function fmtTime(t: number) {
@@ -20,6 +20,7 @@ export function VideoPlayerCard({
   progressLabel,
   progressPercent,
   errorMessage,
+  onEdit,
 }: {
   src?: string | null;
   poster?: string | null;
@@ -29,6 +30,7 @@ export function VideoPlayerCard({
   progressLabel?: string;
   progressPercent?: number;
   errorMessage?: string;
+  onEdit?: (src: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -161,6 +163,15 @@ export function VideoPlayerCard({
             {SPEEDS.map(s => <option key={s} value={s} className="text-black">{s}×</option>)}
           </select>
           <div className="flex-1" />
+          {onEdit && (
+            <button
+              onClick={() => onEdit(src!)}
+              className="h-7 px-2 grid place-items-center rounded bg-primary/90 hover:bg-primary text-primary-foreground text-[10px] gap-1 inline-flex"
+              title="Edit this video with Hyperframes-style chat"
+            >
+              <Wand2 className="h-3 w-3" /> Edit
+            </button>
+          )}
           <button onClick={pip} className="h-7 w-7 grid place-items-center rounded hover:bg-white/10 text-white" title="Picture-in-picture">
             <PictureInPicture2 className="h-3.5 w-3.5" />
           </button>

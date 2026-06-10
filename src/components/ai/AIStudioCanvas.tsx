@@ -36,12 +36,13 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, clientId, onCanvasItemUpdated, onSendMessage,
+  entries, onEditImage, onInlineEdit, onEditVideo, clientId, onCanvasItemUpdated, onSendMessage,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
   onEditImage?: (imageUrl: string, aspectRatio: string) => void;
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
+  onEditVideo?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
   onSendMessage?: (text: string) => void;
@@ -418,6 +419,7 @@ export function AIStudioCanvas({
                 aspect={p.aspect_ratio === "16:9" ? "16/9" : p.aspect_ratio === "1:1" ? "1/1" : "9/16"}
                 status={p.video_url ? "ready" : "failed"}
                 errorMessage={!p.video_url ? "Generation finished but no video URL was returned." : undefined}
+                onEdit={p.video_url && onEditVideo ? (u) => onEditVideo(u, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio }) : undefined}
               />
               <div className="flex items-center gap-2 mt-2">
                 <p className="text-[10px] text-muted-foreground line-clamp-2 flex-1">{p.video_prompt}</p>

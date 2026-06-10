@@ -1024,6 +1024,30 @@ async function generateSeedanceVideo(opts: {
         duration: body.duration, resolution: effectiveResolution,
       },
     });
+    // Mirror into client_videos (per-client persistent library).
+    try {
+      await supa.from("client_videos").insert({
+        client_id: opts.clientId,
+        title: `Seedance ${opts.imageUrl ? "image→video" : "text→video"}`,
+        prompt: opts.prompt,
+        storage_url: storedUrl,
+        storage_path: storagePath,
+        poster_url: opts.imageUrl || null,
+        source_url: videoUrl,
+        source: "ai_studio",
+        conversation_id: opts.conversationId || null,
+        canvas_item_id: ci?.data?.id || null,
+        model,
+        aspect_ratio: opts.aspectRatio,
+        duration_seconds: body.duration,
+        resolution: effectiveResolution,
+        status: "completed",
+        metadata: { job_id: jobId, mode: opts.imageUrl ? "image_to_video" : "text_to_video" },
+        created_by: opts.userId || null,
+      });
+    } catch (e) {
+      console.warn("client_videos insert failed (non-fatal)", e);
+    }
   }
 
   return { item: ci.data, video_url: storedUrl, model, resolution: effectiveResolution };
