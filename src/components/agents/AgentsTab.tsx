@@ -505,7 +505,7 @@ export function AgentsTab({ clients }: Props) {
                         agentName={selectedAgent.name}
                       />
                     </TabsContent>
-                    <TabsContent value="runs-list" className="space-y-3 mt-4">
+                    <TabsContent value="runs" className="space-y-3 mt-4">
                       {runs.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-8">No runs yet</p>
                       ) : (
