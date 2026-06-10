@@ -27,23 +27,19 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: false, stage: 'submit', status: submit.status, body: submitText.slice(0, 800) }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   const sj = JSON.parse(submitText);
-  const pollingUrl = sj.polling_url;
-  const jobId = sj.id;
-  let last: any = null;
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 5000));
+  const url = new URL(req.url);
+  if (url.searchParams.get('poll')) {
+    const pollingUrl = url.searchParams.get('poll')!;
     const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${KEY}` } });
-    if (!p.ok) { last = { http: p.status }; continue; }
-    last = await p.json();
-    if (last.status === 'completed' || last.status === 'failed') break;
+    const pj = await p.json();
+    const urls = pj?.unsigned_urls || pj?.urls || (pj?.video?.url ? [pj.video.url] : []);
+    return new Response(JSON.stringify({ status: pj?.status, error: pj?.error, videoUrl: urls[0] || null, raw: pj }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-  const urls = last?.unsigned_urls || last?.urls || (last?.video?.url ? [last.video.url] : []);
   return new Response(JSON.stringify({
-    ok: last?.status === 'completed',
+    ok: true,
     elapsed_s: (Date.now() - t0) / 1000,
-    jobId,
-    status: last?.status,
-    error: last?.error,
-    videoUrl: urls[0] || null,
+    jobId: sj.id,
+    polling_url: sj.polling_url,
+    submitResponse: sj,
   }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 });
