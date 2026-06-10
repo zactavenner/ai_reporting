@@ -6,12 +6,15 @@ import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const API_ENDPOINT = 'https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/external-data-api';
+const HERMES_ENDPOINT = 'https://jgwwmtuvjlmzapwqiabu.functions.supabase.co/hermes-orchestrator';
 const PASSWORD = 'HPA1234$';
 
 interface ApiCall {
   title: string;
   description: string;
   body: Record<string, unknown>;
+  endpoint?: string;
+  headers?: Record<string, string>;
 }
 
 interface ApiSection {
@@ -360,6 +363,104 @@ const API_SECTIONS: ApiSection[] = [
   },
 ];
 
+// Hermes Orchestrator — separate endpoint, Bearer-token auth
+const HERMES_HEADERS = {
+  'Authorization': 'Bearer <HERMES_API_KEY>',
+  'Content-Type': 'application/json',
+};
+
+const HERMES_SECTION: ApiSection = {
+  title: '🪽 Hermes Orchestrator',
+  badge: 'External AI Bridge',
+  badgeVariant: 'secondary',
+  calls: [
+    {
+      title: 'Ping (health check)',
+      description: 'Verify the orchestrator is reachable and the API key is valid.',
+      endpoint: HERMES_ENDPOINT,
+      headers: HERMES_HEADERS,
+      body: { action: 'ping' },
+    },
+    {
+      title: 'List Clients',
+      description: 'Returns active / onboarding / paused clients with id, name, slug.',
+      endpoint: HERMES_ENDPOINT,
+      headers: HERMES_HEADERS,
+      body: { action: 'list_clients' },
+    },
+    {
+      title: 'Create Task (auto-route)',
+      description: 'Creates a Hermes task and auto-routes to the matching agent (video / static_ad / copy / research). Opens the "🤖 Hermes Orchestrator" channel in AI Studio.',
+      endpoint: HERMES_ENDPOINT,
+      headers: HERMES_HEADERS,
+      body: {
+        action: 'create_task',
+        client_id: '<CLIENT_UUID>',
+        task_type: 'video',
+        hermes_external_id: '<HERMES_TASK_ID>',
+        title: 'New VSL for fund X',
+        brief: 'Hook on inflation, 45s, vertical, narrator avatar.',
+        callback_url: 'https://hermes.example.com/webhooks/lovable',
+      },
+    },
+    {
+      title: 'Complete Task',
+      description: 'Manually mark a task complete and deliver assets to the Hermes channel. Idempotent — repeat calls return { ok:true, already_delivered:true }.',
+      endpoint: HERMES_ENDPOINT,
+      headers: HERMES_HEADERS,
+      body: {
+        action: 'complete_task',
+        task_id: '<TASK_UUID>',
+        status: 'completed',
+        assets: [{ type: 'video', url: 'https://...', poster_url: 'https://...', duration: 45 }],
+      },
+    },
+    {
+      title: 'Post Message',
+      description: 'Free-form message into the client\'s Hermes channel in AI Studio.',
+      endpoint: HERMES_ENDPOINT,
+      headers: HERMES_HEADERS,
+      body: {
+        action: 'post_message',
+        client_id: '<CLIENT_UUID>',
+        message: 'Hermes here — kicking off 3 new creative tests today.',
+      },
+    },
+    {
+      title: 'Get Task',
+      description: 'Fetch current status + linked assets for a task.',
+      endpoint: HERMES_ENDPOINT,
+      headers: HERMES_HEADERS,
+      body: { action: 'get_task', task_id: '<TASK_UUID>' },
+    },
+    {
+      title: 'List Tasks (per client)',
+      description: 'List tasks for a client, optionally filtered by status.',
+      endpoint: HERMES_ENDPOINT,
+      headers: HERMES_HEADERS,
+      body: { action: 'list_tasks', client_id: '<CLIENT_UUID>', status: 'in_progress', limit: 50 },
+    },
+    {
+      title: 'Callback Webhook Payload (FYI)',
+      description: 'Shape of the task.completed event the platform POSTs to your callback_url when work finishes.',
+      endpoint: '<YOUR_CALLBACK_URL>',
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        event: 'task.completed',
+        task_id: '<TASK_UUID>',
+        hermes_external_id: '<HERMES_TASK_ID>',
+        client_id: '<CLIENT_UUID>',
+        task_type: 'video',
+        status: 'completed',
+        assets: [{ type: 'video', url: 'https://...', poster_url: 'https://...', duration: 45 }],
+        error_message: null,
+      },
+    },
+  ],
+};
+
+API_SECTIONS.push(HERMES_SECTION);
+
 function CopyBlock({ json }: { json: Record<string, unknown> }) {
   const [copied, setCopied] = useState(false);
   const text = JSON.stringify(json, null, 2);
@@ -400,7 +501,19 @@ function ApiCallCard({ call }: { call: ApiCall }) {
           <span className="text-xs text-muted-foreground ml-2">{call.description}</span>
         </div>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pl-9 pr-3 pb-2">
+      <CollapsibleContent className="pl-9 pr-3 pb-2 space-y-2">
+        {call.endpoint && (
+          <div className="text-[11px] font-mono bg-muted/50 border border-border rounded px-2 py-1 break-all">
+            POST {call.endpoint}
+          </div>
+        )}
+        {call.headers && (
+          <div className="text-[11px] font-mono bg-muted/50 border border-border rounded px-2 py-1 space-y-0.5">
+            {Object.entries(call.headers).map(([k, v]) => (
+              <div key={k}><span className="text-muted-foreground">{k}:</span> {v}</div>
+            ))}
+          </div>
+        )}
         <CopyBlock json={call.body} />
       </CollapsibleContent>
     </Collapsible>
@@ -504,12 +617,26 @@ export function ApiReferenceTab() {
       for (const call of section.calls) {
         lines.push(`### ${call.title}`);
         lines.push(call.description);
+        if (call.endpoint) lines.push(`POST ${call.endpoint}`);
+        if (call.headers) {
+          for (const [k, v] of Object.entries(call.headers)) {
+            lines.push(`${k}: ${v}`);
+          }
+        }
         lines.push('```json');
         lines.push(JSON.stringify(call.body, null, 2));
         lines.push('```');
         lines.push('');
       }
     }
+
+    lines.push('## Hermes Orchestrator Notes');
+    lines.push(`Base URL: ${HERMES_ENDPOINT}`);
+    lines.push('Auth: Authorization: Bearer <HERMES_API_KEY> (generated in Agency Settings → Hermes Integration)');
+    lines.push('Task types auto-route by agent_type: video → video/creative/content, static_ad → image/creative/static_ad, copy → copy/content/writing, research → research/analyst.');
+    lines.push('complete_task is idempotent (delivered_at row-lock). Video tasks auto-complete via the platform.');
+    lines.push('If callback_url is omitted in create_task, the default from Agency Settings is used.');
+    lines.push('');
 
     lines.push('## All Available Tables');
     lines.push([
