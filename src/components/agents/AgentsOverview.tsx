@@ -149,49 +149,7 @@ export function AgentsOverview({ clients }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent className="max-h-[480px] overflow-y-auto">
-            <div className="flex flex-col items-center gap-4">
-              <div className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow">
-                🤖 Hermes (Master Orchestrator)
-              </div>
-              <div className="w-px h-4 bg-border" />
-              <div className="flex flex-wrap gap-2 justify-center">
-                {agents.map((a) => (
-                  <div key={a.id} className="px-3 py-1.5 rounded-lg border bg-muted/50 text-xs flex items-center gap-1.5">
-                    <span>{a.icon || "⚙️"}</span>
-                    <span className="font-medium">{a.name}</span>
-                    {a.enabled ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> : <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />}
-                  </div>
-                ))}
-                {agents.length === 0 && <p className="text-xs text-muted-foreground">No agency agents yet.</p>}
-              </div>
-
-              <div className="w-full mt-4 space-y-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Per-client agents</p>
-                {clients
-                  .filter((c) => byClient.has(c.id))
-                  .map((c) => {
-                    const list = byClient.get(c.id) || [];
-                    return (
-                      <div key={c.id} className="rounded-lg border p-2">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium">{c.name}</span>
-                          <span className="text-[10px] text-muted-foreground">{list.length} agents</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {list.map((a) => (
-                            <Badge key={a.id} variant="outline" className="text-[10px]">
-                              @{a.handle} · {a.agent_type}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                {byClient.size === 0 && (
-                  <p className="text-xs text-muted-foreground">No client-scoped agents yet. Add them inside each client's AI Studio → Agents tab.</p>
-                )}
-              </div>
-            </div>
+            <OrgChart agents={agents} clients={clients} byClient={byClient} />
           </CardContent>
         </Card>
       </div>
