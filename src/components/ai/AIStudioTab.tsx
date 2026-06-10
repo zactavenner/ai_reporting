@@ -588,7 +588,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [interimTranscript, setInterimTranscript] = useState("");
   const speechRecRef = useRef<any>(null);
   const speechBaseInputRef = useRef<string>("");
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -1001,7 +1000,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (r.isFinal) finalText += r[0].transcript;
             else interim += r[0].transcript;
           }
-          setInterimTranscript(interim);
           const base = speechBaseInputRef.current;
           const combined =
             (base ? base + (base.endsWith(" ") ? "" : " ") : "") +
@@ -1017,7 +1015,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         };
         rec.onend = () => {
           setIsRecording(false);
-          setInterimTranscript("");
           // Commit any final text into the input — leaves the user to hit Send.
           if (finalText.trim()) {
             const base = speechBaseInputRef.current;
@@ -1070,7 +1067,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     speechRecRef.current = null;
     try { mediaRecRef.current?.stop(); } catch {}
     setIsRecording(false);
-    setInterimTranscript("");
   }, []);
 
   async function clearConversation() {
