@@ -47,7 +47,7 @@ export function AgentsOverview({ clients }: Props) {
         .select("asset_type")
         .limit(5000);
       if (error) throw error;
-      const rows = (data ?? []) as { asset_type: string }[];
+      const rows = (data ?? []) as unknown as { asset_type: string }[];
       let creative = 0;
       let text = 0;
       for (const r of rows) {
