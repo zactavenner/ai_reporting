@@ -427,9 +427,14 @@ export default function ClientDetail() {
           </TabsContent>
 
           {/* ─── AI STUDIO TAB ─── */}
-          <TabsContent value="ai-studio" className="space-y-4">
+          <TabsContent value="ai-studio" className="m-0">
             <SectionErrorBoundary sectionName="AI Studio">
-              <AIStudioTab clientId={client.id} clientName={client.name} />
+              {/* Bound height so the chat & canvas panels scroll internally and
+                  stay aligned as the conversation grows, instead of letting the
+                  page itself scroll and pushing the canvas out of view. */}
+              <div className="h-[calc(100vh-220px)] min-h-[600px]">
+                <AIStudioTab clientId={client.id} clientName={client.name} />
+              </div>
             </SectionErrorBoundary>
           </TabsContent>
 
