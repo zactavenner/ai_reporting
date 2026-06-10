@@ -188,14 +188,30 @@ async function handleCompleteTask(body: any, cfg: any) {
     .from("hermes_tasks").select("*").eq("id", taskId).maybeSingle();
   if (loadErr || !task) return json({ error: "Task not found" }, 404);
 
-  const { error } = await supa.from("hermes_tasks").update({
-    status,
-    result_assets: assets,
-    error_message: body.error_message || null,
-    completed_at: new Date().toISOString(),
-    delivered_at: new Date().toISOString(),
-  }).eq("id", taskId);
+  // Idempotency / race guard: only one caller wins the delivery.
+  // We atomically claim the task by requiring delivered_at IS NULL.
+  // If another concurrent call (or a retry) already delivered it, we
+  // short-circuit instead of double-posting messages and callbacks.
+  const nowIso = new Date().toISOString();
+  const { data: claimed, error } = await supa
+    .from("hermes_tasks")
+    .update({
+      status,
+      result_assets: assets,
+      error_message: body.error_message || null,
+      completed_at: nowIso,
+      delivered_at: nowIso,
+    })
+    .eq("id", taskId)
+    .is("delivered_at", null)
+    .select("id")
+    .maybeSingle();
   if (error) return json({ error: error.message }, 500);
+
+  if (!claimed) {
+    // Already delivered by a prior call — return success without side effects.
+    return json({ ok: true, already_delivered: true });
+  }
 
   if (task.conversation_id) {
     const assetLines = assets.map((a: any, i: number) => `- [${a.title || `Asset ${i + 1}`}](${a.url})`).join("\n");
