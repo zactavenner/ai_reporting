@@ -581,6 +581,9 @@ export type Database = {
           api_usage_limit: number | null
           created_at: string
           gemini_api_key: string | null
+          hermes_api_key: string | null
+          hermes_callback_url: string | null
+          hermes_enabled: boolean
           id: string
           kpi_google_doc_url: string | null
           kpi_google_sheet_url: string | null
@@ -608,6 +611,9 @@ export type Database = {
           api_usage_limit?: number | null
           created_at?: string
           gemini_api_key?: string | null
+          hermes_api_key?: string | null
+          hermes_callback_url?: string | null
+          hermes_enabled?: boolean
           id?: string
           kpi_google_doc_url?: string | null
           kpi_google_sheet_url?: string | null
@@ -635,6 +641,9 @@ export type Database = {
           api_usage_limit?: number | null
           created_at?: string
           gemini_api_key?: string | null
+          hermes_api_key?: string | null
+          hermes_callback_url?: string | null
+          hermes_enabled?: boolean
           id?: string
           kpi_google_doc_url?: string | null
           kpi_google_sheet_url?: string | null
@@ -1059,6 +1068,8 @@ export type Database = {
           focused_canvas_item_id: string | null
           id: string
           image_quality: string
+          is_shared: boolean
+          kind: string
           last_active_at: string
           pinned: boolean
           sheet_url: string | null
@@ -1081,6 +1092,8 @@ export type Database = {
           focused_canvas_item_id?: string | null
           id?: string
           image_quality?: string
+          is_shared?: boolean
+          kind?: string
           last_active_at?: string
           pinned?: boolean
           sheet_url?: string | null
@@ -1103,6 +1116,8 @@ export type Database = {
           focused_canvas_item_id?: string | null
           id?: string
           image_quality?: string
+          is_shared?: boolean
+          kind?: string
           last_active_at?: string
           pinned?: boolean
           sheet_url?: string | null
