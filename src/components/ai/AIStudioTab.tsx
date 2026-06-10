@@ -22,8 +22,9 @@ import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 import { AIStudioAgentsTab } from "./AIStudioAgentsTab";
-import { AIStudioReferencePicker, buildReferenceContextBlock, type VideoReference } from "./AIStudioReferencePicker";
 import { VideoPlayerCard } from "./VideoPlayerCard";
+import { VideoEditDialog } from "./VideoEditDialog";
+import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
 
 interface Props {
   clientId: string;
@@ -566,7 +567,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents">("chat");
-  const [videoRefs, setVideoRefs] = useState<VideoReference[]>([]);
+  const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string } | null>(null);
+  const { data: agencyRefs } = useAgencyReferences();
+  const { data: clientRefs } = useClientReferences(clientId);
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [showCanvas, setShowCanvas] = useState<boolean>(() => {
@@ -847,8 +850,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         userText: (() => {
           const mentioned = extractAgentMentions(text, clientAgents as any);
           const agentBlock = mentioned.length ? buildAgentContextBlock(mentioned) : "";
-          const refBlock = buildReferenceContextBlock(videoRefs);
-          return agentBlock + refBlock + text;
+          const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
+          return masterBlock + agentBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
@@ -1451,11 +1454,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
-                <AIStudioReferencePicker
-                  clientId={clientId}
-                  selected={videoRefs}
-                  onChange={setVideoRefs}
-                />
                 <button
                   type="button"
                   onClick={() => setAgentMode(v => !v)}
