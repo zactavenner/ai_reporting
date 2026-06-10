@@ -76,6 +76,7 @@ import { AdminAdsManagerTab } from '@/components/ads-manager/AdminAdsManagerTab'
 import { AdminOffersTab } from '@/components/offers/AdminOffersTab';
 import { QuizBuilderTab } from '@/components/quiz/QuizBuilderTab';
 import { AgentsTab } from '@/components/agents/AgentsTab';
+import { AgentsOverview } from '@/components/agents/AgentsOverview';
 import { AvatarAdProvider } from '@/context/AvatarAdContext';
 import { AvatarAdWizard } from '@/components/avatar-ad/AvatarAdWizard';
 
@@ -663,7 +664,7 @@ const Index = () => {
             {/* Agents */}
             {activeTab === 'agents' && (
               <SectionErrorBoundary sectionName="Agents">
-                <AgentsTab clients={clients} />
+                <AgentsOverview clients={clients} />
               </SectionErrorBoundary>
             )}
 
