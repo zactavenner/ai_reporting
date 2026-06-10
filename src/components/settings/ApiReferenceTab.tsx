@@ -647,9 +647,14 @@ export function ApiReferenceTab() {
     lines.push(`Auth Header: Authorization: Bearer ${hermesApiKey || '<HERMES_API_KEY — generate in Agency Settings → Hermes Integration>'}`);
     lines.push(`Content-Type: application/json`);
     if (hermesCallbackUrl) lines.push(`Default Callback URL: ${hermesCallbackUrl}`);
-    lines.push('Endpoints (POST {Base URL}/{action}): ping, list_clients, create_task, complete_task, post_message, get_task, list_tasks');
+    lines.push('Endpoints (POST {Base URL}/{action}):');
+    lines.push('  • Core: ping, list_clients, post_message');
+    lines.push('  • Tasks: create_task, get_task, list_tasks, update_task, cancel_task, assign_task, complete_task');
+    lines.push('  • Agents: list_agents, get_agent, create_agent, update_agent, delete_agent, toggle_agent');
+    lines.push('  • Generation: generate_copy, generate_video, generate_image, generate_static_ad, generate_brief');
     lines.push('Task types auto-route by agent_type: video → video/creative/content, static_ad → image/creative/static_ad, copy → copy/content/writing, research → research/analyst.');
     lines.push('complete_task is idempotent (delivered_at row-lock). Video tasks auto-complete via the platform.');
+    lines.push('Generation actions create a hermes_task, invoke the matching internal pipeline (generate-asset / generate-video-from-image / generate-static-ad / generate-brief), upload assets, and POST a task.completed callback automatically.');
     lines.push('If callback_url is omitted in create_task, the default from Agency Settings is used.');
     lines.push('');
 
