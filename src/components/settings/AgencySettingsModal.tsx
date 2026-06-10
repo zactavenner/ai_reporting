@@ -175,7 +175,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         </DialogHeader>
 
         <Tabs defaultValue="team" className="mt-4">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="team" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Team
@@ -195,10 +195,6 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
             <TabsTrigger value="integrations" className="flex items-center gap-2">
               <Video className="h-4 w-4" />
               Integrations
-            </TabsTrigger>
-            <TabsTrigger value="hermes" className="flex items-center gap-2">
-              <Bot className="h-4 w-4" />
-              Hermes
             </TabsTrigger>
             <TabsTrigger value="api-reference" className="flex items-center gap-2">
               <Code2 className="h-4 w-4" />
@@ -732,10 +728,6 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
 
           <TabsContent value="api-reference" className="mt-4">
             <ApiReferenceTab />
-          </TabsContent>
-
-          <TabsContent value="hermes" className="mt-4">
-            <HermesIntegrationTab />
           </TabsContent>
         </Tabs>
 
