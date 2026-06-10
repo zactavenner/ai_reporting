@@ -1515,7 +1515,7 @@ Deno.serve(async (req) => {
         .from("ai_studio_conversations")
         .select("*")
         .eq("id", requestedConversationId)
-        .eq("user_id", userId)
+        .or(`user_id.eq.${userId},and(is_shared.eq.true,kind.eq.hermes)`)
         .maybeSingle();
       convo = data;
     } else {
@@ -1546,16 +1546,29 @@ Deno.serve(async (req) => {
   }
 
   if (action === "list_threads") {
-    const { data: threads } = await supa
+    const { data: ownThreads } = await supa
       .from("ai_studio_conversations")
-      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind")
       .eq("client_id", clientId)
       .eq("user_id", userId)
       .is("archived_at", null)
       .order("pinned", { ascending: false })
       .order("last_active_at", { ascending: false })
       .limit(100);
-    return new Response(JSON.stringify({ threads: threads || [] }), {
+    // Also include the shared Hermes channel for this client so every team member sees it.
+    const { data: sharedThreads } = await supa
+      .from("ai_studio_conversations")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind")
+      .eq("client_id", clientId)
+      .eq("is_shared", true)
+      .eq("kind", "hermes")
+      .is("archived_at", null);
+    const seen = new Set((ownThreads || []).map((t: any) => t.id));
+    const merged = [
+      ...(ownThreads || []),
+      ...((sharedThreads || []) as any[]).filter((t) => !seen.has(t.id)),
+    ];
+    return new Response(JSON.stringify({ threads: merged }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
