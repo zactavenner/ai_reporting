@@ -975,6 +975,65 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   function stop() { abortRef.current?.abort(); }
 
   const startRecording = useCallback(async () => {
+    // Prefer the native Web Speech API for live, in-input transcription.
+    const SR: any =
+      (typeof window !== "undefined" &&
+        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
+      null;
+    if (SR) {
+      try {
+        // Surface a clear permission state before starting.
+        if (navigator.mediaDevices?.getUserMedia) {
+          await navigator.mediaDevices.getUserMedia({ audio: true }).then((s) =>
+            s.getTracks().forEach((t) => t.stop()),
+          );
+        }
+        const rec = new SR();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = (navigator.language || "en-US");
+        speechBaseInputRef.current = input;
+        let finalText = "";
+        rec.onresult = (event: any) => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const r = event.results[i];
+            if (r.isFinal) finalText += r[0].transcript;
+            else interim += r[0].transcript;
+          }
+          setInterimTranscript(interim);
+          const base = speechBaseInputRef.current;
+          const combined =
+            (base ? base + (base.endsWith(" ") ? "" : " ") : "") +
+            (finalText + (interim ? (finalText.endsWith(" ") || !finalText ? "" : " ") + interim : ""));
+          setInput(combined);
+        };
+        rec.onerror = (e: any) => {
+          if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
+            toast.error("Microphone blocked. Enable it in browser settings.");
+          } else if (e?.error && e.error !== "no-speech" && e.error !== "aborted") {
+            toast.error(`Voice error: ${e.error}`);
+          }
+        };
+        rec.onend = () => {
+          setIsRecording(false);
+          setInterimTranscript("");
+          // Commit any final text into the input — leaves the user to hit Send.
+          if (finalText.trim()) {
+            const base = speechBaseInputRef.current;
+            const merged = (base ? base + (base.endsWith(" ") ? "" : " ") : "") + finalText.trim();
+            setInput(merged);
+          }
+        };
+        speechRecRef.current = rec;
+        rec.start();
+        setIsRecording(true);
+        return;
+      } catch (e: any) {
+        console.warn("SpeechRecognition failed, falling back to MediaRecorder:", e);
+        // fall through to MediaRecorder
+      }
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recStreamRef.current = stream;
@@ -1005,8 +1064,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       mr.start();
       setIsRecording(true);
     } catch (e: any) { toast.error(e?.message || "Mic permission denied"); }
+  }, [input]);
+  const stopRecording = useCallback(() => {
+    try { speechRecRef.current?.stop(); } catch {}
+    speechRecRef.current = null;
+    try { mediaRecRef.current?.stop(); } catch {}
+    setIsRecording(false);
+    setInterimTranscript("");
   }, []);
-  const stopRecording = useCallback(() => { try { mediaRecRef.current?.stop(); } catch {} setIsRecording(false); }, []);
 
   async function clearConversation() {
     if (!conversationId) { setMessages([]); setCanvas([]); return; }
