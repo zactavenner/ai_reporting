@@ -643,7 +643,11 @@ export function ApiReferenceTab() {
 
     lines.push('## Hermes Orchestrator Notes');
     lines.push(`Base URL: ${HERMES_ENDPOINT}`);
-    lines.push('Auth: Authorization: Bearer <HERMES_API_KEY> (generated in Agency Settings → Hermes Integration)');
+    lines.push(`Status: ${hermesEnabled ? 'ACTIVE' : 'DISABLED (toggle on in Agency Settings → Hermes Integration)'}`);
+    lines.push(`Auth Header: Authorization: Bearer ${hermesApiKey || '<HERMES_API_KEY — generate in Agency Settings → Hermes Integration>'}`);
+    lines.push(`Content-Type: application/json`);
+    if (hermesCallbackUrl) lines.push(`Default Callback URL: ${hermesCallbackUrl}`);
+    lines.push('Endpoints (POST {Base URL}/{action}): ping, list_clients, create_task, complete_task, post_message, get_task, list_tasks');
     lines.push('Task types auto-route by agent_type: video → video/creative/content, static_ad → image/creative/static_ad, copy → copy/content/writing, research → research/analyst.');
     lines.push('complete_task is idempotent (delivered_at row-lock). Video tasks auto-complete via the platform.');
     lines.push('If callback_url is omitted in create_task, the default from Agency Settings is used.');
