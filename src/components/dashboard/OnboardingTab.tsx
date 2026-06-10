@@ -341,7 +341,7 @@ export function OnboardingTab() {
     setLaunchingPipeline(clientId);
     try {
       const { data, error } = await supabase.functions.invoke('fulfill-client', {
-        body: { password: 'HPA1234$', client_id: clientId, offer_id: offerId || null },
+        body: { password: 'hpa1234', client_id: clientId, offer_id: offerId || null },
       });
       if (error) throw error;
       toast.success(`Pipeline launched! Run ID: ${data?.run_id?.slice(0, 8)}`);
