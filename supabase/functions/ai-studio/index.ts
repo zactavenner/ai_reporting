@@ -1451,7 +1451,7 @@ Deno.serve(async (req) => {
   }
 
   const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
-    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item";
+    action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
@@ -1471,6 +1471,7 @@ Deno.serve(async (req) => {
     canvasItemKind?: string;
     canvasItemPayload?: any;
   };
+  const creativeRows: any[] | undefined = (body as any).creativeRows;
 
   const selectedImageModels = Array.isArray(imageModels)
     ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
@@ -1515,7 +1516,7 @@ Deno.serve(async (req) => {
         .from("ai_studio_conversations")
         .select("*")
         .eq("id", requestedConversationId)
-        .eq("user_id", userId)
+        .or(`user_id.eq.${userId},and(is_shared.eq.true,kind.eq.hermes)`)
         .maybeSingle();
       convo = data;
     } else {
@@ -1546,16 +1547,29 @@ Deno.serve(async (req) => {
   }
 
   if (action === "list_threads") {
-    const { data: threads } = await supa
+    const { data: ownThreads } = await supa
       .from("ai_studio_conversations")
-      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind")
       .eq("client_id", clientId)
       .eq("user_id", userId)
       .is("archived_at", null)
       .order("pinned", { ascending: false })
       .order("last_active_at", { ascending: false })
       .limit(100);
-    return new Response(JSON.stringify({ threads: threads || [] }), {
+    // Also include the shared Hermes channel for this client so every team member sees it.
+    const { data: sharedThreads } = await supa
+      .from("ai_studio_conversations")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind")
+      .eq("client_id", clientId)
+      .eq("is_shared", true)
+      .eq("kind", "hermes")
+      .is("archived_at", null);
+    const seen = new Set((ownThreads || []).map((t: any) => t.id));
+    const merged = [
+      ...(ownThreads || []),
+      ...((sharedThreads || []) as any[]).filter((t) => !seen.has(t.id)),
+    ];
+    return new Response(JSON.stringify({ threads: merged }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -1636,6 +1650,35 @@ Deno.serve(async (req) => {
       });
     }
     return new Response(JSON.stringify({ item }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (action === "send_to_creatives") {
+    if (!Array.isArray(creativeRows) || creativeRows.length === 0) {
+      return new Response(JSON.stringify({ error: "creativeRows[] required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Force client_id to the authenticated client scope and stamp source.
+    const rows = creativeRows.map((r: any) => ({
+      client_id: clientId,
+      title: String(r?.title || "AI Studio asset").slice(0, 200),
+      type: r?.type === "video" ? "video" : "image",
+      platform: r?.platform || "meta",
+      file_url: r?.file_url || null,
+      status: "draft",
+      aspect_ratio: r?.aspect_ratio || null,
+      comments: [],
+      source: "ai_studio_canvas",
+    }));
+    const { error, data } = await supa.from("creatives").insert(rows).select("id");
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ ok: true, count: data?.length ?? rows.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
