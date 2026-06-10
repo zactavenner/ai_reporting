@@ -1564,6 +1564,44 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
+  if (action === "add_canvas_item" && requestedConversationId) {
+    if (!canvasItemKind || !canvasItemPayload) {
+      return new Response(JSON.stringify({ error: "canvasItemKind and canvasItemPayload are required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Verify the conversation belongs to this user before writing.
+    const { data: convo } = await supa
+      .from("ai_studio_conversations")
+      .select("id, user_id")
+      .eq("id", requestedConversationId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!convo) {
+      return new Response(JSON.stringify({ error: "Conversation not found" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: item, error } = await supa
+      .from("ai_studio_canvas_items")
+      .insert({
+        conversation_id: requestedConversationId,
+        user_id: userId,
+        kind: canvasItemKind,
+        payload: canvasItemPayload,
+      })
+      .select("id, kind, payload, created_at")
+      .single();
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ item }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (action === "settings" && requestedConversationId) {
     const settingsUpdate: Record<string, any> = { doc_url: docUrl || null, sheet_url: sheetUrl || null, image_quality: quality };
     if (typeof chatModel === "string" || chatModel === null) settingsUpdate.chat_model = chatModel || null;
