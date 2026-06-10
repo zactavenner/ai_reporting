@@ -1689,6 +1689,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       </Card>
       )}
       </div>
+      {editVideo && (
+        <VideoEditDialog
+          open={!!editVideo}
+          onOpenChange={(o) => !o && setEditVideo(null)}
+          clientId={clientId}
+          videoUrl={editVideo.url}
+          fallbackVideo={{ prompt: editVideo.prompt, aspect_ratio: editVideo.aspect_ratio }}
+        />
+      )}
     </div>
   );
 }
