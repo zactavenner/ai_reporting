@@ -6,6 +6,8 @@ import { Bot, MessageSquare, Image as ImageIcon, FileText, DollarSign, Network, 
 import type { Client } from "@/hooks/useClients";
 import { useAgents } from "@/hooks/useAgents";
 import { formatDistanceToNow } from "date-fns";
+import { AIStudioReferenceLibrary } from "@/components/ai/AIStudioReferenceLibrary";
+import { useState } from "react";
 
 interface Props { clients: Client[]; }
 
@@ -14,6 +16,8 @@ const COST_PER_1K_TOKENS = 0.002;
 
 export function AgentsOverview({ clients }: Props) {
   const { data: agents = [] } = useAgents();
+  const [activeRefImages, setActiveRefImages] = useState<string[]>([]);
+  const [activeRefVideos, setActiveRefVideos] = useState<string[]>([]);
 
   const { data: hermesTasks = [] } = useQuery({
     queryKey: ["agents-overview", "hermes_tasks"],
@@ -191,6 +195,30 @@ export function AgentsOverview({ clients }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Global Reference Library — drives quality of creatives, videos & scripts */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ImageIcon className="h-4 w-4" /> Agent Reference Library
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Upload reference images and videos the agents will use as visual inspiration when generating
+            creatives, reels and scripts. Uploads here are <strong>global</strong> — available to every client.
+            Tag with <code className="text-[10px]">industry:capital-raising</code>, <code className="text-[10px]">hook:scarcity</code>,
+            etc. so the right ones get pulled per brief.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <AIStudioReferenceLibrary
+            activeIds={activeRefImages}
+            onToggle={setActiveRefImages}
+            activeVideoIds={activeRefVideos}
+            onToggleVideo={setActiveRefVideos}
+            clientId="00000000-0000-0000-0000-000000000000"
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
