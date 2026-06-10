@@ -4,6 +4,14 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   const KEY = Deno.env.get('OPENROUTER_API_KEY');
   if (!KEY) return new Response(JSON.stringify({ ok: false, error: 'no key' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const url = new URL(req.url);
+  const pollUrl = url.searchParams.get('poll');
+  if (pollUrl) {
+    const p = await fetch(pollUrl, { headers: { Authorization: `Bearer ${KEY}` } });
+    const pj = await p.json();
+    const urls = pj?.unsigned_urls || pj?.urls || (pj?.video?.url ? [pj.video.url] : []);
+    return new Response(JSON.stringify({ status: pj?.status, error: pj?.error, videoUrl: urls[0] || null, raw: pj }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
   const body = {
     model: 'bytedance/seedance-2.0-fast',
     prompt: 'Cinematic drone shot of a modern downtown skyline at golden hour, slow push in, soft glow',
@@ -27,14 +35,6 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: false, stage: 'submit', status: submit.status, body: submitText.slice(0, 800) }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   const sj = JSON.parse(submitText);
-  const url = new URL(req.url);
-  if (url.searchParams.get('poll')) {
-    const pollingUrl = url.searchParams.get('poll')!;
-    const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${KEY}` } });
-    const pj = await p.json();
-    const urls = pj?.unsigned_urls || pj?.urls || (pj?.video?.url ? [pj.video.url] : []);
-    return new Response(JSON.stringify({ status: pj?.status, error: pj?.error, videoUrl: urls[0] || null, raw: pj }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
   return new Response(JSON.stringify({
     ok: true,
     elapsed_s: (Date.now() - t0) / 1000,
