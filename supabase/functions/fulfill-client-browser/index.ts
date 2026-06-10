@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const PASSWORD = 'hpa1234';
+const PASSWORD = 'HPA1234$';
 
 function getCloudUrl() { return Deno.env.get('SUPABASE_URL')!; }
 function getCloudKey() { return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!; }

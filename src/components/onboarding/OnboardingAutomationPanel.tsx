@@ -105,7 +105,7 @@ export function OnboardingAutomationPanel({ clientId, clientName, primaryOffer, 
       setStatusText('Generating copy, ads, avatar, VSL…');
       const { data, error } = await supabase.functions.invoke('auto-generate-onboarding', {
         body: {
-          password: 'hpa1234',
+          password: 'HPA1234$',
           client_id: clientId,
           offer_id: primaryOffer.id,
           offer_description: primaryOffer.description,
