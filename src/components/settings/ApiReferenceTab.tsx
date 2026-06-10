@@ -501,7 +501,19 @@ function ApiCallCard({ call }: { call: ApiCall }) {
           <span className="text-xs text-muted-foreground ml-2">{call.description}</span>
         </div>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pl-9 pr-3 pb-2">
+      <CollapsibleContent className="pl-9 pr-3 pb-2 space-y-2">
+        {call.endpoint && (
+          <div className="text-[11px] font-mono bg-muted/50 border border-border rounded px-2 py-1 break-all">
+            POST {call.endpoint}
+          </div>
+        )}
+        {call.headers && (
+          <div className="text-[11px] font-mono bg-muted/50 border border-border rounded px-2 py-1 space-y-0.5">
+            {Object.entries(call.headers).map(([k, v]) => (
+              <div key={k}><span className="text-muted-foreground">{k}:</span> {v}</div>
+            ))}
+          </div>
+        )}
         <CopyBlock json={call.body} />
       </CollapsibleContent>
     </Collapsible>
