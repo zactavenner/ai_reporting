@@ -588,6 +588,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const speechRecRef = useRef<any>(null);
+  const speechBaseInputRef = useRef<string>("");
   const [threads, setThreads] = useState<Thread[]>([]);
   const [showThreads, setShowThreads] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:show-threads") !== "false"; } catch { return true; }
