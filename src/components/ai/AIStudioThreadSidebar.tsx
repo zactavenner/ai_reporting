@@ -11,6 +11,7 @@ export type Thread = {
   pinned: boolean;
   last_active_at: string;
   chat_model?: string | null;
+  last_actor_name?: string | null;
 };
 
 interface Props {
@@ -74,7 +75,14 @@ export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRe
           </>
         ) : (
           <>
-            <span className="flex-1 truncate">{t.title || "Untitled"}</span>
+            <div className="flex-1 min-w-0">
+              <div className="truncate">{t.title || "Untitled"}</div>
+              {t.last_actor_name && (
+                <div className="truncate text-[9px] text-muted-foreground/70 leading-tight">
+                  last by {t.last_actor_name}
+                </div>
+              )}
+            </div>
             <div className="hidden group-hover:flex items-center gap-0.5">
               <button title="Rename" onClick={(e) => { e.stopPropagation(); startEdit(t); }} className="p-0.5 hover:text-foreground"><Pencil className="h-3 w-3" /></button>
               <button title={t.pinned ? "Unpin" : "Pin"} onClick={(e) => { e.stopPropagation(); onPin(t.id, !t.pinned); }} className="p-0.5 hover:text-foreground">

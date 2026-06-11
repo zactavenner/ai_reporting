@@ -1451,6 +1451,10 @@ Deno.serve(async (req) => {
     });
   }
 
+  // The agency_member id of the person taking this action, when signed in
+  // via dashboard token. Used to attribute writes across the shared team.
+  const actorMemberId: string | null = dashboardMemberId || null;
+
   const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
@@ -1517,7 +1521,6 @@ Deno.serve(async (req) => {
         .from("ai_studio_conversations")
         .select("*")
         .eq("id", requestedConversationId)
-        .or(`user_id.eq.${userId},and(is_shared.eq.true,kind.eq.hermes)`)
         .maybeSingle();
       convo = data;
     } else {
@@ -1525,7 +1528,6 @@ Deno.serve(async (req) => {
         .from("ai_studio_conversations")
         .select("*")
         .eq("client_id", clientId)
-        .eq("user_id", userId)
         .is("archived_at", null)
         .order("last_active_at", { ascending: false })
         .limit(1)
@@ -1539,38 +1541,52 @@ Deno.serve(async (req) => {
     }
     const sinceClause = convo.cleared_at || "1970-01-01T00:00:00Z";
     const [{ data: messages }, { data: canvasItems }] = await Promise.all([
-      supa.from("ai_studio_messages").select("id, role, content, tools, created_at").eq("conversation_id", convo.id).gte("created_at", sinceClause).order("created_at", { ascending: true }).limit(200),
-      supa.from("ai_studio_canvas_items").select("id, kind, payload, created_at").eq("conversation_id", convo.id).gte("created_at", sinceClause).order("created_at", { ascending: false }).limit(50),
+      supa.from("ai_studio_messages").select("id, role, content, tools, created_at, actor_member_id").eq("conversation_id", convo.id).gte("created_at", sinceClause).order("created_at", { ascending: true }).limit(200),
+      supa.from("ai_studio_canvas_items").select("id, kind, payload, created_at, actor_member_id").eq("conversation_id", convo.id).gte("created_at", sinceClause).order("created_at", { ascending: false }).limit(50),
     ]);
-    return new Response(JSON.stringify({ conversation: convo, messages: messages || [], canvasItems: canvasItems || [] }), {
+    // Resolve member names for attribution
+    const memberIds = new Set<string>();
+    if (convo.last_actor_member_id) memberIds.add(convo.last_actor_member_id);
+    for (const m of messages || []) if (m.actor_member_id) memberIds.add(m.actor_member_id);
+    for (const c of canvasItems || []) if (c.actor_member_id) memberIds.add(c.actor_member_id);
+    let memberMap: Record<string, { name: string; email: string }> = {};
+    if (memberIds.size) {
+      const { data: members } = await supa
+        .from("agency_members")
+        .select("id, name, email")
+        .in("id", Array.from(memberIds));
+      memberMap = Object.fromEntries((members || []).map((m: any) => [m.id, { name: m.name, email: m.email }]));
+    }
+    return new Response(JSON.stringify({ conversation: convo, messages: messages || [], canvasItems: canvasItems || [], members: memberMap }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   if (action === "list_threads") {
-    const { data: ownThreads } = await supa
+    const { data: clientThreads } = await supa
       .from("ai_studio_conversations")
-      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind, last_actor_member_id")
       .eq("client_id", clientId)
-      .eq("user_id", userId)
       .is("archived_at", null)
       .order("pinned", { ascending: false })
       .order("last_active_at", { ascending: false })
-      .limit(100);
-    // Also include the shared Hermes channel for this client so every team member sees it.
-    const { data: sharedThreads } = await supa
-      .from("ai_studio_conversations")
-      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind")
-      .eq("client_id", clientId)
-      .eq("is_shared", true)
-      .eq("kind", "hermes")
-      .is("archived_at", null);
-    const seen = new Set((ownThreads || []).map((t: any) => t.id));
-    const merged = [
-      ...(ownThreads || []),
-      ...((sharedThreads || []) as any[]).filter((t) => !seen.has(t.id)),
-    ];
-    return new Response(JSON.stringify({ threads: merged }), {
+      .limit(200);
+    const memberIds = Array.from(new Set((clientThreads || [])
+      .map((t: any) => t.last_actor_member_id)
+      .filter(Boolean)));
+    let memberMap: Record<string, { name: string; email: string }> = {};
+    if (memberIds.length) {
+      const { data: members } = await supa
+        .from("agency_members")
+        .select("id, name, email")
+        .in("id", memberIds);
+      memberMap = Object.fromEntries((members || []).map((m: any) => [m.id, { name: m.name, email: m.email }]));
+    }
+    const enriched = (clientThreads || []).map((t: any) => ({
+      ...t,
+      last_actor_name: t.last_actor_member_id ? (memberMap[t.last_actor_member_id]?.name || null) : null,
+    }));
+    return new Response(JSON.stringify({ threads: enriched, members: memberMap }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -1585,6 +1601,7 @@ Deno.serve(async (req) => {
         image_quality: quality,
         chat_model: typeof chatModel === "string" ? chatModel : null,
         last_active_at: new Date().toISOString(),
+        last_actor_member_id: actorMemberId,
       })
       .select("*")
       .single();
@@ -1608,12 +1625,15 @@ Deno.serve(async (req) => {
     if (Object.keys(upd).length === 0) {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    await supa.from("ai_studio_conversations").update(upd).eq("id", requestedConversationId).eq("user_id", userId);
+    upd.last_actor_member_id = actorMemberId;
+    await supa.from("ai_studio_conversations").update(upd).eq("id", requestedConversationId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   if (action === "clear" && requestedConversationId) {
-    await supa.from("ai_studio_conversations").update({ cleared_at: new Date().toISOString() }).eq("id", requestedConversationId).eq("user_id", userId);
+    await supa.from("ai_studio_conversations")
+      .update({ cleared_at: new Date().toISOString(), last_actor_member_id: actorMemberId })
+      .eq("id", requestedConversationId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
@@ -1623,12 +1643,10 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    // Verify the conversation belongs to this user before writing.
     const { data: convo } = await supa
       .from("ai_studio_conversations")
-      .select("id, user_id")
+      .select("id")
       .eq("id", requestedConversationId)
-      .eq("user_id", userId)
       .maybeSingle();
     if (!convo) {
       return new Response(JSON.stringify({ error: "Conversation not found" }), {
@@ -1642,6 +1660,7 @@ Deno.serve(async (req) => {
         user_id: userId,
         kind: canvasItemKind,
         payload: canvasItemPayload,
+        actor_member_id: actorMemberId,
       })
       .select("id, kind, payload, created_at")
       .single();
@@ -1697,7 +1716,8 @@ Deno.serve(async (req) => {
     if (typeof focusedCanvasItemId === "string" || focusedCanvasItemId === null) {
       settingsUpdate.focused_canvas_item_id = focusedCanvasItemId || null;
     }
-    await supa.from("ai_studio_conversations").update(settingsUpdate).eq("id", requestedConversationId).eq("user_id", userId);
+    settingsUpdate.last_actor_member_id = actorMemberId;
+    await supa.from("ai_studio_conversations").update(settingsUpdate).eq("id", requestedConversationId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
@@ -1774,6 +1794,7 @@ Deno.serve(async (req) => {
     image_quality: quality,
     last_active_at: new Date().toISOString(),
     cleared_at: null,
+    last_actor_member_id: actorMemberId,
   };
   if (typeof chatModel === "string") baseUpdate.chat_model = chatModel;
   if (Array.isArray(activeReferenceIds)) baseUpdate.active_reference_ids = activeReferenceIds;
@@ -1785,7 +1806,6 @@ Deno.serve(async (req) => {
       .from("ai_studio_conversations")
       .update(baseUpdate)
       .eq("id", requestedConversationId)
-      .eq("user_id", userId)
       .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .maybeSingle();
     convoRow = data;
@@ -1796,7 +1816,6 @@ Deno.serve(async (req) => {
       .from("ai_studio_conversations")
       .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .eq("client_id", clientId)
-      .eq("user_id", userId)
       .is("archived_at", null)
       .order("last_active_at", { ascending: false })
       .limit(1)
@@ -1810,6 +1829,7 @@ Deno.serve(async (req) => {
         client_id: clientId,
         title: userText.slice(0, 60),
         ...baseUpdate,
+        last_actor_member_id: actorMemberId,
       };
       const { data: created } = await supa
         .from("ai_studio_conversations")
@@ -1902,6 +1922,7 @@ Deno.serve(async (req) => {
     user_id: userId,
     role: "user",
     content: persistedUserText,
+    actor_member_id: actorMemberId,
   });
 
   // Brand context
@@ -2691,6 +2712,7 @@ Deno.serve(async (req) => {
             role: "assistant",
             content: cleaned,
             tools: finalToolEvents,
+            actor_member_id: actorMemberId,
           });
         } catch (e) { console.error("persist assistant", e); }
         // Suggested follow-ups — quick lightweight call

@@ -33,7 +33,7 @@ interface Props {
   clientName: string;
 }
 
-type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
 type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean };
@@ -104,10 +104,13 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
   const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   if (m.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-0.5">
         <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2 text-sm whitespace-pre-wrap text-foreground">
           {m.content}
         </div>
+        {m.actorName && (
+          <div className="text-[10px] text-muted-foreground/70 pr-1">— {m.actorName}</div>
+        )}
       </div>
     );
   }
@@ -705,7 +708,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       }
       const res = await studioFetch({ action: "history", clientId, conversationId: threadId || undefined });
       if (!res.ok) throw new Error(await res.text().catch(() => "Failed to load AI Studio history"));
-      const { conversation: convo, messages: msgs = [], canvasItems: items = [] } = await res.json();
+      const { conversation: convo, messages: msgs = [], canvasItems: items = [], members = {} } = await res.json();
 
       if (convo) {
         setConversationId(convo.id);
@@ -726,6 +729,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           role: m.role as "user" | "assistant",
           content: m.content || "",
           tools: Array.isArray(m.tools) ? m.tools : [],
+          actorName: m.actor_member_id ? (members?.[m.actor_member_id]?.name || null) : null,
         })));
         setCanvas((items || []) as CanvasItem[]);
       } else {
@@ -875,7 +879,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     const userContent = attSnapshot.length
       ? text + "\n\n" + attSnapshot.map(a => `📎 ${a.name}`).join("\n")
       : text;
-    const userMsg: Msg = { role: "user", content: userContent };
+    const optimisticActorName =
+      (typeof window !== "undefined" && localStorage.getItem("team_member_name")) || null;
+    const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName };
     const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
