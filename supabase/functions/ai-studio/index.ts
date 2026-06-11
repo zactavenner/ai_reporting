@@ -1250,7 +1250,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality, 720p max). Default false." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "moonshotai/kling-v2.1", "moonshotai/kling-v2.1-pro"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "moonshotai/kling-v2.1", "moonshotai/kling-v2.1-pro", "google/veo-3.1-fast"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
