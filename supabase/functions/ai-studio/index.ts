@@ -1408,6 +1408,39 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
     : (ctx.videoModel
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
+  // Per-model duration caps + automatic multi-clip splitting
+  (() => {
+    const ids = (ctx.videoModels && ctx.videoModels.length ? ctx.videoModels : (ctx.videoModel ? [ctx.videoModel] : []))
+      .filter((m) => VIDEO_MODEL_CAPS[m]);
+    if (!ids.length) return null;
+    const lines = ids.map((m) => `  • ${VIDEO_MODEL_CAPS[m].label}`).join("\n");
+    return [
+      "VIDEO MODEL CAPABILITIES (CRITICAL — respect per-clip duration limits):",
+      lines,
+      "- When the requested total video length EXCEEDS the chosen model's per-clip max, you MUST split the script into MULTIPLE generate_seedance_video tool_calls in the SAME assistant turn (parallel). Example: a 30s script on Seedance (15s max) → 2 calls of 15s each; a 24s script on Veo 3.1 Fast (8s max) → 3 calls of 8s each.",
+      "- For each split clip, assign the matching segment of the script to the prompt (Clip 1 = first segment, Clip 2 = next segment, …) and keep aspect_ratio/resolution identical across clips.",
+      "- If an avatar is selected (see AVATAR CONTEXT below), pass the SAME avatar image_url on every clip so the same face carries across all segments.",
+    ].join("\n");
+  })(),
+  // Avatar selection (chat-side ingredient for video ads)
+  ctx.avatar
+    ? [
+        "AVATAR CONTEXT (the user picked an avatar to feature in any generated video):",
+        `- id: ${ctx.avatar.id}`,
+        `- name: ${ctx.avatar.name}`,
+        `- image_url: ${ctx.avatar.image_url}`,
+        ctx.avatar.gender ? `- gender: ${ctx.avatar.gender}` : "",
+        ctx.avatar.age_range ? `- age: ${ctx.avatar.age_range}` : "",
+        ctx.avatar.ethnicity ? `- ethnicity: ${ctx.avatar.ethnicity}` : "",
+        ctx.avatar.description ? `- notes: ${ctx.avatar.description}` : "",
+        ctx.avatar.elevenlabs_voice_id ? `- voice_id: ${ctx.avatar.elevenlabs_voice_id}` : "",
+        "RULES:",
+        "- For ANY video the user asks for (single-clip or multi-clip), pass image_url = the avatar image_url to generate_seedance_video so the avatar is preserved across frames. The user does NOT need to re-state the avatar in their message.",
+        "- If the script is longer than the model's per-clip max, split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url so the avatar's face and outfit stay consistent across segments.",
+        "- In the video prompt, briefly describe the avatar performing the scripted action (e.g. 'Sarah, 28, casual blazer, smiling to camera, holding phone vertically — speaks the hook directly into the lens'). Don't change the avatar's identity, ethnicity, or core look.",
+        "- The user can override the avatar for a specific request by saying 'no avatar' or supplying a different image — respect that.",
+      ].filter(Boolean).join("\n")
+    : null,
   ctx.adFormat && AD_FORMAT_RULES[ctx.adFormat] ? AD_FORMAT_RULES[ctx.adFormat] : null,
   ctx.hookFramework && HOOK_FRAMEWORK_RULES[ctx.hookFramework] ? HOOK_FRAMEWORK_RULES[ctx.hookFramework] : null,
   ctx.burnCaptions
