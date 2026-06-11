@@ -1241,6 +1241,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Button>
           </div>
         </div>
+        <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear this AI Studio conversation?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Past messages and canvas items will be hidden from this thread. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={doClear}>Clear</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="flex items-center gap-1 px-3 py-1 border-b border-border/60 bg-muted/10">
           <button
