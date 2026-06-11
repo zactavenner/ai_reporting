@@ -1864,6 +1864,10 @@ Deno.serve(async (req) => {
       .from("ai_studio_reference_videos")
       .select("name, tags, video_url, aspect_ratio")
       .in("id", vidRefIds)
+      // CRITICAL: prevent cross-client contamination. A video reference is
+      // only allowed if it's global (client_id IS NULL) OR scoped to THIS
+      // client. Selections from other clients are silently dropped.
+      .or(`client_id.is.null,client_id.eq.${clientId || "00000000-0000-0000-0000-000000000000"}`)
       .limit(6);
     activeVideoRefs = (vrefs || []) as any[];
   }
