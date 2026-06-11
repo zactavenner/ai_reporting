@@ -518,6 +518,11 @@ export function HyperframesEditor({
                 </button>
               ))}
             </div>
+            {hasCaptionLayers(comp) && (
+              <Button size="sm" variant="ghost" onClick={clearCaptions} title="Clear captions" className="text-[11px]">
+                Clear
+              </Button>
+            )}
           </div>
         </div>
         {(captionBusy || captionError) && (
@@ -565,18 +570,6 @@ export function HyperframesEditor({
             ) : null}
           </div>
         )}
-        {/* spacer to preserve next sibling structure */}
-        <div className="hidden">
-          <div>
-            <div>
-            </div>
-            {hasCaptionLayers(comp) && (
-              <Button size="sm" variant="ghost" onClick={clearCaptions} title="Clear captions" className="text-[11px]">
-                Clear
-              </Button>
-            )}
-          </div>
-        </div>
 
         <div className="flex-1 flex items-center justify-center">
           <div className="w-full max-w-full" style={{ ...aspectStyle, maxHeight: "100%" }}>
