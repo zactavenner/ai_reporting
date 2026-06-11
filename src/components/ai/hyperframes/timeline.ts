@@ -45,6 +45,18 @@ export interface TextLayer extends BaseLayer {
   borderRadius?: number;
   align?: "left" | "center" | "right";
   maxWidthPct?: number; // 0..1 of canvas width
+  /** Outline stroke around the text (separate from bg). */
+  stroke?: string;
+  /** Stroke width in px at composition size. */
+  strokeWidth?: number;
+  /** Drop shadow color (rgba). */
+  shadowColor?: string;
+  /** Shadow blur radius in px. */
+  shadowBlur?: number;
+  /** Letter-spacing in px (canvas approx). */
+  letterSpacing?: number;
+  /** Uppercase rendering toggle. */
+  uppercase?: boolean;
 }
 
 export interface IconLayer extends BaseLayer {

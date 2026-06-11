@@ -239,7 +239,8 @@ function drawTextLayer(
   ctx.textBaseline = "top";
 
   const maxWidth = (layer.maxWidthPct ?? 0.9) * comp.width;
-  const lines = wrapText(ctx, layer.text, maxWidth);
+  const rawText = layer.uppercase ? layer.text.toUpperCase() : layer.text;
+  const lines = wrapText(ctx, rawText, maxWidth);
   const lineHeight = Math.round(fontSize * 1.15);
   const padding = layer.padding ?? Math.round(fontSize * 0.4);
   const align = layer.align ?? "center";
@@ -257,13 +258,39 @@ function drawTextLayer(
     ctx.fill();
   }
 
-  ctx.fillStyle = layer.color || "#fff";
+  const fillColor = layer.color || "#fff";
+  const strokeColor = layer.stroke;
+  const strokeWidth = layer.strokeWidth ?? 0;
+  const shadowColor = layer.shadowColor;
+  const shadowBlur = layer.shadowBlur ?? 0;
   lines.forEach((line, i) => {
     const w = widths[i];
     let tx = bx + padding;
     if (align === "center") tx = bx + (boxW - w) / 2;
     if (align === "right") tx = bx + boxW - padding - w;
-    ctx.fillText(line, tx, by + padding + i * lineHeight);
+    const ty = by + padding + i * lineHeight;
+    // shadow pass
+    if (shadowColor && shadowBlur > 0) {
+      ctx.save();
+      ctx.shadowColor = shadowColor;
+      ctx.shadowBlur = shadowBlur;
+      ctx.shadowOffsetY = Math.round(fontSize * 0.04);
+      ctx.fillStyle = fillColor;
+      ctx.fillText(line, tx, ty);
+      ctx.restore();
+    }
+    // stroke pass (drawn BEFORE fill so fill sits on top)
+    if (strokeColor && strokeWidth > 0) {
+      ctx.save();
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeText(line, tx, ty);
+      ctx.restore();
+    }
+    ctx.fillStyle = fillColor;
+    ctx.fillText(line, tx, ty);
   });
 }
 
