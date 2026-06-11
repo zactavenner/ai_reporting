@@ -39,6 +39,9 @@ import { ClientFulfillmentWorkspace } from '@/components/fulfillment/ClientFulfi
 import { PropertyManagerTab } from '@/components/properties/PropertyManagerTab';
 import { AttributionSettings } from '@/components/ads-manager/AttributionSettings';
 import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMappingSection';
+import { RevenueAttributionPanel } from '@/components/dashboard/RevenueAttributionPanel';
+import CustomerJourneyPanel from '@/components/dashboard/CustomerJourneyPanel';
+import { GoalTrackerWidget } from '@/components/dashboard/GoalTrackerWidget';
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
 import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { useClient } from '@/hooks/useClients';
@@ -281,6 +284,10 @@ export default function ClientDetail() {
               <Megaphone className="h-4 w-4" />
               Ads Manager
             </TabsTrigger>
+            <TabsTrigger value="attribution" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Attribution
+            </TabsTrigger>
             <TabsTrigger value="creatives" className="gap-2">
               <Palette className="h-4 w-4" />
               Creatives
@@ -337,6 +344,10 @@ export default function ClientDetail() {
                 </SectionErrorBoundary>
               </CollapsibleContent>
             </Collapsible>
+
+            <SectionErrorBoundary sectionName="KPI Goals">
+              <GoalTrackerWidget clientId={clientId} />
+            </SectionErrorBoundary>
 
             <SectionErrorBoundary sectionName="Performance Summary">
               <PeriodicStatsTable clientId={clientId} />
@@ -411,6 +422,21 @@ export default function ClientDetail() {
             <SectionErrorBoundary sectionName="Attribution Settings">
               <h2 className="text-lg font-bold mb-3">Attribution Settings</h2>
               <AttributionSettings clientId={client.id} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── ATTRIBUTION TAB ─── */}
+          <TabsContent value="attribution" className="space-y-6">
+            <SectionErrorBoundary sectionName="Revenue Attribution">
+              <RevenueAttributionPanel deals={[]} />
+            </SectionErrorBoundary>
+
+            <SectionErrorBoundary sectionName="Customer Journey">
+              <CustomerJourneyPanel leads={leads} clientId={clientId} />
+            </SectionErrorBoundary>
+
+            <SectionErrorBoundary sectionName="KPI Goals">
+              <GoalTrackerWidget clientId={clientId} />
             </SectionErrorBoundary>
           </TabsContent>
 
