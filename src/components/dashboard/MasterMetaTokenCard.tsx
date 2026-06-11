@@ -4,44 +4,74 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Key, Eye, EyeOff, Save, Shield, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Key, Eye, EyeOff, Save, Shield, AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+type Validation = {
+  ok: boolean;
+  token?: string;
+  expires_at?: string | null;
+  scopes?: string[];
+  ad_accounts?: { id: string; name: string; account_status: number }[];
+  user?: { id: string; name: string };
+  error?: string;
+};
 
 export function MasterMetaTokenCard() {
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [checkingCurrent, setCheckingCurrent] = useState(false);
+  const [result, setResult] = useState<Validation | null>(null);
+  const [currentStatus, setCurrentStatus] = useState<Validation | null>(null);
 
-  const handleSaveMasterToken = async () => {
-    if (!token.trim()) {
-      toast.error('Please enter a token');
-      return;
-    }
-    setSaving(true);
+  const runValidation = async (tok?: string): Promise<Validation | null> => {
     try {
-      // Update the META_SHARED_ACCESS_TOKEN secret via edge function
-      const { error } = await supabase.functions.invoke('test-integration-connection', {
-        body: { 
-          action: 'validate_meta_token',
-          token: token.trim()
-        }
+      const { data, error } = await supabase.functions.invoke('meta-token-refresh', {
+        body: { action: 'validate', token: tok },
       });
-      
-      // Even if validation isn't available, we store it — the token was already updated via secrets
-      // For now, just confirm to user
-      toast.success('Master Meta token updated. It will take effect on the next sync cycle.');
-      setToken('');
-    } catch (err) {
-      toast.error('Failed to validate token');
-    } finally {
-      setSaving(false);
+      if (error) throw error;
+      return data as Validation;
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Validation failed' };
     }
   };
 
-  // Current token expiry info — from Graph API Explorer tokens last ~60 days
-  const expiryDate = new Date();
-  expiryDate.setDate(expiryDate.getDate() + 60);
+  const handleValidate = async () => {
+    if (!token.trim()) {
+      toast.error('Paste a token first');
+      return;
+    }
+    setValidating(true);
+    setResult(null);
+    const v = await runValidation(token.trim());
+    setResult(v);
+    if (v?.ok) toast.success(`Token valid — ${v.ad_accounts?.length ?? 0} ad accounts accessible`);
+    else toast.error(v?.error || 'Token invalid');
+    setValidating(false);
+  };
+
+  const handleCheckCurrent = async () => {
+    setCheckingCurrent(true);
+    const v = await runValidation();
+    setCurrentStatus(v);
+    setCheckingCurrent(false);
+  };
+
+  const handleSave = async () => {
+    if (!result?.ok) {
+      toast.error('Validate the token first — only green tokens can be saved');
+      return;
+    }
+    // Saving the secret itself requires the secrets management flow.
+    // Surface clear instructions; the secret rotation is handled outside the app.
+    toast.info('Update META_SHARED_ACCESS_TOKEN in Project Secrets to roll it out to all syncs.');
+  };
+
+  const daysLeft = result?.expires_at
+    ? Math.ceil((new Date(result.expires_at).getTime() - Date.now()) / 86400000)
+    : null;
 
   return (
     <Card className="border-2 border-border">
