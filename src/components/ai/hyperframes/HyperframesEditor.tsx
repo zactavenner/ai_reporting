@@ -438,13 +438,14 @@ export function HyperframesEditor({
       await new Promise((r) => setTimeout(r, 100));
 
       const stream = (canvas as HTMLCanvasElement).captureStream(30);
-      // Mix in source audio if possible
+      // Mix in source audio (robust: tries captureStream → WebAudio fallback).
       try {
-        const v: any = video;
-        const vStream: MediaStream | undefined =
-          v.captureStream?.() || v.mozCaptureStream?.();
-        if (vStream) {
-          vStream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        video.muted = false;
+        video.volume = 1;
+        const audioTracks = captureVideoAudioTracks(video);
+        audioTracks.forEach((t) => stream.addTrack(t));
+        if (!audioTracks.length) {
+          toast.warning("Source audio couldn't be captured — exporting silent video.");
         }
       } catch {}
 
@@ -520,10 +521,10 @@ export function HyperframesEditor({
 
       const stream = (canvas as HTMLCanvasElement).captureStream(30);
       try {
-        const v: any = video;
-        const vStream: MediaStream | undefined =
-          v.captureStream?.() || v.mozCaptureStream?.();
-        if (vStream) vStream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        video.muted = false;
+        video.volume = 1;
+        const audioTracks = captureVideoAudioTracks(video);
+        audioTracks.forEach((t) => stream.addTrack(t));
       } catch {}
 
       const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
