@@ -253,7 +253,7 @@ function drawVideoLayer(
   layer: VideoLayer,
   v: HTMLVideoElement,
 ) {
-  if (!v.videoWidth) return;
+  if (!v.videoWidth || v.readyState < 2) return;
   const fit = layer.fit ?? "cover";
   const cw = comp.width;
   const ch = comp.height;
