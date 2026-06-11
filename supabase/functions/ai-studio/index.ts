@@ -2712,6 +2712,7 @@ Deno.serve(async (req) => {
             role: "assistant",
             content: cleaned,
             tools: finalToolEvents,
+            actor_member_id: actorMemberId,
           });
         } catch (e) { console.error("persist assistant", e); }
         // Suggested follow-ups — quick lightweight call
