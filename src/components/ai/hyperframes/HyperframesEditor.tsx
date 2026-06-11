@@ -36,6 +36,8 @@ import {
   applyCaptionPreset,
   hasCaptionLayers,
   stripCaptionLayers,
+  CAPTION_STYLES,
+  type CaptionStyle,
   type CaptionSegment,
 } from "./captionPresets";
 
@@ -82,13 +84,15 @@ export function HyperframesEditor({
   >([]);
   const [captionBusy, setCaptionBusy] = useState(false);
   const captionsRanRef = useRef(false);
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
+  const segmentsRef = useRef<CaptionSegment[]>([]);
 
   const [comp, setComp] = useState<HyperframesComposition>(() =>
     makeDefaultComposition(videoUrl, 8, aspectRatio),
   );
 
   // ---------- Captions ----------
-  const generateCaptions = async () => {
+  const generateCaptions = async (styleOverride?: CaptionStyle) => {
     setCaptionBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("transcribe-video", {
@@ -100,13 +104,24 @@ export function HyperframesEditor({
         toast.error("No speech detected");
         return;
       }
-      setComp((c) => applyCaptionPreset(c, segments, "viral-pop"));
+      segmentsRef.current = segments;
+      const style = styleOverride ?? captionStyle;
+      setComp((c) => applyCaptionPreset(c, segments, style));
       toast.success(`Generated ${segments.reduce((n, s) => n + (s.words?.length || s.text.split(/\s+/).length), 0)} caption words`);
     } catch (e: any) {
       toast.error(`Caption generation failed: ${e?.message || e}`);
     } finally {
       setCaptionBusy(false);
     }
+  };
+
+  const restyleCaptions = (style: CaptionStyle) => {
+    setCaptionStyle(style);
+    if (segmentsRef.current.length === 0) {
+      generateCaptions(style);
+      return;
+    }
+    setComp((c) => applyCaptionPreset(c, segmentsRef.current, style));
   };
 
   const clearCaptions = () => {
@@ -426,14 +441,31 @@ export function HyperframesEditor({
             <Button
               size="sm"
               variant={hasCaptionLayers(comp) ? "secondary" : "ghost"}
-              onClick={generateCaptions}
+              onClick={() => generateCaptions()}
               disabled={captionBusy}
-              title="Generate viral-pop captions (word-by-word, yellow highlight)"
+              title="Transcribe & apply selected caption style"
               className="gap-1 text-[11px]"
             >
               {captionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Subtitles className="h-3.5 w-3.5" />}
               {hasCaptionLayers(comp) ? "Regen" : "Captions"}
             </Button>
+            <div className="flex items-center gap-0.5 rounded-md border bg-background/40 p-0.5">
+              {CAPTION_STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => restyleCaptions(s.id)}
+                  title={s.hint}
+                  className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    captionStyle === s.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
             {hasCaptionLayers(comp) && (
               <Button size="sm" variant="ghost" onClick={clearCaptions} title="Clear captions" className="text-[11px]">
                 Clear
