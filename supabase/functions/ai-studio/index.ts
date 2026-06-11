@@ -1716,7 +1716,8 @@ Deno.serve(async (req) => {
     if (typeof focusedCanvasItemId === "string" || focusedCanvasItemId === null) {
       settingsUpdate.focused_canvas_item_id = focusedCanvasItemId || null;
     }
-    await supa.from("ai_studio_conversations").update(settingsUpdate).eq("id", requestedConversationId).eq("user_id", userId);
+    settingsUpdate.last_actor_member_id = actorMemberId;
+    await supa.from("ai_studio_conversations").update(settingsUpdate).eq("id", requestedConversationId);
     return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
@@ -1804,7 +1805,6 @@ Deno.serve(async (req) => {
       .from("ai_studio_conversations")
       .update(baseUpdate)
       .eq("id", requestedConversationId)
-      .eq("user_id", userId)
       .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .maybeSingle();
     convoRow = data;
@@ -1815,7 +1815,6 @@ Deno.serve(async (req) => {
       .from("ai_studio_conversations")
       .select("id, cleared_at, active_reference_ids, active_video_reference_ids, title")
       .eq("client_id", clientId)
-      .eq("user_id", userId)
       .is("archived_at", null)
       .order("last_active_at", { ascending: false })
       .limit(1)
@@ -1829,6 +1828,7 @@ Deno.serve(async (req) => {
         client_id: clientId,
         title: userText.slice(0, 60),
         ...baseUpdate,
+        last_actor_member_id: actorMemberId,
       };
       const { data: created } = await supa
         .from("ai_studio_conversations")
