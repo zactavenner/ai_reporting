@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -431,10 +431,48 @@ export function AIStudioCanvas({
               <div className="flex items-center gap-2 mt-2">
                 <p className="text-[10px] text-muted-foreground line-clamp-2 flex-1">{p.video_prompt}</p>
                 {p.video_url && (
-                  <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
-                    onClick={() => { navigator.clipboard.writeText(p.video_url); toast.success("URL copied"); }}>
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      title="Download video"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(p.video_url, { mode: "cors" });
+                          const blob = await res.blob();
+                          const obj = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = obj;
+                          a.download = `aistudio-${Date.now()}.mp4`;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          URL.revokeObjectURL(obj);
+                          toast.success("Downloaded");
+                        } catch {
+                          window.open(p.video_url, "_blank");
+                        }
+                      }}
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download
+                    </Button>
+                    {onEditVideo && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2 text-[11px] gap-1"
+                        title="Edit in Video Editor"
+                        onClick={() => onEditVideo(p.video_url, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio })}
+                      >
+                        <Scissors className="h-3.5 w-3.5" /> Edit
+                      </Button>
+                    )}
+                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
+                      onClick={() => { navigator.clipboard.writeText(p.video_url); toast.success("URL copied"); }}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
                 )}
               </div>
             </Card>
