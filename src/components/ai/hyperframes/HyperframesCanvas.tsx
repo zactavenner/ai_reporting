@@ -211,7 +211,7 @@ function drawFrame(
     ctx.translate(-cx, -cy);
 
     if (layer.type === "video" && videoEl) {
-      drawVideoLayer(ctx, comp, layer as VideoLayer, videoEl, r);
+      drawVideoLayer(ctx, comp, layer as VideoLayer, videoEl);
     } else if (layer.type === "text" || layer.type === "subtitle") {
       drawTextLayer(ctx, comp, layer as TextLayer, cx, cy);
     } else if (layer.type === "icon") {
@@ -231,7 +231,6 @@ function drawVideoLayer(
   comp: HyperframesComposition,
   layer: VideoLayer,
   v: HTMLVideoElement,
-  r: { scale: number; dx: number; dy: number },
 ) {
   if (!v.videoWidth) return;
   const fit = layer.fit ?? "cover";
@@ -248,13 +247,34 @@ function drawVideoLayer(
     dw = cw;
     dh = cw / vr;
   }
-  // Ken Burns: scale around center + drift (dx/dy as fraction of canvas).
-  const scale = r.scale || 1;
-  dw *= scale;
-  dh *= scale;
-  const dx = (cw - dw) / 2 + (r.dx || 0) * cw;
-  const dy = (ch - dh) / 2 + (r.dy || 0) * ch;
+  const dx = (cw - dw) / 2;
+  const dy = (ch - dh) / 2;
   ctx.drawImage(v, dx, dy, dw, dh);
+}
+
+function drawImageLayer(
+  ctx: CanvasRenderingContext2D,
+  comp: HyperframesComposition,
+  layer: ImageLayer,
+  cx: number,
+  cy: number,
+  images: Map<string, HTMLImageElement>,
+) {
+  const img = images.get(layer.src);
+  if (!img || !img.complete || !img.naturalWidth) return;
+  const ratio = img.naturalWidth / img.naturalHeight;
+  let w = (layer.width ?? 0.4) * comp.width;
+  let h = layer.height ? layer.height * comp.height : w / ratio;
+  const { x, y } = applyAnchor(cx, cy, w, h, layer.anchor || "center");
+  if (layer.borderRadius && layer.borderRadius > 0) {
+    ctx.save();
+    roundRect(ctx, x, y, w, h, layer.borderRadius);
+    ctx.clip();
+    ctx.drawImage(img, x, y, w, h);
+    ctx.restore();
+  } else {
+    ctx.drawImage(img, x, y, w, h);
+  }
 }
 
 function drawTextLayer(
