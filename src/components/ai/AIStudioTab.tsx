@@ -1735,6 +1735,30 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
                   )}
                 </div>
+                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
+                  <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
+                    <SelectTrigger className="h-7 text-[10px] w-[160px]">
+                      <SelectValue placeholder="No avatar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">No avatar</SelectItem>
+                      {studioAvatars.map((a) => (
+                        <SelectItem key={a.id} value={a.id} className="text-xs">
+                          <span className="inline-flex items-center gap-2">
+                            {a.image_url ? <img src={a.image_url} alt="" className="h-4 w-4 rounded-full object-cover" /> : null}
+                            {a.name}{a.is_stock ? " · stock" : ""}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedAvatar && (
+                    <button type="button" onClick={() => setAiStudioTab("avatars")} className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+                      manage
+                    </button>
+                  )}
+                </div>
                 </div>
                 <div className="shrink-0">
                 {loading ? (
