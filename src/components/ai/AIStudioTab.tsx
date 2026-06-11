@@ -941,6 +941,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         imageModels,
         videoModel,
         videoModels,
+        avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
         hookFramework: hookFramework === "auto" ? undefined : hookFramework,
         burnCaptions,
