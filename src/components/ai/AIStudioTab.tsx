@@ -99,7 +99,7 @@ function contextLimitFor(model: string): number {
   return 200_000;
 }
 
-function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: boolean }) {
+function ChatMessage({ message: m, isStreaming, clientId, clientName }: { message: Msg; isStreaming: boolean; clientId: string; clientName?: string }) {
   const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   if (m.role === "user") {
     return (
@@ -220,7 +220,7 @@ function ChatMessage({ message: m, isStreaming }: { message: Msg; isStreaming: b
       {inlineVideos.length > 0 && (
         <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
           {inlineVideos.map((vid, idx) => (
-            <ChatVideoPreview key={idx} video={vid} />
+            <ChatVideoPreview key={idx} video={vid} clientId={clientId} clientName={clientName} />
           ))}
         </div>
       )}
@@ -1411,6 +1411,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   key={m.id || i}
                   message={m}
                   isStreaming={loading && isLast && m.role === "assistant"}
+                  clientId={clientId}
+                  clientName={clientName}
                 />
               );
             })}
