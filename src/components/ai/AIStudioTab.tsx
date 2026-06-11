@@ -64,6 +64,7 @@ const VIDEO_MODELS: { value: string; label: string; hint: string }[] = [
   { value: "bytedance/seedance-2.0", label: "Seedance Pro", hint: "Best Seedance quality" },
   { value: "moonshotai/kling-v2.1", label: "Kling 2.1", hint: "Realistic motion" },
   { value: "moonshotai/kling-v2.1-pro", label: "Kling 2.1 Pro", hint: "Highest quality Kling" },
+  { value: "google/veo-3.1-fast", label: "Veo 3.1 Fast", hint: "Google Veo via OpenRouter — fast" },
 ];
 
 // Conversion-focused ad format presets. Each preset is injected into the
@@ -585,11 +586,24 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
-  const [videoModel, setVideoModel] = useState<string>(() => {
-    try { return localStorage.getItem("ai-studio:video-model") || "bytedance/seedance-2.0-fast"; }
-    catch { return "bytedance/seedance-2.0-fast"; }
+  const [videoModels, setVideoModels] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("ai-studio:video-models");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length) return arr.filter((v) => typeof v === "string");
+      }
+      // back-compat: migrate the old single-value key
+      const legacy = localStorage.getItem("ai-studio:video-model");
+      if (legacy) return [legacy];
+    } catch {}
+    return ["bytedance/seedance-2.0-fast"];
   });
-  useEffect(() => { try { localStorage.setItem("ai-studio:video-model", videoModel); } catch {} }, [videoModel]);
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-models", JSON.stringify(videoModels)); } catch {}
+  }, [videoModels]);
+  // first selection drives single-clip default model passed to the server
+  const videoModel = videoModels[0] || "bytedance/seedance-2.0-fast";
   const [adFormat, setAdFormat] = useState<string>(() => {
     try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
   });
@@ -913,6 +927,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         chatModel,
         imageModels,
         videoModel,
+        videoModels,
         adFormat: adFormat === "none" ? undefined : adFormat,
         hookFramework: hookFramework === "auto" ? undefined : hookFramework,
         burnCaptions,
@@ -1666,18 +1681,30 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
-                  <Select value={videoModel} onValueChange={setVideoModel}>
-                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VIDEO_MODELS.map(m => (
-                        <SelectItem key={m.value} value={m.value} className="text-xs">
-                          {m.label}<span className="text-muted-foreground ml-1">— {m.hint}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {VIDEO_MODELS.map((m) => {
+                    const active = videoModels.includes(m.value);
+                    return (
+                      <button
+                        key={m.value}
+                        type="button"
+                        onClick={() => {
+                          setVideoModels((curr) => {
+                            const next = curr.includes(m.value)
+                              ? curr.filter((v) => v !== m.value)
+                              : [...curr, m.value];
+                            return next.length === 0 ? [m.value] : next;
+                          });
+                        }}
+                        title={`${m.label} — ${m.hint}${active && videoModels.length > 1 ? " (in comparison)" : ""}`}
+                        className={`h-7 px-2 rounded-lg text-[10px] border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                  {videoModels.length > 1 && (
+                    <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
+                  )}
                 </div>
                 </div>
                 <div className="shrink-0">

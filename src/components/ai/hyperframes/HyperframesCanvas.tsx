@@ -144,8 +144,20 @@ export const HyperframesCanvas = forwardRef<HyperframesCanvasHandle, Props>(func
     const tick = () => {
       const c = compRef.current;
       if (playingRef.current) {
-        const elapsed = (performance.now() - startWallRef.current) / 1000;
-        compTimeRef.current = startCompRef.current + elapsed;
+        // When a video layer is present, use the <video> element's currentTime
+        // as the master clock so on-canvas captions stay perfectly in sync with
+        // the audio track (wall-clock drifts vs. video decoding/buffering).
+        const v = videoRef.current;
+        const vLayer = c.layers.find((l) => l.type === "video") as VideoLayer | undefined;
+        if (v && vLayer && !v.paused && !v.ended && v.readyState >= 2) {
+          compTimeRef.current = vLayer.start + v.currentTime;
+          // Keep wall-clock anchors fresh so a future pause→play continues smoothly.
+          startWallRef.current = performance.now();
+          startCompRef.current = compTimeRef.current;
+        } else {
+          const elapsed = (performance.now() - startWallRef.current) / 1000;
+          compTimeRef.current = startCompRef.current + elapsed;
+        }
         if (compTimeRef.current >= c.duration) {
           compTimeRef.current = c.duration;
           playingRef.current = false;
