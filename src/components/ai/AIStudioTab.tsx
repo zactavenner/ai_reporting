@@ -21,6 +21,7 @@ import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
 import { AgentMentionPopover } from "./AgentMentionPopover";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 import { AIStudioAgentsTab } from "./AIStudioAgentsTab";
 import { VideoPlayerCard } from "./VideoPlayerCard";
@@ -1111,7 +1112,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function clearConversation() {
     if (!conversationId) { setMessages([]); setCanvas([]); return; }
-    if (!confirm("Clear this AI Studio conversation? Past messages and canvas items will be hidden.")) return;
+    setClearOpen(true);
+  }
+  const [clearOpen, setClearOpen] = useState(false);
+  async function doClear() {
+    setClearOpen(false);
+    if (!conversationId) return;
     const res = await studioFetch({ action: "clear", clientId, conversationId });
     if (!res.ok) { toast.error("Failed to clear"); return; }
     setMessages([]);
