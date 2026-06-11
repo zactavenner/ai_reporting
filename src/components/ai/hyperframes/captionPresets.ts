@@ -14,12 +14,14 @@ const CAP_PREFIX = "cap_";
 export type CaptionStyle =
   | "simple-mono"   // single big white word, thick black stroke (clean reels look)
   | "viral-pop"     // word-by-word yellow highlight + spring pop
+  | "karaoke-line"  // full phrase visible, current word highlighted in yellow
   | "stacked-bold"  // 2-line condensed Anton-style, one accent word per phrase
   | "advanced-cinematic"; // 3-line cinematic stack, tilted, gold/red accent, staggered
 
 export const CAPTION_STYLES: { id: CaptionStyle; label: string; hint: string }[] = [
   { id: "simple-mono", label: "Simple", hint: "Big bold white words, thick black stroke" },
   { id: "viral-pop", label: "Viral pop", hint: "Word-by-word with yellow highlight & spring" },
+  { id: "karaoke-line", label: "Karaoke", hint: "Full phrase visible, current word highlighted" },
   { id: "stacked-bold", label: "Stacked", hint: "Condensed Anton-style stack with accent color" },
   { id: "advanced-cinematic", label: "Advanced", hint: "3-line cinematic stack, tilted, gold/red accent, staggered entrance" },
 ];
@@ -246,6 +248,8 @@ export function applyCaptionPreset(
   const caps =
     preset === "viral-pop"
       ? buildViralPopLayers(segments, comp)
+      : preset === "karaoke-line"
+      ? buildKaraokeLineLayers(segments, comp)
       : preset === "stacked-bold"
       ? buildStackedBoldLayers(segments, comp)
       : preset === "advanced-cinematic"
@@ -256,6 +260,78 @@ export function applyCaptionPreset(
 
 export function hasCaptionLayers(comp: HyperframesComposition): boolean {
   return comp.layers.some((l) => l.id.startsWith(CAP_PREFIX));
+}
+
+/**
+ * KARAOKE-LINE: shows the full phrase on screen; the currently spoken word
+ * is highlighted yellow & slightly scaled. Implemented as per-word layers
+ * positioned along a centered baseline, with a brief "active" pulse during
+ * each word's spoken window.
+ */
+export function buildKaraokeLineLayers(
+  segments: CaptionSegment[],
+  comp: HyperframesComposition,
+): Layer[] {
+  const layers: Layer[] = [];
+  const fontSize = Math.round(comp.height * 0.06);
+  const stroke = Math.max(4, Math.round(fontSize * 0.12));
+  const charPx = fontSize * 0.55; // rough advance per char for layout
+  const spacePx = fontSize * 0.32;
+  let i = 0;
+  for (const seg of segments) {
+    const words = ensureWords(seg);
+    if (!words.length) continue;
+    const phraseStart = seg.startTime;
+    const phraseEnd = Math.min(comp.duration, seg.endTime + 0.15);
+    const upperWords = words.map((w) => w.word.toUpperCase());
+
+    // Layout: lay words out around the center horizontally.
+    const widths = upperWords.map((w) => w.length * charPx);
+    const total = widths.reduce((a, b) => a + b, 0) + spacePx * (words.length - 1);
+    let cursor = -total / 2;
+    const yBase = 0.82;
+
+    words.forEach((w, idx) => {
+      const wPx = widths[idx];
+      const centerX = cursor + wPx / 2;
+      cursor += wPx + spacePx;
+      // Convert centerX (px around comp center) to 0..1 x.
+      const x = 0.5 + centerX / comp.width;
+      const wordStart = Math.max(phraseStart, w.startTime);
+      const wordEnd = Math.min(phraseEnd, w.endTime);
+      const activeIn = Math.max(0, wordStart - phraseStart);
+      const activeOut = Math.max(activeIn + 0.05, wordEnd - phraseStart);
+
+      layers.push({
+        id: `${CAP_PREFIX}${i++}`,
+        type: "text",
+        text: upperWords[idx],
+        uppercase: false,
+        start: phraseStart,
+        end: phraseEnd,
+        x,
+        y: yBase,
+        anchor: "center",
+        fontFamily: DISPLAY_FONT,
+        fontSize,
+        fontWeight: 900,
+        color: "#FFFFFF",
+        stroke: "#000000",
+        strokeWidth: stroke,
+        shadowColor: "rgba(0,0,0,0.6)",
+        shadowBlur: Math.round(fontSize * 0.2),
+        align: "center",
+        maxWidthPct: 0.4,
+        animations: [
+          { prop: "opacity", from: 0, to: 1, start: 0, end: 0.18, ease: "easeOut" },
+          // Active pulse: scale up briefly when this word is spoken.
+          { prop: "scale", from: 1, to: 1.18, start: activeIn, end: activeIn + 0.08, ease: "easeOut" },
+          { prop: "scale", from: 1.18, to: 1, start: activeOut, end: activeOut + 0.12, ease: "easeOut" },
+        ],
+      } as TextLayer);
+    });
+  }
+  return layers;
 }
 
 /**

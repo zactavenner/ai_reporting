@@ -6,6 +6,7 @@ import {
   IconLayer,
   RectLayer,
   VideoLayer,
+  ImageLayer,
   resolveLayer,
 } from "./timeline";
 
@@ -69,6 +70,29 @@ export const HyperframesCanvas = forwardRef<HyperframesCanvasHandle, Props>(func
     compRef.current = comp;
   }, [comp]);
 
+  // Image asset cache (HTMLImageElement keyed by src).
+  const imgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  useEffect(() => {
+    const cache = imgCacheRef.current;
+    const seen = new Set<string>();
+    for (const l of comp.layers) {
+      if (l.type !== "image") continue;
+      const src = (l as ImageLayer).src;
+      if (!src) continue;
+      seen.add(src);
+      if (!cache.has(src)) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = src;
+        cache.set(src, img);
+      }
+    }
+    // GC stale entries.
+    for (const key of Array.from(cache.keys())) {
+      if (!seen.has(key)) cache.delete(key);
+    }
+  }, [comp]);
+
   useImperativeHandle(ref, () => ({
     play: () => {
       const v = videoRef.current;
@@ -128,7 +152,7 @@ export const HyperframesCanvas = forwardRef<HyperframesCanvasHandle, Props>(func
           videoRef.current?.pause();
         }
       }
-      drawFrame(ctx, c, compTimeRef.current, videoRef.current);
+      drawFrame(ctx, c, compTimeRef.current, videoRef.current, imgCacheRef.current);
       onTime?.(compTimeRef.current);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -166,6 +190,7 @@ function drawFrame(
   comp: HyperframesComposition,
   t: number,
   videoEl: HTMLVideoElement | null,
+  images: Map<string, HTMLImageElement>,
 ) {
   ctx.save();
   ctx.fillStyle = comp.bgColor || "#000";
@@ -193,6 +218,8 @@ function drawFrame(
       drawIconLayer(ctx, comp, layer as IconLayer, cx, cy);
     } else if (layer.type === "rect") {
       drawRectLayer(ctx, comp, layer as RectLayer, cx, cy);
+    } else if (layer.type === "image") {
+      drawImageLayer(ctx, comp, layer as ImageLayer, cx, cy, images);
     }
     ctx.restore();
   }
@@ -223,6 +250,31 @@ function drawVideoLayer(
   const dx = (cw - dw) / 2;
   const dy = (ch - dh) / 2;
   ctx.drawImage(v, dx, dy, dw, dh);
+}
+
+function drawImageLayer(
+  ctx: CanvasRenderingContext2D,
+  comp: HyperframesComposition,
+  layer: ImageLayer,
+  cx: number,
+  cy: number,
+  images: Map<string, HTMLImageElement>,
+) {
+  const img = images.get(layer.src);
+  if (!img || !img.complete || !img.naturalWidth) return;
+  const ratio = img.naturalWidth / img.naturalHeight;
+  let w = (layer.width ?? 0.4) * comp.width;
+  let h = layer.height ? layer.height * comp.height : w / ratio;
+  const { x, y } = applyAnchor(cx, cy, w, h, layer.anchor || "center");
+  if (layer.borderRadius && layer.borderRadius > 0) {
+    ctx.save();
+    roundRect(ctx, x, y, w, h, layer.borderRadius);
+    ctx.clip();
+    ctx.drawImage(img, x, y, w, h);
+    ctx.restore();
+  } else {
+    ctx.drawImage(img, x, y, w, h);
+  }
 }
 
 function drawTextLayer(

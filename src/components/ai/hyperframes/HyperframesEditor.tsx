@@ -6,6 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import {
   Loader2,
   Play,
   Pause,
@@ -20,6 +28,11 @@ import {
   Save,
   AlertCircle,
   RefreshCw,
+  Undo2,
+  Redo2,
+  Image as ImageIcon,
+  Camera,
+  LayoutTemplate,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,7 +45,11 @@ import {
   Layer,
   TextLayer,
   IconLayer,
+  ImageLayer,
   makeDefaultComposition,
+  withKenBurns,
+  withoutKenBurns,
+  hasKenBurns,
 } from "./timeline";
 import {
   applyCaptionPreset,
@@ -43,6 +60,15 @@ import {
   type CaptionSegment,
 } from "./captionPresets";
 import { transcodeWebmToMp4 } from "./transcodeMp4";
+import { captureVideoAudioTracks } from "./captureAudio";
+import { useCompHistory } from "./useCompHistory";
+import {
+  listTemplates,
+  saveTemplate,
+  deleteTemplate,
+  bindVideoSrc,
+  type HyperframesTemplate,
+} from "./templates";
 
 const QUICK = [
   "Add bold caption: 'You won't believe this' fading in at 0.5s",
@@ -96,9 +122,74 @@ export function HyperframesEditor({
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
   const segmentsRef = useRef<CaptionSegment[]>([]);
 
-  const [comp, setComp] = useState<HyperframesComposition>(() =>
+  const { comp, setComp, undo, redo, canUndo, canRedo } = useCompHistory(
     makeDefaultComposition(videoUrl, 8, aspectRatio),
   );
+
+  // Templates
+  const [templates, setTemplates] = useState<HyperframesTemplate[]>([]);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadTemplates = async () => {
+    try {
+      const list = await listTemplates(clientId);
+      setTemplates(list);
+      setTemplatesLoaded(true);
+    } catch (e: any) {
+      toast.error(`Couldn't load templates: ${e?.message || e}`);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    const title = window.prompt("Template name?", "Hyperframes template");
+    if (!title) return;
+    try {
+      const t = await saveTemplate(clientId, title, comp);
+      setTemplates((ts) => [t, ...ts]);
+      toast.success(`Saved template "${title}"`);
+    } catch (e: any) {
+      toast.error(`Save failed: ${e?.message || e}`);
+    }
+  };
+
+  const handleApplyTemplate = (t: HyperframesTemplate) => {
+    const bound = bindVideoSrc(t.composition, videoUrl, duration);
+    setComp(bound, { commit: true });
+    toast.success(`Applied "${t.title}"`);
+  };
+
+  const handleDeleteTemplate = async (t: HyperframesTemplate) => {
+    if (!window.confirm(`Delete template "${t.title}"?`)) return;
+    try {
+      await deleteTemplate(t.id);
+      setTemplates((ts) => ts.filter((x) => x.id !== t.id));
+      toast.success("Template deleted");
+    } catch (e: any) {
+      toast.error(`Delete failed: ${e?.message || e}`);
+    }
+  };
+
+  // Keyboard shortcuts: cmd/ctrl-Z = undo, cmd/ctrl-shift-Z or cmd/ctrl-Y = redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.isContentEditable)) {
+        return;
+      }
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo, redo]);
 
   // ---------- Captions ----------
   const generateCaptions = async (styleOverride?: CaptionStyle) => {
@@ -253,6 +344,49 @@ export function HyperframesEditor({
     setSelectedId(id);
   };
 
+  // ---------- Image layer ----------
+  const handleImageUpload = async (file: File) => {
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `ai-studio/${clientId}/hyperframes-img-${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("creatives").upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (up.error) throw up.error;
+      const { data: pub } = supabase.storage.from("creatives").getPublicUrl(path);
+      const id = `image-${Date.now()}`;
+      const layer: ImageLayer = {
+        id,
+        type: "image",
+        src: pub.publicUrl,
+        start: Math.max(0, time),
+        end: Math.min(comp.duration, time + 3),
+        x: 0.5,
+        y: 0.5,
+        anchor: "center",
+        width: 0.4,
+        borderRadius: 16,
+        animations: [
+          { prop: "opacity", from: 0, to: 1, start: 0, end: 0.3, ease: "easeOut" },
+          { prop: "scale", from: 0.85, to: 1, start: 0, end: 0.35, ease: "spring" },
+        ],
+      };
+      setComp((c) => ({ ...c, layers: [...c.layers, layer] }), { commit: true });
+      setSelectedId(id);
+      toast.success("Image added");
+    } catch (e: any) {
+      toast.error(`Image upload failed: ${e?.message || e}`);
+    }
+  };
+
+  // ---------- Ken Burns ----------
+  const kenBurnsOn = hasKenBurns(comp);
+  const toggleKenBurns = () => {
+    setComp((c) => (hasKenBurns(c) ? withoutKenBurns(c) : withKenBurns(c)), { commit: true });
+    toast.success(kenBurnsOn ? "Ken Burns off" : "Ken Burns on");
+  };
+
   // ---------- AI chat ----------
   const sendChat = async () => {
     const inst = chatInput.trim();
@@ -304,13 +438,14 @@ export function HyperframesEditor({
       await new Promise((r) => setTimeout(r, 100));
 
       const stream = (canvas as HTMLCanvasElement).captureStream(30);
-      // Mix in source audio if possible
+      // Mix in source audio (robust: tries captureStream → WebAudio fallback).
       try {
-        const v: any = video;
-        const vStream: MediaStream | undefined =
-          v.captureStream?.() || v.mozCaptureStream?.();
-        if (vStream) {
-          vStream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        video.muted = false;
+        video.volume = 1;
+        const audioTracks = captureVideoAudioTracks(video);
+        audioTracks.forEach((t) => stream.addTrack(t));
+        if (!audioTracks.length) {
+          toast.warning("Source audio couldn't be captured — exporting silent video.");
         }
       } catch {}
 
@@ -386,10 +521,10 @@ export function HyperframesEditor({
 
       const stream = (canvas as HTMLCanvasElement).captureStream(30);
       try {
-        const v: any = video;
-        const vStream: MediaStream | undefined =
-          v.captureStream?.() || v.mozCaptureStream?.();
-        if (vStream) vStream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        video.muted = false;
+        video.volume = 1;
+        const audioTracks = captureVideoAudioTracks(video);
+        audioTracks.forEach((t) => stream.addTrack(t));
       } catch {}
 
       const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
@@ -480,6 +615,25 @@ export function HyperframesEditor({
             <Wand2 className="h-3 w-3" /> Hyperframes runtime
           </Badge>
           <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Cmd/Ctrl-Z)"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Cmd/Ctrl-Shift-Z)"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </Button>
+            <div className="h-4 w-px bg-border mx-1" />
             <Button size="sm" variant="ghost" onClick={() => addText("text")} title="Add headline">
               <Type className="h-3.5 w-3.5" />
             </Button>
@@ -489,6 +643,76 @@ export function HyperframesEditor({
             <Button size="sm" variant="ghost" onClick={addIcon} title="Add icon">
               <Sticker className="h-3.5 w-3.5" />
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => fileInputRef.current?.click()}
+              title="Add image / logo"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleImageUpload(f);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant={kenBurnsOn ? "secondary" : "ghost"}
+              onClick={toggleKenBurns}
+              title="Toggle Ken Burns on base video"
+            >
+              <Camera className="h-3.5 w-3.5" />
+            </Button>
+            <DropdownMenu onOpenChange={(o) => { if (o && !templatesLoaded) loadTemplates(); }}>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" title="Templates">
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="text-[11px]">Templates</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleSaveTemplate} className="text-xs">
+                  <Save className="h-3 w-3 mr-2" /> Save current as template…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {!templatesLoaded ? (
+                  <DropdownMenuItem disabled className="text-[11px] opacity-60">
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading…
+                  </DropdownMenuItem>
+                ) : templates.length === 0 ? (
+                  <DropdownMenuItem disabled className="text-[11px] opacity-60">
+                    No templates yet
+                  </DropdownMenuItem>
+                ) : (
+                  templates.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      className="text-xs flex items-center justify-between gap-2"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        handleApplyTemplate(t);
+                      }}
+                    >
+                      <span className="truncate flex-1">{t.title}</span>
+                      <Trash2
+                        className="h-3 w-3 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTemplate(t);
+                        }}
+                      />
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className="h-4 w-px bg-border mx-1" />
             <Button
               size="sm"
