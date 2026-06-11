@@ -40,6 +40,7 @@ import {
   type CaptionStyle,
   type CaptionSegment,
 } from "./captionPresets";
+import { transcodeWebmToMp4 } from "./transcodeMp4";
 
 const QUICK = [
   "Add bold caption: 'You won't believe this' fading in at 0.5s",
@@ -76,6 +77,8 @@ export function HyperframesEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [exportTick, setExportTick] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"webm" | "mp4">("mp4");
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -320,14 +323,30 @@ export function HyperframesEditor({
       canvasRef.current!.pause();
       setPlaying(false);
 
-      const blob = new Blob(chunks, { type: mime });
+      let blob = new Blob(chunks, { type: mime });
+      let ext = "webm";
+      let outType = mime;
+      if (exportFormat === "mp4") {
+        try {
+          setExportProgress(0);
+          toast.message("Transcoding to MP4…", { description: "First run downloads the ~30MB ffmpeg core." });
+          blob = await transcodeWebmToMp4(blob, (r) => setExportProgress(Math.round(r * 100)));
+          ext = "mp4";
+          outType = "video/mp4";
+        } catch (err: any) {
+          toast.error(`MP4 transcode failed, falling back to WebM: ${err?.message || err}`);
+        } finally {
+          setExportProgress(null);
+        }
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `hyperframes-${Date.now()}.webm`;
+      a.download = `hyperframes-${Date.now()}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Exported. Use 'Save to library' to also push it into the client video set.");
+      toast.success(`Exported ${ext.toUpperCase()}. Use 'Save to library' to also push it into the client video set.`);
+      void outType;
     } catch (e: any) {
       toast.error(`Export failed: ${e?.message || e}`);
     } finally {
