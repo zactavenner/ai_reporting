@@ -344,6 +344,49 @@ export function HyperframesEditor({
     setSelectedId(id);
   };
 
+  // ---------- Image layer ----------
+  const handleImageUpload = async (file: File) => {
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `ai-studio/${clientId}/hyperframes-img-${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("creatives").upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (up.error) throw up.error;
+      const { data: pub } = supabase.storage.from("creatives").getPublicUrl(path);
+      const id = `image-${Date.now()}`;
+      const layer: ImageLayer = {
+        id,
+        type: "image",
+        src: pub.publicUrl,
+        start: Math.max(0, time),
+        end: Math.min(comp.duration, time + 3),
+        x: 0.5,
+        y: 0.5,
+        anchor: "center",
+        width: 0.4,
+        borderRadius: 16,
+        animations: [
+          { prop: "opacity", from: 0, to: 1, start: 0, end: 0.3, ease: "easeOut" },
+          { prop: "scale", from: 0.85, to: 1, start: 0, end: 0.35, ease: "spring" },
+        ],
+      };
+      setComp((c) => ({ ...c, layers: [...c.layers, layer] }), { commit: true });
+      setSelectedId(id);
+      toast.success("Image added");
+    } catch (e: any) {
+      toast.error(`Image upload failed: ${e?.message || e}`);
+    }
+  };
+
+  // ---------- Ken Burns ----------
+  const kenBurnsOn = hasKenBurns(comp);
+  const toggleKenBurns = () => {
+    setComp((c) => (hasKenBurns(c) ? withoutKenBurns(c) : withKenBurns(c)), { commit: true });
+    toast.success(kenBurnsOn ? "Ken Burns off" : "Ken Burns on");
+  };
+
   // ---------- AI chat ----------
   const sendChat = async () => {
     const inst = chatInput.trim();
