@@ -614,7 +614,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [caretPos, setCaretPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents">("chat");
-  const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string } | null>(null);
+  const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
   const [loading, setLoading] = useState(false);
@@ -1753,6 +1753,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 }
               }}
               onEditVideo={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio })}
+              onAddCaptions={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio, autoCaptions: true })}
               initialView={canvasView}
               focusedItemId={focusedItemId}
               onViewChange={(v) => {
@@ -1864,6 +1865,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           clientId={clientId}
           videoUrl={editVideo.url}
           fallbackVideo={{ prompt: editVideo.prompt, aspect_ratio: editVideo.aspect_ratio }}
+          autoCaptions={editVideo.autoCaptions}
         />
       )}
     </div>
