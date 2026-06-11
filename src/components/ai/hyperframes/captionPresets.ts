@@ -14,12 +14,14 @@ const CAP_PREFIX = "cap_";
 export type CaptionStyle =
   | "simple-mono"   // single big white word, thick black stroke (clean reels look)
   | "viral-pop"     // word-by-word yellow highlight + spring pop
+  | "karaoke-line"  // full phrase visible, current word highlighted in yellow
   | "stacked-bold"  // 2-line condensed Anton-style, one accent word per phrase
   | "advanced-cinematic"; // 3-line cinematic stack, tilted, gold/red accent, staggered
 
 export const CAPTION_STYLES: { id: CaptionStyle; label: string; hint: string }[] = [
   { id: "simple-mono", label: "Simple", hint: "Big bold white words, thick black stroke" },
   { id: "viral-pop", label: "Viral pop", hint: "Word-by-word with yellow highlight & spring" },
+  { id: "karaoke-line", label: "Karaoke", hint: "Full phrase visible, current word highlighted" },
   { id: "stacked-bold", label: "Stacked", hint: "Condensed Anton-style stack with accent color" },
   { id: "advanced-cinematic", label: "Advanced", hint: "3-line cinematic stack, tilted, gold/red accent, staggered entrance" },
 ];
@@ -246,6 +248,8 @@ export function applyCaptionPreset(
   const caps =
     preset === "viral-pop"
       ? buildViralPopLayers(segments, comp)
+      : preset === "karaoke-line"
+      ? buildKaraokeLineLayers(segments, comp)
       : preset === "stacked-bold"
       ? buildStackedBoldLayers(segments, comp)
       : preset === "advanced-cinematic"
