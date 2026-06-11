@@ -4,44 +4,74 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Key, Eye, EyeOff, Save, Shield, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Key, Eye, EyeOff, Save, Shield, AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+type Validation = {
+  ok: boolean;
+  token?: string;
+  expires_at?: string | null;
+  scopes?: string[];
+  ad_accounts?: { id: string; name: string; account_status: number }[];
+  user?: { id: string; name: string };
+  error?: string;
+};
 
 export function MasterMetaTokenCard() {
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [checkingCurrent, setCheckingCurrent] = useState(false);
+  const [result, setResult] = useState<Validation | null>(null);
+  const [currentStatus, setCurrentStatus] = useState<Validation | null>(null);
 
-  const handleSaveMasterToken = async () => {
-    if (!token.trim()) {
-      toast.error('Please enter a token');
-      return;
-    }
-    setSaving(true);
+  const runValidation = async (tok?: string): Promise<Validation | null> => {
     try {
-      // Update the META_SHARED_ACCESS_TOKEN secret via edge function
-      const { error } = await supabase.functions.invoke('test-integration-connection', {
-        body: { 
-          action: 'validate_meta_token',
-          token: token.trim()
-        }
+      const { data, error } = await supabase.functions.invoke('meta-token-refresh', {
+        body: { action: 'validate', token: tok },
       });
-      
-      // Even if validation isn't available, we store it — the token was already updated via secrets
-      // For now, just confirm to user
-      toast.success('Master Meta token updated. It will take effect on the next sync cycle.');
-      setToken('');
-    } catch (err) {
-      toast.error('Failed to validate token');
-    } finally {
-      setSaving(false);
+      if (error) throw error;
+      return data as Validation;
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Validation failed' };
     }
   };
 
-  // Current token expiry info — from Graph API Explorer tokens last ~60 days
-  const expiryDate = new Date();
-  expiryDate.setDate(expiryDate.getDate() + 60);
+  const handleValidate = async () => {
+    if (!token.trim()) {
+      toast.error('Paste a token first');
+      return;
+    }
+    setValidating(true);
+    setResult(null);
+    const v = await runValidation(token.trim());
+    setResult(v);
+    if (v?.ok) toast.success(`Token valid — ${v.ad_accounts?.length ?? 0} ad accounts accessible`);
+    else toast.error(v?.error || 'Token invalid');
+    setValidating(false);
+  };
+
+  const handleCheckCurrent = async () => {
+    setCheckingCurrent(true);
+    const v = await runValidation();
+    setCurrentStatus(v);
+    setCheckingCurrent(false);
+  };
+
+  const handleSave = async () => {
+    if (!result?.ok) {
+      toast.error('Validate the token first — only green tokens can be saved');
+      return;
+    }
+    // Saving the secret itself requires the secrets management flow.
+    // Surface clear instructions; the secret rotation is handled outside the app.
+    toast.info('Update META_SHARED_ACCESS_TOKEN in Project Secrets to roll it out to all syncs.');
+  };
+
+  const daysLeft = result?.expires_at
+    ? Math.ceil((new Date(result.expires_at).getTime() - Date.now()) / 86400000)
+    : null;
 
   return (
     <Card className="border-2 border-border">
@@ -59,13 +89,33 @@ export function MasterMetaTokenCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="p-3 bg-muted/50 rounded-md space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <CheckCircle className="h-4 w-4 text-chart-2" />
-            <span className="font-medium">Shared token is active</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              {currentStatus?.ok ? (
+                <CheckCircle className="h-4 w-4 text-chart-2" />
+              ) : currentStatus && !currentStatus.ok ? (
+                <XCircle className="h-4 w-4 text-destructive" />
+              ) : (
+                <Shield className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span className="font-medium">
+                {currentStatus?.ok
+                  ? `Active — ${currentStatus.ad_accounts?.length ?? 0} ad accounts`
+                  : currentStatus && !currentStatus.ok
+                  ? 'Current token failing'
+                  : 'Shared token status unknown'}
+              </span>
+            </div>
+            <Button size="sm" variant="ghost" onClick={handleCheckCurrent} disabled={checkingCurrent} className="h-7">
+              {checkingCurrent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              <span className="ml-1 text-xs">Check now</span>
+            </Button>
           </div>
+          {currentStatus && !currentStatus.ok && (
+            <p className="text-xs text-destructive">{currentStatus.error}</p>
+          )}
           <p className="text-xs text-muted-foreground">
-            This token is used by all client accounts that don't have a client-specific override. 
-            Update it here when you generate a new long-lived token from the Graph API Explorer.
+            Used by all client accounts without a client-specific override.
           </p>
         </div>
 
@@ -113,15 +163,58 @@ export function MasterMetaTokenCard() {
           </p>
         </div>
 
-        <Button 
-          onClick={handleSaveMasterToken} 
-          disabled={saving || !token.trim()} 
-          className="w-full"
-          variant="default"
-        >
-          <Save className="h-4 w-4 mr-2" />
-          {saving ? 'Updating...' : 'Update Master Token'}
-        </Button>
+        {result && (
+          <div
+            className={`p-3 rounded-md border text-xs space-y-1 ${
+              result.ok
+                ? 'border-chart-2/40 bg-chart-2/5'
+                : 'border-destructive/40 bg-destructive/5'
+            }`}
+          >
+            <div className="flex items-center gap-2 font-medium">
+              {result.ok ? (
+                <CheckCircle className="h-4 w-4 text-chart-2" />
+              ) : (
+                <XCircle className="h-4 w-4 text-destructive" />
+              )}
+              {result.ok ? 'Token valid' : 'Token invalid'}
+            </div>
+            {result.ok && (
+              <>
+                {result.user && <div>User: <span className="font-mono">{result.user.name}</span></div>}
+                <div>Ad accounts: <span className="font-mono">{result.ad_accounts?.length ?? 0}</span></div>
+                {daysLeft !== null && (
+                  <div>Expires in: <span className="font-mono">{daysLeft} days</span></div>
+                )}
+                {result.scopes && result.scopes.length > 0 && (
+                  <div className="text-[10px] text-muted-foreground">
+                    Scopes: {result.scopes.join(', ')}
+                  </div>
+                )}
+              </>
+            )}
+            {!result.ok && <div className="text-destructive">{result.error}</div>}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            onClick={handleValidate}
+            disabled={validating || !token.trim()}
+            variant="outline"
+          >
+            {validating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Shield className="h-4 w-4 mr-2" />}
+            {validating ? 'Validating...' : 'Validate'}
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!result?.ok}
+            variant="default"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            Save
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
