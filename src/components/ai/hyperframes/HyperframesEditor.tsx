@@ -615,6 +615,25 @@ export function HyperframesEditor({
             <Wand2 className="h-3 w-3" /> Hyperframes runtime
           </Badge>
           <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Cmd/Ctrl-Z)"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Cmd/Ctrl-Shift-Z)"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </Button>
+            <div className="h-4 w-px bg-border mx-1" />
             <Button size="sm" variant="ghost" onClick={() => addText("text")} title="Add headline">
               <Type className="h-3.5 w-3.5" />
             </Button>
@@ -624,6 +643,76 @@ export function HyperframesEditor({
             <Button size="sm" variant="ghost" onClick={addIcon} title="Add icon">
               <Sticker className="h-3.5 w-3.5" />
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => fileInputRef.current?.click()}
+              title="Add image / logo"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleImageUpload(f);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant={kenBurnsOn ? "secondary" : "ghost"}
+              onClick={toggleKenBurns}
+              title="Toggle Ken Burns on base video"
+            >
+              <Camera className="h-3.5 w-3.5" />
+            </Button>
+            <DropdownMenu onOpenChange={(o) => { if (o && !templatesLoaded) loadTemplates(); }}>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" title="Templates">
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="text-[11px]">Templates</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleSaveTemplate} className="text-xs">
+                  <Save className="h-3 w-3 mr-2" /> Save current as template…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {!templatesLoaded ? (
+                  <DropdownMenuItem disabled className="text-[11px] opacity-60">
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading…
+                  </DropdownMenuItem>
+                ) : templates.length === 0 ? (
+                  <DropdownMenuItem disabled className="text-[11px] opacity-60">
+                    No templates yet
+                  </DropdownMenuItem>
+                ) : (
+                  templates.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      className="text-xs flex items-center justify-between gap-2"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        handleApplyTemplate(t);
+                      }}
+                    >
+                      <span className="truncate flex-1">{t.title}</span>
+                      <Trash2
+                        className="h-3 w-3 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTemplate(t);
+                        }}
+                      />
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className="h-4 w-px bg-border mx-1" />
             <Button
               size="sm"
