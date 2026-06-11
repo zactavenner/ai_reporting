@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Play, Power, Trash2, AlertTriangle, CheckCircle, XCircle, Clock, Zap, Activity, Bot, Settings2, ChevronRight, Circle, Building2, User, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +41,19 @@ export function AgentsTab({ clients }: Props) {
   const [tab, setTab] = useState('overview');
   const [showTemplates, setShowTemplates] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+
+  // Deep-link: ?agent=<id> selects that agent + listen for org-chart clicks
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const id = sp.get('agent');
+    if (id) setSelectedId(id);
+    const handler = (e: any) => {
+      const id = e?.detail?.id;
+      if (id) { setSelectedId(id); setEditMode(false); }
+    };
+    window.addEventListener('agents:select', handler as any);
+    return () => window.removeEventListener('agents:select', handler as any);
+  }, []);
 
   // Computed stats
   const stats = useMemo(() => {
