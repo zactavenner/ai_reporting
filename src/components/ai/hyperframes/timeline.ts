@@ -18,7 +18,7 @@ export interface OverlayAnimation {
 
 export interface BaseLayer {
   id: string;
-  type: "video" | "text" | "subtitle" | "icon" | "rect";
+  type: "video" | "text" | "subtitle" | "icon" | "rect" | "image";
   /** seconds */
   start: number;
   /** seconds */
@@ -81,7 +81,72 @@ export interface VideoLayer extends BaseLayer {
   fit?: "cover" | "contain";
 }
 
-export type Layer = VideoLayer | TextLayer | IconLayer | RectLayer;
+export interface ImageLayer extends BaseLayer {
+  type: "image";
+  src: string;
+  /** Width as 0..1 of canvas width. Height auto from intrinsic ratio unless `height` given. */
+  width?: number;
+  height?: number;
+  fit?: "cover" | "contain";
+  borderRadius?: number;
+}
+
+export type Layer = VideoLayer | TextLayer | IconLayer | RectLayer | ImageLayer;
+
+/**
+ * Build a slow Ken Burns animation (zoom + drift) for the base video layer.
+ * Replaces any existing scale/x/y animations on the video layer.
+ */
+export function withKenBurns(
+  comp: HyperframesComposition,
+  opts: { zoom?: number; direction?: "in" | "out"; drift?: number } = {},
+): HyperframesComposition {
+  const zoom = opts.zoom ?? 1.12;
+  const drift = opts.drift ?? 0.02;
+  const dir = opts.direction ?? "in";
+  return {
+    ...comp,
+    layers: comp.layers.map((l) => {
+      if (l.type !== "video") return l;
+      const dur = Math.max(0.5, l.end - l.start);
+      const fromScale = dir === "in" ? 1 : zoom;
+      const toScale = dir === "in" ? zoom : 1;
+      const others = (l.animations || []).filter(
+        (a) => a.prop !== "scale" && a.prop !== "x" && a.prop !== "y",
+      );
+      return {
+        ...l,
+        animations: [
+          ...others,
+          { prop: "scale", from: fromScale, to: toScale, start: 0, end: dur, ease: "easeInOut" },
+          { prop: "x", from: -drift, to: drift, start: 0, end: dur, ease: "easeInOut" },
+          { prop: "y", from: drift * 0.5, to: -drift * 0.5, start: 0, end: dur, ease: "easeInOut" },
+        ],
+      };
+    }),
+  };
+}
+
+/** Remove Ken Burns by stripping scale/x/y animations from the video layer. */
+export function withoutKenBurns(comp: HyperframesComposition): HyperframesComposition {
+  return {
+    ...comp,
+    layers: comp.layers.map((l) => {
+      if (l.type !== "video") return l;
+      const others = (l.animations || []).filter(
+        (a) => a.prop !== "scale" && a.prop !== "x" && a.prop !== "y",
+      );
+      return { ...l, animations: others };
+    }),
+  };
+}
+
+export function hasKenBurns(comp: HyperframesComposition): boolean {
+  const v = comp.layers.find((l) => l.type === "video");
+  return !!v?.animations?.some(
+    (a) => a.prop === "scale" || a.prop === "x" || a.prop === "y",
+  );
+}
 
 export interface HyperframesComposition {
   width: number;
