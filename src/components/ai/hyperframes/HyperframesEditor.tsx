@@ -122,9 +122,74 @@ export function HyperframesEditor({
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
   const segmentsRef = useRef<CaptionSegment[]>([]);
 
-  const [comp, setComp] = useState<HyperframesComposition>(() =>
+  const { comp, setComp, undo, redo, canUndo, canRedo, reset: resetHistory } = useCompHistory(
     makeDefaultComposition(videoUrl, 8, aspectRatio),
   );
+
+  // Templates
+  const [templates, setTemplates] = useState<HyperframesTemplate[]>([]);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadTemplates = async () => {
+    try {
+      const list = await listTemplates(clientId);
+      setTemplates(list);
+      setTemplatesLoaded(true);
+    } catch (e: any) {
+      toast.error(`Couldn't load templates: ${e?.message || e}`);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    const title = window.prompt("Template name?", "Hyperframes template");
+    if (!title) return;
+    try {
+      const t = await saveTemplate(clientId, title, comp);
+      setTemplates((ts) => [t, ...ts]);
+      toast.success(`Saved template "${title}"`);
+    } catch (e: any) {
+      toast.error(`Save failed: ${e?.message || e}`);
+    }
+  };
+
+  const handleApplyTemplate = (t: HyperframesTemplate) => {
+    const bound = bindVideoSrc(t.composition, videoUrl, duration);
+    setComp(bound, { commit: true });
+    toast.success(`Applied "${t.title}"`);
+  };
+
+  const handleDeleteTemplate = async (t: HyperframesTemplate) => {
+    if (!window.confirm(`Delete template "${t.title}"?`)) return;
+    try {
+      await deleteTemplate(t.id);
+      setTemplates((ts) => ts.filter((x) => x.id !== t.id));
+      toast.success("Template deleted");
+    } catch (e: any) {
+      toast.error(`Delete failed: ${e?.message || e}`);
+    }
+  };
+
+  // Keyboard shortcuts: cmd/ctrl-Z = undo, cmd/ctrl-shift-Z or cmd/ctrl-Y = redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.isContentEditable)) {
+        return;
+      }
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo, redo]);
 
   // ---------- Captions ----------
   const generateCaptions = async (styleOverride?: CaptionStyle) => {
