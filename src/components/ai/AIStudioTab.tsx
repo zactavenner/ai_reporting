@@ -33,7 +33,7 @@ interface Props {
   clientName: string;
 }
 
-type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[] };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
 type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean };
@@ -104,10 +104,13 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
   const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   if (m.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-0.5">
         <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2 text-sm whitespace-pre-wrap text-foreground">
           {m.content}
         </div>
+        {m.actorName && (
+          <div className="text-[10px] text-muted-foreground/70 pr-1">— {m.actorName}</div>
+        )}
       </div>
     );
   }
