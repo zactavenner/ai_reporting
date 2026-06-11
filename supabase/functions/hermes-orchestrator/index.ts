@@ -88,12 +88,14 @@ async function getOrCreateHermesConversation(clientId: string): Promise<string> 
 }
 
 async function postMessage(conversationId: string, role: "user" | "assistant" | "system", content: string, metadata: any = {}) {
-  await supa.from("ai_studio_messages").insert({
+  const { error } = await supa.from("ai_studio_messages").insert({
     conversation_id: conversationId,
+    user_id: HERMES_BOT_USER_ID,
     role,
     content,
-    metadata,
+    tools: metadata ? [{ kind: "hermes_meta", data: metadata }] : [],
   });
+  if (error) console.error("postMessage insert failed", error);
   await supa.from("ai_studio_conversations").update({ last_active_at: new Date().toISOString() }).eq("id", conversationId);
 }
 
