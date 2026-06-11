@@ -51,14 +51,26 @@ serve(async (req) => {
       apiKey: requestApiKey,
       isStock,
       clientId,
+      model: requestedModel,
     } = body;
 
-    // Get API key with priority chain
-    const geminiApiKey = await getGeminiApiKey(requestApiKey);
-    if (!geminiApiKey) {
+    // model selection: 'openai' = GPT Image 2, default 'nano-banana-pro' = Gemini 3 Pro Image
+    const selectedModel: 'openai' | 'nano-banana-pro' =
+      requestedModel === 'openai' ? 'openai' : 'nano-banana-pro';
+
+    // Get API keys (gemini for nano-banana-pro path; LOVABLE_API_KEY for gpt-image-2 path)
+    const geminiApiKey = selectedModel === 'nano-banana-pro' ? await getGeminiApiKey(requestApiKey) : null;
+    const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
+    if (selectedModel === 'nano-banana-pro' && !geminiApiKey) {
       return new Response(
         JSON.stringify({ success: false, error: 'Gemini API key not configured. Add it in Agency Settings.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (selectedModel === 'openai' && !lovableKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'LOVABLE_API_KEY missing — cannot call GPT Image 2.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -109,68 +121,94 @@ CRITICAL REQUIREMENTS:
 - Authentic UGC creator aesthetic`.trim();
     }
 
-    // Build parts array
-    const parts: any[] = [{ text: fullPrompt }];
+    // Generate the image
+    let base64Image = '';
+    let mimeType = 'image/png';
 
-    // Add reference image for identity consistency
-    if (referenceImageUrl) {
-      try {
-        const imgRes = await fetch(referenceImageUrl);
-        if (imgRes.ok) {
-          const buf = await imgRes.arrayBuffer();
-          const b64 = arrayBufferToBase64(buf);
-          const ct = imgRes.headers.get('content-type') || 'image/png';
-          parts.push({ inlineData: { mimeType: ct, data: b64 } });
-          console.log('Added reference image for identity consistency');
-        }
-      } catch (err) {
-        console.warn('Failed to fetch reference image:', err);
-      }
-    }
-
-    // Call Gemini
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${geminiApiKey}`,
-      {
+    if (selectedModel === 'openai') {
+      // GPT Image 2 via Lovable AI Gateway
+      const sizeMap: Record<string, string> = {
+        '1:1': '1024x1024', '3:4': '1024x1536', '9:16': '1024x1536',
+        '4:3': '1536x1024', '16:9': '1536x1024', '2:3': '1024x1536', '3:2': '1536x1024',
+      };
+      const size = sizeMap[aspectRatio] || '1024x1536';
+      const promptText = fullPrompt + (referenceImageUrl ? `\n\nReference image (preserve identity / look): ${referenceImageUrl}` : '');
+      const res = await fetch('https://ai.gateway.lovable.dev/v1/images/generations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          model: 'openai/gpt-image-2',
+          prompt: promptText,
+          size,
+          n: 1,
+          quality: 'medium',
         }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        console.error('GPT Image 2 error:', t);
+        return new Response(
+          JSON.stringify({ success: false, error: 'GPT Image 2 error', details: t.slice(0, 500) }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-    );
-
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      console.error('Gemini API error:', errorText);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Gemini API error', details: errorText }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      const data = await res.json();
+      const b64 = data?.data?.[0]?.b64_json;
+      if (!b64) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No image data from GPT Image 2' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      base64Image = b64;
+      mimeType = 'image/png';
+    } else {
+      // Nano Banana Pro (Gemini 3 Pro Image Preview)
+      const parts: any[] = [{ text: fullPrompt }];
+      if (referenceImageUrl) {
+        try {
+          const imgRes = await fetch(referenceImageUrl);
+          if (imgRes.ok) {
+            const buf = await imgRes.arrayBuffer();
+            const b64 = arrayBufferToBase64(buf);
+            const ct = imgRes.headers.get('content-type') || 'image/png';
+            parts.push({ inlineData: { mimeType: ct, data: b64 } });
+          }
+        } catch (err) {
+          console.warn('Failed to fetch reference image:', err);
+        }
+      }
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          }),
+        }
       );
+      if (!geminiResponse.ok) {
+        const errorText = await geminiResponse.text();
+        console.error('Gemini API error:', errorText);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Gemini API error', details: errorText }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const geminiData = await geminiResponse.json();
+      const imageParts = geminiData.candidates?.[0]?.content?.parts || [];
+      const imagePart = imageParts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
+      if (!imagePart?.inlineData?.data) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No image data in Gemini response' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      base64Image = imagePart.inlineData.data;
+      mimeType = imagePart.inlineData.mimeType || 'image/png';
     }
-
-    const geminiData = await geminiResponse.json();
-    const candidates = geminiData.candidates || [];
-    if (candidates.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'No image generated' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const imageParts = candidates[0]?.content?.parts || [];
-    const imagePart = imageParts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
-
-    if (!imagePart?.inlineData?.data) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'No image data in response' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const base64Image = imagePart.inlineData.data;
-    const mimeType = imagePart.inlineData.mimeType || 'image/png';
 
     // Upload to storage
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

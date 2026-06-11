@@ -1336,7 +1336,15 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
   curiosity_gap: "COPY FRAMEWORK: Curiosity Gap. Open an information loop in the hook ('The 1 thing 90% of investors miss…'), tease the payoff visually, withhold the full answer — CTA promises to deliver it.",
 };
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean }) => [
+const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
+  "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
+  "bytedance/seedance-2.0":      { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, up to 1080p)" },
+  "moonshotai/kling-v2.1":       { maxDuration: 10, label: "Kling 2.1 (≤10s per clip)" },
+  "moonshotai/kling-v2.1-pro":   { maxDuration: 10, label: "Kling 2.1 Pro (≤10s per clip)" },
+  "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
+};
+
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
@@ -1400,6 +1408,39 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
     : (ctx.videoModel
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
+  // Per-model duration caps + automatic multi-clip splitting
+  (() => {
+    const ids = (ctx.videoModels && ctx.videoModels.length ? ctx.videoModels : (ctx.videoModel ? [ctx.videoModel] : []))
+      .filter((m) => VIDEO_MODEL_CAPS[m]);
+    if (!ids.length) return null;
+    const lines = ids.map((m) => `  • ${VIDEO_MODEL_CAPS[m].label}`).join("\n");
+    return [
+      "VIDEO MODEL CAPABILITIES (CRITICAL — respect per-clip duration limits):",
+      lines,
+      "- When the requested total video length EXCEEDS the chosen model's per-clip max, you MUST split the script into MULTIPLE generate_seedance_video tool_calls in the SAME assistant turn (parallel). Example: a 30s script on Seedance (15s max) → 2 calls of 15s each; a 24s script on Veo 3.1 Fast (8s max) → 3 calls of 8s each.",
+      "- For each split clip, assign the matching segment of the script to the prompt (Clip 1 = first segment, Clip 2 = next segment, …) and keep aspect_ratio/resolution identical across clips.",
+      "- If an avatar is selected (see AVATAR CONTEXT below), pass the SAME avatar image_url on every clip so the same face carries across all segments.",
+    ].join("\n");
+  })(),
+  // Avatar selection (chat-side ingredient for video ads)
+  ctx.avatar
+    ? [
+        "AVATAR CONTEXT (the user picked an avatar to feature in any generated video):",
+        `- id: ${ctx.avatar.id}`,
+        `- name: ${ctx.avatar.name}`,
+        `- image_url: ${ctx.avatar.image_url}`,
+        ctx.avatar.gender ? `- gender: ${ctx.avatar.gender}` : "",
+        ctx.avatar.age_range ? `- age: ${ctx.avatar.age_range}` : "",
+        ctx.avatar.ethnicity ? `- ethnicity: ${ctx.avatar.ethnicity}` : "",
+        ctx.avatar.description ? `- notes: ${ctx.avatar.description}` : "",
+        ctx.avatar.elevenlabs_voice_id ? `- voice_id: ${ctx.avatar.elevenlabs_voice_id}` : "",
+        "RULES:",
+        "- For ANY video the user asks for (single-clip or multi-clip), pass image_url = the avatar image_url to generate_seedance_video so the avatar is preserved across frames. The user does NOT need to re-state the avatar in their message.",
+        "- If the script is longer than the model's per-clip max, split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url so the avatar's face and outfit stay consistent across segments.",
+        "- In the video prompt, briefly describe the avatar performing the scripted action (e.g. 'Sarah, 28, casual blazer, smiling to camera, holding phone vertically — speaks the hook directly into the lens'). Don't change the avatar's identity, ethnicity, or core look.",
+        "- The user can override the avatar for a specific request by saying 'no avatar' or supplying a different image — respect that.",
+      ].filter(Boolean).join("\n")
+    : null,
   ctx.adFormat && AD_FORMAT_RULES[ctx.adFormat] ? AD_FORMAT_RULES[ctx.adFormat] : null,
   ctx.hookFramework && HOOK_FRAMEWORK_RULES[ctx.hookFramework] ? HOOK_FRAMEWORK_RULES[ctx.hookFramework] : null,
   ctx.burnCaptions
@@ -1457,13 +1498,14 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, videoModels, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, videoModels, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
+    avatarId?: string | null;
     adFormat?: string | null;
     hookFramework?: string | null;
     burnCaptions?: boolean;
@@ -1500,6 +1542,19 @@ Deno.serve(async (req) => {
     : (selectedVideoModels[0] || "bytedance/seedance-2.0-fast");
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
+
+  // Load selected avatar (if any) for system-prompt context + auto-injection into video tools
+  let selectedAvatar: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null = null;
+  if (typeof avatarId === "string" && avatarId) {
+    try {
+      const { data: av } = await supa
+        .from("avatars")
+        .select("id, name, image_url, gender, age_range, ethnicity, description, elevenlabs_voice_id")
+        .eq("id", avatarId)
+        .maybeSingle();
+      if (av && av.image_url) selectedAvatar = av as any;
+    } catch (e) { console.warn("avatar lookup failed", e); }
+  }
 
   // Route chat completions through OpenRouter when the model id is prefixed
   // with "openrouter/" (e.g. "openrouter/anthropic/claude-3.5-sonnet").
@@ -1995,7 +2050,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: selectedVideoModels, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: selectedVideoModels, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
@@ -2536,7 +2591,7 @@ Deno.serve(async (req) => {
                   aspectRatio: args.aspect_ratio || "9:16",
                   duration: typeof args.duration === "number" ? args.duration : 15,
                   resolution: args.resolution === "720p" ? "720p" : "1080p",
-                  imageUrl: args.image_url || null,
+                  imageUrl: args.image_url || (selectedAvatar ? selectedAvatar.image_url : null),
                   lastFrameUrl: args.last_frame_url || null,
                   fast: !!args.fast,
                   model: (typeof args.model === "string" && args.model) ? args.model : selectedVideoModel,

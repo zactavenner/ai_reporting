@@ -24,6 +24,8 @@ import { AgentMentionPopover } from "./AgentMentionPopover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 import { AIStudioAgentsTab } from "./AIStudioAgentsTab";
+import { AIStudioAvatarsTab } from "./AIStudioAvatarsTab";
+import { useAvatars } from "@/hooks/useAvatars";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
@@ -630,7 +632,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [input, setInput] = useState("");
   const [caretPos, setCaretPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents">("chat");
+  const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents" | "avatars">("chat");
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(() => {
+    try { return localStorage.getItem(`ai-studio:avatar:${clientId}`) || null; } catch { return null; }
+  });
+  useEffect(() => {
+    try {
+      if (selectedAvatarId) localStorage.setItem(`ai-studio:avatar:${clientId}`, selectedAvatarId);
+      else localStorage.removeItem(`ai-studio:avatar:${clientId}`);
+    } catch {}
+  }, [selectedAvatarId, clientId]);
+  const { data: studioAvatars = [] } = useAvatars(clientId);
+  const selectedAvatar = studioAvatars.find(a => a.id === selectedAvatarId) || null;
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
@@ -928,6 +941,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         imageModels,
         videoModel,
         videoModels,
+        avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
         hookFramework: hookFramework === "auto" ? undefined : hookFramework,
         burnCaptions,
@@ -1288,11 +1302,26 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             onClick={() => setAiStudioTab("agents")}
             className={`text-xs px-3 py-1 rounded-md transition inline-flex items-center gap-1 ${aiStudioTab === "agents" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
           ><Bot className="h-3 w-3" /> Agents</button>
+          <button
+            type="button"
+            onClick={() => setAiStudioTab("avatars")}
+            className={`text-xs px-3 py-1 rounded-md transition inline-flex items-center gap-1 ${aiStudioTab === "avatars" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+          >Avatars{selectedAvatar ? <span className="ml-1 inline-flex items-center gap-1 text-[10px] text-primary">· {selectedAvatar.name}</span> : null}</button>
         </div>
 
         {aiStudioTab === "agents" && (
           <div className="flex-1 min-h-0">
             <AIStudioAgentsTab clientId={clientId} clientName={clientName} />
+          </div>
+        )}
+        {aiStudioTab === "avatars" && (
+          <div className="flex-1 min-h-0">
+            <AIStudioAvatarsTab
+              clientId={clientId}
+              clientName={clientName}
+              selectedAvatarId={selectedAvatarId}
+              onSelectAvatar={setSelectedAvatarId}
+            />
           </div>
         )}
         {aiStudioTab === "chat" && (
@@ -1704,6 +1733,30 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   })}
                   {videoModels.length > 1 && (
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
+                  <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
+                    <SelectTrigger className="h-7 text-[10px] w-[160px]">
+                      <SelectValue placeholder="No avatar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">No avatar</SelectItem>
+                      {studioAvatars.map((a) => (
+                        <SelectItem key={a.id} value={a.id} className="text-xs">
+                          <span className="inline-flex items-center gap-2">
+                            {a.image_url ? <img src={a.image_url} alt="" className="h-4 w-4 rounded-full object-cover" /> : null}
+                            {a.name}{a.is_stock ? " · stock" : ""}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedAvatar && (
+                    <button type="button" onClick={() => setAiStudioTab("avatars")} className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+                      manage
+                    </button>
                   )}
                 </div>
                 </div>
