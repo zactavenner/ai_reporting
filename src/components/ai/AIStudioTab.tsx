@@ -471,10 +471,39 @@ function ChatImagePreview({ image }: { image: ChatImage }) {
   );
 }
 
-function ChatVideoPreview({ video }: { video: ChatVideo }) {
+function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; clientId: string; clientName?: string }) {
   const filename = `aistudio-${Date.now()}.mp4`;
   const aspect = video.aspect_ratio === "16:9" ? "16/9" : video.aspect_ratio === "1:1" ? "1/1" : "9/16";
   const hasUrl = !!video.url;
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const saveAsTraining = async () => {
+    if (!video.url || !clientId) return;
+    setSaving(true);
+    try {
+      const { data: sess } = await supabase.auth.getUser();
+      const tags = ["training", "winner", `client:${clientId}`];
+      if (video.model) tags.push(`model:${video.model.replace(/[^a-z0-9.-]/gi, "-").toLowerCase()}`);
+      const { error } = await supabase.from("ai_studio_reference_videos" as any).insert({
+        name: `⭐ ${clientName || "Client"} winner — ${new Date().toLocaleDateString()}`,
+        tags,
+        video_url: video.url,
+        client_id: clientId,
+        created_by: sess.user?.id || null,
+        source: "training",
+        aspect_ratio: video.aspect_ratio || "9:16",
+        duration_seconds: video.duration || null,
+        notes: (video.prompt || "").slice(0, 1000),
+      });
+      if (error) throw error;
+      setSaved(true);
+      toast.success(`Saved to ${clientName || "client"} training library`);
+    } catch (e: any) {
+      toast.error(e?.message || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <div className="shrink-0 snap-start w-72 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
       <VideoPlayerCard
@@ -507,6 +536,15 @@ function ChatVideoPreview({ video }: { video: ChatVideo }) {
           }}
           canvasKind="scene_video"
         />
+        <button
+          type="button"
+          disabled={!hasUrl || saving || saved}
+          onClick={saveAsTraining}
+          className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 hover:border-primary disabled:opacity-50"
+          title={`Save as ${clientName || "client"}-only training reference`}
+        >
+          {saved ? "✓ Trained" : saving ? "Saving…" : "⭐ Train"}
+        </button>
         {video.duration && <span className="text-[10px] text-muted-foreground">{video.duration}s</span>}
       </div>
     </div>
