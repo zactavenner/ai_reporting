@@ -538,7 +538,28 @@ export function HyperframesEditor({
               {time.toFixed(2)}s / {comp.duration.toFixed(2)}s
             </span>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end items-center gap-2">
+            {exportProgress !== null && (
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                MP4 {exportProgress}%
+              </span>
+            )}
+            <div className="flex items-center gap-0.5 rounded-md border bg-background/40 p-0.5">
+              {(["mp4", "webm"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setExportFormat(f)}
+                  className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${
+                    exportFormat === f
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
             <Button size="sm" variant="outline" onClick={exportMp4} disabled={exporting || saving}>
               {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
               Export
