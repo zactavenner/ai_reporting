@@ -2591,7 +2591,7 @@ Deno.serve(async (req) => {
                   aspectRatio: args.aspect_ratio || "9:16",
                   duration: typeof args.duration === "number" ? args.duration : 15,
                   resolution: args.resolution === "720p" ? "720p" : "1080p",
-                  imageUrl: args.image_url || null,
+                  imageUrl: args.image_url || (selectedAvatar ? selectedAvatar.image_url : null),
                   lastFrameUrl: args.last_frame_url || null,
                   fast: !!args.fast,
                   model: (typeof args.model === "string" && args.model) ? args.model : selectedVideoModel,
