@@ -49,7 +49,14 @@ async function loadAgent(agentId: string | null) {
 }
 
 async function postMessage(conversationId: string, role: "assistant" | "user", content: string, metadata: any = {}) {
-  await supa.from("ai_studio_messages").insert({ conversation_id: conversationId, role, content, metadata });
+  const { error } = await supa.from("ai_studio_messages").insert({
+    conversation_id: conversationId,
+    user_id: HERMES_BOT_USER_ID,
+    role,
+    content,
+    tools: metadata ? [{ kind: "hermes_meta", data: metadata }] : [],
+  });
+  if (error) console.error("executor postMessage insert failed", error);
   await supa.from("ai_studio_conversations").update({ last_active_at: new Date().toISOString() }).eq("id", conversationId);
 }
 
