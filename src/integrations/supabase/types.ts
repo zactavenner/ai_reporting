@@ -1007,6 +1007,7 @@ export type Database = {
       }
       ai_studio_canvas_items: {
         Row: {
+          actor_member_id: string | null
           conversation_id: string
           created_at: string
           feedback_notes: string | null
@@ -1019,6 +1020,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          actor_member_id?: string | null
           conversation_id: string
           created_at?: string
           feedback_notes?: string | null
@@ -1031,6 +1033,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          actor_member_id?: string | null
           conversation_id?: string
           created_at?: string
           feedback_notes?: string | null
@@ -1071,6 +1074,7 @@ export type Database = {
           is_shared: boolean
           kind: string
           last_active_at: string
+          last_actor_member_id: string | null
           pinned: boolean
           sheet_url: string | null
           title: string | null
@@ -1095,6 +1099,7 @@ export type Database = {
           is_shared?: boolean
           kind?: string
           last_active_at?: string
+          last_actor_member_id?: string | null
           pinned?: boolean
           sheet_url?: string | null
           title?: string | null
@@ -1119,6 +1124,7 @@ export type Database = {
           is_shared?: boolean
           kind?: string
           last_active_at?: string
+          last_actor_member_id?: string | null
           pinned?: boolean
           sheet_url?: string | null
           title?: string | null
@@ -1129,6 +1135,7 @@ export type Database = {
       }
       ai_studio_messages: {
         Row: {
+          actor_member_id: string | null
           content: string
           conversation_id: string
           created_at: string
@@ -1138,6 +1145,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          actor_member_id?: string | null
           content?: string
           conversation_id: string
           created_at?: string
@@ -1147,6 +1155,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          actor_member_id?: string | null
           content?: string
           conversation_id?: string
           created_at?: string
