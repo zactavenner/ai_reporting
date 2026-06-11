@@ -24,6 +24,8 @@ import { AgentMentionPopover } from "./AgentMentionPopover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 import { AIStudioAgentsTab } from "./AIStudioAgentsTab";
+import { AIStudioAvatarsTab } from "./AIStudioAvatarsTab";
+import { useAvatars } from "@/hooks/useAvatars";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
