@@ -398,11 +398,25 @@ export function HyperframesEditor({
       canvasRef.current!.pause();
       setPlaying(false);
 
-      const blob = new Blob(chunks, { type: mime });
-      const path = `ai-studio/${clientId}/hyperframes-${Date.now()}.webm`;
+      let blob = new Blob(chunks, { type: mime });
+      let ext = "webm";
+      let outType = mime;
+      if (exportFormat === "mp4") {
+        try {
+          setExportProgress(0);
+          blob = await transcodeWebmToMp4(blob, (r) => setExportProgress(Math.round(r * 100)));
+          ext = "mp4";
+          outType = "video/mp4";
+        } catch (err: any) {
+          toast.error(`MP4 transcode failed, saving WebM instead: ${err?.message || err}`);
+        } finally {
+          setExportProgress(null);
+        }
+      }
+      const path = `ai-studio/${clientId}/hyperframes-${Date.now()}.${ext}`;
       const up = await supabase.storage
         .from("creatives")
-        .upload(path, blob, { contentType: mime, upsert: false });
+        .upload(path, blob, { contentType: outType, upsert: false });
       if (up.error) throw up.error;
       const { data: pub } = supabase.storage.from("creatives").getPublicUrl(path);
       const storageUrl = pub.publicUrl;
