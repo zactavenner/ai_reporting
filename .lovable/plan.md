@@ -1,100 +1,77 @@
+
 ## Goal
 
-Make video generation in AI Studio work reliably for every client, give it a real player, let users attach avatars / products / PDFs as inputs, and add a first-class place to manage agents.
+Add a one-click **Captions** button to every video card on the AI Studio canvas. Clicking it opens the existing Hyperframes editor, auto-transcribes the video, and pre-populates it with a **viral-pop** caption style (word-by-word, big bold, yellow active-word highlight). The user can tweak text/timing live in the editor, then export — at which point captions are burned into a new MP4 saved as a child `client_video`.
 
----
+## User flow
 
-## 1. Fix the video pipeline end-to-end
+1. Video finishes rendering in AI Studio → card shows `Download | Edit | Captions`.
+2. Click **Captions** → Hyperframes opens with the video loaded.
+3. Editor auto-runs transcription (existing `transcribe-video` edge function) and converts each word into a Hyperframes `subtitle` layer using the viral-pop preset.
+4. User can drag, retime, edit text, change color/size like any other layer.
+5. Click **Export** → server-side render bakes captions into MP4, saves to `creatives` bucket as a new `client_videos` row (parent = original), appears back in the canvas.
 
-**Symptoms (from screenshot):** two `<video>` cards rendered with no playable source (0:00, black). The current chat path posts a Seedance "result" before/without a valid rehosted URL.
+## What to build
 
-**Backend (`supabase/functions/ai-studio/index.ts` — `generateSeedanceVideo` + caller):**
-- Always rehost the final mp4 into the `creatives` bucket under `ai-studio/{client_id}/seedance/{jobId}.mp4`. Today rehost is a try/catch that silently falls back to the (often expired / signed) provider URL — make rehost mandatory; if it fails, surface a clear `failed` status to the canvas instead of returning a broken URL.
-- Emit a placeholder canvas row at `submitting` and update it through `queued → polling → downloading → rehosting → completed/failed` (the placeholder type already exists for images — extend for video).
-- HEAD-check the final URL before returning; if non-2xx, mark failed.
-- Validate `image_url` is reachable when in image→video mode; if not, return a typed error the chat surfaces.
+### 1. Caption style preset (frontend)
+`src/components/ai/hyperframes/captionPresets.ts` (new)
+- `buildViralPopLayers(words, composition)` → returns Hyperframes layers:
+  - One `subtitle` layer per word with `start`/`end` from transcript
+  - `fontSize` ~9% of height, `fontWeight: 800`, white text, no bg
+  - `color: '#FFEB3B'` (yellow) for active word; achieved by stacking one full-line "context" layer (low opacity) + the active word layer popping in with a `spring` scale 0.6→1.1→1 over ~120ms
+  - Positioned at `y: 0.78`, `anchor: 'center'`
+  - Entrance animation: opacity 0→1 + scale 0.6→1 (`spring`, ~0.2s)
+  - Group all caption layers with `id` prefix `cap_` so they're easy to identify, clear, or restyle
 
-**Frontend:**
-- In `ChatVideoPreview`, hide the `<video>` element if `video.url` is empty / failed and render a "Generating…" or "Failed — retry" state tied to the placeholder progress.
-- After completion swap to the new player.
+### 2. Hyperframes editor entry point
+`src/components/ai/hyperframes/HyperframesEditor.tsx` (edit)
+- Accept new prop `autoCaptions?: boolean` and `captionStyle?: 'viral-pop'`
+- On mount, if `autoCaptions` and no `cap_*` layers exist:
+  - Call `transcribe-video` edge function with the video URL
+  - Convert returned word-level timings via `buildViralPopLayers`
+  - Merge into composition.layers; toast "Captions generated"
+- Add a toolbar control "Captions ▾" with: Regenerate · Style: Viral pop / Karaoke (stub) / None · Clear
 
-## 2. Upgrade the in-chat video player
+### 3. Video card button
+`src/components/ai/AIStudioCanvas.tsx` (edit)
+- Add `<Button>Captions</Button>` next to Download/Edit (uses `Captions` icon from lucide-react)
+- Calls a new `onAddCaptions(videoUrl, fallbackVideo)` prop
+- Plumb through `AIStudioTab.tsx` to open `VideoEditDialog` with `autoCaptions: true`
 
-Replace the bare `<video controls>` in `ChatVideoPreview` (and `AIStudioCanvas` `scene_video`) with a new `VideoPlayerCard` component:
+### 4. VideoEditDialog
+`src/components/ai/VideoEditDialog.tsx` (edit)
+- Accept and forward `autoCaptions` to `HyperframesEditor`
 
-- Play / pause, large play overlay on first frame
-- Frame-accurate scrubber bar with elapsed / total time
-- Speed selector: 0.5× · 0.75× · 1× · 1.5× · 2×
-- Mute toggle + volume
-- Fullscreen + Picture-in-Picture buttons
-- Keeps existing Download / Recreate / + Canvas action bar
+### 5. Server-side burn-in on export
+`supabase/functions/hyperframes-render/index.ts` (new — or extend existing render fn if present)
+- Already-rendered composition path: most Hyperframes layers render in-browser. For burn-in export we need ffmpeg-style overlays.
+- Implementation: render frames via existing browser export pipeline (if Hyperframes already has client-side MediaRecorder export, captions are already baked in — confirm during build). If not, add server fn that:
+  1. Downloads source MP4
+  2. Builds an ASS subtitle file from `cap_*` layers (viral-pop styled via `\fad`, `\t` scale tags)
+  3. Runs ffmpeg `-vf "ass=captions.ass"` (requires ffmpeg in edge — fallback to Remotion-style render if not available)
+  4. Uploads result to `creatives`, inserts child `client_videos` row
+- Decision during build: inspect existing Hyperframes export path first; only add server fn if needed.
 
-Shared component so canvas cards and chat cards look identical.
+### 6. Transcription reuse
+- Use existing `supabase/functions/transcribe-video/index.ts` (referenced by `useVideoCaptions`) — returns `{ captions: [{ text, startTime, endTime, words: [{word, startTime, endTime}] }] }`. No backend changes needed.
 
-## 3. Avatar / Product / PDF picker for video generation
+## Anti-mix-clients safeguard
+- Caption layers are scoped to the composition belonging to a single `client_video.id`; they are saved on that video's `composition` JSON only. No cross-client cache key. (Mirrors the safeguard added earlier for video AI Studio prompts.)
 
-Two surfaces, same data source:
-
-**A. Composer picker (inline)** — new "+ Reference" menu next to the composer in `AIStudioTab` with three tabs:
-- **Avatars** — pulls from existing `avatars` table for the client (+ stock). Selecting one sets `avatar_image_url` on the next message.
-- **Products** — pulls from `client_assets` where type is image/product, plus uploaded refs from `ai_studio_reference_images`.
-- **PDFs** — pulls from `client_offer_files` + `client_file_uploads` where mime is `application/pdf`. Up to 3 PDFs attached; passed as `pdf_context_urls`.
-
-Selected references become structured attachments on the user message and are appended to the system prompt as:
-```
-ATTACHED REFERENCES:
-- Avatar: <url> (use this person's face/identity in the video)
-- Product: <url>
-- PDF context: <url>  (extract offer details, compliance, value props)
-```
-
-**B. Dedicated Video Studio panel** — a slide-over from the AI Studio header ("🎬 Video Studio") that gives a structured form:
-- Avatar select · Product image select (multi) · PDF context (multi)
-- Prompt + aspect ratio + duration + 720p/1080p + Fast/Standard
-- Big "Generate" button → calls `ai-studio` edge function directly with `generate_seedance_video` tool args wired in, then streams the placeholder → video card back into the active conversation.
-
-**Edge function changes:**
-- Extend `generate_seedance_video` tool schema with optional `avatar_image_url`, `product_image_urls[]`, `pdf_context_urls[]`.
-- When PDFs present, fetch text via existing offer-files context loader and merge into the Seedance prompt prefix (Seedance is image+text, no PDF input — context is folded into the prompt).
-- When `avatar_image_url` is set and no `image_url`, use the avatar as the source frame (image-to-video).
-
-## 4. Agents sub-tab in AI Studio
-
-Add a new tab strip at the top of AI Studio: **Chat · Agents · Canvas** (Canvas tab already exists implicitly; this just makes Agents first-class).
-
-**Agents tab** (new component `AIStudioAgentsTab.tsx`):
-- Left column: list of this client's agents + "+ New agent" + a default seed (Creatives, Copy, Strategy)
-- Right column: editor — name, handle, type, model, system prompt, knowledge base (markdown), reference files (uploader)
-- Header sub-section: edit the client Agent Folder (profile_md, brand_kit, notes)
-- Reuses existing `ClientAgentsManager` internals + `useClientAgents` hook
-
-Keep the existing "Agents" header button as a quick-access shortcut that switches to this tab instead of opening a dialog.
-
-## 5. End-to-end verification
-
-For every AI Studio client (loop through `clients` where `status in (active, onboarding, paused)`):
-- Call `ai-studio` with a fixed prompt: "Generate a 5s 9:16 720p Seedance fast test clip showing a brand-color gradient" using `fast: true`.
-- Verify a placeholder is emitted, completes, and the final URL HEAD-checks 200.
-- Write outcome to a small new table `ai_studio_video_smoke_runs(client_id, status, video_url, error, ran_at)` and surface a "Last smoke run" badge on each client in the AI Studio client picker.
-- Provide a one-click "Run smoke test for all clients" button in the new Agents tab header for admins.
-
----
+## Out of scope
+- Karaoke / other caption styles (button stubs only, viral-pop only working preset)
+- Auto-generating captions on every new render (per user choice: button-triggered only)
+- Multi-language translation of captions
 
 ## Files touched
 
-- **Edit** `supabase/functions/ai-studio/index.ts` — mandatory rehost, video placeholder progress, extended seedance tool schema, PDF/avatar/product context.
-- **Edit** `src/components/ai/AIStudioTab.tsx` — composer reference picker, video player swap, tab strip, hook agents tab.
-- **Edit** `src/components/ai/AIStudioCanvas.tsx` — use new player for `scene_video`, video placeholder rendering.
-- **New** `src/components/ai/VideoPlayerCard.tsx` — full-featured player.
-- **New** `src/components/ai/AIStudioReferencePicker.tsx` — composer popover with Avatars / Products / PDFs.
-- **New** `src/components/ai/AIStudioVideoStudio.tsx` — slide-over generation panel.
-- **New** `src/components/ai/AIStudioAgentsTab.tsx` — wraps `ClientAgentsManager` as a real tab.
-- **Migration** — `ai_studio_video_smoke_runs` table + grants/RLS.
+| File | Change |
+|---|---|
+| `src/components/ai/hyperframes/captionPresets.ts` | new — viral-pop layer builder |
+| `src/components/ai/hyperframes/HyperframesEditor.tsx` | auto-transcribe + caption toolbar |
+| `src/components/ai/AIStudioCanvas.tsx` | add Captions button on video cards |
+| `src/components/ai/AIStudioTab.tsx` | wire `onAddCaptions` → dialog with `autoCaptions` |
+| `src/components/ai/VideoEditDialog.tsx` | forward `autoCaptions` prop |
+| `supabase/functions/hyperframes-render/index.ts` | new (only if existing export doesn't bake overlays) |
 
----
-
-## Out of scope (call out)
-
-- Veo storyboard pipeline (untouched — already separate path).
-- Lipsync/voice synthesis to PDFs (no provider chain in place — PDFs only inform the prompt text).
-- Per-end-user OAuth into HeyGen or other avatar providers — uses our existing `avatars` table only.
+Send the example video + style reference whenever ready — I'll mirror the exact font/spacing/highlight color in `buildViralPopLayers` before shipping.
