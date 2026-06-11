@@ -1,4 +1,5 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const META_V = 'v21.0';
 const GRAPH = `https://graph.facebook.com/${META_V}`;
@@ -65,15 +66,49 @@ async function validateToken(token: string): Promise<ValidationResult> {
   }
 }
 
+async function persistTokenState(state: {
+  token: string;
+  expires_at: string | null;
+  ok: boolean;
+  error?: string;
+  ad_account_count: number;
+}) {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return;
+  const sb = createClient(url, key);
+  await sb.from('meta_token_state').upsert({
+    id: 1,
+    access_token: state.token,
+    expires_at: state.expires_at,
+    last_refreshed_at: new Date().toISOString(),
+    last_validated_at: new Date().toISOString(),
+    last_status: state.ok ? 'ok' : 'failed',
+    last_error: state.error ?? null,
+    ad_account_count: state.ad_account_count,
+  });
+}
+
+async function getCurrentToken(): Promise<string | null> {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (url && key) {
+    const sb = createClient(url, key);
+    const { data } = await sb.from('meta_token_state').select('access_token').eq('id', 1).maybeSingle();
+    if (data?.access_token) return data.access_token as string;
+  }
+  return Deno.env.get('META_SHARED_ACCESS_TOKEN') ?? null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { action = 'validate', token: inputToken } = await req.json().catch(() => ({}));
+    const { action = 'validate', token: inputToken, persist = false } = await req.json().catch(() => ({}));
 
     // Action: validate a token (provided or current shared)
     if (action === 'validate') {
-      const tok = inputToken || Deno.env.get('META_SHARED_ACCESS_TOKEN');
+      const tok = inputToken || (await getCurrentToken());
       if (!tok) {
         return new Response(JSON.stringify({ ok: false, error: 'No token provided' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -87,7 +122,7 @@ Deno.serve(async (req) => {
 
     // Action: exchange short-lived → long-lived AND validate
     if (action === 'refresh') {
-      const seed = inputToken || Deno.env.get('META_SHARED_ACCESS_TOKEN');
+      const seed = inputToken || (await getCurrentToken());
       if (!seed) {
         return new Response(JSON.stringify({ ok: false, error: 'No seed token' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -95,6 +130,15 @@ Deno.serve(async (req) => {
       }
       const { token: longLived } = await exchangeForLongLived(seed);
       const validation = await validateToken(longLived);
+      if (persist || validation.ok) {
+        await persistTokenState({
+          token: longLived,
+          expires_at: validation.expires_at ?? null,
+          ok: validation.ok,
+          error: validation.error,
+          ad_account_count: validation.ad_accounts?.length ?? 0,
+        });
+      }
       return new Response(JSON.stringify(validation), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

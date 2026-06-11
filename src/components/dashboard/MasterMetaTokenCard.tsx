@@ -59,6 +59,24 @@ export function MasterMetaTokenCard() {
     setCheckingCurrent(false);
   };
 
+  const handleRefreshNow = async () => {
+    setCheckingCurrent(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-token-refresh', {
+        body: { action: 'refresh', persist: true },
+      });
+      if (error) throw error;
+      const v = data as Validation;
+      setCurrentStatus(v);
+      if (v?.ok) toast.success('Token refreshed & saved to secrets');
+      else toast.error(v?.error || 'Refresh failed');
+    } catch (e: any) {
+      toast.error(e?.message || 'Refresh failed');
+    } finally {
+      setCheckingCurrent(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!result?.ok) {
       toast.error('Validate the token first — only green tokens can be saved');
@@ -109,6 +127,10 @@ export function MasterMetaTokenCard() {
             <Button size="sm" variant="ghost" onClick={handleCheckCurrent} disabled={checkingCurrent} className="h-7">
               {checkingCurrent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               <span className="ml-1 text-xs">Check now</span>
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleRefreshNow} disabled={checkingCurrent} className="h-7 ml-2">
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span className="ml-1 text-xs">Refresh & save</span>
             </Button>
           </div>
           {currentStatus && !currentStatus.ok && (
