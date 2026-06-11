@@ -99,10 +99,16 @@ async function postMessage(conversationId: string, role: "user" | "assistant" | 
 
 async function pickDefaultAgent(clientId: string, taskType: string) {
   const typeToType: Record<string, string[]> = {
-    video: ["video", "creative", "content"],
-    static_ad: ["image", "creative", "static_ad"],
+    video: ["video_ads_generator", "video_ads", "video", "creative", "content"],
+    video_ad: ["video_ads_generator", "video_ads", "video"],
+    video_edit: ["video_editor", "video_editing"],
+    video_editing: ["video_editor", "video_editing"],
+    static_ad: ["static_ads_generator", "static_ads", "image", "creative", "static_ad"],
+    static: ["static_ads_generator", "static_ads"],
     copy: ["copy", "content", "writing"],
     research: ["research", "analyst"],
+    reporting: ["reporting", "analyst"],
+    report: ["reporting", "analyst"],
   };
   const cats = typeToType[taskType] || [taskType];
   const { data } = await supa
@@ -112,7 +118,20 @@ async function pickDefaultAgent(clientId: string, taskType: string) {
     .eq("enabled", true)
     .in("agent_type", cats)
     .limit(1);
-  return data?.[0] ?? null;
+  if (data?.[0]) return data[0];
+  // Fallback: any enabled agent whose type contains the task keyword
+  const kw = taskType.split(/[_\-\s]/)[0];
+  if (kw) {
+    const { data: fuzzy } = await supa
+      .from("client_agents")
+      .select("id, name, agent_type, enabled")
+      .eq("client_id", clientId)
+      .eq("enabled", true)
+      .ilike("agent_type", `%${kw}%`)
+      .limit(1);
+    return fuzzy?.[0] ?? null;
+  }
+  return null;
 }
 
 async function callHermesCallback(callbackUrl: string | null | undefined, payload: unknown) {
