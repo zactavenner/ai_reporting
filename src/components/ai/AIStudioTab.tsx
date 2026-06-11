@@ -21,6 +21,7 @@ import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
 import { AgentMentionPopover } from "./AgentMentionPopover";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
 import { AIStudioAgentsTab } from "./AIStudioAgentsTab";
 import { VideoPlayerCard } from "./VideoPlayerCard";
@@ -645,7 +646,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recStreamRef = useRef<MediaStream | null>(null);
-  useEffect(() => { try { localStorage.setItem("ai-studio:show-canvas", String(showCanvas)); } catch {} }, [showCanvas]);
   const [clientDocUrl, setClientDocUrl] = useState<string>("");
   const [docTest, setDocTest] = useState<null | { ok: boolean; source?: string; title?: string; char_count?: number; doc_id?: string; latency_ms?: number; error?: string; client?: { name?: string } }>(null);
   const [testingDoc, setTestingDoc] = useState(false);
@@ -1112,7 +1112,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   async function clearConversation() {
     if (!conversationId) { setMessages([]); setCanvas([]); return; }
-    if (!confirm("Clear this AI Studio conversation? Past messages and canvas items will be hidden.")) return;
+    setClearOpen(true);
+  }
+  const [clearOpen, setClearOpen] = useState(false);
+  async function doClear() {
+    setClearOpen(false);
+    if (!conversationId) return;
     const res = await studioFetch({ action: "clear", clientId, conversationId });
     if (!res.ok) { toast.error("Failed to clear"); return; }
     setMessages([]);
@@ -1236,6 +1241,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Button>
           </div>
         </div>
+        <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear this AI Studio conversation?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Past messages and canvas items will be hidden from this thread. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={doClear}>Clear</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="flex items-center gap-1 px-3 py-1 border-b border-border/60 bg-muted/10">
           <button

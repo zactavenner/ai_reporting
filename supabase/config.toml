@@ -132,3 +132,9 @@ verify_jwt = false
 
 [functions.fulfill-client]
 verify_jwt = false
+
+[functions.hermes-task-executor]
+verify_jwt = false
+
+[functions.dispatch-scheduled-agents]
+verify_jwt = false

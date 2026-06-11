@@ -169,6 +169,26 @@ async function handleCreateTask(body: any, cfg: any) {
     { hermes_task_id: task.id, source: "hermes" },
   );
 
+  // Fire-and-forget: dispatch to background executor so the task doesn't sit
+  // in `queued` forever. If no agent matched, we still return — a human can
+  // pick it up in AI Studio.
+  if (agent?.id) {
+    const dispatch = fetch(`${SUPABASE_URL}/functions/v1/hermes-task-executor`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        apikey: SERVICE_KEY,
+      },
+      body: JSON.stringify({ password: "HPA1234$", task_id: task.id }),
+    }).catch((e) => console.warn("executor dispatch failed", e));
+    // @ts-ignore EdgeRuntime is available in Supabase Functions
+    if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
+      // @ts-ignore
+      (EdgeRuntime as any).waitUntil(dispatch);
+    }
+  }
+
   return json({
     task_id: task.id,
     client: { id: client.id, name: client.name, slug: client.slug },
