@@ -18,6 +18,8 @@ import {
   Send,
   Wand2,
   Save,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -86,6 +88,10 @@ export function HyperframesEditor({
     { role: "user" | "assistant"; content: string }[]
   >([]);
   const [captionBusy, setCaptionBusy] = useState(false);
+  const [captionStage, setCaptionStage] = useState<
+    "idle" | "downloading" | "transcribing" | "applying" | "done"
+  >("idle");
+  const [captionError, setCaptionError] = useState<string | null>(null);
   const captionsRanRef = useRef(false);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
   const segmentsRef = useRef<CaptionSegment[]>([]);
@@ -97,23 +103,36 @@ export function HyperframesEditor({
   // ---------- Captions ----------
   const generateCaptions = async (styleOverride?: CaptionStyle) => {
     setCaptionBusy(true);
+    setCaptionError(null);
+    setCaptionStage("downloading");
+    // Advance stage indicators so the UI feels responsive while the edge fn runs
+    const t1 = window.setTimeout(() => setCaptionStage("transcribing"), 600);
     try {
       const { data, error } = await supabase.functions.invoke("transcribe-video", {
         body: { videoUrl },
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Transcription request failed");
+      if (data?.error) throw new Error(String(data.error));
       const segments: CaptionSegment[] = Array.isArray(data?.captions) ? data.captions : [];
       if (segments.length === 0) {
-        toast.error("No speech detected");
+        const msg = "No speech detected in the video";
+        setCaptionError(msg);
+        toast.error(msg);
         return;
       }
+      setCaptionStage("applying");
       segmentsRef.current = segments;
       const style = styleOverride ?? captionStyle;
       setComp((c) => applyCaptionPreset(c, segments, style));
+      setCaptionStage("done");
       toast.success(`Generated ${segments.reduce((n, s) => n + (s.words?.length || s.text.split(/\s+/).length), 0)} caption words`);
     } catch (e: any) {
-      toast.error(`Caption generation failed: ${e?.message || e}`);
+      const msg = e?.message || String(e);
+      setCaptionError(msg);
+      setCaptionStage("idle");
+      toast.error(`Caption generation failed: ${msg}`);
     } finally {
+      window.clearTimeout(t1);
       setCaptionBusy(false);
     }
   };
