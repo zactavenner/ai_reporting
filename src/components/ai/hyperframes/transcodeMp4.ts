@@ -49,5 +49,5 @@ export async function transcodeWebmToMp4(
   const data = (await ff.readFile(outputName)) as Uint8Array;
   try { await ff.deleteFile(inputName); } catch {}
   try { await ff.deleteFile(outputName); } catch {}
-  return new Blob([data.buffer], { type: "video/mp4" });
+  return new Blob([data as BlobPart], { type: "video/mp4" });
 }
