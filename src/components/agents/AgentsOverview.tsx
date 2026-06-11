@@ -10,6 +10,7 @@ import { AIStudioReferenceLibrary } from "@/components/ai/AIStudioReferenceLibra
 import { useState } from "react";
 
 interface Props { clients: Client[]; }
+type AgentClick = (agentId: string) => void;
 
 // Rough cost estimate per token for mixed gemini/gpt usage
 const COST_PER_1K_TOKENS = 0.002;
@@ -149,7 +150,22 @@ export function AgentsOverview({ clients }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent className="max-h-[480px] overflow-y-auto">
-            <OrgChart agents={agents} clients={clients} byClient={byClient} />
+            <OrgChart
+              agents={agents}
+              clients={clients}
+              byClient={byClient}
+              onAgentClick={(id) => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("tab", "agents");
+                url.searchParams.set("agent", id);
+                window.history.replaceState({}, "", url.toString());
+                // Smooth scroll to workforce section + notify AgentsTab
+                window.dispatchEvent(new CustomEvent("agents:select", { detail: { id } }));
+                setTimeout(() => {
+                  document.getElementById("agent-workforce")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 50);
+              }}
+            />
           </CardContent>
         </Card>
       </div>
@@ -200,10 +216,12 @@ function OrgChart({
   agents,
   clients,
   byClient,
+  onAgentClick,
 }: {
   agents: any[];
   clients: Client[];
   byClient: Map<string, any[]>;
+  onAgentClick?: AgentClick;
 }) {
   // Group agency agents by functional category based on template_key / name.
   const cats: { label: string; emoji: string; keys: string[] }[] = [
@@ -249,7 +267,12 @@ function OrgChart({
                   <p className="text-[10px] text-muted-foreground text-center">No agents</p>
                 )}
                 {g.list.map((a: any) => (
-                  <div key={a.id} className="px-2.5 py-1.5 rounded-md border bg-card/50 text-xs flex items-center gap-1.5">
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => onAgentClick?.(a.id)}
+                    className="px-2.5 py-1.5 rounded-md border bg-card/50 text-xs flex items-center gap-1.5 hover:border-primary hover:bg-primary/5 transition-colors text-left w-full"
+                  >
                     <span>{a.icon || "⚙️"}</span>
                     <span className="font-medium truncate flex-1">{a.name}</span>
                     {a.enabled ? (
@@ -257,7 +280,7 @@ function OrgChart({
                     ) : (
                       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
