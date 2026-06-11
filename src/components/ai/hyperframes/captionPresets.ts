@@ -257,3 +257,126 @@ export function applyCaptionPreset(
 export function hasCaptionLayers(comp: HyperframesComposition): boolean {
   return comp.layers.some((l) => l.id.startsWith(CAP_PREFIX));
 }
+
+/**
+ * ADVANCED-CINEMATIC: 3-line cinematic stack with a tilted, gold/red accent word.
+ *  - Top line: small lowercase modifier ("your biggest", "is not")
+ *  - Middle:   HUGE condensed uppercase ACCENT in gold or red-orange
+ *  - Bottom:   medium uppercase suffix in white
+ * Staggered entrance — prefix fades in, accent springs in tilted, suffix slides up.
+ */
+export function buildAdvancedCinematicLayers(
+  segments: CaptionSegment[],
+  comp: HyperframesComposition,
+): Layer[] {
+  const layers: Layer[] = [];
+  const smallSize = Math.round(comp.height * 0.055);
+  const accentSize = Math.round(comp.height * 0.13);
+  const suffixSize = Math.round(comp.height * 0.075);
+  const strokeBase = Math.max(5, Math.round(smallSize * 0.18));
+  const accentColors = ["#F5C24B", "#E85A2A", "#FFFFFF"]; // gold, red-orange, white — cycle per phrase
+  let i = 0;
+  let phraseIdx = 0;
+  for (const seg of segments) {
+    const words = ensureWords(seg);
+    if (!words.length) continue;
+    const accentIdx = pickAccentIndex(words);
+    const before = words.slice(0, accentIdx).map((w) => w.word).join(" ");
+    const accent = words[accentIdx].word;
+    const after = words.slice(accentIdx + 1).map((w) => w.word).join(" ");
+    const start = seg.startTime;
+    const end = Math.min(comp.duration, seg.endTime + 0.1);
+    const accentColor = accentColors[phraseIdx % accentColors.length];
+    const tilt = ((phraseIdx % 2 === 0) ? -1 : 1) * 2.5; // alternate slight tilt
+    phraseIdx++;
+
+    const shadow = {
+      shadowColor: "rgba(0,0,0,0.7)",
+      shadowBlur: Math.round(accentSize * 0.18),
+    };
+
+    if (before) {
+      layers.push({
+        id: `${CAP_PREFIX}${i++}`,
+        type: "text",
+        text: before,
+        uppercase: false,
+        start,
+        end,
+        x: 0.5,
+        y: 0.28,
+        anchor: "center",
+        fontFamily: "Playfair Display, Georgia, serif",
+        fontSize: smallSize,
+        fontWeight: 600,
+        color: "#FFFFFF",
+        stroke: "#000000",
+        strokeWidth: Math.max(3, Math.round(strokeBase * 0.7)),
+        ...shadow,
+        align: "center",
+        maxWidthPct: 0.85,
+        animations: [
+          { prop: "opacity", from: 0, to: 1, start: 0, end: 0.18, ease: "easeOut" },
+          { prop: "y", from: 0.04, to: 0, start: 0, end: 0.24, ease: "easeOut" },
+        ],
+      } as TextLayer);
+    }
+
+    // Accent: tilted, big condensed, springs in
+    layers.push({
+      id: `${CAP_PREFIX}${i++}`,
+      type: "text",
+      text: accent,
+      uppercase: true,
+      start,
+      end,
+      x: 0.5,
+      y: before && after ? 0.45 : before ? 0.5 : 0.42,
+      anchor: "center",
+      rotate: tilt,
+      fontFamily: DISPLAY_FONT,
+      fontSize: accentSize,
+      fontWeight: 900,
+      color: accentColor,
+      stroke: "#000000",
+      strokeWidth: Math.max(7, Math.round(strokeBase * 1.4)),
+      ...shadow,
+      align: "center",
+      maxWidthPct: 0.96,
+      animations: [
+        { prop: "opacity", from: 0, to: 1, start: 0.05, end: 0.22, ease: "easeOut" },
+        { prop: "scale", from: 0.55, to: 1.12, start: 0.05, end: 0.3, ease: "spring" },
+        { prop: "scale", from: 1.12, to: 1, start: 0.3, end: 0.42, ease: "easeOut" },
+      ],
+    } as TextLayer);
+
+    if (after) {
+      layers.push({
+        id: `${CAP_PREFIX}${i++}`,
+        type: "text",
+        text: after,
+        uppercase: true,
+        start,
+        end,
+        x: 0.5,
+        y: 0.66,
+        anchor: "center",
+        rotate: -tilt * 0.4,
+        fontFamily: DISPLAY_FONT,
+        fontSize: suffixSize,
+        fontWeight: 900,
+        color: "#FFFFFF",
+        stroke: "#000000",
+        strokeWidth: Math.max(5, strokeBase),
+        ...shadow,
+        align: "center",
+        maxWidthPct: 0.92,
+        animations: [
+          { prop: "opacity", from: 0, to: 1, start: 0.2, end: 0.4, ease: "easeOut" },
+          { prop: "y", from: 0.05, to: 0, start: 0.2, end: 0.46, ease: "easeOut" },
+        ],
+      } as TextLayer);
+    }
+  }
+  return layers;
+}
