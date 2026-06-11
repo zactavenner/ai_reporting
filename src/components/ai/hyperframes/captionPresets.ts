@@ -14,12 +14,14 @@ const CAP_PREFIX = "cap_";
 export type CaptionStyle =
   | "simple-mono"   // single big white word, thick black stroke (clean reels look)
   | "viral-pop"     // word-by-word yellow highlight + spring pop
-  | "stacked-bold"; // 2-line condensed Anton-style, one accent word per phrase
+  | "stacked-bold"  // 2-line condensed Anton-style, one accent word per phrase
+  | "advanced-cinematic"; // 3-line cinematic stack, tilted, gold/red accent, staggered
 
 export const CAPTION_STYLES: { id: CaptionStyle; label: string; hint: string }[] = [
   { id: "simple-mono", label: "Simple", hint: "Big bold white words, thick black stroke" },
   { id: "viral-pop", label: "Viral pop", hint: "Word-by-word with yellow highlight & spring" },
   { id: "stacked-bold", label: "Stacked", hint: "Condensed Anton-style stack with accent color" },
+  { id: "advanced-cinematic", label: "Advanced", hint: "3-line cinematic stack, tilted, gold/red accent, staggered entrance" },
 ];
 
 const DISPLAY_FONT = "Anton, Oswald, 'Bebas Neue', Impact, system-ui, sans-serif";
@@ -246,6 +248,8 @@ export function applyCaptionPreset(
       ? buildViralPopLayers(segments, comp)
       : preset === "stacked-bold"
       ? buildStackedBoldLayers(segments, comp)
+      : preset === "advanced-cinematic"
+      ? buildAdvancedCinematicLayers(segments, comp)
       : buildSimpleMonoLayers(segments, comp);
   return { ...comp, layers: [...base, ...caps] };
 }
