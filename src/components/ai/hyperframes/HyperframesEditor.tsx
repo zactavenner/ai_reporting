@@ -18,7 +18,6 @@ import {
   Loader2,
   Play,
   Pause,
-  Plus,
   Trash2,
   Type,
   Subtitles,
