@@ -879,7 +879,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     const userContent = attSnapshot.length
       ? text + "\n\n" + attSnapshot.map(a => `📎 ${a.name}`).join("\n")
       : text;
-    const userMsg: Msg = { role: "user", content: userContent };
+    const optimisticActorName =
+      (typeof window !== "undefined" && localStorage.getItem("team_member_name")) || null;
+    const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName };
     const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
