@@ -5,20 +5,24 @@
  *
  * Loaded on demand only — the wasm core is ~30MB.
  */
-let ffmpegSingleton: any | null = null;
+// Cache the PROMISE (not the resolved instance) so concurrent export calls
+// share a single 30MB wasm download instead of racing two parallel loads.
+let ffmpegPromise: Promise<any> | null = null;
 
-async function getFfmpeg() {
-  if (ffmpegSingleton) return ffmpegSingleton;
-  const { FFmpeg } = await import("@ffmpeg/ffmpeg");
-  const { toBlobURL } = await import("@ffmpeg/util");
-  const ff = new FFmpeg();
-  const base = "https://unpkg.com/@ffmpeg/[email protected]/dist/umd";
-  await ff.load({
-    coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-  });
-  ffmpegSingleton = ff;
-  return ff;
+function getFfmpeg() {
+  if (ffmpegPromise) return ffmpegPromise;
+  ffmpegPromise = (async () => {
+    const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+    const { toBlobURL } = await import("@ffmpeg/util");
+    const ff = new FFmpeg();
+    const base = "https://unpkg.com/@ffmpeg/[email protected]/dist/umd";
+    await ff.load({
+      coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
+    });
+    return ff;
+  })().catch((e) => { ffmpegPromise = null; throw e; });
+  return ffmpegPromise;
 }
 
 export async function transcodeWebmToMp4(

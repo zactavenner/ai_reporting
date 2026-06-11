@@ -77,6 +77,7 @@ import { AdminOffersTab } from '@/components/offers/AdminOffersTab';
 import { QuizBuilderTab } from '@/components/quiz/QuizBuilderTab';
 import { AgentsTab } from '@/components/agents/AgentsTab';
 import { AgentsOverview } from '@/components/agents/AgentsOverview';
+import { TeamReport } from '@/components/agents/TeamReport';
 import { AvatarAdProvider } from '@/context/AvatarAdContext';
 import { AvatarAdWizard } from '@/components/avatar-ad/AvatarAdWizard';
 
@@ -664,7 +665,13 @@ const Index = () => {
             {/* Agents */}
             {activeTab === 'agents' && (
               <SectionErrorBoundary sectionName="Agents">
-                <AgentsOverview clients={clients} />
+                <div className="space-y-6">
+                  <AgentsOverview clients={clients} />
+                  <TeamReport />
+                  <div id="agent-workforce">
+                    <AgentsTab clients={clients} />
+                  </div>
+                </div>
               </SectionErrorBoundary>
             )}
 
