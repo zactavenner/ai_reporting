@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,13 +36,14 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, onEditVideo, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
+  entries, onEditImage, onInlineEdit, onEditVideo, onAddCaptions, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
   onEditImage?: (imageUrl: string, aspectRatio: string) => void;
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   onEditVideo?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
+  onAddCaptions?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
   onSendMessage?: (text: string) => void;
