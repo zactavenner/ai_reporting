@@ -1080,10 +1080,82 @@ function captionPresetPreviewBg(id: CaptionStyle): string {
     case "karaoke-line": return "bg-gradient-to-br from-indigo-900 to-slate-950";
     case "stacked-bold": return "bg-gradient-to-br from-amber-900/60 to-slate-950";
     case "advanced-cinematic": return "bg-gradient-to-br from-emerald-900 to-slate-950";
+    case "hormozi": return "bg-gradient-to-br from-zinc-800 to-black";
+    case "mrbeast": return "bg-gradient-to-br from-emerald-900 to-black";
+    case "three-pop": return "bg-gradient-to-br from-pink-900 to-black";
+    case "viral-glow": return "bg-gradient-to-br from-cyan-900 to-slate-950";
+    case "word-pop": return "bg-gradient-to-br from-violet-900 to-slate-950";
+    case "bounce": return "bg-gradient-to-br from-orange-900 to-slate-950";
+    case "typewriter": return "bg-gradient-to-br from-slate-900 to-black";
+    case "one-word": return "bg-gradient-to-br from-zinc-900 to-black";
+    case "golden-cue": return "bg-gradient-to-br from-amber-950 to-stone-950";
+    case "box-pop": return "bg-gradient-to-br from-yellow-900/60 to-slate-950";
   }
 }
 
 function CaptionPresetPreview({ id }: { id: CaptionStyle }) {
+  if (id === "hormozi") {
+    return (
+      <div className="flex gap-1 items-baseline">
+        <span className="font-black text-white text-lg" style={{ fontFamily: "Montserrat, sans-serif", WebkitTextStroke: "1.5px black" }}>MAKE</span>
+        <span className="font-black text-lg" style={{ color: "#FFD93D", fontFamily: "Montserrat, sans-serif", WebkitTextStroke: "1.5px black" }}>MORE</span>
+        <span className="font-black text-white text-lg" style={{ fontFamily: "Montserrat, sans-serif", WebkitTextStroke: "1.5px black" }}>MONEY</span>
+      </div>
+    );
+  }
+  if (id === "mrbeast") {
+    return (
+      <div className="flex gap-1 items-baseline">
+        <span className="font-black text-white text-lg" style={{ fontFamily: "Bangers, Impact, sans-serif", WebkitTextStroke: "2px black" }}>YOU</span>
+        <span className="font-black text-xl" style={{ color: "#39FF14", fontFamily: "Bangers, Impact, sans-serif", WebkitTextStroke: "2px black", textShadow: "0 0 10px rgba(57,255,20,0.7)" }}>WON</span>
+      </div>
+    );
+  }
+  if (id === "three-pop") {
+    return (
+      <div className="flex gap-1 items-baseline">
+        <span className="font-black text-white text-base" style={{ WebkitTextStroke: "1.5px black" }}>BUY</span>
+        <span className="font-black text-base text-white" style={{ WebkitTextStroke: "1.5px black" }}>IT</span>
+        <span className="font-black text-lg" style={{ color: "#FF2D78", WebkitTextStroke: "1.5px black", textShadow: "0 0 8px rgba(255,45,120,0.7)" }}>NOW</span>
+      </div>
+    );
+  }
+  if (id === "viral-glow") {
+    return (
+      <span className="font-black text-xl" style={{ color: "#24E6FF", WebkitTextStroke: "1.5px black", textShadow: "0 0 12px rgba(36,230,255,0.9)" }}>VIRAL</span>
+    );
+  }
+  if (id === "word-pop") {
+    return <span className="font-black text-white text-2xl tracking-tight scale-110 inline-block" style={{ WebkitTextStroke: "2px black" }}>POP</span>;
+  }
+  if (id === "bounce") {
+    return (
+      <div className="flex gap-1 items-baseline">
+        <span className="text-white font-black text-base" style={{ WebkitTextStroke: "1px black" }}>let's</span>
+        <span className="font-black text-lg" style={{ color: "#FFB400", WebkitTextStroke: "1.5px black" }}>go!</span>
+      </div>
+    );
+  }
+  if (id === "typewriter") {
+    return <span className="text-white font-mono font-bold text-base" style={{ WebkitTextStroke: "0.5px black" }}>BUILD▌IT▌NOW</span>;
+  }
+  if (id === "one-word") {
+    return <span className="font-black text-white text-3xl tracking-tighter" style={{ fontFamily: "Anton, sans-serif", WebkitTextStroke: "2px black" }}>ONE</span>;
+  }
+  if (id === "golden-cue") {
+    return (
+      <div className="flex gap-1 items-baseline" style={{ fontFamily: "'DM Serif Display', serif" }}>
+        <span style={{ color: "#F5EFE0" }} className="text-base">an</span>
+        <span style={{ color: "#E4B14A", textShadow: "0 0 8px rgba(228,177,74,0.5)" }} className="text-lg">elegant</span>
+        <span style={{ color: "#F5EFE0" }} className="text-base">cue</span>
+      </div>
+    );
+  }
+  if (id === "box-pop") {
+    return (
+      <span className="font-bold text-base px-2 py-0.5 rounded-md" style={{ background: "#FFD93D", color: "#0B1530" }}>BOOM!</span>
+    );
+  }
   if (id === "simple-mono") {
     return <span className="font-black text-white text-2xl tracking-tight" style={{ WebkitTextStroke: "2px black" }}>HOOK</span>;
   }
