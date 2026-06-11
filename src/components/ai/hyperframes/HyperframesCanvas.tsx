@@ -111,7 +111,11 @@ export const HyperframesCanvas = forwardRef<HyperframesCanvasHandle, Props>(func
       startWallRef.current = performance.now();
       startCompRef.current = clamped;
       if (videoRef.current && videoLayer) {
+        const inRange = clamped >= videoLayer.start && clamped <= (videoLayer.end ?? comp.duration);
         videoRef.current.currentTime = Math.max(0, clamped - videoLayer.start);
+        // Pause underlying audio when scrubbed outside the video layer window so
+        // the soundtrack doesn't leak while the canvas is empty.
+        if (!inRange && !videoRef.current.paused) videoRef.current.pause();
       }
     },
     getTime: () => compTimeRef.current,
@@ -149,9 +153,14 @@ export const HyperframesCanvas = forwardRef<HyperframesCanvasHandle, Props>(func
         // the audio track (wall-clock drifts vs. video decoding/buffering).
         const v = videoRef.current;
         const vLayer = c.layers.find((l) => l.type === "video") as VideoLayer | undefined;
-        if (v && vLayer && !v.paused && !v.ended && v.readyState >= 2) {
+        if (v && vLayer && !v.paused && !v.ended && v.readyState >= 3) {
+          // readyState >= 3 = HAVE_FUTURE_DATA — guarantees video isn't stalled.
           compTimeRef.current = vLayer.start + v.currentTime;
           // Keep wall-clock anchors fresh so a future pause→play continues smoothly.
+          startWallRef.current = performance.now();
+          startCompRef.current = compTimeRef.current;
+        } else if (v && vLayer && !v.paused && v.readyState < 3) {
+          // Video is buffering: freeze the clock so captions don't drift ahead of audio.
           startWallRef.current = performance.now();
           startCompRef.current = compTimeRef.current;
         } else {
