@@ -1395,9 +1395,11 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   (ctx.imageModels && ctx.imageModels.length > 1)
     ? `IMAGE MODEL PREFERENCE: The user selected MULTIPLE image models [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] for side-by-side outputs. For ANY new ad generation request, call compare_image_models with models: [${ctx.imageModels.map(m => `"${m}"`).join(", ")}] so the user gets one variant per selected model on the canvas.`
     : null,
-  ctx.videoModel
-    ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance or Kling, depending on the chosen model id).`
-    : null,
+  (ctx.videoModels && ctx.videoModels.length > 1)
+    ? `VIDEO MODEL PREFERENCE: The user selected MULTIPLE video models [${ctx.videoModels.map(m => `"${m}"`).join(", ")}] for side-by-side comparison. For ANY single-clip video request, emit ONE generate_seedance_video tool_call PER selected model IN THE SAME ASSISTANT TURN (parallel execution). Set the "model" argument on each call to one of the listed model ids. Use IDENTICAL prompt, aspect_ratio, duration, resolution, and (when present) image_url across the calls so the user gets a true apples-to-apples comparison on the canvas. Do not serialize across turns.`
+    : (ctx.videoModel
+        ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
+        : null),
   ctx.adFormat && AD_FORMAT_RULES[ctx.adFormat] ? AD_FORMAT_RULES[ctx.adFormat] : null,
   ctx.hookFramework && HOOK_FRAMEWORK_RULES[ctx.hookFramework] ? HOOK_FRAMEWORK_RULES[ctx.hookFramework] : null,
   ctx.burnCaptions
