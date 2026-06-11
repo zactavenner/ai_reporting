@@ -632,7 +632,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [input, setInput] = useState("");
   const [caretPos, setCaretPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents">("chat");
+  const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents" | "avatars">("chat");
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(() => {
+    try { return localStorage.getItem(`ai-studio:avatar:${clientId}`) || null; } catch { return null; }
+  });
+  useEffect(() => {
+    try {
+      if (selectedAvatarId) localStorage.setItem(`ai-studio:avatar:${clientId}`, selectedAvatarId);
+      else localStorage.removeItem(`ai-studio:avatar:${clientId}`);
+    } catch {}
+  }, [selectedAvatarId, clientId]);
+  const { data: studioAvatars = [] } = useAvatars(clientId);
+  const selectedAvatar = studioAvatars.find(a => a.id === selectedAvatarId) || null;
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
