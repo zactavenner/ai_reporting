@@ -64,6 +64,7 @@ const VIDEO_MODELS: { value: string; label: string; hint: string }[] = [
   { value: "bytedance/seedance-2.0", label: "Seedance Pro", hint: "Best Seedance quality" },
   { value: "moonshotai/kling-v2.1", label: "Kling 2.1", hint: "Realistic motion" },
   { value: "moonshotai/kling-v2.1-pro", label: "Kling 2.1 Pro", hint: "Highest quality Kling" },
+  { value: "google/veo-3.1-fast", label: "Veo 3.1 Fast", hint: "Google Veo via OpenRouter — fast" },
 ];
 
 // Conversion-focused ad format presets. Each preset is injected into the
