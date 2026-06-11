@@ -290,11 +290,78 @@ async function handlePostMessage(body: any) {
   const message = String(body.message || "").trim();
   if (!message) return json({ error: "message required" }, 400);
   const conversationId = await getOrCreateHermesConversation(client.id);
-  await postMessage(conversationId, body.role === "assistant" ? "assistant" : "user", message, {
+  const role: "user" | "assistant" = body.role === "assistant" ? "assistant" : "user";
+  await postMessage(conversationId, role, message, {
     source: "hermes",
     ...(body.metadata || {}),
   });
-  return json({ ok: true, conversation_id: conversationId });
+
+  // Back-and-forth loop: when Hermes posts as the "user" voice in the channel,
+  // auto-route to the matching client agent so the AI replies in-channel AND
+  // callbacks Hermes via the executor. Skip if explicitly disabled, or when
+  // the message itself came from the assistant side.
+  const autoRespond = role === "user" && body.auto_respond !== false;
+  if (!autoRespond) {
+    return json({ ok: true, conversation_id: conversationId });
+  }
+
+  const taskType = String(body.task_type || "general").toLowerCase();
+  const agent = await pickDefaultAgent(client.id, taskType);
+  const cfg = await loadAgencyConfig();
+  const callbackUrl = body.callback_url || cfg?.hermes_callback_url || null;
+
+  const { data: task, error: taskErr } = await supa
+    .from("hermes_tasks")
+    .insert({
+      client_id: client.id,
+      conversation_id: conversationId,
+      hermes_external_id: body.hermes_external_id || null,
+      task_type: taskType,
+      instructions: message,
+      status: "queued",
+      hermes_callback_url: callbackUrl,
+      agent_id: agent?.id || null,
+      metadata: { ...(body.metadata || {}), origin: "post_message" },
+    })
+    .select("id")
+    .single();
+
+  if (taskErr || !task) {
+    return json({ ok: true, conversation_id: conversationId, auto_respond: false, error: taskErr?.message });
+  }
+
+  if (!agent?.id) {
+    await postMessage(
+      conversationId,
+      "assistant",
+      `(No enabled agent for \`${taskType}\` on this client — a teammate can reply directly in AI Studio.)`,
+      { hermes_task_id: task.id, source: "hermes" },
+    );
+    return json({ ok: true, conversation_id: conversationId, task_id: task.id, auto_respond: false });
+  }
+
+  const dispatch = fetch(`${SUPABASE_URL}/functions/v1/hermes-task-executor`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
+    },
+    body: JSON.stringify({ password: "HPA1234$", task_id: task.id }),
+  }).catch((e) => console.warn("post_message executor dispatch failed", e));
+  // @ts-ignore EdgeRuntime is available in Supabase Functions
+  if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
+    // @ts-ignore
+    (EdgeRuntime as any).waitUntil(dispatch);
+  }
+
+  return json({
+    ok: true,
+    conversation_id: conversationId,
+    task_id: task.id,
+    agent: { id: agent.id, name: agent.name },
+    auto_respond: true,
+  });
 }
 
 // --------- Agent CRUD ---------
