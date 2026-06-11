@@ -18,6 +18,8 @@ import {
   Send,
   Wand2,
   Save,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -86,6 +88,10 @@ export function HyperframesEditor({
     { role: "user" | "assistant"; content: string }[]
   >([]);
   const [captionBusy, setCaptionBusy] = useState(false);
+  const [captionStage, setCaptionStage] = useState<
+    "idle" | "downloading" | "transcribing" | "applying" | "done"
+  >("idle");
+  const [captionError, setCaptionError] = useState<string | null>(null);
   const captionsRanRef = useRef(false);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
   const segmentsRef = useRef<CaptionSegment[]>([]);
@@ -97,23 +103,36 @@ export function HyperframesEditor({
   // ---------- Captions ----------
   const generateCaptions = async (styleOverride?: CaptionStyle) => {
     setCaptionBusy(true);
+    setCaptionError(null);
+    setCaptionStage("downloading");
+    // Advance stage indicators so the UI feels responsive while the edge fn runs
+    const t1 = window.setTimeout(() => setCaptionStage("transcribing"), 600);
     try {
       const { data, error } = await supabase.functions.invoke("transcribe-video", {
         body: { videoUrl },
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Transcription request failed");
+      if (data?.error) throw new Error(String(data.error));
       const segments: CaptionSegment[] = Array.isArray(data?.captions) ? data.captions : [];
       if (segments.length === 0) {
-        toast.error("No speech detected");
+        const msg = "No speech detected in the video";
+        setCaptionError(msg);
+        toast.error(msg);
         return;
       }
+      setCaptionStage("applying");
       segmentsRef.current = segments;
       const style = styleOverride ?? captionStyle;
       setComp((c) => applyCaptionPreset(c, segments, style));
+      setCaptionStage("done");
       toast.success(`Generated ${segments.reduce((n, s) => n + (s.words?.length || s.text.split(/\s+/).length), 0)} caption words`);
     } catch (e: any) {
-      toast.error(`Caption generation failed: ${e?.message || e}`);
+      const msg = e?.message || String(e);
+      setCaptionError(msg);
+      setCaptionStage("idle");
+      toast.error(`Caption generation failed: ${msg}`);
     } finally {
+      window.clearTimeout(t1);
       setCaptionBusy(false);
     }
   };
@@ -506,6 +525,51 @@ export function HyperframesEditor({
             )}
           </div>
         </div>
+        {(captionBusy || captionError) && (
+          <div
+            className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] ${
+              captionError
+                ? "border-destructive/40 bg-destructive/10 text-destructive"
+                : "border-primary/30 bg-primary/10 text-primary-foreground/90"
+            }`}
+          >
+            {captionBusy ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="font-medium">
+                  {captionStage === "downloading" && "Preparing video…"}
+                  {captionStage === "transcribing" && "Transcribing with Gemini…"}
+                  {captionStage === "applying" && "Applying caption style…"}
+                  {captionStage === "idle" && "Starting…"}
+                </span>
+                <span className="opacity-70 ml-auto">This can take 10–30s</span>
+              </>
+            ) : captionError ? (
+              <>
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate flex-1" title={captionError}>
+                  {captionError}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[10px] gap-1"
+                  onClick={() => generateCaptions()}
+                >
+                  <RefreshCw className="h-3 w-3" /> Retry
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setCaptionError(null)}
+                  className="text-[10px] opacity-60 hover:opacity-100"
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              </>
+            ) : null}
+          </div>
+        )}
 
         <div className="flex-1 flex items-center justify-center">
           <div className="w-full max-w-full" style={{ ...aspectStyle, maxHeight: "100%" }}>
