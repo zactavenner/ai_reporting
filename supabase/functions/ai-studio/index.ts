@@ -1922,6 +1922,7 @@ Deno.serve(async (req) => {
     user_id: userId,
     role: "user",
     content: persistedUserText,
+    actor_member_id: actorMemberId,
   });
 
   // Brand context
