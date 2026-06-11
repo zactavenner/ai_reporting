@@ -469,6 +469,17 @@ export function AIStudioCanvas({
                         <Scissors className="h-3.5 w-3.5" /> Edit
                       </Button>
                     )}
+                    {onAddCaptions && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2 text-[11px] gap-1"
+                        title="Add viral-pop captions (auto-transcribe)"
+                        onClick={() => onAddCaptions(p.video_url, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio })}
+                      >
+                        <Subtitles className="h-3.5 w-3.5" /> Captions
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
                       onClick={() => { navigator.clipboard.writeText(p.video_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
