@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -120,7 +121,8 @@ export function HyperframesEditor({
   const [captionError, setCaptionError] = useState<string | null>(null);
   const captionsRanRef = useRef(false);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
-  const segmentsRef = useRef<CaptionSegment[]>([]);
+  const [segments, setSegments] = useState<CaptionSegment[]>([]);
+  const [leftTab, setLeftTab] = useState<"style" | "edit" | "layers" | "ai">("style");
 
   const { comp, setComp, undo, redo, canUndo, canRedo } = useCompHistory(
     makeDefaultComposition(videoUrl, 8, aspectRatio),
@@ -212,7 +214,7 @@ export function HyperframesEditor({
         return;
       }
       setCaptionStage("applying");
-      segmentsRef.current = segments;
+      setSegments(segments);
       const style = styleOverride ?? captionStyle;
       setComp((c) => applyCaptionPreset(c, segments, style));
       setCaptionStage("done");
@@ -230,11 +232,47 @@ export function HyperframesEditor({
 
   const restyleCaptions = (style: CaptionStyle) => {
     setCaptionStyle(style);
-    if (segmentsRef.current.length === 0) {
+    if (segments.length === 0) {
       generateCaptions(style);
       return;
     }
-    setComp((c) => applyCaptionPreset(c, segmentsRef.current, style));
+    setComp((c) => applyCaptionPreset(c, segments, style));
+    setLeftTab("edit");
+  };
+
+  // Edit a caption segment's text and re-apply the current style
+  const updateSegmentText = (idx: number, text: string) => {
+    setSegments((prev) => {
+      const next = prev.map((s, i) =>
+        i === idx
+          ? {
+              ...s,
+              text,
+              // Re-distribute word timings evenly across the new word list
+              words: (() => {
+                const arr = text.split(/\s+/).filter(Boolean);
+                if (!arr.length) return [];
+                const span = (s.endTime - s.startTime) / arr.length;
+                return arr.map((w, i) => ({
+                  word: w,
+                  startTime: s.startTime + i * span,
+                  endTime: s.startTime + (i + 1) * span,
+                }));
+              })(),
+            }
+          : s,
+      );
+      setComp((c) => applyCaptionPreset(c, next, captionStyle));
+      return next;
+    });
+  };
+
+  const deleteSegment = (idx: number) => {
+    setSegments((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      setComp((c) => applyCaptionPreset(c, next, captionStyle));
+      return next;
+    });
   };
 
   const clearCaptions = () => {
