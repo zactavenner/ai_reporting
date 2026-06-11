@@ -518,6 +518,58 @@ export function HyperframesEditor({
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+        {(captionBusy || captionError) && (
+          <div
+            className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] ${
+              captionError
+                ? "border-destructive/40 bg-destructive/10 text-destructive"
+                : "border-primary/30 bg-primary/10 text-primary-foreground/90"
+            }`}
+          >
+            {captionBusy ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="font-medium">
+                  {captionStage === "downloading" && "Preparing video…"}
+                  {captionStage === "transcribing" && "Transcribing with Gemini…"}
+                  {captionStage === "applying" && "Applying caption style…"}
+                  {captionStage === "idle" && "Starting…"}
+                </span>
+                <span className="opacity-70 ml-auto">This can take 10–30s</span>
+              </>
+            ) : captionError ? (
+              <>
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate flex-1" title={captionError}>
+                  {captionError}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[10px] gap-1"
+                  onClick={() => generateCaptions()}
+                >
+                  <RefreshCw className="h-3 w-3" /> Retry
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setCaptionError(null)}
+                  className="text-[10px] opacity-60 hover:opacity-100"
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              </>
+            ) : null}
+          </div>
+        )}
+        {/* spacer to preserve next sibling structure */}
+        <div className="hidden">
+          <div>
+            <div>
+            </div>
             {hasCaptionLayers(comp) && (
               <Button size="sm" variant="ghost" onClick={clearCaptions} title="Clear captions" className="text-[11px]">
                 Clear
