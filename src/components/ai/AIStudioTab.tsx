@@ -586,11 +586,24 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
-  const [videoModel, setVideoModel] = useState<string>(() => {
-    try { return localStorage.getItem("ai-studio:video-model") || "bytedance/seedance-2.0-fast"; }
-    catch { return "bytedance/seedance-2.0-fast"; }
+  const [videoModels, setVideoModels] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("ai-studio:video-models");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length) return arr.filter((v) => typeof v === "string");
+      }
+      // back-compat: migrate the old single-value key
+      const legacy = localStorage.getItem("ai-studio:video-model");
+      if (legacy) return [legacy];
+    } catch {}
+    return ["bytedance/seedance-2.0-fast"];
   });
-  useEffect(() => { try { localStorage.setItem("ai-studio:video-model", videoModel); } catch {} }, [videoModel]);
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-models", JSON.stringify(videoModels)); } catch {}
+  }, [videoModels]);
+  // first selection drives single-clip default model passed to the server
+  const videoModel = videoModels[0] || "bytedance/seedance-2.0-fast";
   const [adFormat, setAdFormat] = useState<string>(() => {
     try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
   });
