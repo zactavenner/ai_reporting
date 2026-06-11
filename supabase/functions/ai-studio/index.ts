@@ -1455,12 +1455,13 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, videoModels, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
     videoModel?: string | null;
+    videoModels?: string[] | null;
     adFormat?: string | null;
     hookFramework?: string | null;
     burnCaptions?: boolean;
@@ -1487,10 +1488,14 @@ Deno.serve(async (req) => {
     "bytedance/seedance-2.0",
     "moonshotai/kling-v2.1",
     "moonshotai/kling-v2.1-pro",
+    "google/veo-3.1-fast",
   ];
+  const selectedVideoModels: string[] = Array.isArray(videoModels)
+    ? videoModels.filter((m) => typeof m === "string" && ALLOWED_VIDEO_MODELS.includes(m))
+    : [];
   const selectedVideoModel = (typeof videoModel === "string" && ALLOWED_VIDEO_MODELS.includes(videoModel))
     ? videoModel
-    : "bytedance/seedance-2.0-fast";
+    : (selectedVideoModels[0] || "bytedance/seedance-2.0-fast");
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
 
