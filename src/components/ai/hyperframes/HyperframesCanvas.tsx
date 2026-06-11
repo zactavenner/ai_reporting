@@ -6,6 +6,7 @@ import {
   IconLayer,
   RectLayer,
   VideoLayer,
+  ImageLayer,
   resolveLayer,
 } from "./timeline";
 
@@ -69,6 +70,29 @@ export const HyperframesCanvas = forwardRef<HyperframesCanvasHandle, Props>(func
     compRef.current = comp;
   }, [comp]);
 
+  // Image asset cache (HTMLImageElement keyed by src).
+  const imgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  useEffect(() => {
+    const cache = imgCacheRef.current;
+    const seen = new Set<string>();
+    for (const l of comp.layers) {
+      if (l.type !== "image") continue;
+      const src = (l as ImageLayer).src;
+      if (!src) continue;
+      seen.add(src);
+      if (!cache.has(src)) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = src;
+        cache.set(src, img);
+      }
+    }
+    // GC stale entries.
+    for (const key of Array.from(cache.keys())) {
+      if (!seen.has(key)) cache.delete(key);
+    }
+  }, [comp]);
+
   useImperativeHandle(ref, () => ({
     play: () => {
       const v = videoRef.current;
@@ -128,7 +152,7 @@ export const HyperframesCanvas = forwardRef<HyperframesCanvasHandle, Props>(func
           videoRef.current?.pause();
         }
       }
-      drawFrame(ctx, c, compTimeRef.current, videoRef.current);
+      drawFrame(ctx, c, compTimeRef.current, videoRef.current, imgCacheRef.current);
       onTime?.(compTimeRef.current);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -166,6 +190,7 @@ function drawFrame(
   comp: HyperframesComposition,
   t: number,
   videoEl: HTMLVideoElement | null,
+  images: Map<string, HTMLImageElement>,
 ) {
   ctx.save();
   ctx.fillStyle = comp.bgColor || "#000";
@@ -186,13 +211,15 @@ function drawFrame(
     ctx.translate(-cx, -cy);
 
     if (layer.type === "video" && videoEl) {
-      drawVideoLayer(ctx, comp, layer as VideoLayer, videoEl);
+      drawVideoLayer(ctx, comp, layer as VideoLayer, videoEl, r);
     } else if (layer.type === "text" || layer.type === "subtitle") {
       drawTextLayer(ctx, comp, layer as TextLayer, cx, cy);
     } else if (layer.type === "icon") {
       drawIconLayer(ctx, comp, layer as IconLayer, cx, cy);
     } else if (layer.type === "rect") {
       drawRectLayer(ctx, comp, layer as RectLayer, cx, cy);
+    } else if (layer.type === "image") {
+      drawImageLayer(ctx, comp, layer as ImageLayer, cx, cy, images);
     }
     ctx.restore();
   }
@@ -204,6 +231,7 @@ function drawVideoLayer(
   comp: HyperframesComposition,
   layer: VideoLayer,
   v: HTMLVideoElement,
+  r: { scale: number; dx: number; dy: number },
 ) {
   if (!v.videoWidth) return;
   const fit = layer.fit ?? "cover";
@@ -220,8 +248,12 @@ function drawVideoLayer(
     dw = cw;
     dh = cw / vr;
   }
-  const dx = (cw - dw) / 2;
-  const dy = (ch - dh) / 2;
+  // Ken Burns: scale around center + drift (dx/dy as fraction of canvas).
+  const scale = r.scale || 1;
+  dw *= scale;
+  dh *= scale;
+  const dx = (cw - dw) / 2 + (r.dx || 0) * cw;
+  const dy = (ch - dh) / 2 + (r.dy || 0) * ch;
   ctx.drawImage(v, dx, dy, dw, dh);
 }
 
