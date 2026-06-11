@@ -122,7 +122,7 @@ export function HyperframesEditor({
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
   const segmentsRef = useRef<CaptionSegment[]>([]);
 
-  const { comp, setComp, undo, redo, canUndo, canRedo, reset: resetHistory } = useCompHistory(
+  const { comp, setComp, undo, redo, canUndo, canRedo } = useCompHistory(
     makeDefaultComposition(videoUrl, 8, aspectRatio),
   );
 
