@@ -78,7 +78,7 @@ export async function saveTemplate(
   return {
     id: data.id,
     title: data.title,
-    composition: data.content as HyperframesComposition,
+    composition: data.content as unknown as HyperframesComposition,
     created_at: data.created_at,
   };
 }
