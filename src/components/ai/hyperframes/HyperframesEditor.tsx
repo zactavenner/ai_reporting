@@ -32,6 +32,12 @@ import {
   IconLayer,
   makeDefaultComposition,
 } from "./timeline";
+import {
+  applyCaptionPreset,
+  hasCaptionLayers,
+  stripCaptionLayers,
+  type CaptionSegment,
+} from "./captionPresets";
 
 const QUICK = [
   "Add bold caption: 'You won't believe this' fading in at 0.5s",
@@ -48,6 +54,8 @@ interface Props {
   initialPrompt?: string;
   sourceVideoId?: string | null;
   onSaved?: (newUrl: string) => void;
+  /** When true, auto-transcribe + apply viral-pop captions on mount. */
+  autoCaptions?: boolean;
 }
 
 export function HyperframesEditor({
@@ -57,6 +65,7 @@ export function HyperframesEditor({
   initialPrompt,
   sourceVideoId,
   onSaved,
+  autoCaptions = false,
 }: Props) {
   const canvasRef = useRef<HyperframesCanvasHandle>(null);
   const [duration, setDuration] = useState(8);
@@ -71,10 +80,51 @@ export function HyperframesEditor({
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; content: string }[]
   >([]);
+  const [captionBusy, setCaptionBusy] = useState(false);
+  const captionsRanRef = useRef(false);
 
   const [comp, setComp] = useState<HyperframesComposition>(() =>
     makeDefaultComposition(videoUrl, 8, aspectRatio),
   );
+
+  // ---------- Captions ----------
+  const generateCaptions = async () => {
+    setCaptionBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("transcribe-video", {
+        body: { videoUrl },
+      });
+      if (error) throw error;
+      const segments: CaptionSegment[] = Array.isArray(data?.captions) ? data.captions : [];
+      if (segments.length === 0) {
+        toast.error("No speech detected");
+        return;
+      }
+      setComp((c) => applyCaptionPreset(c, segments, "viral-pop"));
+      toast.success(`Generated ${segments.reduce((n, s) => n + (s.words?.length || s.text.split(/\s+/).length), 0)} caption words`);
+    } catch (e: any) {
+      toast.error(`Caption generation failed: ${e?.message || e}`);
+    } finally {
+      setCaptionBusy(false);
+    }
+  };
+
+  const clearCaptions = () => {
+    setComp((c) => ({ ...c, layers: stripCaptionLayers(c.layers) }));
+    toast.success("Captions cleared");
+  };
+
+  // Auto-run captions on mount when requested
+  useEffect(() => {
+    if (!autoCaptions || captionsRanRef.current) return;
+    if (hasCaptionLayers(comp)) {
+      captionsRanRef.current = true;
+      return;
+    }
+    captionsRanRef.current = true;
+    generateCaptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCaptions]);
 
   // When duration becomes known, extend video layer + composition
   useEffect(() => {
@@ -372,6 +422,23 @@ export function HyperframesEditor({
             <Button size="sm" variant="ghost" onClick={addIcon} title="Add icon">
               <Sticker className="h-3.5 w-3.5" />
             </Button>
+            <div className="h-4 w-px bg-border mx-1" />
+            <Button
+              size="sm"
+              variant={hasCaptionLayers(comp) ? "secondary" : "ghost"}
+              onClick={generateCaptions}
+              disabled={captionBusy}
+              title="Generate viral-pop captions (word-by-word, yellow highlight)"
+              className="gap-1 text-[11px]"
+            >
+              {captionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Subtitles className="h-3.5 w-3.5" />}
+              {hasCaptionLayers(comp) ? "Regen" : "Captions"}
+            </Button>
+            {hasCaptionLayers(comp) && (
+              <Button size="sm" variant="ghost" onClick={clearCaptions} title="Clear captions" className="text-[11px]">
+                Clear
+              </Button>
+            )}
           </div>
         </div>
 
