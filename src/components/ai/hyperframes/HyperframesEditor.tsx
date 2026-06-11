@@ -645,193 +645,365 @@ export function HyperframesEditor({
       : { aspectRatio: "9 / 16" };
 
   return (
-    <div className="flex-1 grid grid-cols-[1fr_320px_320px] gap-0 min-h-0">
-      {/* Canvas + transport */}
-      <div className="border-r p-4 flex flex-col gap-3 min-h-0 bg-black/80">
+    <div className="flex-1 grid grid-cols-[minmax(0,1fr)_minmax(420px,520px)] gap-0 min-h-0">
+      {/* LEFT: Tabbed caption studio / layers / AI */}
+      <div className="border-r flex flex-col min-h-0">
+        <Tabs value={leftTab} onValueChange={(v) => setLeftTab(v as any)} className="flex-1 flex flex-col min-h-0">
+          <div className="px-3 pt-3 pb-2 border-b flex items-center justify-between gap-2">
+            <TabsList className="h-9">
+              <TabsTrigger value="style" className="text-xs">Choose Style</TabsTrigger>
+              <TabsTrigger value="edit" className="text-xs">Edit Captions</TabsTrigger>
+              <TabsTrigger value="layers" className="text-xs">Layers</TabsTrigger>
+              <TabsTrigger value="ai" className="text-xs">AI Tools</TabsTrigger>
+            </TabsList>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onClick={undo} disabled={!canUndo} title="Undo (Cmd/Ctrl-Z)" className="h-8 w-8 p-0">
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={redo} disabled={!canRedo} title="Redo" className="h-8 w-8 p-0">
+                <Redo2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          {(captionBusy || captionError) && (
+            <div
+              className={`mx-3 mt-2 flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] ${
+                captionError
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : "border-primary/30 bg-primary/10"
+              }`}
+            >
+              {captionBusy ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="font-medium">
+                    {captionStage === "downloading" && "Preparing video…"}
+                    {captionStage === "transcribing" && "Transcribing with Gemini…"}
+                    {captionStage === "applying" && "Applying caption style…"}
+                    {captionStage === "idle" && "Starting…"}
+                  </span>
+                  <span className="opacity-70 ml-auto">10–30s</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate flex-1" title={captionError!}>{captionError}</span>
+                  <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] gap-1" onClick={() => generateCaptions()}>
+                    <RefreshCw className="h-3 w-3" /> Retry
+                  </Button>
+                  <button type="button" onClick={() => setCaptionError(null)} className="text-[10px] opacity-60 hover:opacity-100" aria-label="Dismiss">✕</button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* CHOOSE STYLE */}
+          <TabsContent value="style" className="flex-1 min-h-0 m-0">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold">Caption presets</div>
+                    <div className="text-[11px] text-muted-foreground">Pick a look — we'll transcribe + apply</div>
+                  </div>
+                  <Button size="sm" variant={hasCaptionLayers(comp) ? "secondary" : "default"} onClick={() => generateCaptions()} disabled={captionBusy} className="gap-1 text-[11px]">
+                    {captionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Subtitles className="h-3.5 w-3.5" />}
+                    {hasCaptionLayers(comp) ? "Regenerate" : "Transcribe"}
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {CAPTION_STYLES.map((s) => {
+                    const active = captionStyle === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => restyleCaptions(s.id)}
+                        title={s.hint}
+                        className={`group relative aspect-[16/9] rounded-lg border overflow-hidden text-left transition-all ${
+                          active
+                            ? "border-primary ring-2 ring-primary/40 shadow-md"
+                            : "border-border/60 hover:border-primary/40 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className={`absolute inset-0 ${captionPresetPreviewBg(s.id)}`} />
+                        <div className="absolute inset-0 flex items-center justify-center px-3">
+                          <CaptionPresetPreview id={s.id} />
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 bg-background/85 backdrop-blur px-2 py-1.5 flex items-center justify-between">
+                          <div className="text-[11px] font-semibold truncate">{s.label}</div>
+                          {active && <Badge variant="default" className="text-[9px] h-4 px-1.5">Active</Badge>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-2 border-t flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-muted-foreground">
+                    {segments.length > 0 ? `${segments.length} caption phrases` : "No captions yet"}
+                  </div>
+                  {hasCaptionLayers(comp) && (
+                    <Button size="sm" variant="ghost" onClick={clearCaptions} className="text-[11px] h-7">
+                      Clear captions
+                    </Button>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t">
+                  <div className="text-[10px] uppercase text-muted-foreground mb-2">Base video</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant={kenBurnsOn ? "secondary" : "outline"} onClick={toggleKenBurns} className="text-[11px] h-8 gap-1">
+                      <Camera className="h-3.5 w-3.5" /> Ken Burns
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="text-[11px] h-8 gap-1">
+                      <ImageIcon className="h-3.5 w-3.5" /> Add image
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleImageUpload(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <DropdownMenu onOpenChange={(o) => { if (o && !templatesLoaded) loadTemplates(); }}>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="text-[11px] h-8 gap-1">
+                          <LayoutTemplate className="h-3.5 w-3.5" /> My templates
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        <DropdownMenuLabel className="text-[11px]">Saved compositions</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={handleSaveTemplate} className="text-xs">
+                          <Save className="h-3 w-3 mr-2" /> Save current as template…
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {!templatesLoaded ? (
+                          <DropdownMenuItem disabled className="text-[11px] opacity-60">
+                            <Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading…
+                          </DropdownMenuItem>
+                        ) : templates.length === 0 ? (
+                          <DropdownMenuItem disabled className="text-[11px] opacity-60">No templates yet</DropdownMenuItem>
+                        ) : (
+                          templates.map((t) => (
+                            <DropdownMenuItem
+                              key={t.id}
+                              className="text-xs flex items-center justify-between gap-2"
+                              onSelect={(e) => { e.preventDefault(); handleApplyTemplate(t); }}
+                            >
+                              <span className="truncate flex-1">{t.title}</span>
+                              <Trash2
+                                className="h-3 w-3 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(t); }}
+                              />
+                            </DropdownMenuItem>
+                          ))
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* EDIT CAPTIONS */}
+          <TabsContent value="edit" className="flex-1 min-h-0 m-0">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-2">
+                {segments.length === 0 ? (
+                  <div className="text-center text-[12px] text-muted-foreground py-12 space-y-3">
+                    <div>No captions yet. Transcribe the video to start editing.</div>
+                    <Button size="sm" onClick={() => generateCaptions()} disabled={captionBusy} className="gap-1">
+                      {captionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Subtitles className="h-3.5 w-3.5" />}
+                      Transcribe video
+                    </Button>
+                  </div>
+                ) : (
+                  segments.map((seg, i) => (
+                    <div key={i} className="rounded-lg border bg-card p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] tabular-nums text-muted-foreground">
+                        <span>{seg.startTime.toFixed(2)}s → {seg.endTime.toFixed(2)}s</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            canvasRef.current?.seek(seg.startTime);
+                            setTime(seg.startTime);
+                          }}
+                          className="text-primary hover:underline"
+                        >
+                          Jump
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteSegment(i)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label="Delete segment"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <Textarea
+                        rows={2}
+                        value={seg.text}
+                        onChange={(e) => updateSegmentText(i, e.target.value)}
+                        className="text-xs resize-none"
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* LAYERS */}
+          <TabsContent value="layers" className="flex-1 min-h-0 m-0 flex flex-col">
+            <div className="p-3 border-b flex items-center justify-between">
+              <span className="text-xs font-semibold">Layers</span>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={() => addText("text")} title="Add headline" className="h-7 w-7 p-0">
+                  <Type className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => addText("subtitle")} title="Add subtitle" className="h-7 w-7 p-0">
+                  <Subtitles className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={addIcon} title="Add sticker" className="h-7 w-7 p-0">
+                  <Sticker className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-2 space-y-1">
+                {comp.layers.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => setSelectedId(l.id)}
+                    className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] flex items-center justify-between border ${
+                      selectedId === l.id ? "border-primary bg-primary/10" : "border-border/40 hover:bg-muted/40"
+                    }`}
+                  >
+                    <span className="truncate">
+                      <span className="uppercase text-muted-foreground mr-2">{l.type}</span>
+                      {(l as any).text || (l as any).glyph || (l.type === "video" ? "source clip" : "")}
+                    </span>
+                    {l.type !== "video" && (
+                      <Trash2
+                        className="h-3 w-3 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); removeLayer(l.id); }}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
+            {selected && selected.type !== "video" && (
+              <div className="border-t p-3 space-y-2 text-xs">
+                {(selected.type === "text" || selected.type === "subtitle") && (
+                  <>
+                    <label className="block text-[10px] uppercase text-muted-foreground">Text</label>
+                    <Textarea rows={2} value={(selected as TextLayer).text} onChange={(e) => updateLayer(selected.id, { text: e.target.value } as any)} className="text-xs" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] uppercase text-muted-foreground">Font px</label>
+                        <Input type="number" value={(selected as TextLayer).fontSize ?? 64} onChange={(e) => updateLayer(selected.id, { fontSize: +e.target.value } as any)} className="h-7 text-xs" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase text-muted-foreground">Color</label>
+                        <Input type="color" value={(selected as TextLayer).color ?? "#ffffff"} onChange={(e) => updateLayer(selected.id, { color: e.target.value } as any)} className="h-7 p-0.5" />
+                      </div>
+                    </div>
+                  </>
+                )}
+                {selected.type === "icon" && (
+                  <div>
+                    <label className="block text-[10px] uppercase text-muted-foreground">Emoji / glyph</label>
+                    <Input value={(selected as IconLayer).glyph} onChange={(e) => updateLayer(selected.id, { glyph: e.target.value } as any)} className="h-7 text-xs" />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] uppercase text-muted-foreground">Start (s)</label>
+                    <Input type="number" step="0.1" value={selected.start} onChange={(e) => updateLayer(selected.id, { start: +e.target.value })} className="h-7 text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase text-muted-foreground">End (s)</label>
+                    <Input type="number" step="0.1" value={selected.end} onChange={(e) => updateLayer(selected.id, { end: +e.target.value })} className="h-7 text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase text-muted-foreground">X (0-1)</label>
+                    <Input type="number" step="0.05" value={selected.x} onChange={(e) => updateLayer(selected.id, { x: +e.target.value })} className="h-7 text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase text-muted-foreground">Y (0-1)</label>
+                    <Input type="number" step="0.05" value={selected.y} onChange={(e) => updateLayer(selected.id, { y: +e.target.value })} className="h-7 text-xs" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* AI TOOLS */}
+          <TabsContent value="ai" className="flex-1 min-h-0 m-0 flex flex-col">
+            <ScrollArea className="flex-1">
+              <div className="p-3 space-y-2">
+                {messages.length === 0 && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Tell me what to layer on. Examples:
+                    <div className="flex flex-col gap-1 mt-2">
+                      {QUICK.map((q) => (
+                        <button key={q} className="text-left text-[10px] px-2 py-1 rounded border border-border/40 hover:bg-muted/40" onClick={() => setChatInput(q)}>
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {messages.map((m, i) => (
+                  <div key={i} className={`text-[11px] rounded-md px-3 py-2 ${m.role === "user" ? "bg-primary/10 ml-6" : "bg-muted mr-6"}`}>
+                    <div className="text-[9px] uppercase tracking-wide text-muted-foreground mb-0.5">{m.role}</div>
+                    <div className="whitespace-pre-wrap">{m.content}</div>
+                  </div>
+                ))}
+                {chatBusy && (
+                  <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Updating timeline…
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+            <div className="border-t p-3 space-y-2">
+              <Textarea
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                rows={2}
+                placeholder="Add a 🔥 sticker bouncing in at 1s..."
+                className="text-xs"
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendChat(); }}
+              />
+              <div className="flex justify-end">
+                <Button size="sm" onClick={sendChat} disabled={chatBusy || !chatInput.trim()}>
+                  <Send className="h-3.5 w-3.5 mr-1" /> Send
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* RIGHT: Preview + transport */}
+      <div className="p-4 flex flex-col gap-3 min-h-0 bg-black/85">
         <div className="flex items-center justify-between gap-2">
           <Badge variant="outline" className="text-[10px] gap-1">
             <Wand2 className="h-3 w-3" /> Hyperframes runtime
           </Badge>
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={undo}
-              disabled={!canUndo}
-              title="Undo (Cmd/Ctrl-Z)"
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={redo}
-              disabled={!canRedo}
-              title="Redo (Cmd/Ctrl-Shift-Z)"
-            >
-              <Redo2 className="h-3.5 w-3.5" />
-            </Button>
-            <div className="h-4 w-px bg-border mx-1" />
-            <Button size="sm" variant="ghost" onClick={() => addText("text")} title="Add headline">
-              <Type className="h-3.5 w-3.5" />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => addText("subtitle")} title="Add subtitle">
-              <Subtitles className="h-3.5 w-3.5" />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={addIcon} title="Add icon">
-              <Sticker className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => fileInputRef.current?.click()}
-              title="Add image / logo"
-            >
-              <ImageIcon className="h-3.5 w-3.5" />
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleImageUpload(f);
-                e.target.value = "";
-              }}
-            />
-            <Button
-              size="sm"
-              variant={kenBurnsOn ? "secondary" : "ghost"}
-              onClick={toggleKenBurns}
-              title="Toggle Ken Burns on base video"
-            >
-              <Camera className="h-3.5 w-3.5" />
-            </Button>
-            <DropdownMenu onOpenChange={(o) => { if (o && !templatesLoaded) loadTemplates(); }}>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" title="Templates">
-                  <LayoutTemplate className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel className="text-[11px]">Templates</DropdownMenuLabel>
-                <DropdownMenuItem onClick={handleSaveTemplate} className="text-xs">
-                  <Save className="h-3 w-3 mr-2" /> Save current as template…
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {!templatesLoaded ? (
-                  <DropdownMenuItem disabled className="text-[11px] opacity-60">
-                    <Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading…
-                  </DropdownMenuItem>
-                ) : templates.length === 0 ? (
-                  <DropdownMenuItem disabled className="text-[11px] opacity-60">
-                    No templates yet
-                  </DropdownMenuItem>
-                ) : (
-                  templates.map((t) => (
-                    <DropdownMenuItem
-                      key={t.id}
-                      className="text-xs flex items-center justify-between gap-2"
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        handleApplyTemplate(t);
-                      }}
-                    >
-                      <span className="truncate flex-1">{t.title}</span>
-                      <Trash2
-                        className="h-3 w-3 text-muted-foreground hover:text-destructive shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteTemplate(t);
-                        }}
-                      />
-                    </DropdownMenuItem>
-                  ))
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <div className="h-4 w-px bg-border mx-1" />
-            <Button
-              size="sm"
-              variant={hasCaptionLayers(comp) ? "secondary" : "ghost"}
-              onClick={() => generateCaptions()}
-              disabled={captionBusy}
-              title="Transcribe & apply selected caption style"
-              className="gap-1 text-[11px]"
-            >
-              {captionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Subtitles className="h-3.5 w-3.5" />}
-              {hasCaptionLayers(comp) ? "Regen" : "Captions"}
-            </Button>
-            <div className="flex items-center gap-0.5 rounded-md border bg-background/40 p-0.5">
-              {CAPTION_STYLES.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => restyleCaptions(s.id)}
-                  title={s.hint}
-                  className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    captionStyle === s.id
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            {hasCaptionLayers(comp) && (
-              <Button size="sm" variant="ghost" onClick={clearCaptions} title="Clear captions" className="text-[11px]">
-                Clear
-              </Button>
-            )}
-          </div>
+          <span className="text-[10px] text-muted-foreground">{aspectRatio} • {comp.duration.toFixed(1)}s</span>
         </div>
-        {(captionBusy || captionError) && (
-          <div
-            className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] ${
-              captionError
-                ? "border-destructive/40 bg-destructive/10 text-destructive"
-                : "border-primary/30 bg-primary/10 text-primary-foreground/90"
-            }`}
-          >
-            {captionBusy ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span className="font-medium">
-                  {captionStage === "downloading" && "Preparing video…"}
-                  {captionStage === "transcribing" && "Transcribing with Gemini…"}
-                  {captionStage === "applying" && "Applying caption style…"}
-                  {captionStage === "idle" && "Starting…"}
-                </span>
-                <span className="opacity-70 ml-auto">This can take 10–30s</span>
-              </>
-            ) : captionError ? (
-              <>
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate flex-1" title={captionError}>
-                  {captionError}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[10px] gap-1"
-                  onClick={() => generateCaptions()}
-                >
-                  <RefreshCw className="h-3 w-3" /> Retry
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => setCaptionError(null)}
-                  className="text-[10px] opacity-60 hover:opacity-100"
-                  aria-label="Dismiss"
-                >
-                  ✕
-                </button>
-              </>
-            ) : null}
-          </div>
-        )}
 
         <div className="flex-1 flex items-center justify-center">
           <div className="w-full max-w-full" style={{ ...aspectStyle, maxHeight: "100%" }}>
@@ -897,194 +1069,51 @@ export function HyperframesEditor({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Layer panel */}
-      <div className="border-r flex flex-col min-h-0">
-        <div className="p-3 border-b flex items-center justify-between">
-          <span className="text-xs font-semibold">Layers</span>
-          <Button size="sm" variant="ghost" onClick={() => addText("text")}>
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {comp.layers.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => setSelectedId(l.id)}
-                className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] flex items-center justify-between border ${
-                  selectedId === l.id ? "border-primary bg-primary/10" : "border-border/40 hover:bg-muted/40"
-                }`}
-              >
-                <span className="truncate">
-                  <span className="uppercase text-muted-foreground mr-2">{l.type}</span>
-                  {(l as any).text || (l as any).glyph || (l.type === "video" ? "source clip" : "")}
-                </span>
-                {l.type !== "video" && (
-                  <Trash2
-                    className="h-3 w-3 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeLayer(l.id);
-                    }}
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
-        {selected && selected.type !== "video" && (
-          <div className="border-t p-3 space-y-2 text-xs">
-            {(selected.type === "text" || selected.type === "subtitle") && (
-              <>
-                <label className="block text-[10px] uppercase text-muted-foreground">Text</label>
-                <Textarea
-                  rows={2}
-                  value={(selected as TextLayer).text}
-                  onChange={(e) => updateLayer(selected.id, { text: e.target.value } as any)}
-                  className="text-xs"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] uppercase text-muted-foreground">Font px</label>
-                    <Input
-                      type="number"
-                      value={(selected as TextLayer).fontSize ?? 64}
-                      onChange={(e) => updateLayer(selected.id, { fontSize: +e.target.value } as any)}
-                      className="h-7 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase text-muted-foreground">Color</label>
-                    <Input
-                      type="color"
-                      value={(selected as TextLayer).color ?? "#ffffff"}
-                      onChange={(e) => updateLayer(selected.id, { color: e.target.value } as any)}
-                      className="h-7 p-0.5"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-            {selected.type === "icon" && (
-              <div>
-                <label className="block text-[10px] uppercase text-muted-foreground">Emoji / glyph</label>
-                <Input
-                  value={(selected as IconLayer).glyph}
-                  onChange={(e) => updateLayer(selected.id, { glyph: e.target.value } as any)}
-                  className="h-7 text-xs"
-                />
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] uppercase text-muted-foreground">Start (s)</label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={selected.start}
-                  onChange={(e) => updateLayer(selected.id, { start: +e.target.value })}
-                  className="h-7 text-xs"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase text-muted-foreground">End (s)</label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={selected.end}
-                  onChange={(e) => updateLayer(selected.id, { end: +e.target.value })}
-                  className="h-7 text-xs"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase text-muted-foreground">X (0-1)</label>
-                <Input
-                  type="number"
-                  step="0.05"
-                  value={selected.x}
-                  onChange={(e) => updateLayer(selected.id, { x: +e.target.value })}
-                  className="h-7 text-xs"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase text-muted-foreground">Y (0-1)</label>
-                <Input
-                  type="number"
-                  step="0.05"
-                  value={selected.y}
-                  onChange={(e) => updateLayer(selected.id, { y: +e.target.value })}
-                  className="h-7 text-xs"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+// ---- Preset preview helpers (visual cards in Choose Style) ----
+function captionPresetPreviewBg(id: CaptionStyle): string {
+  switch (id) {
+    case "simple-mono": return "bg-gradient-to-br from-slate-800 to-slate-950";
+    case "viral-pop": return "bg-gradient-to-br from-fuchsia-900 to-slate-950";
+    case "karaoke-line": return "bg-gradient-to-br from-indigo-900 to-slate-950";
+    case "stacked-bold": return "bg-gradient-to-br from-amber-900/60 to-slate-950";
+    case "advanced-cinematic": return "bg-gradient-to-br from-emerald-900 to-slate-950";
+  }
+}
 
-      {/* AI chat */}
-      <div className="flex flex-col min-h-0">
-        <div className="p-3 border-b flex items-center gap-2">
-          <Wand2 className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-semibold">Edit with AI</span>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-3 space-y-2">
-            {messages.length === 0 && (
-              <div className="text-[11px] text-muted-foreground">
-                Tell me what to layer on. Examples:
-                <div className="flex flex-col gap-1 mt-2">
-                  {QUICK.map((q) => (
-                    <button
-                      key={q}
-                      className="text-left text-[10px] px-2 py-1 rounded border border-border/40 hover:bg-muted/40"
-                      onClick={() => setChatInput(q)}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`text-[11px] rounded-md px-3 py-2 ${
-                  m.role === "user" ? "bg-primary/10 ml-6" : "bg-muted mr-6"
-                }`}
-              >
-                <div className="text-[9px] uppercase tracking-wide text-muted-foreground mb-0.5">
-                  {m.role}
-                </div>
-                <div className="whitespace-pre-wrap">{m.content}</div>
-              </div>
-            ))}
-            {chatBusy && (
-              <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-3 w-3 animate-spin" /> Updating timeline…
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-        <div className="border-t p-3 space-y-2">
-          <Textarea
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            rows={2}
-            placeholder="Add a 🔥 sticker bouncing in at 1s..."
-            className="text-xs"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendChat();
-            }}
-          />
-          <div className="flex justify-end">
-            <Button size="sm" onClick={sendChat} disabled={chatBusy || !chatInput.trim()}>
-              <Send className="h-3.5 w-3.5 mr-1" />
-              Send
-            </Button>
-          </div>
-        </div>
+function CaptionPresetPreview({ id }: { id: CaptionStyle }) {
+  if (id === "simple-mono") {
+    return <span className="font-black text-white text-2xl tracking-tight" style={{ WebkitTextStroke: "2px black" }}>HOOK</span>;
+  }
+  if (id === "viral-pop") {
+    return <span className="font-black text-yellow-300 text-2xl tracking-tight" style={{ WebkitTextStroke: "2px black" }}>VIRAL</span>;
+  }
+  if (id === "karaoke-line") {
+    return (
+      <div className="flex gap-1.5 items-center">
+        <span className="text-white/70 font-bold text-base">your</span>
+        <span className="text-yellow-300 font-black text-lg scale-110" style={{ WebkitTextStroke: "1.5px black" }}>BIG</span>
+        <span className="text-white/70 font-bold text-base">day</span>
       </div>
+    );
+  }
+  if (id === "stacked-bold") {
+    return (
+      <div className="flex flex-col items-center leading-none">
+        <span className="text-white font-black text-xs">your biggest</span>
+        <span className="text-amber-400 font-black text-2xl" style={{ WebkitTextStroke: "1.5px black" }}>WIN</span>
+        <span className="text-white font-black text-xs">EVER</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center leading-none gap-0.5">
+      <span className="italic text-white/90 text-xs">your biggest</span>
+      <span className="text-amber-400 font-black text-2xl -rotate-3" style={{ WebkitTextStroke: "1.5px black" }}>WINS</span>
+      <span className="text-white font-black text-xs rotate-1">IN LIFE</span>
     </div>
   );
 }
