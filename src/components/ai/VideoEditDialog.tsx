@@ -10,12 +10,14 @@ export function VideoEditDialog({
   clientId,
   videoUrl,
   fallbackVideo,
+  autoCaptions,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   clientId: string;
   videoUrl: string | null;
   fallbackVideo?: { prompt?: string; aspect_ratio?: string };
+  autoCaptions?: boolean;
 }) {
   const { data: found } = useFindClientVideoByUrl(clientId, videoUrl);
   const aspect = (found?.aspect_ratio ||
@@ -45,6 +47,7 @@ export function VideoEditDialog({
             aspectRatio={aspect}
             initialPrompt={found?.prompt || fallbackVideo?.prompt}
             sourceVideoId={found?.id || null}
+            autoCaptions={autoCaptions}
             onSaved={() => onOpenChange(false)}
           />
         )}
