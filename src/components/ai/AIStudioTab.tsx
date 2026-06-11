@@ -708,7 +708,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       }
       const res = await studioFetch({ action: "history", clientId, conversationId: threadId || undefined });
       if (!res.ok) throw new Error(await res.text().catch(() => "Failed to load AI Studio history"));
-      const { conversation: convo, messages: msgs = [], canvasItems: items = [] } = await res.json();
+      const { conversation: convo, messages: msgs = [], canvasItems: items = [], members = {} } = await res.json();
 
       if (convo) {
         setConversationId(convo.id);
@@ -729,6 +729,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           role: m.role as "user" | "assistant",
           content: m.content || "",
           tools: Array.isArray(m.tools) ? m.tools : [],
+          actorName: m.actor_member_id ? (members?.[m.actor_member_id]?.name || null) : null,
         })));
         setCanvas((items || []) as CanvasItem[]);
       } else {
