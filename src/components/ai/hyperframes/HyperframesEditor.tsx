@@ -6,6 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import {
   Loader2,
   Play,
   Pause,
@@ -20,6 +28,11 @@ import {
   Save,
   AlertCircle,
   RefreshCw,
+  Undo2,
+  Redo2,
+  Image as ImageIcon,
+  Camera,
+  LayoutTemplate,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,7 +45,11 @@ import {
   Layer,
   TextLayer,
   IconLayer,
+  ImageLayer,
   makeDefaultComposition,
+  withKenBurns,
+  withoutKenBurns,
+  hasKenBurns,
 } from "./timeline";
 import {
   applyCaptionPreset,
@@ -43,6 +60,15 @@ import {
   type CaptionSegment,
 } from "./captionPresets";
 import { transcodeWebmToMp4 } from "./transcodeMp4";
+import { captureVideoAudioTracks } from "./captureAudio";
+import { useCompHistory } from "./useCompHistory";
+import {
+  listTemplates,
+  saveTemplate,
+  deleteTemplate,
+  bindVideoSrc,
+  type HyperframesTemplate,
+} from "./templates";
 
 const QUICK = [
   "Add bold caption: 'You won't believe this' fading in at 0.5s",
