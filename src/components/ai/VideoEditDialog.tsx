@@ -26,7 +26,7 @@ export function VideoEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1200px] w-[95vw] h-[88vh] p-0 flex flex-col">
+      <DialogContent className="max-w-[1500px] w-[97vw] h-[92vh] p-0 flex flex-col">
         <DialogHeader className="px-5 py-3 border-b">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Wand2 className="h-4 w-4 text-primary" />
