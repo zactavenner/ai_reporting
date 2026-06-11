@@ -1336,7 +1336,15 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
   curiosity_gap: "COPY FRAMEWORK: Curiosity Gap. Open an information loop in the hook ('The 1 thing 90% of investors miss…'), tease the payoff visually, withhold the full answer — CTA promises to deliver it.",
 };
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean }) => [
+const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
+  "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
+  "bytedance/seedance-2.0":      { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, up to 1080p)" },
+  "moonshotai/kling-v2.1":       { maxDuration: 10, label: "Kling 2.1 (≤10s per clip)" },
+  "moonshotai/kling-v2.1-pro":   { maxDuration: 10, label: "Kling 2.1 Pro (≤10s per clip)" },
+  "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
+};
+
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
