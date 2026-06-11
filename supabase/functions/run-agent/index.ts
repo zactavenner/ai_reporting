@@ -409,18 +409,33 @@ serve(async (req) => {
         prompt = prompt.replace(/\{\{yesterday\}\}/g, yesterdayStr);
         prompt = prompt.replace(/\{\{data\}\}/g, JSON.stringify(dataContext, null, 2));
 
+        // Inject per-client agent memory profile (client_agent_profiles.profile_md)
+        let memoryBlock = '';
+        try {
+          const { data: prof } = await cloudDb
+            .from('client_agent_profiles')
+            .select('profile_md, brand_kit, notes')
+            .eq('client_id', client.id)
+            .maybeSingle();
+          if (prof?.profile_md) memoryBlock += `\n\n# Client Memory\n${prof.profile_md}`;
+          if (prof?.brand_kit && Object.keys(prof.brand_kit || {}).length) {
+            memoryBlock += `\n\n# Brand Kit\n\`\`\`json\n${JSON.stringify(prof.brand_kit, null, 2)}\n\`\`\``;
+          }
+          if (prof?.notes) memoryBlock += `\n\n# Notes\n${prof.notes}`;
+        } catch (_e) { /* memory is optional */ }
+
         const inputSummary = `Client: ${client.name}. Connectors: ${connectors.join(', ')}. Data: ${Object.keys(dataContext).join(', ')}`;
 
         // Call AI via Lovable AI Gateway
         const aiBody: any = {
           model: agent.model || 'google/gemini-2.5-flash',
           messages: [
-            { role: 'system', content: 'You are an AI agent executing a scheduled task for a capital raising agency. Analyze the provided data thoroughly and respond ONLY with valid JSON (no markdown fences). Be specific with numbers and actionable with recommendations.' },
+            { role: 'system', content: `You are an AI agent executing a scheduled task for a capital raising agency. Analyze the provided data thoroughly and respond ONLY with valid JSON (no markdown fences). Be specific with numbers and actionable with recommendations.${memoryBlock}` },
             { role: 'user', content: prompt },
           ],
           temperature: Number(agent.temperature) || 0.3,
         };
-        if (agent.max_tokens) aiBody.max_tokens = agent.max_tokens;
+        aiBody.max_tokens = Number(agent.max_tokens) || 4096;
 
         const aiRes = await fetch(AI_GATEWAY_URL, {
           method: 'POST',
@@ -628,6 +643,16 @@ serve(async (req) => {
         }
 
         // Update run as completed
+        const PRICING: Record<string, { in: number; out: number }> = {
+          'google/gemini-2.5-flash': { in: 0.000075, out: 0.0003 },
+          'google/gemini-2.5-pro':   { in: 0.00125, out: 0.005 },
+          'google/gemini-3-flash-preview': { in: 0.000075, out: 0.0003 },
+          'openai/gpt-5':            { in: 0.005, out: 0.015 },
+          'openai/gpt-5-mini':       { in: 0.00025, out: 0.002 },
+        };
+        const pricing = PRICING[agent.model] || PRICING['google/gemini-2.5-flash'];
+        const costUsd = +((((usage.prompt_tokens || 0) / 1000) * pricing.in) + (((usage.completion_tokens || 0) / 1000) * pricing.out)).toFixed(6);
+
         await cloudDb.from('agent_runs').update({
           status: 'completed',
           completed_at: new Date().toISOString(),
@@ -637,7 +662,7 @@ serve(async (req) => {
           tokens_used: tokensUsed,
           input_tokens: usage.prompt_tokens || 0,
           output_tokens: usage.completion_tokens || 0,
-          cost_usd: 0,
+          cost_usd: costUsd,
           duration_ms: durationMs,
         }).eq('id', runId);
 
