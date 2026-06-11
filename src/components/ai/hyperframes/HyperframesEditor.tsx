@@ -40,6 +40,7 @@ import {
   type CaptionStyle,
   type CaptionSegment,
 } from "./captionPresets";
+import { transcodeWebmToMp4 } from "./transcodeMp4";
 
 const QUICK = [
   "Add bold caption: 'You won't believe this' fading in at 0.5s",
@@ -76,6 +77,8 @@ export function HyperframesEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [exportTick, setExportTick] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"webm" | "mp4">("mp4");
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -320,14 +323,30 @@ export function HyperframesEditor({
       canvasRef.current!.pause();
       setPlaying(false);
 
-      const blob = new Blob(chunks, { type: mime });
+      let blob = new Blob(chunks, { type: mime });
+      let ext = "webm";
+      let outType = mime;
+      if (exportFormat === "mp4") {
+        try {
+          setExportProgress(0);
+          toast.message("Transcoding to MP4…", { description: "First run downloads the ~30MB ffmpeg core." });
+          blob = await transcodeWebmToMp4(blob, (r) => setExportProgress(Math.round(r * 100)));
+          ext = "mp4";
+          outType = "video/mp4";
+        } catch (err: any) {
+          toast.error(`MP4 transcode failed, falling back to WebM: ${err?.message || err}`);
+        } finally {
+          setExportProgress(null);
+        }
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `hyperframes-${Date.now()}.webm`;
+      a.download = `hyperframes-${Date.now()}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Exported. Use 'Save to library' to also push it into the client video set.");
+      toast.success(`Exported ${ext.toUpperCase()}. Use 'Save to library' to also push it into the client video set.`);
+      void outType;
     } catch (e: any) {
       toast.error(`Export failed: ${e?.message || e}`);
     } finally {
@@ -379,11 +398,25 @@ export function HyperframesEditor({
       canvasRef.current!.pause();
       setPlaying(false);
 
-      const blob = new Blob(chunks, { type: mime });
-      const path = `ai-studio/${clientId}/hyperframes-${Date.now()}.webm`;
+      let blob = new Blob(chunks, { type: mime });
+      let ext = "webm";
+      let outType = mime;
+      if (exportFormat === "mp4") {
+        try {
+          setExportProgress(0);
+          blob = await transcodeWebmToMp4(blob, (r) => setExportProgress(Math.round(r * 100)));
+          ext = "mp4";
+          outType = "video/mp4";
+        } catch (err: any) {
+          toast.error(`MP4 transcode failed, saving WebM instead: ${err?.message || err}`);
+        } finally {
+          setExportProgress(null);
+        }
+      }
+      const path = `ai-studio/${clientId}/hyperframes-${Date.now()}.${ext}`;
       const up = await supabase.storage
         .from("creatives")
-        .upload(path, blob, { contentType: mime, upsert: false });
+        .upload(path, blob, { contentType: outType, upsert: false });
       if (up.error) throw up.error;
       const { data: pub } = supabase.storage.from("creatives").getPublicUrl(path);
       const storageUrl = pub.publicUrl;
@@ -505,7 +538,28 @@ export function HyperframesEditor({
               {time.toFixed(2)}s / {comp.duration.toFixed(2)}s
             </span>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end items-center gap-2">
+            {exportProgress !== null && (
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                MP4 {exportProgress}%
+              </span>
+            )}
+            <div className="flex items-center gap-0.5 rounded-md border bg-background/40 p-0.5">
+              {(["mp4", "webm"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setExportFormat(f)}
+                  className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${
+                    exportFormat === f
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
             <Button size="sm" variant="outline" onClick={exportMp4} disabled={exporting || saving}>
               {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
               Export
