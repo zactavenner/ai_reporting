@@ -1794,6 +1794,7 @@ Deno.serve(async (req) => {
     image_quality: quality,
     last_active_at: new Date().toISOString(),
     cleared_at: null,
+    last_actor_member_id: actorMemberId,
   };
   if (typeof chatModel === "string") baseUpdate.chat_model = chatModel;
   if (Array.isArray(activeReferenceIds)) baseUpdate.active_reference_ids = activeReferenceIds;
