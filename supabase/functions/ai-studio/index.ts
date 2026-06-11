@@ -1543,6 +1543,19 @@ Deno.serve(async (req) => {
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
 
+  // Load selected avatar (if any) for system-prompt context + auto-injection into video tools
+  let selectedAvatar: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null = null;
+  if (typeof avatarId === "string" && avatarId) {
+    try {
+      const { data: av } = await supa
+        .from("avatars")
+        .select("id, name, image_url, gender, age_range, ethnicity, description, elevenlabs_voice_id")
+        .eq("id", avatarId)
+        .maybeSingle();
+      if (av && av.image_url) selectedAvatar = av as any;
+    } catch (e) { console.warn("avatar lookup failed", e); }
+  }
+
   // Route chat completions through OpenRouter when the model id is prefixed
   // with "openrouter/" (e.g. "openrouter/anthropic/claude-3.5-sonnet").
   const USE_OPENROUTER = CHAT_MODEL.startsWith("openrouter/");
