@@ -1301,11 +1301,26 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             onClick={() => setAiStudioTab("agents")}
             className={`text-xs px-3 py-1 rounded-md transition inline-flex items-center gap-1 ${aiStudioTab === "agents" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
           ><Bot className="h-3 w-3" /> Agents</button>
+          <button
+            type="button"
+            onClick={() => setAiStudioTab("avatars")}
+            className={`text-xs px-3 py-1 rounded-md transition inline-flex items-center gap-1 ${aiStudioTab === "avatars" ? "bg-background border border-border/60 text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+          >Avatars{selectedAvatar ? <span className="ml-1 inline-flex items-center gap-1 text-[10px] text-primary">· {selectedAvatar.name}</span> : null}</button>
         </div>
 
         {aiStudioTab === "agents" && (
           <div className="flex-1 min-h-0">
             <AIStudioAgentsTab clientId={clientId} clientName={clientName} />
+          </div>
+        )}
+        {aiStudioTab === "avatars" && (
+          <div className="flex-1 min-h-0">
+            <AIStudioAvatarsTab
+              clientId={clientId}
+              clientName={clientName}
+              selectedAvatarId={selectedAvatarId}
+              onSelectAvatar={setSelectedAvatarId}
+            />
           </div>
         )}
         {aiStudioTab === "chat" && (
