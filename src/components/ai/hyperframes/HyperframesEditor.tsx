@@ -119,7 +119,7 @@ export function HyperframesEditor({
   >("idle");
   const [captionError, setCaptionError] = useState<string | null>(null);
   const captionsRanRef = useRef(false);
-  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("simple-mono");
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("hormozi");
   const [segments, setSegments] = useState<CaptionSegment[]>([]);
   const [leftTab, setLeftTab] = useState<"style" | "edit" | "layers" | "ai">("style");
 
