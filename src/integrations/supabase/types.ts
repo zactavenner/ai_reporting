@@ -8063,6 +8063,39 @@ export type Database = {
           },
         ]
       }
+      meta_token_state: {
+        Row: {
+          access_token: string
+          ad_account_count: number | null
+          expires_at: string | null
+          id: number
+          last_error: string | null
+          last_refreshed_at: string
+          last_status: string | null
+          last_validated_at: string | null
+        }
+        Insert: {
+          access_token: string
+          ad_account_count?: number | null
+          expires_at?: string | null
+          id?: number
+          last_error?: string | null
+          last_refreshed_at?: string
+          last_status?: string | null
+          last_validated_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          ad_account_count?: number | null
+          expires_at?: string | null
+          id?: number
+          last_error?: string | null
+          last_refreshed_at?: string
+          last_status?: string | null
+          last_validated_at?: string | null
+        }
+        Relationships: []
+      }
       monitoring_status: {
         Row: {
           ads_found: number | null
