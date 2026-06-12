@@ -99,6 +99,13 @@ export function HyperframesEditor({
   autoCaptions = false,
 }: Props) {
   const canvasRef = useRef<HyperframesCanvasHandle>(null);
+  // Resolved playback URL — we fetch the source as a same-origin blob URL so
+  // the <video crossOrigin="anonymous"> element always loads cleanly (no CORS
+  // taint) regardless of the upstream host. This is what unblocks preview
+  // playback, audio capture, MP4 export, and Save-to-library all at once.
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [playbackLoading, setPlaybackLoading] = useState(true);
   const [duration, setDuration] = useState(8);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -126,6 +133,45 @@ export function HyperframesEditor({
   const { comp, setComp, undo, redo, canUndo, canRedo } = useCompHistory(
     makeDefaultComposition(videoUrl, 8, aspectRatio),
   );
+
+  // Rehost the source video into a same-origin blob URL.
+  useEffect(() => {
+    let cancelled = false;
+    let createdUrl: string | null = null;
+    setPlaybackLoading(true);
+    setPlaybackError(null);
+    (async () => {
+      try {
+        const res = await fetch(videoUrl, { mode: "cors", credentials: "omit" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (cancelled) return;
+        createdUrl = URL.createObjectURL(blob);
+        setPlaybackUrl(createdUrl);
+        setComp((c) => ({
+          ...c,
+          layers: c.layers.map((l) =>
+            l.type === "video" ? { ...l, src: createdUrl! } : l,
+          ),
+        }));
+      } catch (e: any) {
+        // Fallback to direct URL — preview may still work for permissive hosts,
+        // but warn the user so they know why export/audio may misbehave.
+        if (cancelled) return;
+        setPlaybackUrl(videoUrl);
+        setPlaybackError(
+          `Couldn't rehost video (${e?.message || e}). Using direct URL — export and audio may be limited if the host blocks CORS.`,
+        );
+      } finally {
+        if (!cancelled) setPlaybackLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoUrl]);
 
   // Templates
   const [templates, setTemplates] = useState<HyperframesTemplate[]>([]);
@@ -1006,6 +1052,7 @@ export function HyperframesEditor({
 
         <div className="flex-1 flex items-center justify-center">
           <div className="w-full max-w-full" style={{ ...aspectStyle, maxHeight: "100%" }}>
+            <div className="relative w-full h-full">
             <HyperframesCanvas
               ref={canvasRef}
               comp={comp}
@@ -1014,6 +1061,18 @@ export function HyperframesEditor({
               onDuration={(d) => setDuration(Math.max(2, Math.min(60, Math.round(d))))}
               className="w-full h-full"
             />
+            {playbackLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white gap-2 text-xs">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Loading source video…
+              </div>
+            )}
+            {playbackError && !playbackLoading && (
+              <div className="absolute top-2 left-2 right-2 bg-amber-500/90 text-black text-[10px] rounded px-2 py-1">
+                {playbackError}
+              </div>
+            )}
+            </div>
           </div>
         </div>
 
