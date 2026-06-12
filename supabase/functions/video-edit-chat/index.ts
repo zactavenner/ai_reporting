@@ -9,7 +9,6 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
 /**
  * Hyperframes-style chat editor for a saved client_video.
@@ -66,9 +65,14 @@ Deno.serve(async (req) => {
         },
       ],
     };
-    const refineRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const refineRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://reporting.highperformanceads.com",
+        "X-Title": "Video Edit Chat",
+      },
       body: JSON.stringify(refinePayload),
     });
     if (!refineRes.ok) throw new Error(`Refine failed ${refineRes.status}: ${(await refineRes.text()).slice(0, 200)}`);

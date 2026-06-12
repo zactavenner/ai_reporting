@@ -16,9 +16,9 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") || Deno.env.get("OPENROUTER_API_KEY") || "";
+const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || Deno.env.get("LOVABLE_API_KEY") || "";
 const HERMES_BOT_USER_ID = "00000000-0000-0000-0000-000000000001";
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const AI_GATEWAY_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -101,7 +101,12 @@ async function runAgentInference(opts: {
 
   const res = await fetch(AI_GATEWAY_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "HTTP-Referer": "https://reporting.highperformanceads.com",
+      "X-Title": "Hermes Task Executor",
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
