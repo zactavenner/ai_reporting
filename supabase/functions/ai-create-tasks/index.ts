@@ -49,6 +49,18 @@ serve(async (req) => {
         results.push({ error: error.message, task });
       } else {
         results.push({ success: true, id: data.id, title: data.title, client_id: data.client_id });
+        // Fire-and-forget auto-assign for every AI-created task
+        try {
+          fetch(`${supabaseUrl}/functions/v1/ai-auto-assign-task`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${supabaseServiceKey}`,
+              apikey: supabaseServiceKey,
+            },
+            body: JSON.stringify({ taskId: data.id }),
+          }).catch((e) => console.warn('auto-assign dispatch failed', e));
+        } catch (e) { console.warn('auto-assign dispatch threw', e); }
       }
     }
 

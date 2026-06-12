@@ -70,11 +70,11 @@ export function useMeetings(clientId?: string) {
   });
 }
 
-export function usePendingMeetingTasks() {
+export function usePendingMeetingTasks(clientId?: string) {
   return useQuery({
-    queryKey: ['pending-meeting-tasks'],
+    queryKey: ['pending-meeting-tasks', clientId ?? 'all'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('pending_meeting_tasks')
         .select(`
           *,
@@ -82,6 +82,8 @@ export function usePendingMeetingTasks() {
         `)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
+      if (clientId) q = q.eq('client_id', clientId);
+      const { data, error } = await q;
 
       if (error) throw error;
       
@@ -184,6 +186,11 @@ export function useApprovePendingTask() {
         .eq('id', pendingTaskId);
 
       if (updateError) throw updateError;
+
+      // Fire-and-forget auto-assign so meeting-sourced tasks aren't orphaned.
+      supabase.functions
+        .invoke('ai-auto-assign-task', { body: { taskId: newTask.id } })
+        .catch((e) => console.warn('ai-auto-assign-task (meeting approval) failed', e));
 
       return newTask;
     },

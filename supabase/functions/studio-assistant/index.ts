@@ -82,6 +82,73 @@ const tools = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'list_open_tasks',
+      description: 'List open tasks (status todo/in_progress) with their current assignees, due date, comments count, and priority. Use this to triage or answer "what is on my plate" questions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          client_id: { type: 'string', description: 'Optional. Filter to one client.' },
+          assignee_member_id: { type: 'string', description: 'Optional. Tasks assigned to this agency_member.' },
+          overdue_only: { type: 'boolean', default: false },
+          limit: { type: 'number', default: 50 },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_task',
+      description: 'Update a task. Provide task_id and any of: status (todo|in_progress|done), priority (low|medium|high), due_date (YYYY-MM-DD), title, description.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string' },
+          status: { type: 'string', enum: ['todo','in_progress','done'] },
+          priority: { type: 'string', enum: ['low','medium','high'] },
+          due_date: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+        },
+        required: ['task_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_task_comment',
+      description: 'Add a comment to a task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string' },
+          content: { type: 'string' },
+          author_name: { type: 'string', default: 'AI Assistant' },
+        },
+        required: ['task_id', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'set_task_assignees',
+      description: 'Replace the assignees on a task with the given members and/or pods. Empty arrays clear assignees.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string' },
+          member_ids: { type: 'array', items: { type: 'string' }, default: [] },
+          pod_ids: { type: 'array', items: { type: 'string' }, default: [] },
+        },
+        required: ['task_id'],
+      },
+    },
+  },
 ];
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
@@ -218,10 +285,87 @@ async function execTool(name: string, args: any) {
     if (name === 'query_table') return await runQueryTable(args);
     if (name === 'send_sms') return await runSendSms(args);
     if (name === 'generate_image') return await runGenerateImage(args);
+    if (name === 'list_open_tasks') return await runListOpenTasks(args);
+    if (name === 'update_task') return await runUpdateTask(args);
+    if (name === 'add_task_comment') return await runAddTaskComment(args);
+    if (name === 'set_task_assignees') return await runSetTaskAssignees(args);
     return { error: `unknown tool ${name}` };
   } catch (e) {
     return { error: (e as Error).message };
   }
+}
+
+// =================== Task management tools ===================
+async function runListOpenTasks(args: any) {
+  let q = sb
+    .from('tasks')
+    .select('id, client_id, title, description, status, priority, stage, due_date, assigned_to, created_at, clients(name), task_assignees(member_id, pod_id, member:agency_members(id,name), pod:agency_pods(id,name))')
+    .in('status', ['todo', 'in_progress'])
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .limit(Math.min(args.limit ?? 50, 200));
+  if (args.client_id) q = q.eq('client_id', args.client_id);
+  if (args.overdue_only) q = q.lt('due_date', new Date().toISOString().slice(0, 10));
+  const { data, error } = await q;
+  if (error) return { error: error.message };
+  let rows = data || [];
+  if (args.assignee_member_id) {
+    rows = rows.filter((t: any) =>
+      (t.task_assignees || []).some((a: any) => a.member_id === args.assignee_member_id) ||
+      t.assigned_to === args.assignee_member_id,
+    );
+  }
+  return { count: rows.length, tasks: rows };
+}
+
+async function runUpdateTask(args: any) {
+  if (!args.task_id) return { error: 'task_id required' };
+  const patch: Record<string, any> = {};
+  for (const k of ['status', 'priority', 'due_date', 'title', 'description']) {
+    if (args[k] !== undefined) patch[k] = args[k];
+  }
+  if (Object.keys(patch).length === 0) return { error: 'no fields to update' };
+  if (patch.status === 'done') patch.completed_at = new Date().toISOString();
+  const { data, error } = await sb.from('tasks').update(patch).eq('id', args.task_id).select('id, title, status, priority, due_date').single();
+  if (error) return { error: error.message };
+  await sb.from('task_history').insert({
+    task_id: args.task_id,
+    action: 'ai_updated',
+    new_value: JSON.stringify(patch),
+    changed_by: 'AI Assistant',
+  }).then(() => {}, () => {});
+  return { updated: data };
+}
+
+async function runAddTaskComment(args: any) {
+  if (!args.task_id || !args.content) return { error: 'task_id and content required' };
+  const { data, error } = await sb.from('task_comments').insert({
+    task_id: args.task_id,
+    author_name: args.author_name || 'AI Assistant',
+    content: args.content,
+  }).select('id, created_at').single();
+  if (error) return { error: error.message };
+  return { comment_id: data.id, created_at: data.created_at };
+}
+
+async function runSetTaskAssignees(args: any) {
+  if (!args.task_id) return { error: 'task_id required' };
+  await sb.from('task_assignees').delete().eq('task_id', args.task_id);
+  const rows = [
+    ...((args.member_ids || []) as string[]).map((id) => ({ task_id: args.task_id, member_id: id, pod_id: null })),
+    ...((args.pod_ids || []) as string[]).map((id) => ({ task_id: args.task_id, member_id: null, pod_id: id })),
+  ];
+  if (rows.length) {
+    const { error } = await sb.from('task_assignees').insert(rows);
+    if (error) return { error: error.message };
+    // Mirror first member into legacy assigned_to column
+    const firstMember = (args.member_ids || [])[0];
+    if (firstMember) {
+      await sb.from('tasks').update({ assigned_to: firstMember }).eq('id', args.task_id);
+    }
+  } else {
+    await sb.from('tasks').update({ assigned_to: null }).eq('id', args.task_id);
+  }
+  return { ok: true, assignees: rows.length };
 }
 
 const SYSTEM_PROMPT = `You are the AI Studio Assistant inside the High Performance Ads internal dashboard. You help Zac and the team by:
@@ -235,7 +379,8 @@ Rules:
 - Before sending any SMS/WhatsApp, briefly confirm the recipient and message in your reply, then call the tool. If the user has already said "send it", just send.
 - When asked for performance, prefer the v_client_performance_* views.
 - Lead counts require non-empty email AND phone.
-- Cite which table you pulled data from in a small footnote.`;
+- Cite which table you pulled data from in a small footnote.
+- You can manage tasks: use list_open_tasks to find tasks, update_task to change status/due/priority/title, add_task_comment to leave notes, set_task_assignees to re-route to agency members or pods. When the user asks "reassign", "change due date", "mark done", "comment on", etc., act directly using these tools (after one short confirmation if destructive).`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });

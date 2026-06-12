@@ -560,7 +560,8 @@ async function processMeeting(supabase: any, apiKey: string, baseUrl: string, me
       }
     }
 
-    // Create pending tasks
+    // Create pending tasks (works for ALL clients, including unmatched — they appear in
+    // the global pending queue so an admin can re-assign the meeting client_id later).
     if (uniqueActionItems.length > 0) {
       const pendingTasks = uniqueActionItems.map((item: ActionItem) => ({
         meeting_id: insertedMeeting.id,
@@ -570,7 +571,12 @@ async function processMeeting(supabase: any, apiKey: string, baseUrl: string, me
         priority: 'medium',
         status: 'pending',
       }));
-      await supabase.from('pending_meeting_tasks').insert(pendingTasks);
+      const { error: pendErr } = await supabase.from('pending_meeting_tasks').insert(pendingTasks);
+      if (pendErr) {
+        console.error('[MeetGeek] pending_meeting_tasks insert failed:', pendErr);
+      } else {
+        console.log(`[MeetGeek] Created ${pendingTasks.length} pending tasks (client=${matchedClientId || 'UNMATCHED'})`);
+      }
     }
 
     return { success: true, meetingId: insertedMeeting.id, actionItems: uniqueActionItems.length, callUpdated };
