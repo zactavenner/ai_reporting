@@ -2085,6 +2085,10 @@ Deno.serve(async (req) => {
   }
   // Vision: attach image attachments to the final user message for multimodal models
   const imageAttachments = (attachments || []).filter(a => /^image\//i.test(a.mime || "") || /\.(png|jpe?g|webp|gif)$/i.test(a.url));
+  // Auto-injected reference URLs for image-generation tools. Every uploaded image is treated as a visual
+  // source of truth for any generate_static_ad / edit_static_ad / explode_ad_variants / image_to_reel call
+  // emitted in the SAME assistant turn, without the model needing to repeat the URLs.
+  const attachmentImageUrls: string[] = imageAttachments.map(a => a.url).filter(Boolean);
   if (imageAttachments.length) {
     const lastIdx = convo.length - 1;
     const text = typeof convo[lastIdx].content === "string" ? convo[lastIdx].content : userText;
