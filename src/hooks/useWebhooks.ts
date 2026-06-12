@@ -259,7 +259,7 @@ export function useWebhookLogs(clientId: string | undefined) {
       return data as WebhookLog[];
     },
     enabled: !!clientId,
-    refetchInterval: 5000, // Faster refetch for testing
+    refetchInterval: 30000,
   });
 }
 
@@ -432,7 +432,7 @@ export function useLiveWebhookTest(clientId: string | undefined, webhookType: st
       return data as WebhookLog[];
     },
     enabled: isListening && !!clientId && !!webhookType && !!startTime,
-    refetchInterval: 2000, // Poll every 2 seconds
+    refetchInterval: isListening ? 3000 : false,
   });
 
   // Check for new webhook

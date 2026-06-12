@@ -130,7 +130,14 @@ export default function VideoEditorPage() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSaveStatus('saving');
-      const parsed = JSON.parse(snapshot);
+      let parsed: any;
+      try {
+        parsed = JSON.parse(snapshot);
+      } catch (e) {
+        console.error('Bad snapshot, skipping save', e);
+        setSaveStatus('unsaved');
+        return;
+      }
       const success = await projectManager.saveProjectState(activeProjectId, {
         clips_data: parsed.clips,
         caption_data: parsed.captions,

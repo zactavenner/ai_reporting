@@ -47,7 +47,7 @@ export function useCalendarSlots({ route, selectedDate, timezone = 'America/New_
       // Fetch just that single day's slots
       const endDate = startDate;
 
-      const { data, error } = await supabase.functions.invoke('ghl-calendars', {
+      const { data, error } = await supabase.functions.invoke('fetch-ghl-calendars', {
         body: {
           action: 'free-slots',
           calendarId,

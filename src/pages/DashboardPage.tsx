@@ -148,7 +148,7 @@ export default function DashboardPage() {
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="h-6 w-6 text-primary" />
-              <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => navigate('/dashboard')}>v5.0</Badge>
+              <Badge variant="secondary" className="text-xs">v5.0</Badge>
             </div>
             <h1 className="text-2xl md:text-3xl font-bold mb-1">Welcome to Capital Creative</h1>
             <p className="text-muted-foreground max-w-lg">
@@ -217,6 +217,7 @@ export default function DashboardPage() {
               <CardContent className="p-6 text-center">
                 <p className="text-3xl font-bold">{s.value}</p>
                 <p className="text-sm text-muted-foreground">{s.label}</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">assets created</p>
               </CardContent>
             </Card>
           ))}

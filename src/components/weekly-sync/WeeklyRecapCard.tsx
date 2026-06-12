@@ -71,12 +71,12 @@ export function WeeklyRecapCard({ clientId, sinceDate, compact, onAutoFill, wind
         {!compact && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Tasks completed */}
-            <Section title={`Tasks completed (${recap.tasks.completed})`}>
-              {recap.tasks.completedList.length === 0 ? (
+            <Section title={`Tasks completed (${recap.tasks?.completed ?? 0})`}>
+              {(recap.tasks?.completedList ?? []).length === 0 ? (
                 <Empty>No tasks completed.</Empty>
               ) : (
                 <ul className="space-y-1 text-sm">
-                  {recap.tasks.completedList.map((t) => (
+                  {(recap.tasks?.completedList ?? []).map((t) => (
                     <li key={t.id} className="flex items-center gap-2">
                       <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                       <span className="truncate">{t.title}</span>
@@ -88,12 +88,12 @@ export function WeeklyRecapCard({ clientId, sinceDate, compact, onAutoFill, wind
             </Section>
 
             {/* Tasks created */}
-            <Section title={`Tasks created (${recap.tasks.created})`}>
-              {recap.tasks.createdList.length === 0 ? (
+            <Section title={`Tasks created (${recap.tasks?.created ?? 0})`}>
+              {(recap.tasks?.createdList ?? []).length === 0 ? (
                 <Empty>No new tasks.</Empty>
               ) : (
                 <ul className="space-y-1 text-sm">
-                  {recap.tasks.createdList.map((t) => (
+                  {(recap.tasks?.createdList ?? []).map((t) => (
                     <li key={t.id} className="flex items-center gap-2">
                       <PlusCircle className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                       <span className="truncate">{t.title}</span>
