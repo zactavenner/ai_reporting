@@ -327,13 +327,30 @@ async function generateStaticAd(opts: {
     } else throw new Error("OpenAI returned no image data");
   } else {
     // Nano Banana 2 via AI Gateway
-    modelUsed = "google/gemini-3.1-flash-image-preview";
+    // When the user attached reference images we upgrade to Gemini 3 Pro Image Preview ("Nano Banana Pro")
+    // for best identity / product preservation across multiple references.
+    modelUsed = hasAttachmentRefs
+      ? "google/gemini-3-pro-image-preview"
+      : "google/gemini-3.1-flash-image-preview";
+
+    // Build multimodal content: text prompt + every attachment + any prior reference image.
+    const refUrls: string[] = [];
+    if (opts.attachmentImageUrls) refUrls.push(...opts.attachmentImageUrls.filter(Boolean));
+    if (opts.referenceImageUrl) refUrls.push(opts.referenceImageUrl);
+
+    const textPrompt = fullPrompt + (refUrls.length
+      ? `\n\nUSE THE ATTACHED REFERENCE IMAGE${refUrls.length > 1 ? "S" : ""} as the visual source of truth for product, identity, style, colors, and composition. Faithfully reproduce the product / subject from the attachment(s). Do not invent a different product.`
+      : "");
+
+    const content: any[] = [{ type: "text", text: textPrompt }];
+    for (const u of refUrls) content.push({ type: "image_url", image_url: { url: u } });
+
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: modelUsed,
-        messages: [{ role: "user", content: fullPrompt }],
+        messages: [{ role: "user", content: content.length === 1 ? textPrompt : content }],
         modalities: ["image", "text"],
       }),
     });
