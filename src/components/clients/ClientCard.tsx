@@ -57,7 +57,7 @@ export function ClientCard({ client, onEdit, onDelete, onQuickGenerate, index = 
               <AvatarImage src={client.logo_url || undefined} alt={client.name} />
               <AvatarFallback 
                 className={cn(
-                  'text-white font-bold text-sm',
+                  'text-primary-foreground font-bold text-sm',
                   primaryColor ? '' : getInitialsBgColor(client.name)
                 )}
                 style={primaryColor ? { backgroundColor: primaryColor } : undefined}

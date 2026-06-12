@@ -66,7 +66,7 @@ export function AppLayout({ children, breadcrumbs }: AppLayoutProps) {
             <Menu className="h-5 w-5" />
           </Button>
           <Sparkles className="h-5 w-5 text-primary" />
-          <span className="font-bold">Creative Ads 5.0</span>
+          <span className="font-bold">Capital Creative</span>
         </header>
       )}
 
@@ -85,7 +85,7 @@ export function AppLayout({ children, breadcrumbs }: AppLayoutProps) {
           <div className="flex h-16 items-center justify-between border-b border-border px-6">
             <Link to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <Sparkles className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold">Creative Ads 5.0</span>
+              <span className="text-lg font-bold">Capital Creative</span>
             </Link>
             {isMobile && (
               <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" onClick={() => setSidebarOpen(false)}>

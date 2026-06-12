@@ -196,8 +196,13 @@ export default function ClientsPage() {
             )}
           </>
         ) : clients && clients.length > 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            No clients match "{searchQuery}"
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="rounded-full bg-muted p-5 mb-4">
+              <Search className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold">No clients match &ldquo;{searchQuery}&rdquo;</h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">Try a different search term or clear the filter.</p>
+            <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>Clear search</Button>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 text-center">

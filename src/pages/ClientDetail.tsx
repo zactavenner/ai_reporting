@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, lazy, Suspense, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil } from 'lucide-react';
+import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil, Users } from 'lucide-react';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
 import { AdSpendDrillDownModal } from '@/components/drilldown/AdSpendDrillDownModal';
@@ -241,16 +241,38 @@ export default function ClientDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <CashBagLoader message="Loading client..." />
+      <div className="min-h-screen bg-background">
+        <div className="border-b border-border bg-card/80 sticky top-0 z-30 px-6 py-3 flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
+          <div className="h-5 w-40 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="p-6 space-y-6">
+          <div className="h-10 w-64 rounded-lg bg-muted animate-pulse" />
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {[...Array(12)].map((_, i) => (
+              <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" style={{ animationDelay: `${i * 40}ms` }} />
+            ))}
+          </div>
+          <div className="h-64 rounded-xl bg-muted animate-pulse" />
+        </div>
       </div>
     );
   }
 
   if (!client) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Client not found</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="rounded-full bg-muted p-5 inline-flex mb-2">
+            <Users className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold">Client not found</h2>
+          <p className="text-sm text-muted-foreground">This client may have been deleted or the link is invalid.</p>
+          <Button onClick={() => navigate("/")}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Clients
+          </Button>
+        </div>
       </div>
     );
   }
@@ -308,7 +330,7 @@ export default function ClientDetail() {
               <p className="text-xs text-muted-foreground hidden sm:block">Client performance & management</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto max-w-[60vw] sm:max-w-none pb-0.5">
             <MetricsSourceToggle
               source={metricsSource}
               onChange={setMetricsSource}
@@ -342,7 +364,7 @@ export default function ClientDetail() {
 
         {/* Grouped Tabs - matching 6.0 */}
         <Tabs value={resolvedTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="bg-muted/50 flex-wrap">
+          <TabsList className="bg-muted/50 overflow-x-auto flex-nowrap w-full justify-start h-auto py-1 px-1">
             {isLeasing && (
               <TabsTrigger value="properties" className="gap-2">
                 <Building2 className="h-4 w-4" />
