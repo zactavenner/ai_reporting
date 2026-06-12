@@ -12,10 +12,8 @@ interface ClientPendingTasksButtonProps {
 
 export function ClientPendingTasksButton({ clientId }: ClientPendingTasksButtonProps) {
   const [open, setOpen] = useState(false);
-  const { data: allPending = [] } = usePendingMeetingTasks();
+  const { data: scopedTasks = [] } = usePendingMeetingTasks(clientId);
   const { data: clients = [] } = useClients();
-
-  const scopedTasks = allPending.filter((t) => t.client_id === clientId);
 
   if (scopedTasks.length === 0) return null;
 

@@ -395,6 +395,20 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         stage: 'backlog',
       }).select().single();
       if (error) return { error: error.message };
+      // Auto-assign if no explicit assignee
+      if (!args.assigned_to && data?.id) {
+        try {
+          fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ai-auto-assign-task`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+            },
+            body: JSON.stringify({ taskId: data.id }),
+          }).catch((e) => console.warn('mcp auto-assign failed', e));
+        } catch (e) { console.warn('mcp auto-assign threw', e); }
+      }
       return data;
     }
 

@@ -284,6 +284,19 @@ Rules:
                   if (!taskErr && newTask) {
                     tasksCreated++;
 
+                    // Auto-assign every Slack-extracted task
+                    try {
+                      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ai-auto-assign-task`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                          apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+                        },
+                        body: JSON.stringify({ taskId: newTask.id }),
+                      }).catch((e) => console.warn('slack auto-assign failed', e));
+                    } catch (e) { console.warn('slack auto-assign threw', e); }
+
                     // Post confirmation to Slack
                     await fetch(`${SLACK_GATEWAY_URL}/chat.postMessage`, {
                       method: "POST",

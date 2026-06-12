@@ -190,8 +190,8 @@ Deno.serve(async (req) => {
 
       const highlights = meeting.highlights || meeting.key_topics || null;
 
-      // Upsert
-      const { error: upsertErr } = await supabase
+      // Upsert (capture id for pending task creation)
+      const { data: upserted, error: upsertErr } = await supabase
         .from('agency_meetings')
         .upsert({
           meeting_id: `fathom-${meetingId}`,
@@ -206,13 +206,33 @@ Deno.serve(async (req) => {
           recording_url: recordingUrl,
           meetgeek_url: fathomUrl,
           highlights,
-        } as any, { onConflict: 'meeting_id' });
+        } as any, { onConflict: 'meeting_id' })
+        .select('id')
+        .single();
 
       if (upsertErr) {
         console.error(`[Fathom] Upsert error for ${meetingId}:`, upsertErr);
         continue;
       }
       synced++;
+
+      // Create reviewable pending tasks from action items
+      if (upserted?.id && actionItems.length > 0) {
+        const pendingRows = actionItems
+          .filter((ai: any) => ai.text && String(ai.text).trim())
+          .map((ai: any) => ({
+            meeting_id: upserted.id,
+            client_id,
+            title: String(ai.text).slice(0, 200),
+            description: ai.assignee ? `Assigned to: ${ai.assignee}` : '',
+            priority: 'medium',
+            status: 'pending',
+          }));
+        if (pendingRows.length) {
+          const { error: pendErr } = await supabase.from('pending_meeting_tasks').insert(pendingRows);
+          if (pendErr) console.error('[Fathom] pending_meeting_tasks insert failed:', pendErr);
+        }
+      }
 
       // Match attendees to contacts
       const externalAttendees = participants.filter((p: any) => !p.is_internal && (p.email || p.name));
