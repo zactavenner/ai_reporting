@@ -901,7 +901,7 @@ function CommentAttachmentUpload({
 }
 
 // Comment display with attachment support
-function CommentBubble({ comment, isInline = false }: { comment: CreativeComment; isInline?: boolean }) {
+function CommentBubble({ comment, isInline = false, isPublicView = false }: { comment: CreativeComment; isInline?: boolean; isPublicView?: boolean }) {
   const [showFullImage, setShowFullImage] = useState(false);
   const hasAttachment = comment.attachmentUrl;
   
@@ -918,7 +918,7 @@ function CommentBubble({ comment, isInline = false }: { comment: CreativeComment
       >
         <div className="flex justify-between mb-0.5">
           <span className="text-xs font-medium">{comment.author}:</span>
-          {!isInline && (
+          {!isInline && !isPublicView && (
             <span className="text-xs text-muted-foreground">
               {new Date(comment.createdAt).toLocaleString()}
             </span>
@@ -1205,7 +1205,7 @@ function CreativeDetailModal({
             <ScrollArea className="h-[250px] border rounded-lg p-3 mb-2">
               <div className="space-y-2">
                 {creative.comments.map((comment) => (
-                  <CommentBubble key={comment.id} comment={comment} />
+                  <CommentBubble key={comment.id} comment={comment} isPublicView={isPublicView} />
                 ))}
               </div>
             </ScrollArea>
@@ -1620,9 +1620,11 @@ function CreativeCard({
               {creative.platform}
             </Badge>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {formatDistanceToNow(new Date(creative.created_at), { addSuffix: true })}
-          </p>
+          {!isPublicView && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {formatDistanceToNow(new Date(creative.created_at), { addSuffix: true })}
+            </p>
+          )}
         </div>
 
         {/* Action buttons - compact */}
