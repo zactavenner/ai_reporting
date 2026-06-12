@@ -901,7 +901,7 @@ function CommentAttachmentUpload({
 }
 
 // Comment display with attachment support
-function CommentBubble({ comment, isInline = false }: { comment: CreativeComment; isInline?: boolean }) {
+function CommentBubble({ comment, isInline = false, isPublicView = false }: { comment: CreativeComment; isInline?: boolean; isPublicView?: boolean }) {
   const [showFullImage, setShowFullImage] = useState(false);
   const hasAttachment = comment.attachmentUrl;
   
@@ -918,7 +918,7 @@ function CommentBubble({ comment, isInline = false }: { comment: CreativeComment
       >
         <div className="flex justify-between mb-0.5">
           <span className="text-xs font-medium">{comment.author}:</span>
-          {!isInline && (
+          {!isInline && !isPublicView && (
             <span className="text-xs text-muted-foreground">
               {new Date(comment.createdAt).toLocaleString()}
             </span>
