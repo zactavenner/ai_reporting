@@ -114,6 +114,40 @@ function estimateWordWidth(word: string, fontSize: number, weight: number | stri
   return word.length * per;
 }
 
+/**
+ * Measure exact word widths using an offscreen 2D canvas with the EXACT font
+ * the renderer will use. Falls back to estimateWordWidth if measurement fails
+ * (e.g. SSR / no DOM). This is what keeps multi-word chunks from overlapping.
+ */
+let __measureCtx: CanvasRenderingContext2D | null = null;
+function getMeasureCtx(): CanvasRenderingContext2D | null {
+  if (__measureCtx) return __measureCtx;
+  if (typeof document === "undefined") return null;
+  try {
+    const c = document.createElement("canvas");
+    __measureCtx = c.getContext("2d");
+    return __measureCtx;
+  } catch {
+    return null;
+  }
+}
+function measureWordWidth(
+  word: string,
+  fontSize: number,
+  weight: number,
+  fontFamily: string,
+  letterSpacing: number = 0,
+): number {
+  const ctx = getMeasureCtx();
+  if (!ctx) return estimateWordWidth(word, fontSize, weight);
+  ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
+  const base = ctx.measureText(word).width;
+  // Account for the stroke outline + letterSpacing (canvas measureText ignores both).
+  // Add ~1 char of safety so the active-pulse scale-up (~1.08-1.2x) doesn't bump.
+  const spacing = Math.max(0, letterSpacing) * Math.max(0, word.length - 1);
+  return base + spacing + fontSize * 0.12;
+}
+
 // ---------------------------------------------------------------------------
 // Building blocks
 // ---------------------------------------------------------------------------
@@ -152,10 +186,22 @@ function layoutWordRow(
   const layers: Layer[] = [];
   let id = startId;
   const renderWords = words.map((w) => (opts.uppercase ? w.word.toUpperCase() : w.word));
-  const widths = renderWords.map((w) => estimateWordWidth(w, opts.fontSize, opts.weight));
-  const space = opts.fontSize * 0.32;
+  // Measure with the real font so chunks don't visually overlap. We also account
+  // for the active-word scale pulse (activeScale ~1.08-1.2x) and stroke outline
+  // by padding each width slightly — the active word may briefly grow.
+  const widths = renderWords.map((w) =>
+    measureWordWidth(w, opts.fontSize, opts.weight, opts.fontFamily, opts.letterSpacing ?? 0) *
+    Math.max(1, opts.activeScale * 0.96),
+  );
+  const space = opts.fontSize * 0.38;
   const total = widths.reduce((a, b) => a + b, 0) + space * Math.max(0, words.length - 1);
-  let cursor = (comp.width - total) / 2 + widths[0] / 2;
+  // If the row is wider than the canvas, scale spacing/positions down proportionally.
+  const maxRowWidth = comp.width * 0.94;
+  const scale = total > maxRowWidth ? maxRowWidth / total : 1;
+  const effSpace = space * scale;
+  const effWidths = widths.map((w) => w * scale);
+  const effTotal = effWidths.reduce((a, b) => a + b, 0) + effSpace * Math.max(0, words.length - 1);
+  let cursor = (comp.width - effTotal) / 2 + effWidths[0] / 2;
 
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -253,7 +299,7 @@ function layoutWordRow(
     } as TextLayer);
 
     if (i < words.length - 1) {
-      cursor += widths[i] / 2 + space + widths[i + 1] / 2;
+      cursor += effWidths[i] / 2 + effSpace + effWidths[i + 1] / 2;
     }
   }
   return { layers, nextId: id };
