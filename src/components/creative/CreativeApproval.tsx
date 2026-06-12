@@ -1205,7 +1205,7 @@ function CreativeDetailModal({
             <ScrollArea className="h-[250px] border rounded-lg p-3 mb-2">
               <div className="space-y-2">
                 {creative.comments.map((comment) => (
-                  <CommentBubble key={comment.id} comment={comment} />
+                  <CommentBubble key={comment.id} comment={comment} isPublicView={isPublicView} />
                 ))}
               </div>
             </ScrollArea>
