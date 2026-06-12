@@ -237,6 +237,7 @@ async function generateStaticAd(opts: {
   prompt: string;
   aspectRatio?: string;
   referenceImageUrl?: string;
+  attachmentImageUrls?: string[];
   clientId: string | null;
   brandContext: any;
   quality: "pro" | "fast";
@@ -255,18 +256,23 @@ async function generateStaticAd(opts: {
     includeDisclaimer: opts.brandContext?.includeDisclaimer,
     disclaimerText: opts.brandContext?.disclaimerText,
     strictBrandAdherence: opts.brandContext?.strictBrandAdherence,
-    hasReference: !!opts.referenceImageUrl,
+    hasReference: !!opts.referenceImageUrl || !!(opts.attachmentImageUrls && opts.attachmentImageUrls.length),
   });
 
   let base64Image = "";
   let mime = "image/png";
   let modelUsed = "";
 
-  // Effective model selection: explicit `model` arg wins; else quality maps to pro=openai (gpt-image-2), fast=nano-banana
-  const effectiveModel: "nano-banana" | "openai" =
-    opts.model === "openai" || opts.model === "nano-banana"
-      ? opts.model
-      : (opts.quality === "pro" ? "openai" : "nano-banana");
+  // Effective model selection: explicit `model` arg wins; else quality maps to pro=openai (gpt-image-2), fast=nano-banana.
+  // When the user uploaded image attachments we MUST use a multimodal-capable image model — force Nano Banana
+  // (Gemini 3.x flash image preview) because GPT Image 2's /v1/images/generations endpoint does not accept
+  // reference images. This matches the user's request: "use NanoBanana Pro 2 or GPT-2, whichever one".
+  const hasAttachmentRefs = !!(opts.attachmentImageUrls && opts.attachmentImageUrls.length);
+  const effectiveModel: "nano-banana" | "openai" = hasAttachmentRefs
+    ? "nano-banana"
+    : (opts.model === "openai" || opts.model === "nano-banana"
+        ? opts.model
+        : (opts.quality === "pro" ? "openai" : "nano-banana"));
 
   if (effectiveModel === "openai") {
     // Prefer the agency-stored OpenAI API key (set in Agency Settings → API Keys).
@@ -321,13 +327,30 @@ async function generateStaticAd(opts: {
     } else throw new Error("OpenAI returned no image data");
   } else {
     // Nano Banana 2 via AI Gateway
-    modelUsed = "google/gemini-3.1-flash-image-preview";
+    // When the user attached reference images we upgrade to Gemini 3 Pro Image Preview ("Nano Banana Pro")
+    // for best identity / product preservation across multiple references.
+    modelUsed = hasAttachmentRefs
+      ? "google/gemini-3-pro-image-preview"
+      : "google/gemini-3.1-flash-image-preview";
+
+    // Build multimodal content: text prompt + every attachment + any prior reference image.
+    const refUrls: string[] = [];
+    if (opts.attachmentImageUrls) refUrls.push(...opts.attachmentImageUrls.filter(Boolean));
+    if (opts.referenceImageUrl) refUrls.push(opts.referenceImageUrl);
+
+    const textPrompt = fullPrompt + (refUrls.length
+      ? `\n\nUSE THE ATTACHED REFERENCE IMAGE${refUrls.length > 1 ? "S" : ""} as the visual source of truth for product, identity, style, colors, and composition. Faithfully reproduce the product / subject from the attachment(s). Do not invent a different product.`
+      : "");
+
+    const content: any[] = [{ type: "text", text: textPrompt }];
+    for (const u of refUrls) content.push({ type: "image_url", image_url: { url: u } });
+
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: modelUsed,
-        messages: [{ role: "user", content: fullPrompt }],
+        messages: [{ role: "user", content: content.length === 1 ? textPrompt : content }],
         modalities: ["image", "text"],
       }),
     });
@@ -1365,6 +1388,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- Use web_search whenever the user asks about real-time info, current events, news, prices, benchmarks, competitor data, or anything you might not know. Always cite source URLs from the result in your reply.",
   "- Use compare_image_models when the user asks to 'compare', 'try both', 'see both models', or wants the same prompt across both image models side-by-side. Default models = ['nano-banana', 'openai'].",
   "- APPROVED REFERENCES: This client's approved creatives are auto-loaded as visual references for new generations. You can mention this if helpful (e.g. 'Riffed on the approved ad style from earlier this week').",
+  "- USER ATTACHMENTS AS REFERENCES: If the user uploaded image attachments with this message (you'll see them as image_url blocks in the user content and listed under [Attachments provided by user]), those images are AUTOMATICALLY passed as visual references into every generate_static_ad / edit_static_ad / explode_ad_variants / image_to_reel call in this turn — you do NOT need to copy URLs into reference_image_url. The image model will reproduce the product / subject / style from those attachments faithfully. Acknowledge them in your reply (e.g. 'Using the 4 product shots you uploaded as the visual source'). When attachments are present the static-ad pipeline auto-routes to Nano Banana Pro (Gemini 3 Pro Image Preview) for best multi-reference fidelity.",
   "- Use edit_static_ad whenever the user asks to revise, change, tweak, or update an ad already on the canvas (e.g. 'change the offer', 'swap the hook', 'use brand green', 'update the disclaimer'). Pass the source_image_url from the prior canvas card and a clear edit_instruction. Optional: new_offer, new_hook, new_colors, new_disclaimer.",
   "- Use generate_ad_variations when the user asks for 'options', 'variations', 'alternatives', or 'a few different versions' of an Instagram ad. Generates 2–5 distinct visual directions side-by-side; the user picks which to save from the canvas card.",
   "- VARIANT EXPLOSION (Phase 2): When the user asks to 'explode variants', 'matrix', 'A/B 6 ideas', 'test multiple hooks', or wants a BATCH of static ads at once, call explode_ad_variants with arrays of hooks (2–6) and visual_styles (1–4). All variants render in parallel. Default quality='fast' (Nano Banana 2). Use this instead of looping generate_static_ad N times.",
@@ -2062,6 +2086,10 @@ Deno.serve(async (req) => {
   }
   // Vision: attach image attachments to the final user message for multimodal models
   const imageAttachments = (attachments || []).filter(a => /^image\//i.test(a.mime || "") || /\.(png|jpe?g|webp|gif)$/i.test(a.url));
+  // Auto-injected reference URLs for image-generation tools. Every uploaded image is treated as a visual
+  // source of truth for any generate_static_ad / edit_static_ad / explode_ad_variants / image_to_reel call
+  // emitted in the SAME assistant turn, without the model needing to repeat the URLs.
+  const attachmentImageUrls: string[] = imageAttachments.map(a => a.url).filter(Boolean);
   if (imageAttachments.length) {
     const lastIdx = convo.length - 1;
     const text = typeof convo[lastIdx].content === "string" ? convo[lastIdx].content : userText;
@@ -2430,6 +2458,7 @@ Deno.serve(async (req) => {
                   prompt: args.prompt,
                   aspectRatio: args.aspect_ratio || "1:1",
                   referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
+                  attachmentImageUrls,
                   clientId: clientId || null,
                   brandContext,
                   quality: (args.quality === "fast" ? "fast" : "pro"),
@@ -2458,6 +2487,7 @@ Deno.serve(async (req) => {
                       prompt: args.prompt,
                       aspectRatio: args.aspect_ratio || "1:1",
                       referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
+                      attachmentImageUrls,
                       clientId: clientId || null,
                       brandContext,
                       quality: mdl === "nano-banana" ? "fast" : "pro",
@@ -2623,6 +2653,7 @@ Deno.serve(async (req) => {
                         prompt: fullPrompt,
                         aspectRatio: aspect,
                         referenceImageUrl: args.reference_image_url || defaultReferenceImageUrl || undefined,
+                        attachmentImageUrls,
                         clientId: clientId || null,
                         brandContext,
                         quality,
@@ -2668,6 +2699,7 @@ Deno.serve(async (req) => {
                       prompt: args.brief,
                       aspectRatio: aspect,
                       referenceImageUrl: defaultReferenceImageUrl || undefined,
+                      attachmentImageUrls,
                       clientId: clientId || null,
                       brandContext,
                       quality: "pro",
