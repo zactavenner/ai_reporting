@@ -1,6 +1,6 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY")!;
 const INTERNAL_PW = "HPA1234$";
 
 /**
@@ -59,11 +59,13 @@ Rules:
 
     const userMsg = `CURRENT COMPOSITION:\n${JSON.stringify(composition)}\n\nORIGINAL VIDEO PROMPT (context, may be empty):\n${videoPrompt || ""}\n\nINSTRUCTION:\n${instruction}`;
 
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://reporting.highperformanceads.com",
+        "X-Title": "Hyperframes Author",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
@@ -76,7 +78,7 @@ Rules:
     });
     if (!r.ok) {
       const t = await r.text();
-      return json({ error: `AI gateway ${r.status}: ${t.slice(0, 300)}` }, 500);
+      return json({ error: `OpenRouter ${r.status}: ${t.slice(0, 300)}` }, 500);
     }
     const data = await r.json();
     const raw = data?.choices?.[0]?.message?.content ?? "{}";
