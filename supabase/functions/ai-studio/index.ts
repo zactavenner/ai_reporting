@@ -237,6 +237,7 @@ async function generateStaticAd(opts: {
   prompt: string;
   aspectRatio?: string;
   referenceImageUrl?: string;
+  attachmentImageUrls?: string[];
   clientId: string | null;
   brandContext: any;
   quality: "pro" | "fast";
@@ -255,18 +256,23 @@ async function generateStaticAd(opts: {
     includeDisclaimer: opts.brandContext?.includeDisclaimer,
     disclaimerText: opts.brandContext?.disclaimerText,
     strictBrandAdherence: opts.brandContext?.strictBrandAdherence,
-    hasReference: !!opts.referenceImageUrl,
+    hasReference: !!opts.referenceImageUrl || !!(opts.attachmentImageUrls && opts.attachmentImageUrls.length),
   });
 
   let base64Image = "";
   let mime = "image/png";
   let modelUsed = "";
 
-  // Effective model selection: explicit `model` arg wins; else quality maps to pro=openai (gpt-image-2), fast=nano-banana
-  const effectiveModel: "nano-banana" | "openai" =
-    opts.model === "openai" || opts.model === "nano-banana"
-      ? opts.model
-      : (opts.quality === "pro" ? "openai" : "nano-banana");
+  // Effective model selection: explicit `model` arg wins; else quality maps to pro=openai (gpt-image-2), fast=nano-banana.
+  // When the user uploaded image attachments we MUST use a multimodal-capable image model — force Nano Banana
+  // (Gemini 3.x flash image preview) because GPT Image 2's /v1/images/generations endpoint does not accept
+  // reference images. This matches the user's request: "use NanoBanana Pro 2 or GPT-2, whichever one".
+  const hasAttachmentRefs = !!(opts.attachmentImageUrls && opts.attachmentImageUrls.length);
+  const effectiveModel: "nano-banana" | "openai" = hasAttachmentRefs
+    ? "nano-banana"
+    : (opts.model === "openai" || opts.model === "nano-banana"
+        ? opts.model
+        : (opts.quality === "pro" ? "openai" : "nano-banana"));
 
   if (effectiveModel === "openai") {
     // Prefer the agency-stored OpenAI API key (set in Agency Settings → API Keys).
