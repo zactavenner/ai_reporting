@@ -1093,7 +1093,7 @@ function CreativeDetailModal({
               ) : creative.status === 'revisions' ? (
                 <>
                   <Button
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
                     onClick={() => {
                       onStatusChange(creative, 'approved');
                       toast.success('Approved');
@@ -1110,7 +1110,7 @@ function CreativeDetailModal({
               ) : (
                 <>
                   <Button
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
                     onClick={() => {
                       onStatusChange(creative, 'approved');
                       toast.success('Approved');
@@ -1131,7 +1131,7 @@ function CreativeDetailModal({
             <>
               {creative.status === 'approved' && !isPublicView && (
                 <Button
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={() => { onLaunch(); onClose(); }}
                 >
                   <Play className="h-4 w-4 mr-1" />
@@ -1651,7 +1651,7 @@ function CreativeCard({
               ) : creative.status === 'revisions' ? (
                 <Button
                   size="sm"
-                  className="h-6 text-[10px] gap-0.5 bg-green-600 hover:bg-green-700 text-white"
+                  className="h-6 text-[10px] gap-0.5 bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
                   onClick={() => {
                     onStatusChange(creative, 'approved');
                     toast.success('Approved');
@@ -1664,7 +1664,7 @@ function CreativeCard({
                 <>
                   <Button
                     size="sm"
-                    className="h-6 text-[10px] gap-0.5 bg-green-600 hover:bg-green-700 text-white"
+                    className="h-6 text-[10px] gap-0.5 bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
                     onClick={() => {
                       onStatusChange(creative, 'approved');
                       toast.success('Approved');
@@ -1689,7 +1689,7 @@ function CreativeCard({
           {creative.status !== 'launched' && creative.status !== 'draft' && !isPublicView && (
             <>
               {creative.status === 'approved' && (
-                <Button size="sm" className="h-6 text-[10px] gap-0.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={onLaunch}>
+                <Button size="sm" className="h-6 text-[10px] gap-0.5 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={onLaunch}>
                   <Play className="h-2.5 w-2.5" />
                   Launch
                 </Button>

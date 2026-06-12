@@ -150,7 +150,7 @@ export default function DashboardPage() {
               <Sparkles className="h-6 w-6 text-primary" />
               <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => navigate('/dashboard')}>v5.0</Badge>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold mb-1">Welcome to Creative Ads 5.0</h1>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">Welcome to Capital Creative</h1>
             <p className="text-muted-foreground max-w-lg">
               Your AI-powered creative command center — <strong className="text-foreground">{clients.length}</strong> clients, <strong className="text-foreground">{avatars.length}</strong> avatars, and <strong className="text-foreground">{assets.length}</strong> assets ready to go.
             </p>
