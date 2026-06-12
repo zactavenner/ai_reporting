@@ -129,9 +129,10 @@ async function applyTriageWritebacks(parsed: any, agentName: string) {
       ...podIds.map((id: string) => ({ task_id: a.task_id, member_id: null, pod_id: id })),
     ];
     if (rows.length) {
-      const { error } = await supa.from("task_assignees").upsert(rows, { onConflict: "task_id,member_id,pod_id", ignoreDuplicates: true } as any);
-      if (error) stats.errors.push(`assign ${a.task_id}: ${error.message}`);
-      else {
+      const { error } = await supa.from("task_assignees").insert(rows);
+      if (error && !/duplicate|unique/i.test(error.message)) {
+        stats.errors.push(`assign ${a.task_id}: ${error.message}`);
+      } else {
         stats.reassigned++;
         if (memberIds[0]) {
           await supa.from("tasks").update({ assigned_to: memberIds[0] }).eq("id", a.task_id);
