@@ -111,6 +111,8 @@ async function pickDefaultAgent(clientId: string, taskType: string) {
     research: ["research", "analyst"],
     reporting: ["reporting", "analyst"],
     report: ["reporting", "analyst"],
+    task_triage: ["task_triage", "triage", "project_manager", "pm", "operations"],
+    triage: ["task_triage", "triage", "project_manager", "pm", "operations"],
   };
   const cats = typeToType[taskType] || [taskType];
   const { data } = await supa
@@ -697,6 +699,61 @@ async function handleGenerateBrief(body: any, cfg: any) {
   });
 }
 
+async function handleTriageTasks(body: any, cfg: any) {
+  // Either run for a single client (body.client_id/slug/name) or fan out across all active.
+  let clients: { id: string; name: string }[] = [];
+  const single = await resolveClient(body);
+  if (single) clients = [single as any];
+  else {
+    const { data } = await supa
+      .from("clients")
+      .select("id, name")
+      .in("status", ["active", "onboarding", "paused"])
+      .order("name");
+    clients = data || [];
+  }
+
+  const instructions = String(body.instructions || "").trim() ||
+    "Review all open tasks for this client. For each unassigned task, suggest the right team member or pod and call set_task_assignees. For overdue or stale tasks, propose a new due date or status. Leave a short comment on each task explaining the action.";
+
+  const created: any[] = [];
+  for (const c of clients) {
+    const conversationId = await getOrCreateHermesConversation(c.id);
+    const agent = await pickDefaultAgent(c.id, "task_triage");
+    const { data: task, error } = await supa
+      .from("hermes_tasks")
+      .insert({
+        client_id: c.id,
+        conversation_id: conversationId,
+        hermes_external_id: body.hermes_external_id || null,
+        task_type: "task_triage",
+        instructions,
+        status: "queued",
+        hermes_callback_url: body.callback_url || cfg.hermes_callback_url || null,
+        agent_id: agent?.id || null,
+        metadata: { ...(body.metadata || {}), origin: "triage_tasks" },
+      })
+      .select("id")
+      .single();
+    if (error || !task) { console.warn("triage queue failed for", c.id, error); continue; }
+
+    await postMessage(conversationId, "user", `**Hermes Triage** for ${c.name}\n\n${instructions}`, { hermes_task_id: task.id, source: "hermes" });
+
+    const dispatch = fetch(`${SUPABASE_URL}/functions/v1/hermes-task-executor`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
+      body: JSON.stringify({ password: "HPA1234$", task_id: task.id }),
+    }).catch((e) => console.warn("triage dispatch failed", e));
+    // @ts-ignore
+    if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
+      // @ts-ignore
+      (EdgeRuntime as any).waitUntil(dispatch);
+    }
+    created.push({ client_id: c.id, name: c.name, task_id: task.id });
+  }
+  return json({ ok: true, dispatched: created.length, tasks: created });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -734,6 +791,7 @@ Deno.serve(async (req) => {
       case "generate_image":  return await handleGenerateImage(body, auth.cfg);
       case "generate_static_ad": return await handleGenerateImage(body, auth.cfg);
       case "generate_brief":  return await handleGenerateBrief(body, auth.cfg);
+      case "triage_tasks":    return await handleTriageTasks(body, auth.cfg);
       case "ping":         return json({ ok: true, pong: new Date().toISOString() });
       default:
         return json({
@@ -743,6 +801,7 @@ Deno.serve(async (req) => {
             "create_task", "get_task", "list_tasks", "update_task", "cancel_task", "assign_task", "complete_task",
             "list_agents", "get_agent", "create_agent", "update_agent", "delete_agent", "toggle_agent",
             "generate_copy", "generate_video", "generate_image", "generate_static_ad", "generate_brief",
+            "triage_tasks",
           ],
         }, 400);
     }

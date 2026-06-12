@@ -48,6 +48,112 @@ async function loadAgent(agentId: string | null) {
   return data;
 }
 
+// Load open-task triage context for a client: open tasks (+ current assignees),
+// every agency member with their pod, and pod list. Returns a compact payload
+// suitable for embedding in the task_triage system prompt.
+async function loadTriageContext(clientId: string) {
+  const [{ data: tasks }, { data: members }, { data: pods }] = await Promise.all([
+    supa.from("tasks")
+      .select("id, title, description, status, priority, due_date, created_at, assigned_to, task_assignees(member_id, pod_id, member:agency_members(id,name), pod:agency_pods(id,name)), task_comments(id, content, author_name, created_at)")
+      .eq("client_id", clientId)
+      .in("status", ["todo", "in_progress"])
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(200),
+    supa.from("agency_members").select("id, name, role, pod:agency_pods(id,name,description)").order("name"),
+    supa.from("agency_pods").select("id, name, description").order("name"),
+  ]);
+  const today = new Date().toISOString().slice(0, 10);
+  const taskList = (tasks || []).map((t: any) => ({
+    id: t.id,
+    title: t.title,
+    description: (t.description || "").slice(0, 300),
+    status: t.status,
+    priority: t.priority,
+    due_date: t.due_date,
+    overdue: t.due_date && t.due_date < today,
+    age_days: t.created_at ? Math.round((Date.now() - new Date(t.created_at).getTime()) / 86400000) : null,
+    assignees: (t.task_assignees || []).map((a: any) => ({
+      member: a.member?.name || null,
+      member_id: a.member_id,
+      pod: a.pod?.name || null,
+      pod_id: a.pod_id,
+    })),
+    comment_count: (t.task_comments || []).length,
+  }));
+  return {
+    today,
+    tasks: taskList,
+    members: (members || []).map((m: any) => ({ id: m.id, name: m.name, role: m.role, pod: m.pod?.name || null })),
+    pods: pods || [],
+  };
+}
+
+// Apply AI-produced writebacks against the live tables. All best-effort —
+// individual failures are logged and skipped so a single bad row doesn't
+// abort the whole triage.
+async function applyTriageWritebacks(parsed: any, agentName: string) {
+  const updates = Array.isArray(parsed?.task_updates) ? parsed.task_updates : [];
+  const assignChanges = Array.isArray(parsed?.task_assignee_changes) ? parsed.task_assignee_changes : [];
+  const comments = Array.isArray(parsed?.task_comments) ? parsed.task_comments : [];
+
+  const stats = { updated: 0, reassigned: 0, commented: 0, errors: [] as string[] };
+
+  for (const u of updates) {
+    if (!u?.task_id) continue;
+    const patch: any = {};
+    for (const k of ["status", "priority", "due_date", "title", "description"]) {
+      if (u[k] !== undefined && u[k] !== null && u[k] !== "") patch[k] = u[k];
+    }
+    if (patch.status === "done") patch.completed_at = new Date().toISOString();
+    if (!Object.keys(patch).length) continue;
+    const { error } = await supa.from("tasks").update(patch).eq("id", u.task_id);
+    if (error) stats.errors.push(`update ${u.task_id}: ${error.message}`);
+    else {
+      stats.updated++;
+      await supa.from("task_history").insert({
+        task_id: u.task_id, action: "hermes_triage_update",
+        new_value: JSON.stringify(patch), changed_by: `Hermes:${agentName}`,
+      }).then(() => {}, () => {});
+    }
+  }
+
+  for (const a of assignChanges) {
+    if (!a?.task_id) continue;
+    const memberIds = Array.from(new Set([...(a.set_member_ids || []), ...(a.add_member_ids || [])])).filter(Boolean);
+    const podIds = Array.from(new Set([...(a.set_pod_ids || []), ...(a.add_pod_ids || [])])).filter(Boolean);
+    if (a.set_member_ids !== undefined || a.set_pod_ids !== undefined) {
+      await supa.from("task_assignees").delete().eq("task_id", a.task_id);
+    }
+    const rows = [
+      ...memberIds.map((id: string) => ({ task_id: a.task_id, member_id: id, pod_id: null })),
+      ...podIds.map((id: string) => ({ task_id: a.task_id, member_id: null, pod_id: id })),
+    ];
+    if (rows.length) {
+      const { error } = await supa.from("task_assignees").upsert(rows, { onConflict: "task_id,member_id,pod_id", ignoreDuplicates: true } as any);
+      if (error) stats.errors.push(`assign ${a.task_id}: ${error.message}`);
+      else {
+        stats.reassigned++;
+        if (memberIds[0]) {
+          await supa.from("tasks").update({ assigned_to: memberIds[0] }).eq("id", a.task_id);
+        }
+      }
+    }
+  }
+
+  for (const c of comments) {
+    if (!c?.task_id || !c?.content) continue;
+    const { error } = await supa.from("task_comments").insert({
+      task_id: c.task_id,
+      author_name: `Hermes (${agentName})`,
+      content: String(c.content).slice(0, 4000),
+    });
+    if (error) stats.errors.push(`comment ${c.task_id}: ${error.message}`);
+    else stats.commented++;
+  }
+
+  return stats;
+}
+
 async function postMessage(conversationId: string, role: "assistant" | "user", content: string, metadata: any = {}) {
   const { error } = await supa.from("ai_studio_messages").insert({
     conversation_id: conversationId,
@@ -74,6 +180,7 @@ async function runAgentInference(opts: {
   instructions: string;
   taskType: string;
   metadata: any;
+  triageContext?: any;
 }) {
   const sysParts: string[] = [];
   if (opts.agent?.system_prompt) sysParts.push(opts.agent.system_prompt);
@@ -82,11 +189,29 @@ async function runAgentInference(opts: {
   if (opts.profile?.brand_kit && Object.keys(opts.profile.brand_kit).length) {
     sysParts.push(`# Brand Kit\n\`\`\`json\n${JSON.stringify(opts.profile.brand_kit, null, 2)}\n\`\`\``);
   }
-  sysParts.push(
-    `You are executing a Hermes task of type "${opts.taskType}" for client "${opts.client.name}". ` +
-    `Respond with JSON: { "summary": string, "assets": [{ "title": string, "url"?: string, "kind"?: string, "text"?: string }], "notes"?: string }. ` +
-    `If you cannot produce real asset URLs, return text assets so a human can pick them up in AI Studio.`,
-  );
+  if (opts.taskType === "task_triage" && opts.triageContext) {
+    sysParts.push(
+      `You are the Hermes Task Triage agent for client "${opts.client.name}". Today is ${opts.triageContext.today}.\n\n` +
+      `# Open Tasks (${opts.triageContext.tasks.length})\n\`\`\`json\n${JSON.stringify(opts.triageContext.tasks, null, 2)}\n\`\`\`\n\n` +
+      `# Agency Members\n\`\`\`json\n${JSON.stringify(opts.triageContext.members, null, 2)}\n\`\`\`\n\n` +
+      `# Pods\n\`\`\`json\n${JSON.stringify(opts.triageContext.pods, null, 2)}\n\`\`\`\n\n` +
+      `Return ONLY JSON of shape:\n` +
+      `{\n` +
+      `  "summary": string,  // 2-4 sentences describing the triage you did\n` +
+      `  "task_updates": [{ "task_id": string, "status"?: "todo"|"in_progress"|"done", "priority"?: "low"|"medium"|"high", "due_date"?: "YYYY-MM-DD" }],\n` +
+      `  "task_assignee_changes": [{ "task_id": string, "set_member_ids"?: string[], "set_pod_ids"?: string[], "add_member_ids"?: string[], "add_pod_ids"?: string[] }],\n` +
+      `  "task_comments": [{ "task_id": string, "content": string }],  // one short comment per actioned task explaining why\n` +
+      `  "assets": []  // unused for triage\n` +
+      `}\n` +
+      `Rules:\n- Tag a member (or pod) for every unassigned task; pick from the lists above.\n- Suggest a realistic due_date for any task missing one (within 7 business days).\n- Mark stale "in_progress" tasks done if the description suggests completion.\n- Leave a short comment on every task you touch.`
+    );
+  } else {
+    sysParts.push(
+      `You are executing a Hermes task of type "${opts.taskType}" for client "${opts.client.name}". ` +
+      `Respond with JSON: { "summary": string, "assets": [{ "title": string, "url"?: string, "kind"?: string, "text"?: string }], "notes"?: string }. ` +
+      `If you cannot produce real asset URLs, return text assets so a human can pick them up in AI Studio.`,
+    );
+  }
 
   const model = opts.agent?.model || "google/gemini-2.5-flash";
   const body = {
@@ -95,8 +220,8 @@ async function runAgentInference(opts: {
       { role: "system", content: sysParts.join("\n\n") },
       { role: "user", content: `${opts.instructions}\n\nMetadata: ${JSON.stringify(opts.metadata || {})}` },
     ],
-    temperature: 0.4,
-    max_tokens: 2048,
+    temperature: opts.taskType === "task_triage" ? 0.2 : 0.4,
+    max_tokens: opts.taskType === "task_triage" ? 6000 : 2048,
   } as any;
 
   const res = await fetch(AI_GATEWAY_URL, {
@@ -158,6 +283,10 @@ async function executeTask(taskId: string) {
   const startedAt = Date.now();
 
   try {
+    const triageContext = task.task_type === "task_triage"
+      ? await loadTriageContext(task.client_id)
+      : undefined;
+
     const { parsed, raw, model, usage } = await runAgentInference({
       agent,
       profile,
@@ -165,21 +294,29 @@ async function executeTask(taskId: string) {
       instructions: task.instructions || "",
       taskType: task.task_type || "general",
       metadata: task.metadata || {},
+      triageContext,
     });
 
     const assets = Array.isArray(parsed?.assets) ? parsed.assets : [];
+    let triageStats: any = null;
+    if (task.task_type === "task_triage") {
+      triageStats = await applyTriageWritebacks(parsed, agent?.name || "Triage Agent");
+    }
     const nowIso = new Date().toISOString();
     await supa.from("hermes_tasks").update({
       status: "completed",
       result_assets: assets,
       completed_at: nowIso,
       delivered_at: nowIso,
-      metadata: { ...(task.metadata || {}), summary: parsed?.summary || null, model, usage, cost_usd: estimateCost(model, usage), duration_ms: Date.now() - startedAt },
+      metadata: { ...(task.metadata || {}), summary: parsed?.summary || null, model, usage, cost_usd: estimateCost(model, usage), duration_ms: Date.now() - startedAt, triage_stats: triageStats },
     }).eq("id", taskId).is("delivered_at", null);
 
     if (task.conversation_id) {
       const lines: string[] = [];
       if (parsed?.summary) lines.push(parsed.summary);
+      if (triageStats) {
+        lines.push("", `**Triage applied:** ${triageStats.updated} updates · ${triageStats.reassigned} re-assignments · ${triageStats.commented} comments` + (triageStats.errors.length ? ` · ⚠️ ${triageStats.errors.length} errors` : ""));
+      }
       if (assets.length) {
         lines.push("");
         for (const a of assets) {
