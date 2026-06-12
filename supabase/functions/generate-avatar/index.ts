@@ -147,21 +147,61 @@ CRITICAL REQUIREMENTS:
       if (!res.ok) {
         const t = await res.text();
         console.error('GPT Image 2 error:', t);
-        return new Response(
-          JSON.stringify({ success: false, error: 'GPT Image 2 error', details: t.slice(0, 500) }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // Auto-fallback to Nano Banana Pro on credit/rate errors if Gemini key is configured
+        const isPayment = res.status === 402 || /payment_required|not enough credits/i.test(t);
+        const fallbackKey = await getGeminiApiKey(requestApiKey).catch(() => null);
+        if (isPayment && fallbackKey) {
+          console.log('GPT Image 2 out of credits — falling back to Nano Banana Pro');
+          const geminiResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${fallbackKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: fullPrompt }] }],
+                generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+              }),
+            }
+          );
+          if (!geminiResponse.ok) {
+            const errorText = await geminiResponse.text();
+            return new Response(
+              JSON.stringify({ success: false, error: 'GPT Image 2 out of credits, Gemini fallback also failed', details: errorText.slice(0, 500) }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          const geminiData = await geminiResponse.json();
+          const imageParts = geminiData.candidates?.[0]?.content?.parts || [];
+          const imagePart = imageParts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
+          if (!imagePart?.inlineData?.data) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'GPT Image 2 out of credits; Gemini returned no image' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          base64Image = imagePart.inlineData.data;
+          mimeType = imagePart.inlineData.mimeType || 'image/png';
+        } else {
+          const userMsg = isPayment
+            ? 'GPT Image 2 has no credits left. Top up the Lovable AI workspace balance, or switch the avatar model to Nano Banana Pro.'
+            : 'GPT Image 2 error';
+          return new Response(
+            JSON.stringify({ success: false, error: userMsg, details: t.slice(0, 500) }),
+            { status: isPayment ? 402 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        const data = await res.json();
+        const b64 = data?.data?.[0]?.b64_json;
+        if (!b64) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'No image data from GPT Image 2' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        base64Image = b64;
+        mimeType = 'image/png';
       }
-      const data = await res.json();
-      const b64 = data?.data?.[0]?.b64_json;
-      if (!b64) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'No image data from GPT Image 2' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      base64Image = b64;
-      mimeType = 'image/png';
     } else {
       // Nano Banana Pro (Gemini 3 Pro Image Preview)
       const parts: any[] = [{ text: fullPrompt }];
