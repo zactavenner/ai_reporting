@@ -1620,9 +1620,11 @@ function CreativeCard({
               {creative.platform}
             </Badge>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {formatDistanceToNow(new Date(creative.created_at), { addSuffix: true })}
-          </p>
+          {!isPublicView && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {formatDistanceToNow(new Date(creative.created_at), { addSuffix: true })}
+            </p>
+          )}
         </div>
 
         {/* Action buttons - compact */}
