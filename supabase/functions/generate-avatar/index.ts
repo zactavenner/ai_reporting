@@ -150,10 +150,6 @@ CRITICAL REQUIREMENTS:
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-        }
-        base64Image = b64;
-        mimeType = 'image/png';
-      }
     } else {
       // Nano Banana Pro (Gemini 3 Pro Image Preview)
       const parts: any[] = [{ text: fullPrompt }];
