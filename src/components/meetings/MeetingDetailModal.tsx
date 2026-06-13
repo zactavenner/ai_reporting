@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Video, Clock, Users, ExternalLink, Plus, FileText, ListTodo, Lightbulb, Trash2 } from 'lucide-react';
+import { Video, Clock, Users, ExternalLink, Plus, FileText, ListTodo, Lightbulb, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 import {
   Dialog,
   DialogContent,
@@ -39,6 +42,8 @@ export function MeetingDetailModal({
   const assignMutation = useAssignMeetingToClient();
   const createTaskMutation = useCreatePendingTaskFromActionItem();
   const deleteMutation = useDeleteMeeting();
+  const [aiBrief, setAiBrief] = useState<string>('');
+  const [briefLoading, setBriefLoading] = useState(false);
 
   if (!meeting) return null;
 
@@ -64,6 +69,23 @@ export function MeetingDetailModal({
       deleteMutation.mutate(meeting.id, {
         onSuccess: () => onOpenChange(false),
       });
+    }
+  };
+
+  const handleGenerateBrief = async () => {
+    setBriefLoading(true);
+    setAiBrief('');
+    try {
+      const { data, error } = await supabase.functions.invoke('meeting-prep', {
+        body: { meeting_id: meeting.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setAiBrief(data?.brief_markdown || '(no content)');
+    } catch (e: any) {
+      toast({ title: 'AI prep failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setBriefLoading(false);
     }
   };
 
@@ -109,6 +131,16 @@ export function MeetingDetailModal({
           </div>
 
           <div className="flex gap-2 ml-auto">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleGenerateBrief}
+              disabled={briefLoading || !meeting.client_id}
+              title={!meeting.client_id ? 'Assign a client first' : 'Generate AI prep doc'}
+            >
+              {briefLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+              AI Prep
+            </Button>
             <Button 
               variant="destructive" 
               size="sm" 
@@ -136,6 +168,18 @@ export function MeetingDetailModal({
             )}
           </div>
         </div>
+
+        {aiBrief && (
+          <div className="border rounded-lg bg-gradient-to-br from-primary/5 to-transparent p-4 max-h-[260px] overflow-y-auto">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">AI Meeting Prep</span>
+            </div>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown>{aiBrief}</ReactMarkdown>
+            </div>
+          </div>
+        )}
 
         {/* Participants */}
         {meeting.participants && meeting.participants.length > 0 && (
