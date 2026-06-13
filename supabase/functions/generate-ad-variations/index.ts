@@ -73,7 +73,7 @@ Return ONLY the JSON array, no other text.`;
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "gpt-4o-mini",
+              model: "openrouter/owl-alpha",
               messages: [{ role: "user", content: prompt }],
               temperature: 0.8,
               max_tokens: 2000,

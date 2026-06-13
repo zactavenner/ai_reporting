@@ -194,8 +194,8 @@ Deno.serve(async (req) => {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
-        models: ['google/gemini-2.5-flash', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+            model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
             messages: [
               { role: 'system', content: 'You are AUDITOR, a Google Sheet QA agent. Return ONLY JSON with {summary, whatsapp_message}. summary = 2-3 sentence narrative; whatsapp_message = under 600 chars, plain text, includes top 3 issues + score, NO "guaranteed" language.' },
               { role: 'user', content: JSON.stringify(findingsForAI) },

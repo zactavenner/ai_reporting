@@ -66,8 +66,8 @@ serve(async (req) => {
          "Content-Type": "application/json",
        },
        body: JSON.stringify({
-         model: "google/gemini-2.5-flash",
-        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+         model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
          messages: [
            {
              role: "user",
@@ -127,8 +127,8 @@ serve(async (req) => {
          "Content-Type": "application/json",
        },
        body: JSON.stringify({
-         model: "google/gemini-2.5-flash",
-        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+         model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
          messages: [
            {
              role: "system",
@@ -301,8 +301,8 @@ async function handleTranscribeOnly(audioUrl: string) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           {
             role: "user",
@@ -379,8 +379,8 @@ async function handleExtractTaskDetails(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           {
             role: "user",
@@ -433,8 +433,8 @@ async function handleExtractTaskDetails(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           {
             role: "system",

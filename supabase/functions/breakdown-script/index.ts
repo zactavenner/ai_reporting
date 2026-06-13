@@ -62,8 +62,8 @@ Respond ONLY with valid JSON: { "scenes": [...] }`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        models: ['google/gemini-2.5-flash', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Break this script into ~${segmentDuration}-second scenes:\n\n${script}` },

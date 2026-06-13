@@ -40,11 +40,11 @@ Available connectors (pick only relevant ones):
 - "claude_code" — Connect to Claude Code Desktop for automations via MCP
 
 Available models:
-- "google/gemini-2.5-pro" — Best for complex reasoning, analysis, multi-step tasks
-- "google/gemini-2.5-flash" — Good balance of speed and quality
-- "google/gemini-2.5-flash-lite" — Fast, cheap, for simple checks
-- "google/gemini-3-flash-preview" — Latest balanced model
-- "google/gemini-3.1-pro-preview" — Latest premium model
+- "openrouter/owl-alpha" — Best for complex reasoning, analysis, multi-step tasks
+- "openrouter/owl-alpha" — Good balance of speed and quality
+- "openrouter/owl-alpha" — Fast, cheap, for simple checks
+- "openrouter/owl-alpha" — Latest balanced model
+- "openrouter/owl-alpha" — Latest premium model
 - "openai/gpt-5" — Strong reasoning, expensive
 - "openai/gpt-5-mini" — Good mid-tier
 
@@ -92,8 +92,8 @@ Make the prompt_template detailed and specific. Include:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        models: ['google/gemini-3-flash-preview', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: description },

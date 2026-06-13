@@ -101,8 +101,8 @@ At least one of member_ids or pod_ids must be non-empty unless nothing fits.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
       }),

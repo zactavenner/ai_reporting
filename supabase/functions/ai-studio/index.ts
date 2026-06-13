@@ -665,8 +665,8 @@ async function planStoryboard(opts: {
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
-        models: ["google/gemini-2.5-pro", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+      model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [
         { role: "system", content: sys },
         { role: "user", content: opts.brief },
@@ -1598,7 +1598,7 @@ Deno.serve(async (req) => {
     ? videoModel
     : (selectedVideoModels[0] || "bytedance/seedance-2.0-fast");
 
-  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "google/gemini-2.5-pro";
+  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "openrouter/owl-alpha";
 
   // Load selected avatar (if any) for system-prompt context + auto-injection into video tools
   let selectedAvatar: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null = null;
@@ -2849,8 +2849,8 @@ Deno.serve(async (req) => {
               method: "POST",
               headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
               body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
-        models: ["google/gemini-3-flash-preview", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+                model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
                 messages: [
                   { role: "system", content: "Given the user's last request and the assistant's reply, propose 3 short, concrete next-step prompts the user is most likely to want next. Reply with ONLY a JSON array of 3 strings, max 70 chars each. No prose." },
                   { role: "user", content: `USER: ${(userText || "").slice(0, 800)}\n\nASSISTANT: ${cleaned.slice(0, 1500)}` },
