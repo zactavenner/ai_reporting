@@ -6,6 +6,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { GlobalClientSearch } from '@/components/search/GlobalClientSearch';
 import { NotificationBell } from '@/components/layout/NotificationBell';
 import { CreateTaskModal } from '@/components/tasks/CreateTaskModal';
+import { GlobalVoiceButton } from '@/components/layout/GlobalVoiceButton';
 import { useClients } from '@/hooks/useClients';
 
 interface AppHeaderProps {
@@ -36,6 +37,7 @@ export function AppHeader({ onSettings, currentMemberName, onLogout, onTaskClick
             <span className="hidden sm:inline">Add Task</span>
           </Button>
           <NotificationBell onTaskClick={onTaskClick} />
+          <GlobalVoiceButton />
           {onSettings && (
             <Button variant="ghost" size="icon" onClick={onSettings} title="Settings">
               <Settings2 className="h-4 w-4" />
