@@ -1,0 +1,1 @@
+ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS standup_slack_channel_id text;
