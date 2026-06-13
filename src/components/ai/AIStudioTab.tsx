@@ -56,9 +56,10 @@ const CHAT_MODELS = [
 
 // Image models the AI can use when generating ad creatives.
 // Multi-select: pick 1 = AI uses that model. Pick 2+ = AI runs a side-by-side comparison.
-const IMAGE_MODELS: { value: "nano-banana" | "openai"; label: string; hint: string }[] = [
+const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: string; hint: string }[] = [
   { value: "nano-banana", label: "Nano Banana 2", hint: "Fast iteration" },
   { value: "openai", label: "GPT Image 2", hint: "Highest quality finals" },
+  { value: "riverflow", label: "Riverflow v2 Pro (free)", hint: "Sourceful Riverflow — up to 5 reference images, free preview" },
 ];
 
 // Video models (all routed through OpenRouter /v1/videos)
@@ -588,7 +589,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
-  const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai">>(["openai"]);
+  const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai" | "riverflow">>(["openai"]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("ai-studio:video-models");
