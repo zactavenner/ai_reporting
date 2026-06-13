@@ -60,6 +60,8 @@ export function AIStudioCanvas({
   const draggingRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const focusScrolledRef = useRef<string | null>(null);
+  const lastEntryCountRef = useRef<number>(0);
+  const lastEntryKeyRef = useRef<string>("");
   const [sendingApproval, setSendingApproval] = useState(false);
 
   const approvalCandidates = entries.filter(
@@ -132,6 +134,26 @@ export function AIStudioCanvas({
       focusScrolledRef.current = focusedItemId;
     }
   }, [focusedItemId, entries.length]);
+
+  // Auto-scroll canvas to bottom when new entries arrive (mirrors chat flow).
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const lastKey = entries.length
+      ? ("__placeholder" in entries[entries.length - 1]
+          ? (entries[entries.length - 1] as CanvasPlaceholder).placeholder_id
+          : (entries[entries.length - 1] as CanvasItem).id)
+      : "";
+    const grew = entries.length > lastEntryCountRef.current;
+    const changed = lastKey !== lastEntryKeyRef.current;
+    lastEntryCountRef.current = entries.length;
+    lastEntryKeyRef.current = lastKey;
+    if (!grew && !changed) return;
+    // Defer to next frame so newly inserted card has a measured height.
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
+  }, [entries]);
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     if (!(e.ctrlKey || e.metaKey)) return;
