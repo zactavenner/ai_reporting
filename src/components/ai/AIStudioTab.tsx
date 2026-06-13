@@ -886,6 +886,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // We approximate tokens from char counts and price using public-ish per-1M rates.
   const usageStats = (() => {
     const RATES: Record<string, { in: number; out: number }> = {
+      "openrouter/owl-alpha": { in: 0, out: 0 },
       "google/gemini-2.5-pro": { in: 1.25, out: 5 },
       "google/gemini-3-flash-preview": { in: 0.3, out: 2.5 },
       "openai/gpt-5": { in: 1.25, out: 10 },
