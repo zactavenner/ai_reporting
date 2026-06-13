@@ -15,9 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { useAgencySettings, useUpdateAgencySettings } from '@/hooks/useAgencySettings';
 import { useSyncMeetings } from '@/hooks/useMeetings';
+import { useSlackChannels } from '@/hooks/useSlackChannels';
+import { supabase } from '@/integrations/supabase/client';
 import { TeamManagementTab } from './TeamManagementTab';
 import { SyncQueueStatus } from './SyncQueueStatus';
-import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet } from 'lucide-react';
+import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet, Sunrise, Send } from 'lucide-react';
 import { ApiReferenceTab } from './ApiReferenceTab';
 import { HermesIntegrationTab } from './HermesIntegrationTab';
 
@@ -82,6 +84,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const [twilioWhatsappFrom, setTwilioWhatsappFrom] = useState('');
   const [whatsappRecipientsRaw, setWhatsappRecipientsRaw] = useState('');
   const [testingWa, setTestingWa] = useState(false);
+  const [standupChannelId, setStandupChannelId] = useState('');
+  const [sendingStandup, setSendingStandup] = useState(false);
+  const { data: slackChannels = [], isLoading: loadingSlackChannels } = useSlackChannels();
   const syncMeetings = useSyncMeetings();
   
   const webhookUrl = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/meetgeek-webhook`;
@@ -108,6 +113,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
       setTwilioWhatsappFrom((settings as any).twilio_whatsapp_from || '');
       const recips = (settings as any).whatsapp_default_recipients;
       setWhatsappRecipientsRaw(Array.isArray(recips) ? recips.join('\n') : '');
+      setStandupChannelId((settings as any).standup_slack_channel_id || '');
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
       setSelectedGeminiModel((settings as any).selected_gemini_model || 'gemini-2.5-pro');
       setSelectedGrokModel((settings as any).selected_grok_model || 'grok-3');
@@ -141,6 +147,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         master_pinned_gids: pinnedTabs,
         twilio_whatsapp_from: twilioWhatsappFrom.trim() || null,
         whatsapp_default_recipients: whatsappRecipientsRaw.split('\n').map(s => s.trim()).filter(Boolean),
+        standup_slack_channel_id: standupChannelId.trim() || null,
         selected_openai_model: selectedOpenaiModel,
         selected_gemini_model: selectedGeminiModel,
         selected_grok_model: selectedGrokModel,
