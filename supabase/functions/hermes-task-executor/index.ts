@@ -254,9 +254,10 @@ async function runAgentInference(opts: {
 
 // Rough per-1k-token pricing for cost_usd estimation. Update as new models ship.
 const PRICING: Record<string, { in: number; out: number }> = {
-  "openrouter/owl-alpha": { in: 0.000075, out: 0.0003 },
-  "openrouter/owl-alpha":   { in: 0.00125, out: 0.005 },
-  "openrouter/owl-alpha": { in: 0.000075, out: 0.0003 },
+  "openrouter/owl-alpha": { in: 0, out: 0 },
+  "google/gemini-2.5-flash": { in: 0.000075, out: 0.0003 },
+  "google/gemini-2.5-pro":   { in: 0.00125, out: 0.005 },
+  "google/gemini-3-flash-preview": { in: 0.000075, out: 0.0003 },
   "openai/gpt-5":            { in: 0.005, out: 0.015 },
   "openai/gpt-5-mini":       { in: 0.00025, out: 0.002 },
 };
