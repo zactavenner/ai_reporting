@@ -36,7 +36,7 @@ interface AgencyContext {
 }
 
 type AIModel = 'gemini' | 'openai';
-type FullModel = 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5' | 'grok' | 'grok-4-reasoning';
+type FullModel = 'openrouter/owl-alpha' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5' | 'grok' | 'grok-4-reasoning';
 
 export function useAgencyAIAnalysis() {
   const [messages, setMessages] = useState<Message[]>([]);
