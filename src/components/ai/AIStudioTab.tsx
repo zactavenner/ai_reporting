@@ -29,6 +29,7 @@ import { useAvatars } from "@/hooks/useAvatars";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
+import { ModelCompareTab } from "./ModelCompareTab";
 
 interface Props {
   clientId: string;
