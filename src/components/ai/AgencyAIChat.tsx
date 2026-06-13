@@ -32,7 +32,7 @@ import { useMeetings } from '@/hooks/useMeetings';
 import { TokenUsageBar, FULL_MODEL_OPTIONS, MODEL_LIMITS } from './TokenUsageBar';
 import ReactMarkdown from 'react-markdown';
 
-type AIModel = 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5';
+type AIModel = 'openrouter/owl-alpha' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5';
 
 interface AgencyAIChatProps {
   clients: Client[];
@@ -41,6 +41,7 @@ interface AgencyAIChatProps {
 }
 
 const modelLabels: Record<AIModel, string> = {
+  'openrouter/owl-alpha': 'Owl Alpha',
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
   'gemini-3-flash': 'Gemini 3 Flash',
   'gemini-3-pro': 'Gemini 3 Pro',
@@ -64,7 +65,7 @@ const clientQuickQuestions = [
 export function AgencyAIChat({ clients, clientMetrics, agencyMetrics }: AgencyAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [model, setModel] = useState<AIModel>('gemini-2.5-pro');
+  const [model, setModel] = useState<AIModel>('openrouter/owl-alpha');
   const [isRecording, setIsRecording] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);

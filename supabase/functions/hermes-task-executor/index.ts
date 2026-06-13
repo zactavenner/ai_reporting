@@ -214,7 +214,7 @@ async function runAgentInference(opts: {
     );
   }
 
-  const model = opts.agent?.model || "google/gemini-2.5-flash";
+  const model = opts.agent?.model || "openrouter/owl-alpha";
   const body = {
     model,
     messages: [
@@ -254,6 +254,7 @@ async function runAgentInference(opts: {
 
 // Rough per-1k-token pricing for cost_usd estimation. Update as new models ship.
 const PRICING: Record<string, { in: number; out: number }> = {
+  "openrouter/owl-alpha": { in: 0, out: 0 },
   "google/gemini-2.5-flash": { in: 0.000075, out: 0.0003 },
   "google/gemini-2.5-pro":   { in: 0.00125, out: 0.005 },
   "google/gemini-3-flash-preview": { in: 0.000075, out: 0.0003 },
@@ -261,7 +262,7 @@ const PRICING: Record<string, { in: number; out: number }> = {
   "openai/gpt-5-mini":       { in: 0.00025, out: 0.002 },
 };
 function estimateCost(model: string, usage: { prompt_tokens?: number; completion_tokens?: number }) {
-  const p = PRICING[model] || PRICING["google/gemini-2.5-flash"];
+  const p = PRICING[model] || PRICING["openrouter/owl-alpha"];
   const inK = (usage.prompt_tokens || 0) / 1000;
   const outK = (usage.completion_tokens || 0) / 1000;
   return +(inK * p.in + outK * p.out).toFixed(6);

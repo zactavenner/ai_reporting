@@ -9,9 +9,9 @@ const corsHeaders = {
 };
 
 const MODEL_MAP: Record<string, string> = {
-  "gemini-2.5-pro": "google/gemini-2.5-pro",
+  "gemini-2.5-pro": "openrouter/owl-alpha",
   "gemini-3-pro": "google/gemini-3-pro-preview",
-  "gemini-3-flash": "google/gemini-3-flash-preview",
+  "gemini-3-flash": "openrouter/owl-alpha",
   "gpt-5": "openai/gpt-5",
   "grok": "xai-grok",  // handled separately
   "grok-4-reasoning": "xai-grok-4-reasoning",  // handled separately

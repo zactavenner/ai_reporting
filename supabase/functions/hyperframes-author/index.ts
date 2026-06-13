@@ -68,7 +68,7 @@ Rules:
         "X-Title": "Hyperframes Author",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "openrouter/owl-alpha",
         messages: [
           { role: "system", content: sys },
           { role: "user", content: userMsg },

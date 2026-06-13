@@ -83,7 +83,7 @@ suggest the TOP 3 concrete next actions in order of impact. Be specific (audienc
 funnel tweak). Use "targeted returns" language — never "guaranteed".`;
 
       const { data, error } = await supabase.functions.invoke('ai-analysis', {
-        body: { prompt, model: 'google/gemini-2.5-flash' },
+        body: { prompt, model: 'openrouter/owl-alpha' },
       });
       if (error) throw error;
       setAiSuggestion(data?.text ?? data?.response ?? JSON.stringify(data));

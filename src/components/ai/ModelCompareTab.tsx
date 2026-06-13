@@ -29,7 +29,7 @@ type Result = { model: string; output?: string; error?: string; ms: number; usag
 export function ModelCompareTab() {
   const [prompt, setPrompt] = useState("");
   const [system, setSystem] = useState("");
-  const [selected, setSelected] = useState<string[]>(["openai/gpt-5", "anthropic/claude-opus-4.1"]);
+  const [selected, setSelected] = useState<string[]>(["openrouter/owl-alpha", "openai/gpt-5"]);
   const [custom, setCustom] = useState("");
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<Result[]>([]);

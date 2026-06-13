@@ -42,7 +42,7 @@ export function ScriptStep() {
       const prompt = buildScriptPrompt(deal);
 
       const { data, error } = await supabase.functions.invoke('generate-ad-script', {
-        body: { prompt, model: 'gemini-2.5-flash' },
+        body: { prompt, model: 'openrouter/owl-alpha' },
       });
 
       if (error) throw error;

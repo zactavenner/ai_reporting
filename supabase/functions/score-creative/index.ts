@@ -39,7 +39,7 @@ CTA: ${cta || '(none)'}` }];
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: "openrouter/owl-alpha",
         messages: [{ role: 'user', content: userContent }],
         response_format: { type: 'json_object' },
       }),

@@ -428,7 +428,7 @@ serve(async (req) => {
 
         // Call AI via Lovable AI Gateway
         const aiBody: any = {
-          model: agent.model || 'google/gemini-2.5-flash',
+          model: agent.model || "openrouter/owl-alpha",
           messages: [
             { role: 'system', content: `You are an AI agent executing a scheduled task for a capital raising agency. Analyze the provided data thoroughly and respond ONLY with valid JSON (no markdown fences). Be specific with numbers and actionable with recommendations.${memoryBlock}` },
             { role: 'user', content: prompt },
@@ -644,13 +644,13 @@ serve(async (req) => {
 
         // Update run as completed
         const PRICING: Record<string, { in: number; out: number }> = {
-          'google/gemini-2.5-flash': { in: 0.000075, out: 0.0003 },
+          "openrouter/owl-alpha": { in: 0.000075, out: 0.0003 },
           'google/gemini-2.5-pro':   { in: 0.00125, out: 0.005 },
-          'google/gemini-3-flash-preview': { in: 0.000075, out: 0.0003 },
+          "openrouter/owl-alpha": { in: 0.000075, out: 0.0003 },
           'openai/gpt-5':            { in: 0.005, out: 0.015 },
           'openai/gpt-5-mini':       { in: 0.00025, out: 0.002 },
         };
-        const pricing = PRICING[agent.model] || PRICING['google/gemini-2.5-flash'];
+        const pricing = PRICING[agent.model] || PRICING["openrouter/owl-alpha"];
         const costUsd = +((((usage.prompt_tokens || 0) / 1000) * pricing.in) + (((usage.completion_tokens || 0) / 1000) * pricing.out)).toFixed(6);
 
         await cloudDb.from('agent_runs').update({

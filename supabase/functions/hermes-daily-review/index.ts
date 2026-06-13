@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "openrouter/owl-alpha",
           messages: [
             { role: "system", content: "You are Hermes, an operations triage agent. Output a tight markdown daily triage. Group by client, list at-risk tasks, suggest a single next action per item, and tag owners. No fluff." },
             { role: "user", content: JSON.stringify({ stalled: stalledByClient, cutoff_days: 3 }) },

@@ -300,8 +300,8 @@ serve(async (req) => {
           "X-Title": "HPA Reporting",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          models: ["google/gemini-2.5-flash", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+          model: "openrouter/owl-alpha",
+          models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
           messages: orMessages,
           temperature: 0.7,
           max_tokens: 8192,

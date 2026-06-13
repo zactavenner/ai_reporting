@@ -14,20 +14,20 @@ export type ORMessage = {
 
 // Default fallback chains. Listed best-quality first; auto-falls back on 429/402/5xx/timeouts.
 export const TEXT_MODELS = [
-  "google/gemini-2.5-flash",
+  "openrouter/owl-alpha",
   "google/gemini-2.0-flash-001",
   "openai/gpt-4o-mini",
 ];
 
 export const VISION_MODELS = [
-  "google/gemini-2.5-flash",
+  "openrouter/owl-alpha",
   "google/gemini-2.0-flash-001",
   "openai/gpt-4o-mini",
 ];
 
 // Audio-capable (multimodal) models — used for transcription via inline audio/video data.
 export const AUDIO_MODELS = [
-  "google/gemini-2.5-flash",
+  "openrouter/owl-alpha",
   "google/gemini-2.0-flash-001",
 ];
 

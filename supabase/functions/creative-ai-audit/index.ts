@@ -16,7 +16,7 @@ async function callAI(apiKey: string, prompt: string, options?: { temperature?: 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: options?.model || "google/gemini-2.5-flash",
+      model: options?.model || "openrouter/owl-alpha",
       messages: [{ role: "user", content: prompt }],
       temperature: options?.temperature ?? 0.3,
       max_tokens: options?.maxTokens ?? 4096,

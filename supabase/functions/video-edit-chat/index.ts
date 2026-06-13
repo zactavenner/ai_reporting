@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
     // 1) Refine the prompt with Lovable AI Gateway
     const refinePayload = {
-      model: "google/gemini-3-flash-preview",
+      model: "openrouter/owl-alpha",
       messages: [
         {
           role: "system",

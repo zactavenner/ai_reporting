@@ -42,6 +42,7 @@ type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean };
 
 const CHAT_MODELS = [
+  { value: "openrouter/owl-alpha", label: "Owl Alpha (default)" },
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (reasoning)" },
   { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (fastest)" },
   { value: "openai/gpt-5", label: "GPT-5 (multimodal)" },
@@ -588,7 +589,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
-  const [chatModel, setChatModel] = useState<string>("google/gemini-2.5-pro");
+  const [chatModel, setChatModel] = useState<string>("openrouter/owl-alpha");
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai" | "riverflow">>(["openai"]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
     try {
@@ -885,6 +886,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // We approximate tokens from char counts and price using public-ish per-1M rates.
   const usageStats = (() => {
     const RATES: Record<string, { in: number; out: number }> = {
+      "openrouter/owl-alpha": { in: 0, out: 0 },
       "google/gemini-2.5-pro": { in: 1.25, out: 5 },
       "google/gemini-3-flash-preview": { in: 0.3, out: 2.5 },
       "openai/gpt-5": { in: 1.25, out: 10 },

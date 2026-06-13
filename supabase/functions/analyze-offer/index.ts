@@ -43,8 +43,8 @@ Write 2-3 detailed paragraphs. Be specific and compelling. If file names suggest
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        models: ["google/gemini-3-flash-preview", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "openrouter/owl-alpha",
+        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: "system", content: "You are an expert copywriter. Generate compelling offer descriptions based on available context. Be specific, avoid generic filler. Return ONLY the description text, no JSON wrapping." },
           { role: "user", content: userPrompt },

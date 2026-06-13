@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: "openrouter/owl-alpha",
         messages: [{ role: 'user', content: `Analyze this competitor's landing page and produce a strategic intel report.
 
 Competitor: ${competitor_name || competitor_url}

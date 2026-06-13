@@ -423,7 +423,7 @@ async function handleCreateAgent(body: any) {
     handle,
     name,
     agent_type,
-    model: body.model || "google/gemini-3-flash-preview",
+    model: body.model || "openrouter/owl-alpha",
     system_prompt: body.system_prompt ?? "",
     knowledge_md: body.knowledge_md ?? "",
     reference_files: Array.isArray(body.reference_files) ? body.reference_files : [],
