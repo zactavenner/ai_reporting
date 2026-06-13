@@ -173,14 +173,6 @@ export function AIStudioCanvas({
     return () => el.removeEventListener("wheel", handler as any);
   }, []);
 
-  if (entries.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8 text-center">
-        The canvas builds downward as you chat. Ask for an ad, edit a doc, or pin an asset — each result drops in here in step with the conversation.
-      </div>
-    );
-  }
-
   const onMouseDown = (e: React.MouseEvent) => {
     // Only pan when clicking the empty background, not a card
     if ((e.target as HTMLElement).closest("[data-canvas-card]")) return;
