@@ -17,6 +17,9 @@ const MODEL_PRESETS: { id: string; label: string }[] = [
   { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
   { id: "deepseek/deepseek-chat-v3.1", label: "DeepSeek v3.1" },
+  { id: "deepseek/deepseek-chat-v4", label: "DeepSeek v4" },
+  { id: "openrouter/owl-alpha", label: "Owl Alpha" },
+  { id: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra 550B (free)" },
   { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
   { id: "mistralai/mistral-large-2411", label: "Mistral Large" },
 ];
