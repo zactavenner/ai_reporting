@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { CheckCircle2, AlertOctagon, Clock, CalendarDays, Sparkles, Send, Loader2, ChevronDown, ChevronRight, MessageSquare, Video, Film, Users } from 'lucide-react';
 import { useMemberTasks, useTodayReport, useSubmitDailyReport } from '@/hooks/useDailyReports';
 import { useUpdateTask, useAgencyMembers } from '@/hooks/useTasks';
+import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -115,6 +116,7 @@ export function EODView({ memberId }: { memberId: string }) {
 
   const [touchpointsByClient, setTouchpointsByClient] = useState<Record<string, Record<TouchKey, boolean>>>({});
   const [openSubtasks, setOpenSubtasks] = useState<Record<string, boolean>>({});
+  const [openTask, setOpenTask] = useState<any | null>(null);
 
   const toggleTouch = (clientId: string, key: TouchKey) => {
     setTouchpointsByClient((prev) => ({
@@ -209,21 +211,31 @@ export function EODView({ memberId }: { memberId: string }) {
     const clientName = t.client_id ? clientNameById[t.client_id] : null;
     const isOpen = !!openSubtasks[t.id];
     return (
-      <div className="py-2 border-b last:border-b-0">
+      <div
+        onClick={() => setOpenTask(t)}
+        className="py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded transition-colors"
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              {clientName && <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-medium">{clientName}</Badge>}
+              {clientName && (
+                <Badge variant="outline" className="h-5 px-1.5 text-[11px] font-bold text-foreground border-foreground/30 bg-foreground/5">
+                  {clientName}
+                </Badge>
+              )}
               {t.status === 'blocked' && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">BLOCKED</Badge>}
               <span className="text-sm font-medium truncate">{t.title}</span>
             </div>
+            {t.description && (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
+            )}
             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
               {t.due_date && <span>Due {new Date(t.due_date).toLocaleDateString()}</span>}
               {assignees.length > 0 && (
                 <span className="flex items-center gap-1"><Users className="h-3 w-3" />{assignees.map((a) => a.name).join(', ')}</span>
               )}
               {subs.length > 0 && (
-                <button onClick={() => setOpenSubtasks((p) => ({ ...p, [t.id]: !isOpen }))} className="flex items-center gap-0.5 hover:text-foreground">
+                <button onClick={(e) => { e.stopPropagation(); setOpenSubtasks((p) => ({ ...p, [t.id]: !isOpen })); }} className="flex items-center gap-0.5 hover:text-foreground">
                   {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   {subs.length} subtask{subs.length === 1 ? '' : 's'}
                 </button>
@@ -231,11 +243,11 @@ export function EODView({ memberId }: { memberId: string }) {
             </div>
           </div>
           <div className="flex gap-1 shrink-0">
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleMarkDone(t)}>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={(e) => { e.stopPropagation(); handleMarkDone(t); }}>
               <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
             </Button>
             {t.status !== 'blocked' && (
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={() => setBlockerOpen({ taskId: t.id, title: t.title })}>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={(e) => { e.stopPropagation(); setBlockerOpen({ taskId: t.id, title: t.title }); }}>
                 <AlertOctagon className="h-3.5 w-3.5 mr-1" /> Stuck
               </Button>
             )}
@@ -380,6 +392,14 @@ export function EODView({ memberId }: { memberId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TaskDetailPanel
+        task={openTask}
+        open={!!openTask}
+        onOpenChange={(o) => !o && setOpenTask(null)}
+        clientName={openTask?.client_id ? clientNameById[openTask.client_id] : undefined}
+        clientId={openTask?.client_id || undefined}
+      />
     </div>
   );
 }
