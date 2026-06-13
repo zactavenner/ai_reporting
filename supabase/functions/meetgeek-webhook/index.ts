@@ -213,6 +213,31 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Re-run client-by-title matching across stored meetings (default: only unmatched).
+    if (body.action === 'remap_clients') {
+      const onlyUnmatched = body.only_unmatched !== false;
+      let query = supabase.from('agency_meetings').select('id, title, client_id');
+      if (onlyUnmatched) query = query.is('client_id', null);
+      const { data: meetings, error } = await query;
+      if (error) throw error;
+      let updated = 0;
+      let scanned = 0;
+      const changes: any[] = [];
+      for (const m of meetings || []) {
+        scanned++;
+        const matched = await matchClientByTitle(supabase, m.title || '');
+        if (matched && matched !== m.client_id) {
+          await supabase.from('agency_meetings').update({ client_id: matched }).eq('id', m.id);
+          updated++;
+          changes.push({ title: m.title, from: m.client_id, to: matched });
+        }
+      }
+      return new Response(JSON.stringify({ success: true, scanned, updated, changes: changes.slice(0, 50) }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Handle MeetGeek webhook (meeting analyzed)
     if (body.meeting_id) {
       const result = await processMeeting(supabase, meetgeekApiKey, baseUrl, body.meeting_id, clientId);
@@ -431,16 +456,37 @@ async function matchClientByTitle(supabase: any, title: string): Promise<string 
   try {
     const { data: clients } = await supabase.from('clients').select('id, name');
     if (!clients?.length) return null;
-    
-    const titleLower = title.toLowerCase();
+
+    const STOP = new Set(['the','and','inc','llc','corp','group','capital','investments','investment','management','fund','company','co','partners','holdings','hpa']);
+    const titleLower = ` ${title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ')} `;
+
+    // Score each client by distinctive-word matches; longest distinctive word wins ties.
+    let best: { id: string; score: number; longest: number } | null = null;
     for (const client of clients) {
-      const clientWords = client.name.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
-      for (const word of clientWords) {
-        if (['the', 'and', 'inc', 'llc', 'corp', 'group', 'capital', 'investments', 'management'].includes(word)) continue;
-        if (titleLower.includes(word)) return client.id;
+      const cleanName = client.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+      // 1. Exact full-name substring match — strongest signal.
+      if (cleanName.length >= 4 && titleLower.includes(` ${cleanName} `)) {
+        return client.id;
+      }
+
+      // 2. Score on distinctive (non-stop) words present as whole words in the title.
+      const words = cleanName.split(/\s+/).filter((w: string) => w.length > 2 && !STOP.has(w));
+      if (!words.length) continue;
+      let score = 0;
+      let longest = 0;
+      for (const w of words) {
+        if (titleLower.includes(` ${w} `)) {
+          score++;
+          if (w.length > longest) longest = w.length;
+        }
+      }
+      if (score === 0) continue;
+      if (!best || score > best.score || (score === best.score && longest > best.longest)) {
+        best = { id: client.id, score, longest };
       }
     }
-    return null;
+    return best?.id || null;
   } catch { return null; }
 }
 
