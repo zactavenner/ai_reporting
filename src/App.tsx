@@ -78,6 +78,9 @@ const App = () => (
             <Route path="/projects/:projectId" element={<PasswordGate><ProjectPage /></PasswordGate>} />
             <Route path="/fundad-studio" element={<PasswordGate><FundAdStudioPage /></PasswordGate>} />
             <Route path="/ghl-workflows" element={<PasswordGate><GhlWorkflowsPage /></PasswordGate>} />
+            <Route path="/eod" element={<PasswordGate><DailyReportPage /></PasswordGate>} />
+            <Route path="/daily" element={<PasswordGate><DailyReportPage /></PasswordGate>} />
+            <Route path="/daily/thanks" element={<PasswordGate><DailyReportThankYouPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
