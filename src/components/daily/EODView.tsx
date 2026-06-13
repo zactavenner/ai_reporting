@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, AlertOctagon, Clock, CalendarDays, Sparkles, Send, Loader2, ChevronDown, ChevronRight, MessageSquare, Video, Film, Users } from 'lucide-react';
+import { CheckCircle2, AlertOctagon, Clock, CalendarDays, Sparkles, Send, Loader2, ChevronDown, ChevronRight, MessageSquare, Video, Film, Users, UserCheck } from 'lucide-react';
 import { useMemberTasks, useTodayReport, useSubmitDailyReport } from '@/hooks/useDailyReports';
 import { useUpdateTask, useAgencyMembers } from '@/hooks/useTasks';
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
@@ -62,6 +62,33 @@ export function EODView({ memberId }: { memberId: string }) {
     enabled: clientIds.length > 0,
   });
   const clientNameById = useMemo(() => Object.fromEntries(taskClients.map((c: any) => [c.id, c.name])), [taskClients]);
+
+  // AM (account manager) per client → drives review routing on EOD
+  const { data: amAssignments = [] } = useQuery({
+    queryKey: ['eod-am-assignments', clientIds.join(',')],
+    queryFn: async () => {
+      if (clientIds.length === 0) return [] as any[];
+      const { data } = await (supabase as any)
+        .from('client_assignments')
+        .select('client_id, account_manager')
+        .in('client_id', clientIds);
+      return data || [];
+    },
+    enabled: clientIds.length > 0,
+  });
+  const amNameByClient = useMemo(() => {
+    const m: Record<string, string> = {};
+    (amAssignments as any[]).forEach((a) => { if (a.account_manager) m[a.client_id] = a.account_manager; });
+    return m;
+  }, [amAssignments]);
+  const amMemberByClient = useMemo(() => {
+    const m: Record<string, { id: string; name: string }> = {};
+    Object.entries(amNameByClient).forEach(([cid, name]) => {
+      const mem = (members as any[]).find((mm) => mm.name?.toLowerCase() === String(name).toLowerCase());
+      if (mem) m[cid] = { id: mem.id, name: mem.name };
+    });
+    return m;
+  }, [amNameByClient, members]);
 
   const { data: subtasks = [] } = useQuery({
     queryKey: ['eod-subtasks', taskIds.join(',')],
@@ -171,6 +198,35 @@ export function EODView({ memberId }: { memberId: string }) {
     await updateTask.mutateAsync({ id: t.id, status: 'completed' as any, completed_at: new Date().toISOString() } as any);
   };
 
+  // EOD review routing:
+  // - Non-AM submits work → goes to that client's AM (stage = agency_review, reassign to AM)
+  // - AM with task ready → sends to client review (stage = review)
+  // - AM on a task already in client review → can finally Mark Done
+  const handleSendForReview = async (t: any) => {
+    const am = t.client_id ? amMemberByClient[t.client_id] : undefined;
+    const amName = t.client_id ? amNameByClient[t.client_id] : undefined;
+    const iAmTheAM = !!am && am.id === memberId;
+
+    try {
+      if (iAmTheAM) {
+        // AM moves it to Client Review
+        await updateTask.mutateAsync({ id: t.id, stage: 'review' as any } as any);
+        toast.success('Sent to client for review');
+        return;
+      }
+      // Non-AM: send to AM for agency review
+      const payload: any = { id: t.id, stage: 'agency_review' };
+      if (am?.id) payload.assigned_to = am.id;
+      await updateTask.mutateAsync(payload);
+      if (am?.id) {
+        await (supabase as any).from('task_assignees').insert({ task_id: t.id, member_id: am.id }).then(() => {}, () => {});
+      }
+      toast.success(amName ? `Sent to ${amName} for review` : 'Sent for agency review');
+    } catch (e: any) {
+      toast.error('Failed: ' + e.message);
+    }
+  };
+
   const handleSubmit = async () => {
     const tasksSnapshot = [
       ...buckets.overdue.map((t) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: 'in_progress' as const })),
@@ -228,6 +284,33 @@ export function EODView({ memberId }: { memberId: string }) {
     const assignees = assigneesByTask[t.id] || [];
     const clientName = t.client_id ? clientNameById[t.client_id] : null;
     const isOpen = !!openSubtasks[t.id];
+    const am = t.client_id ? amMemberByClient[t.client_id] : undefined;
+    const amName = t.client_id ? amNameByClient[t.client_id] : undefined;
+    const iAmTheAM = !!am && am.id === memberId;
+    const inClientReview = t.stage === 'review';
+    const inAgencyReview = t.stage === 'agency_review';
+
+    // Action button label/handler
+    let actionLabel: string;
+    let actionIcon: any = Send;
+    let actionHandler: (e: React.MouseEvent) => void;
+    if (inClientReview && iAmTheAM) {
+      actionLabel = 'Mark Done';
+      actionIcon = CheckCircle2;
+      actionHandler = (e) => { e.stopPropagation(); handleMarkDone(t); };
+    } else if (iAmTheAM) {
+      actionLabel = 'Send to Client';
+      actionHandler = (e) => { e.stopPropagation(); handleSendForReview(t); };
+    } else if (!t.client_id || !amName) {
+      // No AM context → keep classic Done
+      actionLabel = 'Done';
+      actionIcon = CheckCircle2;
+      actionHandler = (e) => { e.stopPropagation(); handleMarkDone(t); };
+    } else {
+      actionLabel = `Send to ${amName.split(' ')[0]}`;
+      actionHandler = (e) => { e.stopPropagation(); handleSendForReview(t); };
+    }
+    const ActionIcon = actionIcon;
     return (
       <div
         onClick={() => setOpenTask(t)}
@@ -242,6 +325,16 @@ export function EODView({ memberId }: { memberId: string }) {
                 </Badge>
               )}
               {t.status === 'blocked' && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">BLOCKED</Badge>}
+              {inAgencyReview && (
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-indigo-500/40 text-indigo-600 bg-indigo-500/10">
+                  <UserCheck className="h-3 w-3 mr-1" />{amName ? `${amName} reviewing` : 'Agency Review'}
+                </Badge>
+              )}
+              {inClientReview && (
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-purple-500/40 text-purple-600 bg-purple-500/10">
+                  Client Review
+                </Badge>
+              )}
               <span className="text-sm font-medium truncate">{t.title}</span>
             </div>
             {t.description && (
@@ -261,8 +354,8 @@ export function EODView({ memberId }: { memberId: string }) {
             </div>
           </div>
           <div className="flex gap-1 shrink-0">
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={(e) => { e.stopPropagation(); handleMarkDone(t); }}>
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={actionHandler}>
+              <ActionIcon className="h-3.5 w-3.5 mr-1" /> {actionLabel}
             </Button>
             {t.status !== 'blocked' && (
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={(e) => { e.stopPropagation(); setBlockerOpen({ taskId: t.id, title: t.title }); }}>
