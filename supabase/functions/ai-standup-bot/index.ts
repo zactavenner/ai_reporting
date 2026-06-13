@@ -162,6 +162,44 @@ serve(async (req) => {
       details: { ok: slackData.ok, ts: slackData.ts, members: summary.length, model: ai.model },
     } as any).then(() => {}, () => {});
 
+    // Also push standup to Joe on WhatsApp via Hermes
+    try {
+      const { data: cfg } = await supabase
+        .from("agency_settings")
+        .select("hermes_callback_url, hermes_enabled, whatsapp_owner_number, eod_send_to_hermes")
+        .limit(1)
+        .maybeSingle();
+      const phone = (cfg as any)?.whatsapp_owner_number || "+19167097345";
+      const callback = (cfg as any)?.hermes_callback_url;
+      if ((cfg as any)?.eod_send_to_hermes !== false && (cfg as any)?.hermes_enabled && callback) {
+        // Pull yesterday's EOD reports to attach
+        const yest = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+        const { data: eods = [] } = await supabase
+          .from("daily_reports")
+          .select("member_id, wins_shared, self_assessment, touchpoint_count, touchpoint_notes")
+          .eq("report_date", yest)
+          .eq("report_type", "eod");
+        const eodSection = (eods && eods.length)
+          ? `\n\n📋 *Yesterday EOD (${eods.length})*\n` + eods.map((e: any) => {
+              const m = (members as any[]).find((mm) => mm.id === e.member_id);
+              return `• ${m?.name || "Member"}: ${e.self_assessment ?? "—"}/10${e.wins_shared ? ` — ${e.wins_shared}` : ""}`;
+            }).join("\n")
+          : "";
+        await fetch(callback, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event: "daily_standup",
+            channel: "whatsapp",
+            to: phone,
+            text: messageText + eodSection,
+          }),
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn("Hermes WhatsApp push failed:", e);
+    }
+
     return new Response(JSON.stringify({ ok: slackData.ok, ts: slackData.ts, channel: channelId, model: ai.model }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
