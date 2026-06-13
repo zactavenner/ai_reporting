@@ -137,6 +137,24 @@ export function EODView({ memberId }: { memberId: string }) {
     return (tasks as any[]).filter((t) => t.status === 'completed' && t.completed_at && new Date(t.completed_at) >= today);
   }, [tasks]);
 
+  const periodStats = useMemo(() => {
+    const now = new Date();
+    const startOfWeek = new Date(now); startOfWeek.setHours(0,0,0,0);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const arr = tasks as any[];
+    const completedSince = (d: Date) => arr.filter(t => t.status === 'completed' && t.completed_at && new Date(t.completed_at) >= d).length;
+    const assignedSince = (d: Date) => arr.filter(t => t.created_at && new Date(t.created_at) >= d).length;
+    const outstanding = arr.filter(t => t.status !== 'completed' && t.stage !== 'done').length;
+    return {
+      completedWeek: completedSince(startOfWeek),
+      completedMonth: completedSince(startOfMonth),
+      assignedWeek: assignedSince(startOfWeek),
+      assignedMonth: assignedSince(startOfMonth),
+      outstanding,
+    };
+  }, [tasks]);
+
   const handleMarkBlocked = async () => {
     if (!blockerOpen) return;
     if (!blockerReason.trim()) { toast.error('Add a quick reason'); return; }
@@ -295,6 +313,39 @@ export function EODView({ memberId }: { memberId: string }) {
           <div>
             <p className="text-sm font-semibold">Wrap up the day in 2 minutes.</p>
             <p className="text-xs text-muted-foreground">{completedToday.length} done today • {buckets.overdue.length} overdue • {buckets.today.length} still due today</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Period stats */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-primary" /> Your stats
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="rounded-lg border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Done this week</p>
+              <p className="text-2xl font-bold text-emerald-600">{periodStats.completedWeek}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Done this month</p>
+              <p className="text-2xl font-bold text-emerald-600">{periodStats.completedMonth}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Outstanding</p>
+              <p className="text-2xl font-bold text-foreground">{periodStats.outstanding}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">New this week</p>
+              <p className="text-2xl font-bold text-blue-600">{periodStats.assignedWeek}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">New this month</p>
+              <p className="text-2xl font-bold text-blue-600">{periodStats.assignedMonth}</p>
+            </div>
           </div>
         </CardContent>
       </Card>
