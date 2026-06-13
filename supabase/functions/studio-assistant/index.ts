@@ -385,8 +385,20 @@ Rules:
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    const { messages = [] } = await req.json();
+    const { messages = [], attachments = [] } = await req.json();
+    // Accept attachments on the last user message (image_url[] or pdf data URLs)
     const convo: any[] = [{ role: 'system', content: SYSTEM_PROMPT }, ...messages];
+    if (Array.isArray(attachments) && attachments.length && convo.length > 1) {
+      const last = convo[convo.length - 1];
+      if (last.role === 'user') {
+        const parts: any[] = [{ type: 'text', text: typeof last.content === 'string' ? last.content : '' }];
+        for (const a of attachments) {
+          if (a.kind === 'image' && a.url) parts.push({ type: 'image_url', image_url: { url: a.url } });
+          else if (a.kind === 'pdf' && a.data) parts.push({ type: 'file', file: { filename: a.name || 'file.pdf', file_data: a.data } });
+        }
+        last.content = parts;
+      }
+    }
     const toolEvents: any[] = [];
 
     for (let step = 0; step < 8; step++) {
