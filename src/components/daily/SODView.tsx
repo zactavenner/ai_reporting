@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { CheckCircle2, AlertOctagon, Sunrise, Loader2, Quote } from 'lucide-react';
 import { useMemberTasks } from '@/hooks/useDailyReports';
 import { useUpdateTask, useAgencyMembers } from '@/hooks/useTasks';
+import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -37,6 +38,7 @@ export function SODView({ memberId }: { memberId: string }) {
   const [blockerOpen, setBlockerOpen] = useState<{ task: any } | null>(null);
   const [blockerReason, setBlockerReason] = useState('');
   const [reassigning, setReassigning] = useState(false);
+  const [openTask, setOpenTask] = useState<any | null>(null);
 
   const quote = useMemo(() => QUOTES[Math.floor(Math.random() * QUOTES.length)], []);
   const member = members.find((m: any) => m.id === memberId);
@@ -178,25 +180,31 @@ export function SODView({ memberId }: { memberId: string }) {
           ) : (
             <div>
               {dueToday.map((t: any) => (
-                <div key={t.id} className="flex items-start justify-between gap-2 py-2.5 border-b last:border-b-0">
+                <div
+                  key={t.id}
+                  onClick={() => setOpenTask(t)}
+                  className="flex items-start justify-between gap-2 py-2.5 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded transition-colors"
+                >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       {t.client_id && (clientMap as any)[t.client_id] && (
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{(clientMap as any)[t.client_id]}</Badge>
+                        <Badge variant="outline" className="h-5 px-1.5 text-[11px] font-bold text-foreground border-foreground/30 bg-foreground/5">
+                          {(clientMap as any)[t.client_id]}
+                        </Badge>
                       )}
                       {t.status === 'blocked' && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">BLOCKED</Badge>}
                       <span className="text-sm font-medium">{t.title}</span>
                     </div>
                     {t.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleMarkDone(t)}>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={(e) => { e.stopPropagation(); handleMarkDone(t); }}>
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
                     </Button>
                     {t.status !== 'blocked' && (
-                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={() => setBlockerOpen({ task: t })}>
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={(e) => { e.stopPropagation(); setBlockerOpen({ task: t }); }}>
                         <AlertOctagon className="h-3.5 w-3.5 mr-1" /> Stuck
                       </Button>
                     )}
@@ -233,6 +241,14 @@ export function SODView({ memberId }: { memberId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TaskDetailPanel
+        task={openTask}
+        open={!!openTask}
+        onOpenChange={(o) => !o && setOpenTask(null)}
+        clientName={openTask?.client_id ? (clientMap as any)[openTask.client_id] : undefined}
+        clientId={openTask?.client_id || undefined}
+      />
     </div>
   );
 }
