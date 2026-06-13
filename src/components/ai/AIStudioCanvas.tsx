@@ -232,7 +232,7 @@ export function AIStudioCanvas({
         onWheel={onWheel}
       >
         <div
-          className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-3 origin-top-left transition-transform duration-75 auto-rows-min items-start max-w-3xl mx-auto"
+          className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 origin-top-left transition-transform duration-75 auto-rows-min items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
         >
       {entries.map((e, i) => {
@@ -658,7 +658,7 @@ function VariationSetCard({
         <span className="text-xs text-muted-foreground ml-auto">{new Date(item.created_at).toLocaleTimeString()}</span>
       </div>
       <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{p.prompt}</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 gap-2">
         {variants.map((v, i) => {
           const isSaved = savedIndices.includes(i);
           const isPicked = picked.has(i);
