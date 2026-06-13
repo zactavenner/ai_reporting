@@ -55,14 +55,16 @@ Return JSON: { "variations": [ { "hook": "...", "headline": "...", "body": "..."
       for (const v of parsed.variations) {
         await sb.from('ad_scripts').insert({
           client_id: ad.client_id,
-          source: 'spin_winner',
-          source_ad_id: ad.id,
+          title: `Spin: ${v.headline || ad.name}`.slice(0, 200),
+          linked_meta_ad_id: ad.id,
           hook: v.hook,
           headline: v.headline,
           body: v.body,
           cta: v.cta,
           angle: v.angle,
-          reasoning: v.reason,
+          notes: v.reason,
+          generated_by: 'ai',
+          status: 'draft',
         }).then(() => {}, () => {});
       }
     }
