@@ -60,6 +60,8 @@ export function AIStudioCanvas({
   const draggingRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const focusScrolledRef = useRef<string | null>(null);
+  const lastEntryCountRef = useRef<number>(0);
+  const lastEntryKeyRef = useRef<string>("");
   const [sendingApproval, setSendingApproval] = useState(false);
 
   const approvalCandidates = entries.filter(
@@ -133,6 +135,26 @@ export function AIStudioCanvas({
     }
   }, [focusedItemId, entries.length]);
 
+  // Auto-scroll canvas to bottom when new entries arrive (mirrors chat flow).
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const lastKey = entries.length
+      ? ("__placeholder" in entries[entries.length - 1]
+          ? (entries[entries.length - 1] as CanvasPlaceholder).placeholder_id
+          : (entries[entries.length - 1] as CanvasItem).id)
+      : "";
+    const grew = entries.length > lastEntryCountRef.current;
+    const changed = lastKey !== lastEntryKeyRef.current;
+    lastEntryCountRef.current = entries.length;
+    lastEntryKeyRef.current = lastKey;
+    if (!grew && !changed) return;
+    // Defer to next frame so newly inserted card has a measured height.
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
+  }, [entries]);
+
   const onWheel = useCallback((e: React.WheelEvent) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
@@ -154,7 +176,7 @@ export function AIStudioCanvas({
   if (entries.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8 text-center">
-        The AI builds here. Ask it to generate an ad creative or edit your doc/sheet — results appear as cards on this canvas. Click any image to edit it inline.
+        The canvas builds downward as you chat. Ask for an ad, edit a doc, or pin an asset — each result drops in here in step with the conversation.
       </div>
     );
   }
@@ -210,7 +232,7 @@ export function AIStudioCanvas({
         onWheel={onWheel}
       >
         <div
-          className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 origin-top-left transition-transform duration-75 auto-rows-min items-start"
+          className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-3 origin-top-left transition-transform duration-75 auto-rows-min items-start max-w-3xl mx-auto"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
         >
       {entries.map((e, i) => {

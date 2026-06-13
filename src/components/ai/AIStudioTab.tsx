@@ -758,7 +758,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           tools: Array.isArray(m.tools) ? m.tools : [],
           actorName: m.actor_member_id ? (members?.[m.actor_member_id]?.name || null) : null,
         })));
-        setCanvas((items || []) as CanvasItem[]);
+        // Canvas builds downward (oldest → newest) to align with chat flow.
+        // DB returns newest-first; reverse for chronological top-to-bottom render.
+        setCanvas(((items || []) as CanvasItem[]).slice().reverse());
       } else {
         setConversationId(null);
         setMessages([]);
@@ -995,7 +997,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               aspect_ratio: evt.aspect_ratio,
               quality: evt.quality,
             };
-            setCanvas(curr => [ph, ...curr]);
+            setCanvas(curr => [...curr, ph]);
           } else if (evt.type === "canvas_placeholder_failed") {
             setCanvas(curr =>
               curr.map(c => "__placeholder" in c && c.placeholder_id === evt.placeholder_id ? { ...c, failed: evt.error } : c),
@@ -1023,7 +1025,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               const filtered = evt.replace_placeholder_id
                 ? curr.filter(c => !("__placeholder" in c) || c.placeholder_id !== evt.replace_placeholder_id)
                 : curr;
-              return [evt.item as CanvasItem, ...filtered];
+              // Append newest at the bottom so canvas grows downward with the chat.
+              return [...filtered, evt.item as CanvasItem];
             });
           } else if (evt.type === "suggested_followups") {
             setFollowups(Array.isArray(evt.suggestions) ? evt.suggestions : []);
@@ -1214,7 +1217,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         });
         if (!res.ok) throw new Error(await res.text().catch(() => "Pin failed"));
         const { item } = await res.json();
-        if (item) setCanvas(curr => [item as CanvasItem, ...curr]);
+        if (item) setCanvas(curr => [...curr, item as CanvasItem]);
         toast.success("Pinned to canvas");
       } catch (err: any) {
         toast.error(err?.message || "Failed to pin to canvas");
