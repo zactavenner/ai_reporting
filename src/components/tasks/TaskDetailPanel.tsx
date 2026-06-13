@@ -50,6 +50,7 @@ import {
   EyeOff,
   Circle,
   Repeat,
+  Sparkles,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn, addBusinessDays } from '@/lib/utils';
