@@ -1817,6 +1817,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
+              <TabsTrigger value="compare"><Code2 className="h-4 w-4 mr-1" /> Compare</TabsTrigger>
             </TabsList>
             <Button
               variant="ghost"
@@ -1943,6 +1944,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </div>
               <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} activeVideoIds={activeVideoReferenceIds} onToggleVideo={setActiveVideoReferenceIds} />
             </div>
+          </TabsContent>
+
+          <TabsContent value="compare" className="flex-1 m-0 overflow-hidden">
+            <ModelCompareTab />
           </TabsContent>
         </Tabs>
       </Card>
