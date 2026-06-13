@@ -34,8 +34,10 @@ const SheetsHealthPage = lazyRetry(() => import("./pages/SheetsHealthPage"));
 const ClientProjectsPage = lazyRetry(() => import("./pages/ClientProjectsPage"));
 const ProjectPage = lazyRetry(() => import("./pages/ProjectPage"));
 const OfferDetailPage = lazyRetry(() => import("./pages/OfferDetailPage"));
-const FundAdStudioPage = lazyRetry(() => import("./pages/FundAdStudioPage"));
-const GhlWorkflowsPage = lazyRetry(() => import("./pages/GhlWorkflowsPage"));
+  const FundAdStudioPage = lazyRetry(() => import("./pages/FundAdStudioPage"));
+  const GhlWorkflowsPage = lazyRetry(() => import("./pages/GhlWorkflowsPage"));
+  const DailyReportPage = lazyRetry(() => import("./pages/DailyReportPage"));
+  const DailyReportThankYouPage = lazyRetry(() => import("./pages/DailyReportThankYouPage"));
 
 function PageLoader() {
   return (
