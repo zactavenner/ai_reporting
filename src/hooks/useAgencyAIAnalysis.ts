@@ -157,7 +157,7 @@ export function useAgencyAIAnalysis() {
   const sendFullContextMessage = useCallback(async (
     input: string,
     existingMessages: Message[],
-    fullModel: FullModel = 'gemini-2.5-pro',
+    fullModel: FullModel = 'openrouter/owl-alpha',
     clientFilter: string = 'all',
     onTokenUsage?: (used: number, system: number) => void,
   ) => {
