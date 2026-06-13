@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useAgencyMembers } from '@/hooks/useTasks';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -6,21 +7,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Sun, Moon, History, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
 import { SODView } from '@/components/daily/SODView';
 import { EODView } from '@/components/daily/EODView';
 import { ReportHistory } from '@/components/daily/ReportHistory';
 
-function getDefaultMode(): 'sod' | 'eod' {
+function getDefaultMode(pathname: string): 'sod' | 'eod' {
+  if (pathname === '/eod') return 'eod';
   const hour = new Date().getHours();
   return hour < 14 ? 'sod' : 'eod';
 }
 
 export default function DailyReportPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentMember } = useTeamMember();
   const { data: members = [] } = useAgencyMembers();
-  const [mode, setMode] = useState<'sod' | 'eod' | 'history'>(getDefaultMode());
+  const [mode, setMode] = useState<'sod' | 'eod' | 'history'>(getDefaultMode(location.pathname));
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const activeMemberId = selectedMemberId || currentMember?.id || null;
 
