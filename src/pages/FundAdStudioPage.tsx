@@ -11,6 +11,7 @@ import { Loader2, Sparkles, Video, Copy, RefreshCw, Wand2, Film, MessageSquare }
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { StudioAssistantChat } from "@/components/ai/StudioAssistantChat";
+import { AIPowerToolsPanel } from "@/components/ai/AIPowerToolsPanel";
 
 type Creative = {
   id: string;
@@ -209,9 +210,13 @@ export default function FundAdStudioPage() {
           <TabsList>
             <TabsTrigger value="studio"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Ad Studio</TabsTrigger>
             <TabsTrigger value="assistant"><MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Assistant</TabsTrigger>
+            <TabsTrigger value="power"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Power Tools</TabsTrigger>
           </TabsList>
           <TabsContent value="assistant">
             <StudioAssistantChat />
+          </TabsContent>
+          <TabsContent value="power">
+            <AIPowerToolsPanel />
           </TabsContent>
           <TabsContent value="studio">
         <div className="grid lg:grid-cols-[420px_1fr] gap-6">
