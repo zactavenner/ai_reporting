@@ -15,9 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { useAgencySettings, useUpdateAgencySettings } from '@/hooks/useAgencySettings';
 import { useSyncMeetings } from '@/hooks/useMeetings';
+import { useSlackChannels } from '@/hooks/useSlackChannels';
+import { supabase } from '@/integrations/supabase/client';
 import { TeamManagementTab } from './TeamManagementTab';
 import { SyncQueueStatus } from './SyncQueueStatus';
-import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet } from 'lucide-react';
+import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet, Sunrise, Send } from 'lucide-react';
 import { ApiReferenceTab } from './ApiReferenceTab';
 import { HermesIntegrationTab } from './HermesIntegrationTab';
 
@@ -82,6 +84,9 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const [twilioWhatsappFrom, setTwilioWhatsappFrom] = useState('');
   const [whatsappRecipientsRaw, setWhatsappRecipientsRaw] = useState('');
   const [testingWa, setTestingWa] = useState(false);
+  const [standupChannelId, setStandupChannelId] = useState('');
+  const [sendingStandup, setSendingStandup] = useState(false);
+  const { data: slackChannels = [], isLoading: loadingSlackChannels } = useSlackChannels();
   const syncMeetings = useSyncMeetings();
   
   const webhookUrl = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/meetgeek-webhook`;
@@ -108,6 +113,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
       setTwilioWhatsappFrom((settings as any).twilio_whatsapp_from || '');
       const recips = (settings as any).whatsapp_default_recipients;
       setWhatsappRecipientsRaw(Array.isArray(recips) ? recips.join('\n') : '');
+      setStandupChannelId((settings as any).standup_slack_channel_id || '');
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
       setSelectedGeminiModel((settings as any).selected_gemini_model || 'gemini-2.5-pro');
       setSelectedGrokModel((settings as any).selected_grok_model || 'grok-3');
@@ -141,6 +147,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         master_pinned_gids: pinnedTabs,
         twilio_whatsapp_from: twilioWhatsappFrom.trim() || null,
         whatsapp_default_recipients: whatsappRecipientsRaw.split('\n').map(s => s.trim()).filter(Boolean),
+        standup_slack_channel_id: standupChannelId.trim() || null,
         selected_openai_model: selectedOpenaiModel,
         selected_gemini_model: selectedGeminiModel,
         selected_grok_model: selectedGrokModel,
@@ -722,6 +729,78 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
                     Enter your API key and save settings first
                   </p>
                 )}
+              </div>
+            </div>
+
+            <div className="border-2 border-border p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="font-medium mb-1 flex items-center gap-2">
+                    <Sunrise className="h-4 w-4" />
+                    AI Standup Bot
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Every morning at 5am PST, posts a Slack summary per team member: what they finished yesterday, what's blocked, and what's due today.
+                  </p>
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="standupChannel">Slack channel</Label>
+                <Select value={standupChannelId || 'none'} onValueChange={(v) => setStandupChannelId(v === 'none' ? '' : v)}>
+                  <SelectTrigger id="standupChannel" className="mt-1">
+                    <SelectValue placeholder={loadingSlackChannels ? 'Loading channels…' : 'Select a channel'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Disabled —</SelectItem>
+                    {slackChannels.map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        #{c.name}{c.is_private ? ' (private)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">For private channels, invite the Lovable App bot first.</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={sendingStandup || !standupChannelId}
+                  onClick={async () => {
+                    setSendingStandup(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('ai-standup-bot', {
+                        body: { channel_id: standupChannelId },
+                      });
+                      if (error) throw error;
+                      if ((data as any)?.ok) toast.success('Standup posted to Slack');
+                      else toast.error(`Failed: ${(data as any)?.error || 'unknown'}`);
+                    } catch (e: any) {
+                      toast.error(e.message || 'Failed to post standup');
+                    } finally {
+                      setSendingStandup(false);
+                    }
+                  }}
+                >
+                  <Send className={`h-4 w-4 mr-2 ${sendingStandup ? 'animate-pulse' : ''}`} />
+                  {sendingStandup ? 'Posting…' : 'Send standup now'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    const { data, error } = await supabase.functions.invoke('ai-standup-bot', {
+                      body: { dry_run: true },
+                    });
+                    if (error) { toast.error(error.message); return; }
+                    console.log('Standup preview', data);
+                    toast.success('Preview logged to console');
+                  }}
+                >
+                  Preview
+                </Button>
               </div>
             </div>
           </TabsContent>

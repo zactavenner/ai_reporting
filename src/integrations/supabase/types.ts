@@ -598,6 +598,7 @@ export type Database = {
           selected_grok_model: string | null
           selected_openai_model: string | null
           slack_dm_user_id: string | null
+          standup_slack_channel_id: string | null
           twilio_whatsapp_from: string | null
           updated_at: string
           whatsapp_default_recipients: string[]
@@ -628,6 +629,7 @@ export type Database = {
           selected_grok_model?: string | null
           selected_openai_model?: string | null
           slack_dm_user_id?: string | null
+          standup_slack_channel_id?: string | null
           twilio_whatsapp_from?: string | null
           updated_at?: string
           whatsapp_default_recipients?: string[]
@@ -658,6 +660,7 @@ export type Database = {
           selected_grok_model?: string | null
           selected_openai_model?: string | null
           slack_dm_user_id?: string | null
+          standup_slack_channel_id?: string | null
           twilio_whatsapp_from?: string | null
           updated_at?: string
           whatsapp_default_recipients?: string[]
