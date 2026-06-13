@@ -1,66 +1,52 @@
-# AI Platform Overhaul
+## AI Studio Video Overhaul
 
-Standardize all AI on OpenRouter, upgrade existing AI surfaces, and ship 4 new AI capabilities.
+### 1. Auto Model Routing
+- **Default**: Seedance 2.0 **Fast** via OpenRouter (`bytedance/seedance-2.0-fast`), 15s chunks, 720p, 9:16
+- **Auto rule**: script has spoken dialogue/lipsync → Veo 3.1 (8s chunks). Otherwise → Seedance Fast 15s.
+- **Manual override dropdown** in UI: Auto / Seedance Fast 15s / Seedance Pro 15s / Veo 3.1 8s / Kling
+- **Splitter**: 30s script → 2× Seedance OR 4× Veo (ceil(total/chunk))
+- **Character consistency (Seedance multi-chunk)**: chunk 1 uses avatar/reference image as first frame; chunk N+1 uses extracted last frame of chunk N as first frame (server-side ffmpeg frame extract)
 
-## Phase 1 — OpenRouter standardization
+### 2. Canvas Grouping + Combine
+- New `ai_studio_canvas_groups` table: groups multiple `canvas_items` under one "scene set"
+- Generated chunks land grouped on canvas with a **Combine** button
+- New edge fn `ai-studio-combine-video`: ffmpeg concat → single MP4 → uploaded to `creatives/` → new canvas_item
 
-Audit every edge function and remove any remaining direct Gemini/Lovable AI Gateway/XAI calls in chat/reasoning paths. Keep image/video generation on Gemini/Veo (those aren't on OpenRouter).
+### 3. Native Captions Editor (kills Hyperframes iframe)
+- New `VideoCaptionsEditor.tsx` component on canvas
+- Auto-transcribe via Gemini (existing pattern): word-level timestamps
+- Live HTML overlay preview with drag handles to move caption block up/down (Y%)
+- Style controls: font, size, color, stroke, background
+- **Two-stage export**:
+  - Preview: client-side `<canvas>` + `MediaRecorder` (fast WebM)
+  - Final: new edge fn `ai-studio-burn-captions` → ffmpeg `drawtext`/ASS subtitle burn → MP4 to canvas
 
-**Shared helper:** `supabase/functions/_shared/openrouter.ts` with `callOpenRouter({ model, messages, tools?, stream?, json? })`, retry on 429/5xx, surfaces 402 cleanly. Default model `anthropic/claude-sonnet-4.5`, with `openai/gpt-5`, `google/gemini-2.5-pro` as alternates per task.
+### 4. Files
+**New:**
+- `supabase/functions/ai-studio-video-route/index.ts` — picks model, splits script, dispatches chunks
+- `supabase/functions/ai-studio-combine-video/index.ts` — ffmpeg concat
+- `supabase/functions/ai-studio-extract-last-frame/index.ts` — ffmpeg frame extract for Seedance chaining
+- `supabase/functions/ai-studio-transcribe/index.ts` — Gemini word-timestamps
+- `supabase/functions/ai-studio-burn-captions/index.ts` — ffmpeg burn-in
+- `src/components/ai-studio/VideoModelPicker.tsx`
+- `src/components/ai-studio/CanvasVideoGroup.tsx`
+- `src/components/ai-studio/VideoCaptionsEditor.tsx`
+- `src/lib/video-router.ts` — `pickModel(script, override)`, `splitScript(script, chunkSeconds)`
 
-**Functions to convert:** `studio-assistant`, `hermes-task-executor`, `hermes-orchestrator`, `ai-analysis`, `ai-agent-full-context`, `ai-create-tasks`, `ai-auto-assign-task`, `video-edit-chat`, `refine-asset`, `generate-asset` (text portions), `weekly-recap`, `ai-contextual-analysis`. Anywhere we see `LOVABLE_API_KEY` for chat → swap to `OPENROUTER_API_KEY`.
+**Modified:**
+- AI Studio chat edge fn — add `generate_video` tool that calls `ai-studio-video-route`
+- AI Studio canvas component — render groups + Combine button + open captions editor
 
-## Phase 2 — Studio Assistant chat upgrades
+**DB migration:** `ai_studio_canvas_groups` (id, conversation_id, user_id, client_id, kind, status, combined_url, created_at) + add nullable `group_id` to `ai_studio_canvas_items`. RLS on user_id. Grants to authenticated + service_role.
 
-- **Streaming responses** via SSE (today it waits then dumps); update `StudioAssistantChat.tsx` to read stream.
-- **File/image uploads** in chat (drop PDFs, screenshots → vision model).
-- **Voice input** using existing `VoiceRecordButton` → transcribe via Whisper on OpenRouter, then send.
-- **Richer tool set** (existing 4 + new): `create_task`, `schedule_meeting`, `get_client_briefing`, `query_funded_investors`, `pause_campaign`, `regenerate_ad_copy`.
-- **Per-user persistent threads** in `ai_studio_conversations` (already exists) with thread sidebar + URL routing (`/assistant/:threadId`).
-- **Markdown + code + tables** rendering polish.
+### 5. ffmpeg in edge functions
+Use `https://deno.land/x/[email protected]` (WASM ffmpeg) or shell out via `Deno.Command` with the bundled `ffmpeg-static` npm package. WASM path is portable on Supabase Edge runtime.
 
-## Phase 3 — Hermes orchestrator upgrades
+### Order of implementation
+1. DB migration (groups table)
+2. `video-router.ts` + `ai-studio-video-route` edge fn (Seedance Fast default, Veo for dialogue)
+3. Canvas grouping UI + Combine button + `ai-studio-combine-video`
+4. Last-frame chaining for Seedance multi-chunk
+5. Native captions editor + transcribe + burn-in
 
-- **Scheduled daily review** (pg_cron 7am PST) → triages every active client's open tasks, flags stalled (>3d no activity), reassigns abandoned ones, posts Slack summary tagging owners.
-- **Proactive suggestions:** after every webhook of significance (new funded investor, dropped CPL, missed meeting) Hermes emits a suggestion card to `agent_escalations` shown in dashboard.
-- **Memory:** load last 7d of `hermes_tasks` results so it doesn't repeat suggestions.
-
-## Phase 4 — Creative AI upgrades
-
-- **Auto-variations:** for any approved winning ad, generate 5 variations (hook swap, CTA swap, aspect swap) via a single "Spin Winners" button.
-- **Batch script generation:** select multiple offers → one click → N scripts each, parallelized.
-- **Smarter prompts:** centralize prompt templates in `supabase/functions/_shared/creative-prompts.ts`, version them, log which version produced which asset.
-- **Quality scorer:** post-generation pass that rates each asset 0-100 on hook/clarity/CTA/compliance and stores in `client_assets.meta`.
-
-## Phase 5 — Reporting AI insights
-
-- **Anomaly detector:** nightly job compares each client's last 7d vs prior 28d. Flags >30% CPL spike, >50% lead drop, funded rate decline. Writes to new `ai_insights` table.
-- **Per-client AI commentary** card on dashboard: "What changed this week and why" (uses metrics + recent calls + recent ad changes).
-- **Predictive CoC forecast:** lightweight 30-day projection (linear regression on weekly trends) shown next to current metrics.
-
-## Phase 6 — New features
-
-1. **Daily AI Briefing** — 7am PST cron, writes per-client briefing to `daily_ai_summaries` (table exists). Surfaces top wins, fires, suggested actions. Sends Slack DM to client lead + email digest to leadership. New `BriefingCard.tsx` on Dashboard.
-2. **AI Meeting Prep** — On any upcoming meeting in `agency_meetings`, button "Generate prep doc" → pulls last 30d metrics, recent calls, open tasks, last meeting recap → produces 1-page brief in modal + optional Slack post.
-3. **Predictive Alerts** — Extends Phase 5 anomaly detector with forward-looking signals (declining show rate × low spend velocity → risk score). Pushes to `alert_configs` channel + bell + Slack.
-4. **Voice-to-Action** — Global mic button in `AppHeader`. Speak: "Assign Sajid the HRT script review by Friday and text Zac the daily report" → transcribe → route to Studio Assistant tool runner → confirm before executing destructive actions.
-
-## Phase 7 — DB + cron
-
-New tables: `ai_insights`, `ai_briefings_log`, `ai_voice_commands`. Migrations include GRANTs + RLS. New pg_cron jobs: daily briefing (7am PST), anomaly detector (2am PST), Hermes daily review (7am PST).
-
-## Technical notes
-
-- All chat models: `OPENROUTER_API_KEY` already in secrets — no new keys.
-- Vision uploads: encode to base64 data URLs, pass as image_url parts to vision-capable OpenRouter models (`openai/gpt-5`, `anthropic/claude-sonnet-4.5`).
-- Voice: OpenRouter doesn't host Whisper; use existing Gemini multimodal for STT (audio→text) since we keep Gemini for non-chat anyway. If user insists OpenRouter-only including STT, fall back to browser SpeechRecognition API.
-- Streaming: SSE from edge fn via `ReadableStream`, client uses `EventSource`-style parser.
-- All new edge fns use `HPA1234$` internal auth pattern where called server-to-server.
-- Compliance memory enforced in prompt templates (no "guaranteed", targeted returns, disclaimers).
-- Visual style: glass-card forest green; new cards inherit existing tokens.
-
-## Scope and order
-
-Will ship in this order: Phase 1 (foundation) → Phase 6.1 Daily Briefing → Phase 5 Anomaly+Commentary → Phase 6.2 Meeting Prep → Phase 2 Studio chat upgrades → Phase 3 Hermes scheduled → Phase 4 Creative upgrades → Phase 6.3 Predictive → Phase 6.4 Voice-to-Action.
-
-Estimated: large multi-turn build. Each phase delivered as a coherent unit so you can review and ship incrementally.
+Ship in that order; each step is independently usable.
