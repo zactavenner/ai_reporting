@@ -580,6 +580,7 @@ export type Database = {
           anthropic_api_key: string | null
           api_usage_limit: number | null
           created_at: string
+          eod_send_to_hermes: boolean | null
           gemini_api_key: string | null
           hermes_api_key: string | null
           hermes_callback_url: string | null
@@ -602,6 +603,7 @@ export type Database = {
           twilio_whatsapp_from: string | null
           updated_at: string
           whatsapp_default_recipients: string[]
+          whatsapp_owner_number: string | null
           xai_api_key: string | null
         }
         Insert: {
@@ -611,6 +613,7 @@ export type Database = {
           anthropic_api_key?: string | null
           api_usage_limit?: number | null
           created_at?: string
+          eod_send_to_hermes?: boolean | null
           gemini_api_key?: string | null
           hermes_api_key?: string | null
           hermes_callback_url?: string | null
@@ -633,6 +636,7 @@ export type Database = {
           twilio_whatsapp_from?: string | null
           updated_at?: string
           whatsapp_default_recipients?: string[]
+          whatsapp_owner_number?: string | null
           xai_api_key?: string | null
         }
         Update: {
@@ -642,6 +646,7 @@ export type Database = {
           anthropic_api_key?: string | null
           api_usage_limit?: number | null
           created_at?: string
+          eod_send_to_hermes?: boolean | null
           gemini_api_key?: string | null
           hermes_api_key?: string | null
           hermes_callback_url?: string | null
@@ -664,6 +669,7 @@ export type Database = {
           twilio_whatsapp_from?: string | null
           updated_at?: string
           whatsapp_default_recipients?: string[]
+          whatsapp_owner_number?: string | null
           xai_api_key?: string | null
         }
         Relationships: []
