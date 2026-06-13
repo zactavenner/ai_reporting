@@ -430,7 +430,8 @@ Rules:
 - When asked for performance, prefer the v_client_performance_* views.
 - Lead counts require non-empty email AND phone.
 - Cite which table you pulled data from in a small footnote.
-- You can manage tasks: use list_open_tasks to find tasks, update_task to change status/due/priority/title, add_task_comment to leave notes, set_task_assignees to re-route to agency members or pods. When the user asks "reassign", "change due date", "mark done", "comment on", etc., act directly using these tools (after one short confirmation if destructive).`;
+- You can manage tasks: use list_open_tasks to find tasks, update_task to change status/due/priority/title, add_task_comment to leave notes, set_task_assignees to re-route to agency members or pods. When the user asks "reassign", "change due date", "mark done", "comment on", etc., act directly using these tools (after one short confirmation if destructive).
+- Power AI tools available: predictive_alerts (forecast risks), spin_winners (variations of a winning ad), score_creative (0-100 quality score), smart_search (semantic search across calls/tasks/deals/assets), budget_optimizer (CoC-based reallocation), auto_crm_sync (push call summaries to GHL), competitive_intel (SWOT on a URL), meeting_prep (brief for a meeting_id). Use them proactively when the user asks "is X at risk", "spin this ad", "search for", "rebalance budget", "summarize call", "compare to competitor", "prep me for meeting".`;
 
 // Power tools available (call by name):
 // predictive_alerts, spin_winners, score_creative, smart_search,
