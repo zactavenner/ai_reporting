@@ -176,7 +176,7 @@ export function AIStudioCanvas({
   if (entries.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8 text-center">
-        The AI builds here. Ask it to generate an ad creative or edit your doc/sheet — results appear as cards on this canvas. Click any image to edit it inline.
+        The canvas builds downward as you chat. Ask for an ad, edit a doc, or pin an asset — each result drops in here in step with the conversation.
       </div>
     );
   }
