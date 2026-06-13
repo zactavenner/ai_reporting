@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Loader2, Volume2, ImagePlus, Sparkles, Wand2, Smartphone } from 'lucide-react';
+import { Upload, Loader2, Volume2, ImagePlus, Sparkles, Wand2, Smartphone, Mic, Square } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -106,6 +106,81 @@ export function CreateAvatarDialog({ open, onOpenChange, clientId, isStock = fal
 
   const { generateAvatar, isGenerating, hasApiKey } = useAvatarGeneration();
   const queryClient = useQueryClient();
+
+  // Voice + AI enhance
+  const [isRecording, setIsRecording] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const enhancePrompt = useCallback(async (audioBase64?: string) => {
+    setIsEnhancing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enhance-avatar-prompt', {
+        body: { audioBase64, audioFormat: 'webm', text: customPrompt || undefined },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Enhance failed');
+      setCustomPrompt(data.enhancedPrompt);
+      toast.success('Prompt enhanced — review and generate');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Failed to enhance prompt');
+    } finally {
+      setIsEnhancing(false);
+    }
+  }, [customPrompt]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      streamRef.current = stream;
+      audioChunksRef.current = [];
+      const mr = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
+      });
+      mediaRecorderRef.current = mr;
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(1000);
+      setIsRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => setRecordingTime((p) => p + 1), 1000);
+    } catch (e) {
+      console.error(e);
+      toast.error('Microphone access denied');
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr || mr.state === 'inactive') return;
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    await new Promise<void>((resolve) => {
+      mr.onstop = async () => {
+        setIsRecording(false);
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        audioChunksRef.current = [];
+        if (blob.size < 1000) { toast.error('Recording too short'); resolve(); return; }
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = (reader.result as string).split(',')[1];
+          await enhancePrompt(base64);
+          resolve();
+        };
+        reader.readAsDataURL(blob);
+      };
+      mr.stop();
+    });
+  }, [enhancePrompt]);
+
+  const toggleRecording = () => { isRecording ? stopRecording() : startRecording(); };
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -520,14 +595,56 @@ export function CreateAvatarDialog({ open, onOpenChange, clientId, isStock = fal
 
                 {/* Custom Prompt */}
                 <div>
-                  <Label className="text-xs">Custom Details (optional)</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs">Custom Details (optional)</Label>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isRecording ? 'destructive' : 'ghost'}
+                        className="h-7 px-2 gap-1 text-xs"
+                        onClick={toggleRecording}
+                        disabled={isEnhancing}
+                        title={isRecording ? 'Stop & enhance' : 'Speak to describe avatar'}
+                      >
+                        {isRecording ? (
+                          <>
+                            <Square className="h-3 w-3 fill-current" />
+                            {`${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')}`}
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="h-3 w-3" />
+                            Speak
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 gap-1 text-xs"
+                        onClick={() => enhancePrompt()}
+                        disabled={isEnhancing || isRecording || !customPrompt.trim()}
+                        title="Polish text with AI"
+                      >
+                        {isEnhancing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                        Enhance
+                      </Button>
+                    </div>
+                  </div>
                   <Textarea
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Add specific details like hair color, accessories..."
-                    rows={2}
+                    placeholder="Add specific details — or tap Speak to describe verbally and let AI polish it"
+                    rows={3}
                     className="text-sm"
                   />
+                  {isEnhancing && (
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Enhancing with AI…
+                    </p>
+                  )}
                 </div>
 
                 {/* Info footer */}
