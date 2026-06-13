@@ -15,6 +15,7 @@ export interface AgencySettings {
   hermes_api_key?: string | null;
   hermes_callback_url?: string | null;
   hermes_enabled?: boolean;
+  standup_slack_channel_id?: string | null;
   created_at: string;
   updated_at: string;
 }
