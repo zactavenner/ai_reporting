@@ -158,6 +158,31 @@ function useClientMetaAdAccounts(clientId?: string) {
   const { data: agencySettings } = useAgencySettings();
    const { currentMember } = useTeamMember();
    const { reviewFile, isReviewing, reviewingFileId } = useTaskFileReview();
+    const [aiDrafting, setAiDrafting] = useState(false);
+    const queryClient = useQueryClient();
+    const handleAiDraft = useCallback(async () => {
+      if (!task?.id || aiDrafting) return;
+      setAiDrafting(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-task-draft', {
+          body: { task_id: task.id, force: true },
+        });
+        if (error) throw error;
+        if (data?.drafted) {
+          toast.success('AI Studio posted a draft');
+        } else if (data?.reason === 'ai_draft_exists') {
+          toast.message('AI draft already exists — refreshed');
+        } else if (data?.error) {
+          throw new Error(data.error);
+        }
+        queryClient.invalidateQueries({ queryKey: ['task-comments', task.id] });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`AI draft failed: ${msg}`);
+      } finally {
+        setAiDrafting(false);
+      }
+    }, [task?.id, aiDrafting, queryClient]);
    
    const [isEditingDescription, setIsEditingDescription] = useState(false);
    const [editedDescription, setEditedDescription] = useState('');
