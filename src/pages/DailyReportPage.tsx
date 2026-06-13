@@ -11,16 +11,18 @@ import { SODView } from '@/components/daily/SODView';
 import { EODView } from '@/components/daily/EODView';
 import { ReportHistory } from '@/components/daily/ReportHistory';
 
-function getDefaultMode(): 'sod' | 'eod' {
+function getDefaultMode(pathname: string): 'sod' | 'eod' {
+  if (pathname === '/eod') return 'eod';
   const hour = new Date().getHours();
   return hour < 14 ? 'sod' : 'eod';
 }
 
 export default function DailyReportPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentMember } = useTeamMember();
   const { data: members = [] } = useAgencyMembers();
-  const [mode, setMode] = useState<'sod' | 'eod' | 'history'>(getDefaultMode());
+  const [mode, setMode] = useState<'sod' | 'eod' | 'history'>(getDefaultMode(location.pathname));
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const activeMemberId = selectedMemberId || currentMember?.id || null;
 
