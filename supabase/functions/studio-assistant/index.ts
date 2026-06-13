@@ -432,6 +432,10 @@ Rules:
 - Cite which table you pulled data from in a small footnote.
 - You can manage tasks: use list_open_tasks to find tasks, update_task to change status/due/priority/title, add_task_comment to leave notes, set_task_assignees to re-route to agency members or pods. When the user asks "reassign", "change due date", "mark done", "comment on", etc., act directly using these tools (after one short confirmation if destructive).`;
 
+// Power tools available (call by name):
+// predictive_alerts, spin_winners, score_creative, smart_search,
+// budget_optimizer, auto_crm_sync, competitive_intel, meeting_prep.
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
