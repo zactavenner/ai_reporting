@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getGeminiApiKey } from '../_shared/get-gemini-key.ts';
+import { generateImage as openrouterGenerateImage } from '../_shared/openrouter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -60,16 +61,16 @@ serve(async (req) => {
 
     // Get API keys (gemini for nano-banana-pro path; LOVABLE_API_KEY for gpt-image-2 path)
     const geminiApiKey = selectedModel === 'nano-banana-pro' ? await getGeminiApiKey(requestApiKey) : null;
-    const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
+    const openrouterKey = Deno.env.get('OPENROUTER_API_KEY') || '';
     if (selectedModel === 'nano-banana-pro' && !geminiApiKey) {
       return new Response(
         JSON.stringify({ success: false, error: 'Gemini API key not configured. Add it in Agency Settings.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    if (selectedModel === 'openai' && !lovableKey) {
+    if (selectedModel === 'openai' && !openrouterKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'LOVABLE_API_KEY missing — cannot call GPT Image 2.' }),
+        JSON.stringify({ success: false, error: 'OPENROUTER_API_KEY missing — cannot call image generation.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
