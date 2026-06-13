@@ -241,7 +241,7 @@ async function generateStaticAd(opts: {
   clientId: string | null;
   brandContext: any;
   quality: "pro" | "fast";
-  model?: "nano-banana" | "openai" | null;
+  model?: "nano-banana" | "openai" | "riverflow" | null;
 }): Promise<ImageResult> {
   const aspect = opts.aspectRatio || "1:1";
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -268,13 +268,46 @@ async function generateStaticAd(opts: {
   // (Gemini 3.x flash image preview) because GPT Image 2's /v1/images/generations endpoint does not accept
   // reference images. This matches the user's request: "use NanoBanana Pro 2 or GPT-2, whichever one".
   const hasAttachmentRefs = !!(opts.attachmentImageUrls && opts.attachmentImageUrls.length);
-  const effectiveModel: "nano-banana" | "openai" = hasAttachmentRefs
+  const effectiveModel: "nano-banana" | "openai" | "riverflow" = opts.model === "riverflow"
+    ? "riverflow"
+    : hasAttachmentRefs
     ? "nano-banana"
     : (opts.model === "openai" || opts.model === "nano-banana"
         ? opts.model
         : (opts.quality === "pro" ? "openai" : "nano-banana"));
 
-  if (effectiveModel === "openai") {
+  if (effectiveModel === "riverflow") {
+    // Sourceful Riverflow v2 Pro via OpenRouter (free preview).
+    // Uses chat-completions image modality, supports up to 5 reference images.
+    modelUsed = "sourceful/riverflow-v2-pro";
+    const refUrls: string[] = [];
+    if (opts.attachmentImageUrls) refUrls.push(...opts.attachmentImageUrls.filter(Boolean));
+    if (opts.referenceImageUrl) refUrls.push(opts.referenceImageUrl);
+    const cappedRefs = refUrls.slice(0, 5);
+
+    const textPrompt = fullPrompt + (cappedRefs.length
+      ? `\n\nUSE THE ATTACHED REFERENCE IMAGE${cappedRefs.length > 1 ? "S" : ""} as the visual source of truth for product, identity, style, colors, and composition.`
+      : "");
+    const content: any[] = [{ type: "text", text: textPrompt }];
+    for (const u of cappedRefs) content.push({ type: "image_url", image_url: { url: u } });
+
+    if (!OPENROUTER_API_KEY) throw new Error("Riverflow requires OPENROUTER_API_KEY.");
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+      body: JSON.stringify({
+        model: modelUsed,
+        messages: [{ role: "user", content: content.length === 1 ? textPrompt : content }],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (!res.ok) throw new Error(`Riverflow image [${res.status}]: ${(await res.text()).slice(0, 400)}`);
+    const data = await res.json();
+    const imgUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imgUrl?.startsWith("data:")) throw new Error("Riverflow returned no inline image");
+    const m = imgUrl.match(/^data:(.+?);base64,(.+)$/)!;
+    mime = m[1]; base64Image = m[2];
+  } else if (effectiveModel === "openai") {
     // Prefer the agency-stored OpenAI API key (set in Agency Settings → API Keys).
     // Fall back to env, then OpenRouter passthrough.
     let agencyOpenAi: string | null = null;
