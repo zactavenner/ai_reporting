@@ -25,6 +25,7 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [remapping, setRemapping] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -87,6 +88,23 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
       toast.error('Failed to sync meetings');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleRemap = async () => {
+    setRemapping(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
+        body: { action: 'remap_clients', only_unmatched: true },
+      });
+      if (error) throw error;
+      toast.success(`Re-mapped ${data?.updated || 0} of ${data?.scanned || 0} meetings`);
+      queryClient.invalidateQueries({ queryKey: ['meetings'] });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to re-map meetings');
+    } finally {
+      setRemapping(false);
     }
   };
 
@@ -200,6 +218,10 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
               Sync Now
+            </Button>
+            <Button variant="ghost" onClick={handleRemap} disabled={remapping}>
+              {remapping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Re-match unmatched
             </Button>
           </div>
         </div>
