@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useAgencyMembers } from '@/hooks/useTasks';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -6,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Sun, Moon, History, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
 import { SODView } from '@/components/daily/SODView';
 import { EODView } from '@/components/daily/EODView';
 import { ReportHistory } from '@/components/daily/ReportHistory';
