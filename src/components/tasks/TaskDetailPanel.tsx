@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Sheet,
   SheetContent,
@@ -50,6 +50,7 @@ import {
   EyeOff,
   Circle,
   Repeat,
+  Sparkles,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn, addBusinessDays } from '@/lib/utils';
@@ -157,6 +158,31 @@ function useClientMetaAdAccounts(clientId?: string) {
   const { data: agencySettings } = useAgencySettings();
    const { currentMember } = useTeamMember();
    const { reviewFile, isReviewing, reviewingFileId } = useTaskFileReview();
+    const [aiDrafting, setAiDrafting] = useState(false);
+    const queryClient = useQueryClient();
+    const handleAiDraft = useCallback(async () => {
+      if (!task?.id || aiDrafting) return;
+      setAiDrafting(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-task-draft', {
+          body: { task_id: task.id, force: true },
+        });
+        if (error) throw error;
+        if (data?.drafted) {
+          toast.success('AI Studio posted a draft');
+        } else if (data?.reason === 'ai_draft_exists') {
+          toast.message('AI draft already exists — refreshed');
+        } else if (data?.error) {
+          throw new Error(data.error);
+        }
+        queryClient.invalidateQueries({ queryKey: ['task-comments', task.id] });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`AI draft failed: ${msg}`);
+      } finally {
+        setAiDrafting(false);
+      }
+    }, [task?.id, aiDrafting, queryClient]);
    
    const [isEditingDescription, setIsEditingDescription] = useState(false);
    const [editedDescription, setEditedDescription] = useState('');
@@ -1414,6 +1440,16 @@ const getHistoryIcon = (action: string) => {
                    }}
                  />
                 <div className="flex gap-1 flex-shrink-0 pb-0.5">
+                   <Button
+                     variant="outline"
+                     size="icon"
+                     className="h-9 w-9"
+                     onClick={handleAiDraft}
+                     disabled={aiDrafting}
+                     title="Draft this task with AI Studio"
+                   >
+                     {aiDrafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary" />}
+                   </Button>
                   <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => discussionFileInputRef.current?.click()} disabled={uploadFile.isPending}>
                     {uploadFile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
                   </Button>

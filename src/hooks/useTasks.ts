@@ -273,6 +273,21 @@ export function useCreateTask() {
         })();
       }
       postTaskFeed('task_created', data);
+
+      // Fire-and-forget: ask AI Studio to draft a rough deliverable as a
+      // comment so the assignee starts at the 80% line.  The edge function
+      // skips silently if a draft already exists.  Subtasks are skipped to
+      // avoid noise.
+      if (!data.parent_task_id) {
+        (async () => {
+          try {
+            await supabase.functions.invoke('ai-task-draft', { body: { task_id: data.id } });
+            queryClient.invalidateQueries({ queryKey: ['task-comments', data.id] });
+          } catch (err) {
+            console.warn('ai-task-draft failed (non-blocking):', err);
+          }
+        })();
+      }
     },
     onError: (error: Error) => {
       toast.error('Failed to create task: ' + error.message);
