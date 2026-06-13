@@ -1,77 +1,66 @@
+# AI Platform Overhaul
 
-## Goal
+Standardize all AI on OpenRouter, upgrade existing AI surfaces, and ship 4 new AI capabilities.
 
-Add a one-click **Captions** button to every video card on the AI Studio canvas. Clicking it opens the existing Hyperframes editor, auto-transcribes the video, and pre-populates it with a **viral-pop** caption style (word-by-word, big bold, yellow active-word highlight). The user can tweak text/timing live in the editor, then export — at which point captions are burned into a new MP4 saved as a child `client_video`.
+## Phase 1 — OpenRouter standardization
 
-## User flow
+Audit every edge function and remove any remaining direct Gemini/Lovable AI Gateway/XAI calls in chat/reasoning paths. Keep image/video generation on Gemini/Veo (those aren't on OpenRouter).
 
-1. Video finishes rendering in AI Studio → card shows `Download | Edit | Captions`.
-2. Click **Captions** → Hyperframes opens with the video loaded.
-3. Editor auto-runs transcription (existing `transcribe-video` edge function) and converts each word into a Hyperframes `subtitle` layer using the viral-pop preset.
-4. User can drag, retime, edit text, change color/size like any other layer.
-5. Click **Export** → server-side render bakes captions into MP4, saves to `creatives` bucket as a new `client_videos` row (parent = original), appears back in the canvas.
+**Shared helper:** `supabase/functions/_shared/openrouter.ts` with `callOpenRouter({ model, messages, tools?, stream?, json? })`, retry on 429/5xx, surfaces 402 cleanly. Default model `anthropic/claude-sonnet-4.5`, with `openai/gpt-5`, `google/gemini-2.5-pro` as alternates per task.
 
-## What to build
+**Functions to convert:** `studio-assistant`, `hermes-task-executor`, `hermes-orchestrator`, `ai-analysis`, `ai-agent-full-context`, `ai-create-tasks`, `ai-auto-assign-task`, `video-edit-chat`, `refine-asset`, `generate-asset` (text portions), `weekly-recap`, `ai-contextual-analysis`. Anywhere we see `LOVABLE_API_KEY` for chat → swap to `OPENROUTER_API_KEY`.
 
-### 1. Caption style preset (frontend)
-`src/components/ai/hyperframes/captionPresets.ts` (new)
-- `buildViralPopLayers(words, composition)` → returns Hyperframes layers:
-  - One `subtitle` layer per word with `start`/`end` from transcript
-  - `fontSize` ~9% of height, `fontWeight: 800`, white text, no bg
-  - `color: '#FFEB3B'` (yellow) for active word; achieved by stacking one full-line "context" layer (low opacity) + the active word layer popping in with a `spring` scale 0.6→1.1→1 over ~120ms
-  - Positioned at `y: 0.78`, `anchor: 'center'`
-  - Entrance animation: opacity 0→1 + scale 0.6→1 (`spring`, ~0.2s)
-  - Group all caption layers with `id` prefix `cap_` so they're easy to identify, clear, or restyle
+## Phase 2 — Studio Assistant chat upgrades
 
-### 2. Hyperframes editor entry point
-`src/components/ai/hyperframes/HyperframesEditor.tsx` (edit)
-- Accept new prop `autoCaptions?: boolean` and `captionStyle?: 'viral-pop'`
-- On mount, if `autoCaptions` and no `cap_*` layers exist:
-  - Call `transcribe-video` edge function with the video URL
-  - Convert returned word-level timings via `buildViralPopLayers`
-  - Merge into composition.layers; toast "Captions generated"
-- Add a toolbar control "Captions ▾" with: Regenerate · Style: Viral pop / Karaoke (stub) / None · Clear
+- **Streaming responses** via SSE (today it waits then dumps); update `StudioAssistantChat.tsx` to read stream.
+- **File/image uploads** in chat (drop PDFs, screenshots → vision model).
+- **Voice input** using existing `VoiceRecordButton` → transcribe via Whisper on OpenRouter, then send.
+- **Richer tool set** (existing 4 + new): `create_task`, `schedule_meeting`, `get_client_briefing`, `query_funded_investors`, `pause_campaign`, `regenerate_ad_copy`.
+- **Per-user persistent threads** in `ai_studio_conversations` (already exists) with thread sidebar + URL routing (`/assistant/:threadId`).
+- **Markdown + code + tables** rendering polish.
 
-### 3. Video card button
-`src/components/ai/AIStudioCanvas.tsx` (edit)
-- Add `<Button>Captions</Button>` next to Download/Edit (uses `Captions` icon from lucide-react)
-- Calls a new `onAddCaptions(videoUrl, fallbackVideo)` prop
-- Plumb through `AIStudioTab.tsx` to open `VideoEditDialog` with `autoCaptions: true`
+## Phase 3 — Hermes orchestrator upgrades
 
-### 4. VideoEditDialog
-`src/components/ai/VideoEditDialog.tsx` (edit)
-- Accept and forward `autoCaptions` to `HyperframesEditor`
+- **Scheduled daily review** (pg_cron 7am PST) → triages every active client's open tasks, flags stalled (>3d no activity), reassigns abandoned ones, posts Slack summary tagging owners.
+- **Proactive suggestions:** after every webhook of significance (new funded investor, dropped CPL, missed meeting) Hermes emits a suggestion card to `agent_escalations` shown in dashboard.
+- **Memory:** load last 7d of `hermes_tasks` results so it doesn't repeat suggestions.
 
-### 5. Server-side burn-in on export
-`supabase/functions/hyperframes-render/index.ts` (new — or extend existing render fn if present)
-- Already-rendered composition path: most Hyperframes layers render in-browser. For burn-in export we need ffmpeg-style overlays.
-- Implementation: render frames via existing browser export pipeline (if Hyperframes already has client-side MediaRecorder export, captions are already baked in — confirm during build). If not, add server fn that:
-  1. Downloads source MP4
-  2. Builds an ASS subtitle file from `cap_*` layers (viral-pop styled via `\fad`, `\t` scale tags)
-  3. Runs ffmpeg `-vf "ass=captions.ass"` (requires ffmpeg in edge — fallback to Remotion-style render if not available)
-  4. Uploads result to `creatives`, inserts child `client_videos` row
-- Decision during build: inspect existing Hyperframes export path first; only add server fn if needed.
+## Phase 4 — Creative AI upgrades
 
-### 6. Transcription reuse
-- Use existing `supabase/functions/transcribe-video/index.ts` (referenced by `useVideoCaptions`) — returns `{ captions: [{ text, startTime, endTime, words: [{word, startTime, endTime}] }] }`. No backend changes needed.
+- **Auto-variations:** for any approved winning ad, generate 5 variations (hook swap, CTA swap, aspect swap) via a single "Spin Winners" button.
+- **Batch script generation:** select multiple offers → one click → N scripts each, parallelized.
+- **Smarter prompts:** centralize prompt templates in `supabase/functions/_shared/creative-prompts.ts`, version them, log which version produced which asset.
+- **Quality scorer:** post-generation pass that rates each asset 0-100 on hook/clarity/CTA/compliance and stores in `client_assets.meta`.
 
-## Anti-mix-clients safeguard
-- Caption layers are scoped to the composition belonging to a single `client_video.id`; they are saved on that video's `composition` JSON only. No cross-client cache key. (Mirrors the safeguard added earlier for video AI Studio prompts.)
+## Phase 5 — Reporting AI insights
 
-## Out of scope
-- Karaoke / other caption styles (button stubs only, viral-pop only working preset)
-- Auto-generating captions on every new render (per user choice: button-triggered only)
-- Multi-language translation of captions
+- **Anomaly detector:** nightly job compares each client's last 7d vs prior 28d. Flags >30% CPL spike, >50% lead drop, funded rate decline. Writes to new `ai_insights` table.
+- **Per-client AI commentary** card on dashboard: "What changed this week and why" (uses metrics + recent calls + recent ad changes).
+- **Predictive CoC forecast:** lightweight 30-day projection (linear regression on weekly trends) shown next to current metrics.
 
-## Files touched
+## Phase 6 — New features
 
-| File | Change |
-|---|---|
-| `src/components/ai/hyperframes/captionPresets.ts` | new — viral-pop layer builder |
-| `src/components/ai/hyperframes/HyperframesEditor.tsx` | auto-transcribe + caption toolbar |
-| `src/components/ai/AIStudioCanvas.tsx` | add Captions button on video cards |
-| `src/components/ai/AIStudioTab.tsx` | wire `onAddCaptions` → dialog with `autoCaptions` |
-| `src/components/ai/VideoEditDialog.tsx` | forward `autoCaptions` prop |
-| `supabase/functions/hyperframes-render/index.ts` | new (only if existing export doesn't bake overlays) |
+1. **Daily AI Briefing** — 7am PST cron, writes per-client briefing to `daily_ai_summaries` (table exists). Surfaces top wins, fires, suggested actions. Sends Slack DM to client lead + email digest to leadership. New `BriefingCard.tsx` on Dashboard.
+2. **AI Meeting Prep** — On any upcoming meeting in `agency_meetings`, button "Generate prep doc" → pulls last 30d metrics, recent calls, open tasks, last meeting recap → produces 1-page brief in modal + optional Slack post.
+3. **Predictive Alerts** — Extends Phase 5 anomaly detector with forward-looking signals (declining show rate × low spend velocity → risk score). Pushes to `alert_configs` channel + bell + Slack.
+4. **Voice-to-Action** — Global mic button in `AppHeader`. Speak: "Assign Sajid the HRT script review by Friday and text Zac the daily report" → transcribe → route to Studio Assistant tool runner → confirm before executing destructive actions.
 
-Send the example video + style reference whenever ready — I'll mirror the exact font/spacing/highlight color in `buildViralPopLayers` before shipping.
+## Phase 7 — DB + cron
+
+New tables: `ai_insights`, `ai_briefings_log`, `ai_voice_commands`. Migrations include GRANTs + RLS. New pg_cron jobs: daily briefing (7am PST), anomaly detector (2am PST), Hermes daily review (7am PST).
+
+## Technical notes
+
+- All chat models: `OPENROUTER_API_KEY` already in secrets — no new keys.
+- Vision uploads: encode to base64 data URLs, pass as image_url parts to vision-capable OpenRouter models (`openai/gpt-5`, `anthropic/claude-sonnet-4.5`).
+- Voice: OpenRouter doesn't host Whisper; use existing Gemini multimodal for STT (audio→text) since we keep Gemini for non-chat anyway. If user insists OpenRouter-only including STT, fall back to browser SpeechRecognition API.
+- Streaming: SSE from edge fn via `ReadableStream`, client uses `EventSource`-style parser.
+- All new edge fns use `HPA1234$` internal auth pattern where called server-to-server.
+- Compliance memory enforced in prompt templates (no "guaranteed", targeted returns, disclaimers).
+- Visual style: glass-card forest green; new cards inherit existing tokens.
+
+## Scope and order
+
+Will ship in this order: Phase 1 (foundation) → Phase 6.1 Daily Briefing → Phase 5 Anomaly+Commentary → Phase 6.2 Meeting Prep → Phase 2 Studio chat upgrades → Phase 3 Hermes scheduled → Phase 4 Creative upgrades → Phase 6.3 Predictive → Phase 6.4 Voice-to-Action.
+
+Estimated: large multi-turn build. Each phase delivered as a coherent unit so you can review and ship incrementally.
