@@ -213,6 +213,31 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Re-run client-by-title matching across stored meetings (default: only unmatched).
+    if (body.action === 'remap_clients') {
+      const onlyUnmatched = body.only_unmatched !== false;
+      let query = supabase.from('agency_meetings').select('id, title, client_id');
+      if (onlyUnmatched) query = query.is('client_id', null);
+      const { data: meetings, error } = await query;
+      if (error) throw error;
+      let updated = 0;
+      let scanned = 0;
+      const changes: any[] = [];
+      for (const m of meetings || []) {
+        scanned++;
+        const matched = await matchClientByTitle(supabase, m.title || '');
+        if (matched && matched !== m.client_id) {
+          await supabase.from('agency_meetings').update({ client_id: matched }).eq('id', m.id);
+          updated++;
+          changes.push({ title: m.title, from: m.client_id, to: matched });
+        }
+      }
+      return new Response(JSON.stringify({ success: true, scanned, updated, changes: changes.slice(0, 50) }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Handle MeetGeek webhook (meeting analyzed)
     if (body.meeting_id) {
       const result = await processMeeting(supabase, meetgeekApiKey, baseUrl, body.meeting_id, clientId);
