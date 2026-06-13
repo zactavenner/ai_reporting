@@ -595,14 +595,56 @@ export function CreateAvatarDialog({ open, onOpenChange, clientId, isStock = fal
 
                 {/* Custom Prompt */}
                 <div>
-                  <Label className="text-xs">Custom Details (optional)</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs">Custom Details (optional)</Label>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isRecording ? 'destructive' : 'ghost'}
+                        className="h-7 px-2 gap-1 text-xs"
+                        onClick={toggleRecording}
+                        disabled={isEnhancing}
+                        title={isRecording ? 'Stop & enhance' : 'Speak to describe avatar'}
+                      >
+                        {isRecording ? (
+                          <>
+                            <Square className="h-3 w-3 fill-current" />
+                            {`${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')}`}
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="h-3 w-3" />
+                            Speak
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 gap-1 text-xs"
+                        onClick={() => enhancePrompt()}
+                        disabled={isEnhancing || isRecording || !customPrompt.trim()}
+                        title="Polish text with AI"
+                      >
+                        {isEnhancing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                        Enhance
+                      </Button>
+                    </div>
+                  </div>
                   <Textarea
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Add specific details like hair color, accessories..."
-                    rows={2}
+                    placeholder="Add specific details — or tap Speak to describe verbally and let AI polish it"
+                    rows={3}
                     className="text-sm"
                   />
+                  {isEnhancing && (
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Enhancing with AI…
+                    </p>
+                  )}
                 </div>
 
                 {/* Info footer */}
