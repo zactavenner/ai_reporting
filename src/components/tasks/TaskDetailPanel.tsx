@@ -1440,6 +1440,16 @@ const getHistoryIcon = (action: string) => {
                    }}
                  />
                 <div className="flex gap-1 flex-shrink-0 pb-0.5">
+                   <Button
+                     variant="outline"
+                     size="icon"
+                     className="h-9 w-9"
+                     onClick={handleAiDraft}
+                     disabled={aiDrafting}
+                     title="Draft this task with AI Studio"
+                   >
+                     {aiDrafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary" />}
+                   </Button>
                   <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => discussionFileInputRef.current?.click()} disabled={uploadFile.isPending}>
                     {uploadFile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
                   </Button>
