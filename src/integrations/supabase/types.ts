@@ -1005,6 +1005,129 @@ export type Database = {
           },
         ]
       }
+      ai_insights: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          body: string | null
+          category: string
+          client_id: string | null
+          created_at: string
+          id: string
+          insight_date: string
+          metrics: Json | null
+          severity: string
+          title: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          body?: string | null
+          category: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          insight_date?: string
+          metrics?: Json | null
+          severity?: string
+          title: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          body?: string | null
+          category?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          insight_date?: string
+          metrics?: Json | null
+          severity?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ai_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      ai_meeting_briefs: {
+        Row: {
+          brief_markdown: string
+          client_id: string | null
+          context_used: Json | null
+          created_at: string
+          generated_by: string | null
+          id: string
+          meeting_id: string | null
+        }
+        Insert: {
+          brief_markdown: string
+          client_id?: string | null
+          context_used?: Json | null
+          created_at?: string
+          generated_by?: string | null
+          id?: string
+          meeting_id?: string | null
+        }
+        Update: {
+          brief_markdown?: string
+          client_id?: string | null
+          context_used?: Json | null
+          created_at?: string
+          generated_by?: string | null
+          id?: string
+          meeting_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_meeting_briefs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ai_meeting_briefs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_meeting_briefs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ai_meeting_briefs_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "agency_meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_studio_canvas_items: {
         Row: {
           actor_member_id: string | null
