@@ -473,6 +473,10 @@ const Index = () => {
                   <BestPerformingPanel clientIds={clients?.map((c: any) => c.id)} />
                 </SectionErrorBoundary>
 
+                <SectionErrorBoundary sectionName="AI Insights">
+                  <AIInsightsCard />
+                </SectionErrorBoundary>
+
                 <SectionErrorBoundary sectionName="Integration Health">
                   <section>
                     <h2 className="text-lg font-bold mb-2">Integration Health</h2>
