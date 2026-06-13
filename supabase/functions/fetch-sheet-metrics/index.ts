@@ -448,21 +448,27 @@ Deno.serve(async (req) => {
           for (let i = 0; i < titlesToFetch.length; i += CHUNK) {
             const batch = titlesToFetch.slice(i, i + CHUNK);
             const results = await Promise.all(batch.map(async (title) => {
-              const vr = await fetchWithRetry(
-                `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${title}`,
-                { headers }
-              );
-              const vt = await vr.text();
-              if (!vr.ok) {
-                if (title !== sheetTitle) {
+              try {
+                const vr = await fetchWithRetry(
+                  `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${title}`,
+                  { headers }
+                );
+                const vt = await vr.text();
+                if (!vr.ok) {
                   console.warn(`tab "${title}" fetch failed [${vr.status}]: ${vt.slice(0, 200)}`);
                   tabsSkipped.push({ title, reason: `fetch ${vr.status}` });
                   return { title, rows: [] as any[][] };
                 }
-                throw new Error(`Sheet values fetch failed [${vr.status}]: ${vt}`);
+                const vj = JSON.parse(vt);
+                return { title, rows: (vj?.values || []) as any[][] };
+              } catch (err) {
+                // Never let a single tab fetch reject Promise.all — that
+                // surfaces as an UncaughtException and kills the worker,
+                // causing the next request to return BOOT_ERROR.
+                console.warn(`tab "${title}" fetch threw:`, err instanceof Error ? err.message : String(err));
+                tabsSkipped.push({ title, reason: 'fetch threw' });
+                return { title, rows: [] as any[][] };
               }
-              const vj = JSON.parse(vt);
-              return { title, rows: (vj?.values || []) as any[][] };
             }));
             fetched.push(...results);
           }
