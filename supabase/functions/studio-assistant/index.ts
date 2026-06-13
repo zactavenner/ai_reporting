@@ -152,6 +152,55 @@ const tools = [
 ];
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
+
+// Wrapper tools that proxy to other AI edge functions
+const POWER_TOOLS = [
+  { name: 'predictive_alerts', desc: 'Forecast next 7 days of CPL, lead volume, show rate per client. Returns risks.', params: { client_id: { type: 'string' } } },
+  { name: 'spin_winners', desc: 'Generate N compliant variations (hook/headline/body/CTA swaps) of a winning ad. Saves drafts.', params: { ad_id: { type: 'string' }, count: { type: 'number', default: 5 }, client_id: { type: 'string' } }, required: ['ad_id'] },
+  { name: 'score_creative', desc: 'Score a creative 0-100 on hook, clarity, CTA, compliance. Pass ad_id OR creative_id OR raw {hook,headline,primary_text,cta,image_url}.', params: { ad_id: { type: 'string' }, creative_id: { type: 'string' }, hook: { type: 'string' }, headline: { type: 'string' }, primary_text: { type: 'string' }, cta: { type: 'string' }, image_url: { type: 'string' } } },
+  { name: 'smart_search', desc: 'Semantic search across calls (transcripts), tasks, deals, client_assets. Returns AI-synthesized answer + cited rows.', params: { query: { type: 'string' }, client_id: { type: 'string' } }, required: ['query'] },
+  { name: 'budget_optimizer', desc: 'Analyze 14d CoC per campaign and propose daily budget reallocation for a client.', params: { client_id: { type: 'string' } }, required: ['client_id'] },
+  { name: 'auto_crm_sync', desc: 'Summarize recent call transcripts into CRM notes and push to GHL. Optional client_id and days window.', params: { client_id: { type: 'string' }, days: { type: 'number', default: 1 } } },
+  { name: 'competitive_intel', desc: 'Scrape a competitor landing page or ad URL and return SWOT + counter-angles.', params: { url: { type: 'string' }, client_id: { type: 'string' } }, required: ['url'] },
+  { name: 'meeting_prep', desc: 'Generate a meeting prep brief for an upcoming meeting (talking points, context, action items).', params: { meeting_id: { type: 'string' } }, required: ['meeting_id'] },
+];
+
+for (const t of POWER_TOOLS) {
+  const required = (t as any).required || [];
+  tools.push({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.desc,
+      parameters: { type: 'object', properties: t.params as any, required },
+    },
+  } as any);
+}
+
+const POWER_TOOL_FN: Record<string, string> = {
+  predictive_alerts: 'predictive-alerts',
+  spin_winners: 'creative-spin-winners',
+  score_creative: 'score-creative',
+  smart_search: 'smart-search',
+  budget_optimizer: 'budget-optimizer',
+  auto_crm_sync: 'auto-crm-sync',
+  competitive_intel: 'competitive-intel',
+  meeting_prep: 'meeting-prep',
+};
+
+async function runPowerTool(name: string, args: any) {
+  const fn = POWER_TOOL_FN[name];
+  if (!fn) return { error: `unknown power tool ${name}` };
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
+    body: JSON.stringify(args || {}),
+  });
+  const txt = await res.text();
+  if (!res.ok) return { error: `${fn} ${res.status}: ${txt.slice(0, 500)}` };
+  try { return JSON.parse(txt); } catch { return { raw: txt }; }
+}
+
 const HPA_CLIENT_ID = '18acd701-92ff-4bbc-86aa-1f7cd9a9c973';
 
 function normalizePhone(p: string): string {
@@ -289,6 +338,7 @@ async function execTool(name: string, args: any) {
     if (name === 'update_task') return await runUpdateTask(args);
     if (name === 'add_task_comment') return await runAddTaskComment(args);
     if (name === 'set_task_assignees') return await runSetTaskAssignees(args);
+    if (POWER_TOOL_FN[name]) return await runPowerTool(name, args);
     return { error: `unknown tool ${name}` };
   } catch (e) {
     return { error: (e as Error).message };
