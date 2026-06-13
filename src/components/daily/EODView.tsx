@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -7,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, AlertOctagon, Clock, CalendarDays, Sparkles, Send, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertOctagon, Clock, CalendarDays, Sparkles, Send, Loader2, ChevronDown, ChevronRight, MessageSquare, Video, Film, Users } from 'lucide-react';
 import { useMemberTasks, useTodayReport, useSubmitDailyReport } from '@/hooks/useDailyReports';
 import { useUpdateTask, useAgencyMembers } from '@/hooks/useTasks';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,6 +16,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 type Bucket = 'overdue' | 'today' | 'upcoming';
+type TouchKey = 'message' | 'meeting' | 'loom';
 
 function bucketize(tasks: any[]): Record<Bucket, any[]> {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -41,11 +43,90 @@ export function EODView({ memberId }: { memberId: string }) {
   const member = members.find((m: any) => m.id === memberId);
   const buckets = useMemo(() => bucketize(tasks as any[]), [tasks]);
 
+  // Pull related data for the tasks shown: client names, subtasks, assignees
+  const taskIds = useMemo(() => (tasks as any[]).map((t) => t.id), [tasks]);
+  const clientIds = useMemo(() => {
+    const s = new Set<string>();
+    (tasks as any[]).forEach((t) => t.client_id && s.add(t.client_id));
+    return Array.from(s);
+  }, [tasks]);
+
+  const { data: taskClients = [] } = useQuery({
+    queryKey: ['eod-task-clients', clientIds.join(',')],
+    queryFn: async () => {
+      if (clientIds.length === 0) return [] as any[];
+      const { data } = await supabase.from('clients').select('id, name').in('id', clientIds);
+      return data || [];
+    },
+    enabled: clientIds.length > 0,
+  });
+  const clientNameById = useMemo(() => Object.fromEntries(taskClients.map((c: any) => [c.id, c.name])), [taskClients]);
+
+  const { data: subtasks = [] } = useQuery({
+    queryKey: ['eod-subtasks', taskIds.join(',')],
+    queryFn: async () => {
+      if (taskIds.length === 0) return [] as any[];
+      const { data } = await (supabase as any).from('tasks').select('id, title, status, parent_task_id').in('parent_task_id', taskIds);
+      return data || [];
+    },
+    enabled: taskIds.length > 0,
+  });
+  const subtasksByParent = useMemo(() => {
+    const m: Record<string, any[]> = {};
+    (subtasks as any[]).forEach((s) => { (m[s.parent_task_id] ||= []).push(s); });
+    return m;
+  }, [subtasks]);
+
+  const { data: assigneeRows = [] } = useQuery({
+    queryKey: ['eod-task-assignees', taskIds.join(',')],
+    queryFn: async () => {
+      if (taskIds.length === 0) return [] as any[];
+      const { data } = await (supabase as any).from('task_assignees').select('task_id, member:agency_members(id, name)').in('task_id', taskIds);
+      return data || [];
+    },
+    enabled: taskIds.length > 0,
+  });
+  const assigneesByTask = useMemo(() => {
+    const m: Record<string, { id: string; name: string }[]> = {};
+    (assigneeRows as any[]).forEach((r) => {
+      if (!r.member) return;
+      (m[r.task_id] ||= []).push(r.member);
+    });
+    return m;
+  }, [assigneeRows]);
+
+  // AM detection + their clients
+  const { data: amClients = [] } = useQuery({
+    queryKey: ['eod-am-clients', member?.name],
+    queryFn: async () => {
+      if (!member?.name) return [] as any[];
+      const { data: assigns } = await (supabase as any)
+        .from('client_assignments')
+        .select('client_id')
+        .eq('account_manager', member.name);
+      const ids = (assigns || []).map((a: any) => a.client_id);
+      if (ids.length === 0) return [];
+      const { data: cls } = await supabase.from('clients').select('id, name').in('id', ids).order('name');
+      return cls || [];
+    },
+    enabled: !!member?.name,
+  });
+  const isAM = amClients.length > 0;
+
+  const [touchpointsByClient, setTouchpointsByClient] = useState<Record<string, Record<TouchKey, boolean>>>({});
+  const [openSubtasks, setOpenSubtasks] = useState<Record<string, boolean>>({});
+
+  const toggleTouch = (clientId: string, key: TouchKey) => {
+    setTouchpointsByClient((prev) => ({
+      ...prev,
+      [clientId]: { ...(prev[clientId] || { message: false, meeting: false, loom: false }), [key]: !prev[clientId]?.[key] },
+    }));
+  };
+
   const [wins, setWins] = useState(existing?.wins_shared || '');
   const [touchpoints, setTouchpoints] = useState<number | ''>(existing?.touchpoint_count ?? '');
-  const [touchNotes, setTouchNotes] = useState(existing?.touchpoint_notes || '');
+  const [teamFeedback, setTeamFeedback] = useState(existing?.touchpoint_notes || '');
   const [selfRating, setSelfRating] = useState<number>(existing?.self_assessment ?? 7);
-  const [shareWithJoe, setShareWithJoe] = useState('');
   const [blockerOpen, setBlockerOpen] = useState<{ taskId: string; title: string } | null>(null);
   const [blockerReason, setBlockerReason] = useState('');
 
@@ -75,6 +156,11 @@ export function EODView({ memberId }: { memberId: string }) {
       ...buckets.overdue.map((t) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: 'in_progress' as const })),
       ...buckets.today.map((t) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: t.status === 'blocked' ? 'blocked' as const : 'in_progress' as const })),
     ];
+    const clientTouchpoints = amClients.map((c: any) => {
+      const t = touchpointsByClient[c.id] || { message: false, meeting: false, loom: false };
+      const channels = Object.entries(t).filter(([, v]) => v).map(([k]) => k);
+      return { client_id: c.id, client_name: c.name, channels: channels.length ? channels : ['none'] };
+    });
     await submit.mutateAsync({
       report: {
         member_id: memberId,
@@ -83,7 +169,7 @@ export function EODView({ memberId }: { memberId: string }) {
         top_priorities: [],
         tasks_snapshot: tasksSnapshot,
         touchpoint_count: typeof touchpoints === 'number' ? touchpoints : null,
-        touchpoint_notes: touchNotes || null,
+        touchpoint_notes: teamFeedback || null,
         client_experience_done: null,
         wins_shared: wins || null,
         self_assessment: selfRating,
@@ -91,7 +177,7 @@ export function EODView({ memberId }: { memberId: string }) {
       member_name: member?.name || 'Team Member',
     });
 
-    // Fire off to Hermes → WhatsApp Joe
+    // Fire off to Hermes → SMS Zac (GHL agency)
     try {
       const { data, error } = await supabase.functions.invoke('eod-to-hermes', {
         body: {
@@ -100,15 +186,15 @@ export function EODView({ memberId }: { memberId: string }) {
           wins,
           self_rating: selfRating,
           touchpoints,
-          touchpoint_notes: touchNotes,
-          message_for_joe: shareWithJoe,
+          team_feedback: teamFeedback,
+          client_touchpoints: clientTouchpoints,
           completed_today: completedToday.map((t: any) => ({ title: t.title, client_id: t.client_id })),
           blocked: (tasks as any[]).filter((t) => t.status === 'blocked').map((t: any) => ({ title: t.title, client_id: t.client_id, description: t.description })),
           overdue: buckets.overdue.map((t: any) => ({ title: t.title, client_id: t.client_id })),
         },
       });
       if (error) throw error;
-      if (data?.delivered) toast.success('Sent to Joe on WhatsApp via Hermes');
+      if (data?.delivered) toast.success('Sent to Zac via SMS (Hermes/GHL)');
       else toast.message('Report saved. Hermes delivery skipped (not configured).');
     } catch (e: any) {
       toast.message('Report saved. Hermes delivery failed: ' + e.message);
@@ -117,29 +203,57 @@ export function EODView({ memberId }: { memberId: string }) {
 
   if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>;
 
-  const TaskRow = ({ t, tone }: { t: any; tone: Bucket }) => (
-    <div className="flex items-center justify-between gap-2 py-2 border-b last:border-b-0">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          {t.status === 'blocked' && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">BLOCKED</Badge>}
-          <span className="text-sm font-medium truncate">{t.title}</span>
+  const TaskRow = ({ t }: { t: any; tone: Bucket }) => {
+    const subs = subtasksByParent[t.id] || [];
+    const assignees = assigneesByTask[t.id] || [];
+    const clientName = t.client_id ? clientNameById[t.client_id] : null;
+    const isOpen = !!openSubtasks[t.id];
+    return (
+      <div className="py-2 border-b last:border-b-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              {clientName && <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-medium">{clientName}</Badge>}
+              {t.status === 'blocked' && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">BLOCKED</Badge>}
+              <span className="text-sm font-medium truncate">{t.title}</span>
+            </div>
+            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+              {t.due_date && <span>Due {new Date(t.due_date).toLocaleDateString()}</span>}
+              {assignees.length > 0 && (
+                <span className="flex items-center gap-1"><Users className="h-3 w-3" />{assignees.map((a) => a.name).join(', ')}</span>
+              )}
+              {subs.length > 0 && (
+                <button onClick={() => setOpenSubtasks((p) => ({ ...p, [t.id]: !isOpen }))} className="flex items-center gap-0.5 hover:text-foreground">
+                  {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  {subs.length} subtask{subs.length === 1 ? '' : 's'}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-1 shrink-0">
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleMarkDone(t)}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
+            </Button>
+            {t.status !== 'blocked' && (
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={() => setBlockerOpen({ taskId: t.id, title: t.title })}>
+                <AlertOctagon className="h-3.5 w-3.5 mr-1" /> Stuck
+              </Button>
+            )}
+          </div>
         </div>
-        {t.due_date && (
-          <p className="text-xs text-muted-foreground mt-0.5">Due {new Date(t.due_date).toLocaleDateString()}</p>
+        {isOpen && subs.length > 0 && (
+          <ul className="mt-2 ml-2 pl-3 border-l space-y-1">
+            {subs.map((s) => (
+              <li key={s.id} className="text-xs flex items-center gap-1.5">
+                <span className={cn("h-1.5 w-1.5 rounded-full", s.status === 'completed' ? 'bg-emerald-500' : s.status === 'blocked' ? 'bg-destructive' : 'bg-muted-foreground/40')} />
+                <span className={cn(s.status === 'completed' && 'line-through text-muted-foreground')}>{s.title}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
-      <div className="flex gap-1 shrink-0">
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleMarkDone(t)}>
-          <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
-        </Button>
-        {t.status !== 'blocked' && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={() => setBlockerOpen({ taskId: t.id, title: t.title })}>
-            <AlertOctagon className="h-3.5 w-3.5 mr-1" /> Stuck
-          </Button>
-        )}
-      </div>
-    </div>
-  );
+    );
+  };
 
   const Section = ({ title, icon: Icon, items, tone, empty }: any) => (
     <Card>
@@ -173,6 +287,51 @@ export function EODView({ memberId }: { memberId: string }) {
         </CardContent>
       </Card>
 
+      {/* AM client touchpoints */}
+      {isAM && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" /> Client touchpoints today
+              <Badge variant="secondary" className="ml-auto">{amClients.length} clients</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="divide-y">
+              {amClients.map((c: any) => {
+                const t = touchpointsByClient[c.id] || { message: false, meeting: false, loom: false };
+                const any = t.message || t.meeting || t.loom;
+                const Btn = ({ k, icon: Icon, label }: { k: TouchKey; icon: any; label: string }) => (
+                  <button
+                    type="button"
+                    onClick={() => toggleTouch(c.id, k)}
+                    className={cn(
+                      "inline-flex items-center gap-1 h-7 px-2 rounded-md border text-xs transition",
+                      t[k] ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted text-muted-foreground'
+                    )}
+                  >
+                    <Icon className="h-3 w-3" /> {label}
+                  </button>
+                );
+                return (
+                  <div key={c.id} className="flex items-center justify-between gap-2 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{c.name}</p>
+                      {!any && <p className="text-[11px] text-muted-foreground">None</p>}
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <Btn k="message" icon={MessageSquare} label="Message" />
+                      <Btn k="meeting" icon={Video} label="Meeting" />
+                      <Btn k="loom" icon={Film} label="Loom" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Task triage */}
       <Section title="Overdue" icon={AlertOctagon} items={buckets.overdue} tone="overdue" empty="Nothing overdue. 🎉" />
       <Section title="Due Today" icon={Clock} items={buckets.today} tone="today" empty="Nothing due today." />
@@ -197,21 +356,15 @@ export function EODView({ memberId }: { memberId: string }) {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="notes">Touchpoint notes (optional)</Label>
-            <Textarea id="notes" value={touchNotes} onChange={(e) => setTouchNotes(e.target.value)} placeholder="Quick context for any client conversation" rows={2} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="joe" className="flex items-center gap-1.5">
-              <Send className="h-3.5 w-3.5 text-primary" /> Message for Joe (WhatsApp)
-            </Label>
-            <Textarea id="joe" value={shareWithJoe} onChange={(e) => setShareWithJoe(e.target.value)} placeholder="Anything Joe should know? Sent directly via Hermes." rows={3} />
+            <Label htmlFor="notes">Any feedback for the team? (optional)</Label>
+            <Textarea id="notes" value={teamFeedback} onChange={(e) => setTeamFeedback(e.target.value)} placeholder="Process wins, friction, things to improve…" rows={3} />
           </div>
         </CardContent>
       </Card>
 
       <Button onClick={handleSubmit} disabled={submit.isPending} className="w-full h-12 text-base font-semibold">
         {submit.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-        Submit EOD & Ping Joe
+        Submit EOD & Text Zac
       </Button>
 
       {/* Blocker dialog */}

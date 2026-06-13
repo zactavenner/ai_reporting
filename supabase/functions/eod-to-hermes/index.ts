@@ -21,8 +21,8 @@ Deno.serve(async (req) => {
       wins,
       self_rating,
       touchpoints,
-      touchpoint_notes,
-      message_for_joe,
+      team_feedback,
+      client_touchpoints = [],
       completed_today = [],
       blocked = [],
       overdue = [],
@@ -39,14 +39,20 @@ Deno.serve(async (req) => {
 
     // Compose human-friendly WhatsApp text
     const lines: string[] = [];
-    lines.push(`📋 *EOD — ${member_name}* (${new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })})`);
+    lines.push(`📋 EOD — ${member_name} (${new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })})`);
     lines.push(`Day rating: ${self_rating ?? "—"}/10 · Touchpoints: ${touchpoints ?? 0}`);
-    if (wins) lines.push(`\n✨ *Win:* ${wins}`);
-    if (completed_today.length) lines.push(`\n✅ *Done (${completed_today.length})*\n` + completed_today.slice(0, 6).map((t: any) => `• ${t.title}`).join("\n"));
-    if (blocked.length) lines.push(`\n🚫 *Stuck (${blocked.length})*\n` + blocked.slice(0, 6).map((t: any) => `• ${t.title}${t.description ? ` — ${String(t.description).slice(0, 140)}` : ""}`).join("\n"));
-    if (overdue.length) lines.push(`\n⏰ *Overdue (${overdue.length})*\n` + overdue.slice(0, 6).map((t: any) => `• ${t.title}`).join("\n"));
-    if (touchpoint_notes) lines.push(`\n🗣 ${touchpoint_notes}`);
-    if (message_for_joe) lines.push(`\n💬 *For Joe:* ${message_for_joe}`);
+    if (wins) lines.push(`\n✨ Win: ${wins}`);
+    if (client_touchpoints.length) {
+      lines.push(`\n👥 Clients:`);
+      for (const c of client_touchpoints.slice(0, 12)) {
+        const ch = (c.channels || []).join(", ");
+        lines.push(`• ${c.client_name}: ${ch || "none"}`);
+      }
+    }
+    if (completed_today.length) lines.push(`\n✅ Done (${completed_today.length})\n` + completed_today.slice(0, 6).map((t: any) => `• ${t.title}`).join("\n"));
+    if (blocked.length) lines.push(`\n🚫 Stuck (${blocked.length})\n` + blocked.slice(0, 6).map((t: any) => `• ${t.title}${t.description ? ` — ${String(t.description).slice(0, 140)}` : ""}`).join("\n"));
+    if (overdue.length) lines.push(`\n⏰ Overdue (${overdue.length})\n` + overdue.slice(0, 6).map((t: any) => `• ${t.title}`).join("\n"));
+    if (team_feedback) lines.push(`\n🗣 Team feedback: ${team_feedback}`);
     const text = lines.join("\n");
 
     let delivered = false;
@@ -59,10 +65,10 @@ Deno.serve(async (req) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             event: "eod_report",
-            channel: "whatsapp",
+            channel: "sms",
             to: phone,
             text,
-            payload: { member_name, wins, self_rating, touchpoints, touchpoint_notes, message_for_joe, completed_today, blocked, overdue },
+            payload: { member_name, wins, self_rating, touchpoints, team_feedback, client_touchpoints, completed_today, blocked, overdue },
           }),
         });
         delivered = r.ok;
