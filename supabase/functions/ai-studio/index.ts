@@ -277,7 +277,7 @@ async function generateStaticAd(opts: {
         : (opts.quality === "pro" ? "openai" : "nano-banana"));
 
   if (effectiveModel === "riverflow") {
-    // Sourceful Riverflow v2 Pro via OpenRouter (free preview).
+    // Sourceful Riverflow v2 Pro via OpenRouter (paid: $0.15/img 1-2K, $0.33/img 4K).
     // Uses chat-completions image modality, supports up to 5 reference images.
     modelUsed = "sourceful/riverflow-v2-pro";
     const refUrls: string[] = [];
@@ -1170,7 +1170,7 @@ const tools = [
           prompt: { type: "string", description: "What the ad should communicate, headline ideas, key visuals." },
           aspect_ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"], description: "1:1 feed, 4:5 IG feed tall, 9:16 stories/reels, 16:9 landscape." },
           quality: { type: "string", enum: ["pro", "fast"], description: "pro = highest quality (default), fast = quick iteration" },
-          model: { type: "string", enum: ["nano-banana", "openai", "riverflow"], description: "Which image model to use. 'openai' = GPT Image 2, 'nano-banana' = Nano Banana 2, 'riverflow' = Sourceful Riverflow v2 Pro (free, supports up to 5 reference images). If omitted, derived from quality." },
+          model: { type: "string", enum: ["nano-banana", "openai", "riverflow"], description: "Which image model to use. 'openai' = GPT Image 2, 'nano-banana' = Nano Banana 2, 'riverflow' = Sourceful Riverflow v2 Pro (supports up to 5 reference images, paid). If omitted, derived from quality." },
           reference_image_url: { type: "string", description: "Optional URL of a reference ad to clone the layout/style from." },
         },
         required: ["prompt"],
@@ -1190,7 +1190,7 @@ const tools = [
           models: {
             type: "array",
             items: { type: "string", enum: ["nano-banana", "openai", "riverflow"] },
-            description: "Which models to compare. Options: 'nano-banana', 'openai', 'riverflow' (free).",
+            description: "Which models to compare. Options: 'nano-banana', 'openai', 'riverflow'.",
           },
           reference_image_url: { type: "string", description: "Optional reference to clone layout from." },
         },

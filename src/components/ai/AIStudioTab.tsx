@@ -59,7 +59,7 @@ const CHAT_MODELS = [
 const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: string; hint: string }[] = [
   { value: "nano-banana", label: "Nano Banana 2", hint: "Fast iteration" },
   { value: "openai", label: "GPT Image 2", hint: "Highest quality finals" },
-  { value: "riverflow", label: "Riverflow v2 Pro (free)", hint: "Sourceful Riverflow — up to 5 reference images, free preview" },
+  { value: "riverflow", label: "Riverflow v2 Pro", hint: "Sourceful Riverflow v2 Pro — up to 5 reference images ($0.15/img 1-2K, $0.33/img 4K)" },
 ];
 
 // Video models (all routed through OpenRouter /v1/videos)
