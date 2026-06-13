@@ -227,6 +227,11 @@ export function AIStudioCanvas({
           className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 origin-top-left transition-transform duration-75 auto-rows-min items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
         >
+      {entries.length === 0 && (
+        <div className="col-span-full flex items-center justify-center text-sm text-muted-foreground p-12 text-center">
+          The canvas builds downward as you chat. Ask for an ad, edit a doc, or pin an asset — each result drops in here in step with the conversation.
+        </div>
+      )}
       {entries.map((e, i) => {
         if ("__placeholder" in e) {
           const pr = e.progress;
