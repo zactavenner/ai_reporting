@@ -30,6 +30,8 @@ import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useClientOffers } from "@/hooks/useClientOffers";
+import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
 
 interface Props {
   clientId: string;
