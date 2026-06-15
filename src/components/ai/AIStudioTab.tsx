@@ -58,19 +58,19 @@ const CHAT_MODELS = [
 
 // Image models the AI can use when generating ad creatives.
 // Multi-select: pick 1 = AI uses that model. Pick 2+ = AI runs a side-by-side comparison.
-const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: string; hint: string }[] = [
-  { value: "nano-banana", label: "Nano Banana 2", hint: "Fast iteration" },
-  { value: "openai", label: "GPT Image 2", hint: "Highest quality finals" },
-  { value: "riverflow", label: "Riverflow v2 Pro", hint: "Sourceful Riverflow v2 Pro — up to 5 reference images ($0.15/img 1-2K, $0.33/img 4K)" },
+const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: string; hint: string; price: string }[] = [
+  { value: "nano-banana", label: "Nano Banana 2", hint: "Fast iteration", price: "~$0.04 / image" },
+  { value: "openai", label: "GPT Image 2", hint: "Highest quality finals", price: "~$0.19 / image (high quality)" },
+  { value: "riverflow", label: "Riverflow v2 Pro", hint: "Up to 5 reference images", price: "$0.15 / image (1–2K) · $0.33 / image (4K)" },
 ];
 
 // Video models (all routed through OpenRouter /v1/videos)
-const VIDEO_MODELS: { value: string; label: string; hint: string }[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast", hint: "Cheapest, quick drafts" },
-  { value: "bytedance/seedance-2.0", label: "Seedance Pro", hint: "Best Seedance quality" },
-  { value: "moonshotai/kling-v2.1", label: "Kling 2.1", hint: "Realistic motion" },
-  { value: "moonshotai/kling-v2.1-pro", label: "Kling 2.1 Pro", hint: "Highest quality Kling" },
-  { value: "google/veo-3.1-fast", label: "Veo 3.1 Fast", hint: "Google Veo via OpenRouter — fast" },
+const VIDEO_MODELS: { value: string; label: string; hint: string; price: string }[] = [
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast", hint: "Cheapest, quick drafts", price: "~$0.15 per 5s clip" },
+  { value: "bytedance/seedance-2.0", label: "Seedance Pro", hint: "Best Seedance quality", price: "~$0.50 per 5s clip" },
+  { value: "moonshotai/kling-v3.0", label: "Kling 3.0", hint: "Newest fast Kling — realistic motion", price: "~$0.28 per 5s clip" },
+  { value: "moonshotai/kling-v3.0-pro", label: "Kling 3.0 Pro", hint: "Newest highest-quality Kling", price: "~$0.70 per 5s clip" },
+  { value: "google/veo-3.1-fast", label: "Veo 3.1 Fast", hint: "Google Veo via OpenRouter — fast", price: "~$2.00 per 5s clip" },
 ];
 
 // Conversion-focused ad format presets. Each preset is injected into the
@@ -1852,7 +1852,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             return next.length === 0 ? [m.value] : next;
                           });
                         }}
-                        title={`${m.label} — ${m.hint}${active && imageModels.length > 1 ? " (in comparison)" : ""}`}
+                        title={`${m.label} — ${m.hint}\nEst. ${m.price}${active && imageModels.length > 1 ? "\n(in comparison)" : ""}`}
                         className={`h-7 px-2 rounded-lg text-[10px] border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
                         {m.label}
@@ -1879,7 +1879,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             return next.length === 0 ? [m.value] : next;
                           });
                         }}
-                        title={`${m.label} — ${m.hint}${active && videoModels.length > 1 ? " (in comparison)" : ""}`}
+                        title={`${m.label} — ${m.hint}\nEst. ${m.price}${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
                         className={`h-7 px-2 rounded-lg text-[10px] border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
                         {m.label}
