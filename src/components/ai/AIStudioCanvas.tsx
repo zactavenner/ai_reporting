@@ -316,7 +316,7 @@ export function AIStudioCanvas({
                 <ImageIcon className="h-4 w-4 text-primary" />
                 <Badge variant="outline" className="text-[10px]">{p.aspect_ratio || "1:1"}</Badge>
                 <Badge variant="secondary" className="text-[10px] truncate max-w-[180px]" title={p.model}>
-                  {p.model?.includes("pro") ? "Gemini 3 Pro" : p.model?.includes("flash") ? "Nano Banana 2" : (p.model || "image")}
+                  {modelLabel(p.model)}
                 </Badge>
                 <span className="text-xs text-muted-foreground ml-auto">{new Date(e.created_at).toLocaleTimeString()}</span>
               </div>
@@ -452,6 +452,7 @@ export function AIStudioCanvas({
                 <ImageIcon className="h-4 w-4 text-primary" />
                 <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>
                 <Badge variant="secondary" className="text-[10px]">{p.aspect_ratio}</Badge>
+                {p.model && <Badge variant="secondary" className="text-[10px]" title={p.model}>{modelLabel(p.model)}</Badge>}
                 <span className="text-xs text-muted-foreground ml-auto">keyframe</span>
               </div>
               {p.image_url && (
