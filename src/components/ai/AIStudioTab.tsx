@@ -205,7 +205,9 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
           )}
         </div>
       )}
-      {m.content ? (
+      {(m.compare && m.compare.length > 0) || m.compareLoading ? (
+        <CompareGrid primary={m.content} isStreaming={isStreaming} compare={m.compare || []} loading={!!m.compareLoading} />
+      ) : m.content ? (
         <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:text-foreground prose-strong:font-semibold prose-h1:text-base prose-h2:text-sm prose-h3:text-sm prose-blockquote:border-l-primary/50 prose-code:bg-muted prose-code:px-1 prose-code:rounded">
           <ReactMarkdown>{m.content}</ReactMarkdown>
           {isStreaming && (
