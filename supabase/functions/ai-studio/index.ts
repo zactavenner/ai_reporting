@@ -929,7 +929,6 @@ async function generateSeedanceVideo(opts: {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
     "kwaivgi/kling-v3.0-std",
-    "kwaivgi/kling-v3.0-pro",
   ];
   const model = (opts.model && ALLOWED.includes(opts.model))
     ? opts.model
@@ -1306,7 +1305,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality, 720p max). Default false." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "google/veo-3.1-fast"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
@@ -1396,11 +1395,10 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
   "bytedance/seedance-2.0":      { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, up to 1080p)" },
   "kwaivgi/kling-v3.0-std":       { maxDuration: 15, label: "Kling 3.0 (≤15s per clip)" },
-  "kwaivgi/kling-v3.0-pro":       { maxDuration: 15, label: "Kling 3.0 Pro (≤15s per clip)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
@@ -1479,6 +1477,20 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
       "- If an avatar is selected (see AVATAR CONTEXT below), pass the SAME avatar image_url on every clip so the same face carries across all segments.",
     ].join("\n");
   })(),
+  // Sticky video frame slots (first frame, last frame, ingredient/product reference)
+  (() => {
+    const f = ctx.videoFrames || {};
+    const ff = f.firstFrameUrl, lf = f.lastFrameUrl, ig = f.ingredientUrl;
+    if (!ff && !lf && !ig) return null;
+    const lines = [
+      "VIDEO FRAME SLOTS (the user attached sticky frame references for video generation — ALWAYS apply to every generate_seedance_video call):",
+      ff ? `- FIRST FRAME image_url: ${ff} → pass as generate_seedance_video.image_url so the clip STARTS from this exact frame.` : "",
+      lf ? `- LAST FRAME image_url:  ${lf} → pass as generate_seedance_video.last_frame_url so the clip ENDS on this exact frame.` : "",
+      ig ? `- INGREDIENT / PRODUCT reference: ${ig} → describe this product faithfully in the video prompt and (if no first frame above) ALSO pass it as image_url so the product is preserved across frames.` : "",
+      "- When multi-clip splitting is required, reuse first/last frames sensibly: the FIRST frame seeds Clip 1, the LAST frame finishes the FINAL clip; intermediate clips chain (use the prior clip's last frame conceptually in the prompt).",
+    ].filter(Boolean);
+    return lines.join("\n");
+  })(),
   // Avatar selection (chat-side ingredient for video ads)
   ctx.avatar
     ? [
@@ -1555,13 +1567,14 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, videoModels, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, videoModels, videoFrames, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
+    videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
     avatarId?: string | null;
     adFormat?: string | null;
     hookFramework?: string | null;
@@ -1588,7 +1601,6 @@ Deno.serve(async (req) => {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
     "kwaivgi/kling-v3.0-std",
-    "kwaivgi/kling-v3.0-pro",
     "google/veo-3.1-fast",
   ];
   const selectedVideoModels: string[] = Array.isArray(videoModels)
@@ -2107,7 +2119,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: selectedVideoModels, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: selectedVideoModels, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];

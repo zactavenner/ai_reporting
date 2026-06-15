@@ -72,7 +72,6 @@ const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: nu
   { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts",                 maxSeconds: 15, pricePerSecond: 0.0538 },
   { value: "bytedance/seedance-2.0",      label: "Seedance Pro",   hint: "Best Seedance quality",                  maxSeconds: 15, pricePerSecond: 0.06726 },
   { value: "kwaivgi/kling-v3.0-std",       label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion",   maxSeconds: 15, pricePerSecond: 0.126 },
-  { value: "kwaivgi/kling-v3.0-pro",       label: "Kling 3.0 Pro",  hint: "Newest highest-quality Kling",           maxSeconds: 15, pricePerSecond: 0.168 },
   { value: "google/veo-3.1-fast",          label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast",       maxSeconds: 8,  pricePerSecond: 0.10 },
 ];
 function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): string {
@@ -804,6 +803,38 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => { try { localStorage.setItem("ai-studio:agent-mode", String(agentMode)); } catch {} }, [agentMode]);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Sticky frame slots for video generation (first frame / last frame / ingredient/product image)
+  type FrameSlot = "firstFrame" | "lastFrame" | "ingredient";
+  const [videoFrames, setVideoFrames] = useState<{ firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string }>(() => {
+    try { return JSON.parse(localStorage.getItem(`ai-studio:video-frames:${clientId}`) || "{}"); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`ai-studio:video-frames:${clientId}`, JSON.stringify(videoFrames)); } catch {}
+  }, [videoFrames, clientId]);
+  const frameInputRef = useRef<HTMLInputElement>(null);
+  const frameSlotRef = useRef<FrameSlot | null>(null);
+  const [uploadingSlot, setUploadingSlot] = useState<FrameSlot | null>(null);
+  const uploadFrame = useCallback(async (slot: FrameSlot, file: File) => {
+    if (file.size > 20 * 1024 * 1024) { toast.error("Frame exceeds 20MB"); return; }
+    setUploadingSlot(slot);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `ai-studio/${clientId}/frames/${slot}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+      const { error } = await supabase.storage.from("gpt-files").upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data: pub } = supabase.storage.from("gpt-files").getPublicUrl(path);
+      setVideoFrames(curr => ({
+        ...curr,
+        ...(slot === "firstFrame" ? { firstFrameUrl: pub.publicUrl } : {}),
+        ...(slot === "lastFrame" ? { lastFrameUrl: pub.publicUrl } : {}),
+        ...(slot === "ingredient" ? { ingredientUrl: pub.publicUrl } : {}),
+      }));
+    } catch (e: any) {
+      toast.error(`Upload failed: ${e?.message || e}`);
+    } finally {
+      setUploadingSlot(null);
+    }
+  }, [clientId]);
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recStreamRef = useRef<MediaStream | null>(null);
@@ -1105,6 +1136,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         imageModels,
         videoModel,
         videoModels,
+        videoFrames,
         avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
         hookFramework: hookFramework === "auto" ? undefined : hookFramework,
@@ -1974,6 +2006,62 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
                   )}
                 </div>
+                {videoModels.length > 0 && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Frames:</span>
+                    <input
+                      ref={frameInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        const slot = frameSlotRef.current;
+                        if (f && slot) uploadFrame(slot, f);
+                        e.target.value = "";
+                      }}
+                    />
+                    {([
+                      { slot: "firstFrame" as const, label: "First", url: videoFrames.firstFrameUrl, tip: "First frame — Seedance starts from this image" },
+                      { slot: "lastFrame" as const,  label: "Last",  url: videoFrames.lastFrameUrl,  tip: "Last frame — Seedance ends on this image" },
+                      { slot: "ingredient" as const, label: "Ingredient", url: videoFrames.ingredientUrl, tip: "Product / ingredient reference — model preserves this in the clip" },
+                    ]).map(({ slot, label, url, tip }) => (
+                      <button
+                        key={slot}
+                        type="button"
+                        title={tip}
+                        onClick={() => { frameSlotRef.current = slot; frameInputRef.current?.click(); }}
+                        className={`h-7 px-1.5 rounded-lg text-[10px] border transition inline-flex items-center gap-1 ${url ? "bg-primary/15 border-primary text-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                      >
+                        {url ? (
+                          <img src={url} alt="" className="h-5 w-5 rounded object-cover" />
+                        ) : uploadingSlot === slot ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Paperclip className="h-3 w-3" />
+                        )}
+                        <span>{label}</span>
+                        {url && (
+                          <span
+                            role="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setVideoFrames(curr => ({
+                                ...curr,
+                                ...(slot === "firstFrame" ? { firstFrameUrl: undefined } : {}),
+                                ...(slot === "lastFrame" ? { lastFrameUrl: undefined } : {}),
+                                ...(slot === "ingredient" ? { ingredientUrl: undefined } : {}),
+                              }));
+                            }}
+                            className="ml-0.5 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
                   <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
