@@ -65,13 +65,21 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 ];
 
 // Video models (all routed through OpenRouter /v1/videos)
-const VIDEO_MODELS: { value: string; label: string; hint: string; price: string }[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast", hint: "Cheapest, quick drafts", price: "~$0.15 per 5s clip" },
-  { value: "bytedance/seedance-2.0", label: "Seedance Pro", hint: "Best Seedance quality", price: "~$0.50 per 5s clip" },
-  { value: "moonshotai/kling-v3.0", label: "Kling 3.0", hint: "Newest fast Kling — realistic motion", price: "~$0.28 per 5s clip" },
-  { value: "moonshotai/kling-v3.0-pro", label: "Kling 3.0 Pro", hint: "Newest highest-quality Kling", price: "~$0.70 per 5s clip" },
-  { value: "google/veo-3.1-fast", label: "Veo 3.1 Fast", hint: "Google Veo via OpenRouter — fast", price: "~$2.00 per 5s clip" },
+// `maxSeconds` = longest single clip supported. `pricePerSecond` = USD/sec.
+// UI shows the total cost of generating a clip at maxSeconds so buyers
+// can compare apples-to-apples without doing math in their head.
+const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts",                 maxSeconds: 15, pricePerSecond: 0.03 },
+  { value: "bytedance/seedance-2.0",      label: "Seedance Pro",   hint: "Best Seedance quality",                  maxSeconds: 15, pricePerSecond: 0.10 },
+  { value: "moonshotai/kling-v3.0",       label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion",   maxSeconds: 10, pricePerSecond: 0.056 },
+  { value: "moonshotai/kling-v3.0-pro",   label: "Kling 3.0 Pro",  hint: "Newest highest-quality Kling",           maxSeconds: 10, pricePerSecond: 0.14 },
+  { value: "google/veo-3.1-fast",         label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast",       maxSeconds: 8,  pricePerSecond: 0.40 },
 ];
+function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): string {
+  const total = m.maxSeconds * m.pricePerSecond;
+  const fmt = total >= 1 ? total.toFixed(2) : total.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  return `Max ${m.maxSeconds}s · ~$${fmt} / ${m.maxSeconds}s clip`;
+}
 
 // Conversion-focused ad format presets. Each preset is injected into the
 // AI Studio system prompt so the model picks the right dims, safe zones,
@@ -1952,10 +1960,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             return next.length === 0 ? [m.value] : next;
                           });
                         }}
-                        title={`${m.label} — ${m.hint}\nEst. ${m.price}${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
-                        className={`h-7 px-2 rounded-lg text-[10px] border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                        title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
+                        className={`px-2 py-1 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
-                        {m.label}
+                        <span>{m.label}</span>
+                        <span className={`text-[9px] ${active ? "text-primary-foreground/80" : "text-muted-foreground/70"}`}>
+                          {m.maxSeconds}s · ${ (m.maxSeconds * m.pricePerSecond).toFixed(2) }
+                        </span>
                       </button>
                     );
                   })}
