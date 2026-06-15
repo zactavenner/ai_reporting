@@ -1148,8 +1148,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         videoFrames,
         avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
-        hookFramework: hookFramework === "auto" ? undefined : hookFramework,
-        burnCaptions,
+        offerContext: (() => {
+          const list = selectedOfferId === "all"
+            ? clientOffers
+            : clientOffers.filter(o => o.id === selectedOfferId);
+          if (!list.length) return undefined;
+          return list.map((o, i) => {
+            const parts = [`OFFER ${i + 1}: ${o.title}`];
+            if (o.description) parts.push(o.description);
+            if (o.file_name) parts.push(`Primary file: ${o.file_name}${o.file_url ? ` (${o.file_url})` : ""}`);
+            return parts.join("\n");
+          }).join("\n\n---\n\n");
+        })(),
         activeReferenceIds,
         activeVideoReferenceIds,
         autoDocContext,
