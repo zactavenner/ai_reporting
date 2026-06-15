@@ -1560,6 +1560,7 @@ Deno.serve(async (req) => {
     imageModels?: Array<"nano-banana" | "openai"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
+    videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
     avatarId?: string | null;
     adFormat?: string | null;
     hookFramework?: string | null;
