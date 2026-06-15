@@ -9,6 +9,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { StoryboardTimelineCard } from "./StoryboardTimelineCard";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 
+/** Pretty label for the model id stored on canvas payloads. */
+export function modelLabel(model?: string): string {
+  if (!model) return "model";
+  const m = model.toLowerCase();
+  if (m.includes("seedance") && m.includes("fast")) return "Seedance 2.0 Fast";
+  if (m.includes("seedance")) return "Seedance 2.0 Pro";
+  if (m.includes("kling") && m.includes("pro")) return "Kling 3.0 Pro";
+  if (m.includes("kling")) return "Kling 3.0 Fast";
+  if (m.includes("veo")) return "Veo 3.1 Fast";
+  if (m.includes("riverflow")) return "Riverflow v2 Pro";
+  if (m.includes("gpt-image") || m === "openai") return "GPT Image 2";
+  if (m.includes("gemini-3") && m.includes("pro")) return "Gemini 3 Pro";
+  if (m.includes("nano-banana") || m.includes("gemini-3") || m.includes("flash-image") || m === "nano-banana") return "Nano Banana 2";
+  return model;
+}
+
 export type CanvasPlaceholder = {
   __placeholder: true;
   placeholder_id: string;
