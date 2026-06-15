@@ -284,6 +284,24 @@ export function EODView({ memberId }: { memberId: string }) {
       member_name: member?.name || 'Team Member',
     });
 
+    // Persist per-client touchpoints so "days since last engagement" stays accurate.
+    try {
+      const rows = clientTouchpoints
+        .filter((ct) => ct.channels.length > 0 && ct.channels[0] !== 'none')
+        .map((ct) => ({
+          member_id: memberId,
+          action: 'client_touchpoint',
+          entity_type: 'client',
+          entity_id: ct.client_id,
+          details: { channels: ct.channels, source: 'eod', report_date: new Date().toISOString().slice(0, 10) },
+        }));
+      if (rows.length > 0) {
+        await (supabase as any).from('member_activity_log').insert(rows);
+      }
+    } catch (e) {
+      console.warn('member_activity_log insert failed', e);
+    }
+
     // Fire off to Hermes → SMS Zac (GHL agency)
     try {
       const { data, error } = await supabase.functions.invoke('eod-to-hermes', {
