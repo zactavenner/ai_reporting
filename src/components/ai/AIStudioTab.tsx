@@ -29,7 +29,7 @@ import { useAvatars } from "@/hooks/useAvatars";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
-import { ModelCompareTab } from "./ModelCompareTab";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Props {
   clientId: string;
@@ -590,6 +590,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("openrouter/owl-alpha");
+  // Extra models for inline side-by-side comparison (besides chatModel).
+  const [compareModels, setCompareModels] = useState<string[]>([]);
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai" | "riverflow">>(["openai"]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
     try {
@@ -923,6 +925,30 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     setLoading(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+
+    // Fire side-by-side comparison in parallel (best-effort, results appended after main reply).
+    if (compareModels.length > 0) {
+      const cmpModels = [...compareModels];
+      const cmpPrompt = text;
+      (async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("compare-models", {
+            body: { prompt: cmpPrompt, models: cmpModels },
+          });
+          if (error) throw error;
+          const results = (data as any)?.results || [];
+          const md = results.map((r: any) => {
+            const label = CHAT_MODELS.find(m => m.value === r.model)?.label || r.model;
+            const meta = `_${(r.ms / 1000).toFixed(1)}s${r.usage?.total_tokens ? ` · ${r.usage.total_tokens} tok` : ""}_`;
+            const body = r.error ? `⚠️ ${r.error}` : (r.output || "_(empty)_");
+            return `### ${label}\n${meta}\n\n${body}`;
+          }).join("\n\n---\n\n");
+          setMessages(curr => [...curr, { role: "assistant", content: `**Comparison (${cmpModels.length} models)**\n\n${md}` }]);
+        } catch (e: any) {
+          toast.error(`Compare failed: ${e?.message || e}`);
+        }
+      })();
+    }
 
     // ID-based update avoids index drift (history reloads, parallel state updates)
     // which was the root cause of mid-stream flicker / wrong-message overwrites.
@@ -1680,16 +1706,74 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 >
                   <Bot className="h-3 w-3" /> Agent
                 </button>
-                <Select value={chatModel} onValueChange={setChatModel}>
-                  <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CHAT_MODELS.map(m => (
-                      <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="h-7 px-2 rounded-lg text-[10px] border border-border/60 bg-muted/40 hover:bg-muted inline-flex items-center gap-1"
+                      title="Chat model · pick extras to compare side-by-side"
+                    >
+                      <span className="truncate max-w-[140px]">
+                        {(CHAT_MODELS.find(m => m.value === chatModel)?.label) || chatModel.split("/").pop()}
+                      </span>
+                      {compareModels.length > 0 && (
+                        <Badge variant="secondary" className="text-[9px] h-4 px-1.5">+{compareModels.length} compare</Badge>
+                      )}
+                      <ChevronDown className="h-3 w-3 opacity-60" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-72 p-2">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Primary</div>
+                    <div className="space-y-0.5">
+                      {CHAT_MODELS.map(m => (
+                        <button
+                          key={m.value}
+                          type="button"
+                          onClick={() => {
+                            setChatModel(m.value);
+                            setCompareModels(curr => curr.filter(v => v !== m.value));
+                          }}
+                          className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${chatModel === m.value ? "bg-primary/10 text-foreground font-medium" : ""}`}
+                        >
+                          {chatModel === m.value ? "● " : "○ "}{m.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-border/60">
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Also compare with</div>
+                      <div className="space-y-0.5 max-h-56 overflow-y-auto">
+                        {CHAT_MODELS.filter(m => m.value !== chatModel).map(m => {
+                          const on = compareModels.includes(m.value);
+                          return (
+                            <button
+                              key={m.value}
+                              type="button"
+                              onClick={() => setCompareModels(curr => on ? curr.filter(v => v !== m.value) : (curr.length >= 3 ? curr : [...curr, m.value]))}
+                              className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted flex items-center gap-2 ${on ? "bg-primary/10" : ""}`}
+                            >
+                              <span className={`h-3 w-3 rounded border ${on ? "bg-primary border-primary" : "border-border"} inline-flex items-center justify-center`}>
+                                {on && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                              </span>
+                              <span className="truncate">{m.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {compareModels.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setCompareModels([])}
+                          className="mt-1.5 w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-muted"
+                        >
+                          Clear compare ({compareModels.length})
+                        </button>
+                      )}
+                      <div className="mt-1 px-1 text-[10px] text-muted-foreground">
+                        Up to 3 extras. Replies appear inline alongside the primary.
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image:</span>
                   {IMAGE_MODELS.map(m => {
@@ -1820,7 +1904,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
-              <TabsTrigger value="compare"><Code2 className="h-4 w-4 mr-1" /> Compare</TabsTrigger>
             </TabsList>
             <Button
               variant="ghost"
@@ -1949,9 +2032,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </div>
           </TabsContent>
 
-          <TabsContent value="compare" className="flex-1 m-0 overflow-hidden">
-            <ModelCompareTab />
-          </TabsContent>
         </Tabs>
       </Card>
       )}
