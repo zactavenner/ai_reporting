@@ -143,6 +143,35 @@ export function EODView({ memberId }: { memberId: string }) {
   });
   const isAM = amClients.length > 0;
 
+  // Pull every prior client engagement this AM has logged so we can show
+  // "X days since last touch" per client (red >5d). Touchpoint events are
+  // written to member_activity_log on EOD submit below.
+  const amClientIds = useMemo(() => (amClients as any[]).map((c) => c.id), [amClients]);
+  const { data: lastEngagementRows = [] } = useQuery({
+    queryKey: ['eod-last-engagement', memberId, amClientIds.join(',')],
+    queryFn: async () => {
+      if (!memberId || amClientIds.length === 0) return [] as any[];
+      const { data } = await (supabase as any)
+        .from('member_activity_log')
+        .select('entity_id, created_at, details')
+        .eq('member_id', memberId)
+        .eq('action', 'client_touchpoint')
+        .in('entity_id', amClientIds)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      return data || [];
+    },
+    enabled: !!memberId && amClientIds.length > 0,
+  });
+  const lastEngagementByClient = useMemo(() => {
+    const m: Record<string, { at: string; channels: string[] }> = {};
+    for (const r of lastEngagementRows as any[]) {
+      if (!r.entity_id) continue;
+      if (!m[r.entity_id]) m[r.entity_id] = { at: r.created_at, channels: r.details?.channels || [] };
+    }
+    return m;
+  }, [lastEngagementRows]);
+
   const [touchpointsByClient, setTouchpointsByClient] = useState<Record<string, Record<TouchKey, boolean>>>({});
   const [openSubtasks, setOpenSubtasks] = useState<Record<string, boolean>>({});
   const [openTask, setOpenTask] = useState<any | null>(null);
