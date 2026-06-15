@@ -41,7 +41,6 @@ export function useMemberTasks(memberId?: string) {
       const { data: tasks, error: taskErr } = await (supabase.from('tasks') as any)
         .select('*')
         .in('id', taskIds)
-        .neq('status', 'completed')
         .order('due_date', { ascending: true, nullsFirst: false });
       if (taskErr) throw taskErr;
       return (tasks || []) as any[];
