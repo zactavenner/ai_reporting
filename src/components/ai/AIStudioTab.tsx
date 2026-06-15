@@ -281,7 +281,7 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
       {inlineImages.length > 0 && (
         <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
           {inlineImages.map((img, idx) => (
-            <ChatImagePreview key={idx} image={img} />
+            <ChatImagePreview key={idx} image={img} clientId={clientId} />
           ))}
         </div>
       )}
