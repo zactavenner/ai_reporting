@@ -30,6 +30,8 @@ import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useClientOffers } from "@/hooks/useClientOffers";
+import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
 
 interface Props {
   clientId: string;
@@ -710,6 +712,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: client } = useClient(clientId);
   const brandColors: string[] = Array.isArray(client?.brand_colors) ? (client!.brand_colors as string[]) : [];
   const brandFonts: string[] = Array.isArray(client?.brand_fonts) ? (client!.brand_fonts as string[]) : [];
+  const { data: clientOffers = [] } = useClientOffers(clientId);
   const updateClientSettings = useUpdateClientSettings();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
@@ -744,6 +747,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { return localStorage.getItem("ai-studio:hook-framework") || "auto"; } catch { return "auto"; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:hook-framework", hookFramework); } catch {} }, [hookFramework]);
+  // Selected offer drives which client offer the AI uses as the active campaign context.
+  // "all" = pass every offer as context. Otherwise a single offer.id.
+  const [selectedOfferId, setSelectedOfferId] = useState<string>(() => {
+    try { return localStorage.getItem(`ai-studio:offer:${clientId}`) || "all"; } catch { return "all"; }
+  });
+  useEffect(() => { try { localStorage.setItem(`ai-studio:offer:${clientId}`, selectedOfferId); } catch {} }, [clientId, selectedOfferId]);
   const [burnCaptions, setBurnCaptions] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:burn-captions") === "1"; } catch { return false; }
   });
@@ -1139,8 +1148,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         videoFrames,
         avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
-        hookFramework: hookFramework === "auto" ? undefined : hookFramework,
-        burnCaptions,
+        offerContext: (() => {
+          const list = selectedOfferId === "all"
+            ? clientOffers
+            : clientOffers.filter(o => o.id === selectedOfferId);
+          if (!list.length) return undefined;
+          return list.map((o, i) => {
+            const parts = [`OFFER ${i + 1}: ${o.title}`];
+            if (o.description) parts.push(o.description);
+            if (o.file_name) parts.push(`Primary file: ${o.file_name}${o.file_url ? ` (${o.file_url})` : ""}`);
+            return parts.join("\n");
+          }).join("\n\n---\n\n");
+        })(),
         activeReferenceIds,
         activeVideoReferenceIds,
         autoDocContext,
@@ -1845,28 +1864,24 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   </Select>
                 </div>
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Hook:</span>
-                  <Select value={hookFramework} onValueChange={setHookFramework}>
-                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
-                      <SelectValue />
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Offer:</span>
+                  <Select value={selectedOfferId} onValueChange={setSelectedOfferId}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg max-w-[220px]">
+                      <SelectValue placeholder="All offers" />
                     </SelectTrigger>
                     <SelectContent>
-                      {HOOK_FRAMEWORKS.map(f => (
-                        <SelectItem key={f.value} value={f.value} className="text-xs">
-                          {f.label}<span className="text-muted-foreground ml-1">— {f.desc}</span>
+                      <SelectItem value="all" className="text-xs">All offers ({clientOffers.length})</SelectItem>
+                      {clientOffers.map(o => (
+                        <SelectItem key={o.id} value={o.id} className="text-xs">
+                          {o.title}
                         </SelectItem>
                       ))}
+                      {clientOffers.length === 0 && (
+                        <div className="px-2 py-1.5 text-[10px] text-muted-foreground">No offers — add one in the Offers tab →</div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setBurnCaptions(v => !v)}
-                  title="When on, AI burns styled subtitles into any generated video so it converts with sound off."
-                  className={`h-7 px-2 rounded-lg text-[10px] border transition flex items-center gap-1 ${burnCaptions ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
-                >
-                  CC {burnCaptions ? "on" : "off"}
-                </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -2137,7 +2152,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
-              <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
+              <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
             </TabsList>
@@ -2227,18 +2242,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </div>
           </TabsContent>
 
-          <TabsContent value="doc" className="flex-1 m-0 overflow-hidden">
-            {docUrl ? (
-              <div className="h-full flex flex-col">
-                <div className="px-4 py-2 border-b flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground truncate">{docUrl}</span>
-                  <a href={docUrl} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1 text-primary"><ExternalLink className="h-3 w-3" /> Open</a>
-                </div>
-                <iframe src={docUrl.replace(/\/edit.*$/, "/preview")} className="flex-1 w-full" title="Doc preview" />
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Add a Google Doc URL above.</div>
-            )}
+          <TabsContent value="offers" className="flex-1 m-0 overflow-auto p-4">
+            <ClientOffersSection
+              clientId={clientId}
+              clientName={clientName}
+              brandColors={brandColors}
+              brandFonts={brandFonts}
+              clientDescription={(client as any)?.description ?? null}
+              websiteUrl={(client as any)?.website ?? null}
+              industry={(client as any)?.industry ?? null}
+              clientType={(client as any)?.client_type ?? null}
+            />
           </TabsContent>
 
           <TabsContent value="sheet" className="flex-1 m-0 overflow-hidden">
