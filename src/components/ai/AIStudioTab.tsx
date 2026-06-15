@@ -712,6 +712,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: client } = useClient(clientId);
   const brandColors: string[] = Array.isArray(client?.brand_colors) ? (client!.brand_colors as string[]) : [];
   const brandFonts: string[] = Array.isArray(client?.brand_fonts) ? (client!.brand_fonts as string[]) : [];
+  const { data: clientOffers = [] } = useClientOffers(clientId);
   const updateClientSettings = useUpdateClientSettings();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
