@@ -1864,28 +1864,24 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   </Select>
                 </div>
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Hook:</span>
-                  <Select value={hookFramework} onValueChange={setHookFramework}>
-                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
-                      <SelectValue />
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Offer:</span>
+                  <Select value={selectedOfferId} onValueChange={setSelectedOfferId}>
+                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg max-w-[220px]">
+                      <SelectValue placeholder="All offers" />
                     </SelectTrigger>
                     <SelectContent>
-                      {HOOK_FRAMEWORKS.map(f => (
-                        <SelectItem key={f.value} value={f.value} className="text-xs">
-                          {f.label}<span className="text-muted-foreground ml-1">— {f.desc}</span>
+                      <SelectItem value="all" className="text-xs">All offers ({clientOffers.length})</SelectItem>
+                      {clientOffers.map(o => (
+                        <SelectItem key={o.id} value={o.id} className="text-xs">
+                          {o.title}
                         </SelectItem>
                       ))}
+                      {clientOffers.length === 0 && (
+                        <div className="px-2 py-1.5 text-[10px] text-muted-foreground">No offers — add one in the Offers tab →</div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setBurnCaptions(v => !v)}
-                  title="When on, AI burns styled subtitles into any generated video so it converts with sound off."
-                  className={`h-7 px-2 rounded-lg text-[10px] border transition flex items-center gap-1 ${burnCaptions ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
-                >
-                  CC {burnCaptions ? "on" : "off"}
-                </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
