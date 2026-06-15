@@ -15,7 +15,7 @@ import { useAgencySettings } from "@/hooks/useAgencySettings";
 import { useClientSettings, useUpdateClientSettings } from "@/hooks/useClientSettings";
 import { useClient } from "@/hooks/useClients";
 import { toast } from "sonner";
-import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder } from "./AIStudioCanvas";
+import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder, modelLabel } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
@@ -281,7 +281,7 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
       {inlineImages.length > 0 && (
         <div className="mt-3 -mx-1 px-1 flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-thin scrollbar-thumb-border">
           {inlineImages.map((img, idx) => (
-            <ChatImagePreview key={idx} image={img} />
+            <ChatImagePreview key={idx} image={img} clientId={clientId} />
           ))}
         </div>
       )}
@@ -432,6 +432,9 @@ function PreviewActionBar({
   recreateText,
   canvasPayload,
   canvasKind,
+  clientId,
+  assetKind,
+  aspectRatio,
 }: {
   url: string;
   prompt?: string;
@@ -439,7 +442,37 @@ function PreviewActionBar({
   recreateText: string;
   canvasPayload: Record<string, any>;
   canvasKind: "image" | "scene_video";
+  clientId?: string;
+  assetKind: "image" | "video";
+  aspectRatio?: string;
 }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const sendToCreatives = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!url || !clientId) { toast.error("No client selected"); return; }
+    setSending(true);
+    try {
+      const row = {
+        client_id: clientId,
+        title: `AI Studio — ${(prompt || "asset").slice(0, 80)}`,
+        type: assetKind,
+        platform: "meta",
+        file_url: url,
+        status: "draft" as const,
+        aspect_ratio: aspectRatio || null,
+        comments: [],
+        source: "ai_studio_chat",
+      };
+      window.dispatchEvent(new CustomEvent("aistudio:send-to-creatives", { detail: { rows: [row] } }));
+      setSent(true);
+      toast.success("Sent to Creatives for approval");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed");
+    } finally {
+      setSending(false);
+    }
+  };
   return (
     <div className="flex items-center gap-1">
       <button
@@ -474,11 +507,19 @@ function PreviewActionBar({
       >
         + Canvas
       </button>
+      <button
+        onClick={sendToCreatives}
+        disabled={sending || sent || !clientId}
+        className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-emerald-600 text-white hover:opacity-90 disabled:opacity-50"
+        title="Send this asset to the client's Creatives section for approval"
+      >
+        {sent ? "✓ Sent" : sending ? "Sending…" : "→ Approve"}
+      </button>
     </div>
   );
 }
 
-function ChatImagePreview({ image }: { image: ChatImage }) {
+function ChatImagePreview({ image, clientId }: { image: ChatImage; clientId?: string }) {
   const [open, setOpen] = useState(false);
   const onDragStart = (e: React.DragEvent) => {
     try {
@@ -495,6 +536,12 @@ function ChatImagePreview({ image }: { image: ChatImage }) {
   const filename = `aistudio-${Date.now()}.${ext.length <= 4 ? ext : "png"}`;
   return (
     <div className="shrink-0 snap-start w-56 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
+      {image.model && (
+        <div className="px-2 pt-1.5 pb-1 flex items-center gap-1 border-b border-border/40">
+          <Badge variant="secondary" className="text-[9px] h-4 px-1.5" title={image.model}>{modelLabel(image.model)}</Badge>
+          {image.aspect_ratio && <span className="text-[9px] text-muted-foreground">{image.aspect_ratio}</span>}
+        </div>
+      )}
       <div
         draggable
         onDragStart={onDragStart}
@@ -517,6 +564,9 @@ function ChatImagePreview({ image }: { image: ChatImage }) {
             source: "chat_pin",
           }}
           canvasKind="image"
+          clientId={clientId}
+          assetKind="image"
+          aspectRatio={image.aspect_ratio}
         />
         <button
           onClick={(e) => {
@@ -574,6 +624,13 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
   };
   return (
     <div className="shrink-0 snap-start w-72 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
+      {video.model && (
+        <div className="px-2 pt-1.5 pb-1 flex items-center gap-1 border-b border-border/40">
+          <Badge variant="secondary" className="text-[9px] h-4 px-1.5" title={video.model}>{modelLabel(video.model)}</Badge>
+          {video.aspect_ratio && <span className="text-[9px] text-muted-foreground">{video.aspect_ratio}</span>}
+          {video.resolution && <span className="text-[9px] text-muted-foreground">· {video.resolution}</span>}
+        </div>
+      )}
       <VideoPlayerCard
         src={video.url}
         aspect={aspect as any}
@@ -603,6 +660,9 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
             source: "chat_pin",
           }}
           canvasKind="scene_video"
+          clientId={clientId}
+          assetKind="video"
+          aspectRatio={video.aspect_ratio}
         />
         <button
           type="button"
@@ -1321,15 +1381,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const d = (e as CustomEvent).detail || {};
       if (d.url) setEditVideo({ url: d.url, prompt: d.prompt, aspect_ratio: d.aspect_ratio });
     };
+    const onSendToCreatives = async (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      const rows = Array.isArray(d.rows) ? d.rows : [];
+      if (!rows.length || !clientId) return;
+      try {
+        const res = await studioFetch({ action: "send_to_creatives", clientId, creativeRows: rows });
+        if (!res.ok) throw new Error(await res.text().catch(() => "Failed"));
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to send to Creatives");
+      }
+    };
     window.addEventListener("aistudio:edit-video", onEditVideoEvt);
     window.addEventListener("aistudio:set-prompt", onSetPrompt);
     window.addEventListener("aistudio:add-canvas-asset", onAddCanvas);
+    window.addEventListener("aistudio:send-to-creatives", onSendToCreatives);
     return () => {
       window.removeEventListener("aistudio:use-image", onUse);
       window.removeEventListener("aistudio:edit-image", onEdit);
       window.removeEventListener("aistudio:set-prompt", onSetPrompt);
       window.removeEventListener("aistudio:add-canvas-asset", onAddCanvas);
       window.removeEventListener("aistudio:edit-video", onEditVideoEvt);
+      window.removeEventListener("aistudio:send-to-creatives", onSendToCreatives);
     };
   }, [addImageAsReference, inlineEdit, conversationId, clientId, studioFetch]);
 
