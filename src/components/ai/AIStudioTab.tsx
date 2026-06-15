@@ -590,6 +590,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
   const [chatModel, setChatModel] = useState<string>("openrouter/owl-alpha");
+  // Extra models for inline side-by-side comparison (besides chatModel).
+  const [compareModels, setCompareModels] = useState<string[]>([]);
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai" | "riverflow">>(["openai"]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
     try {
