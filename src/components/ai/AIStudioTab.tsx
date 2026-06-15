@@ -2152,7 +2152,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
-              <TabsTrigger value="doc"><FileText className="h-4 w-4 mr-1" /> Doc</TabsTrigger>
+              <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
             </TabsList>
