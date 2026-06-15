@@ -926,6 +926,30 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    // Fire side-by-side comparison in parallel (best-effort, results appended after main reply).
+    if (compareModels.length > 0) {
+      const cmpModels = [...compareModels];
+      const cmpPrompt = text;
+      (async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("compare-models", {
+            body: { prompt: cmpPrompt, models: cmpModels },
+          });
+          if (error) throw error;
+          const results = (data as any)?.results || [];
+          const md = results.map((r: any) => {
+            const label = CHAT_MODELS.find(m => m.value === r.model)?.label || r.model;
+            const meta = `_${(r.ms / 1000).toFixed(1)}s${r.usage?.total_tokens ? ` · ${r.usage.total_tokens} tok` : ""}_`;
+            const body = r.error ? `⚠️ ${r.error}` : (r.output || "_(empty)_");
+            return `### ${label}\n${meta}\n\n${body}`;
+          }).join("\n\n---\n\n");
+          setMessages(curr => [...curr, { role: "assistant", content: `**Comparison (${cmpModels.length} models)**\n\n${md}` }]);
+        } catch (e: any) {
+          toast.error(`Compare failed: ${e?.message || e}`);
+        }
+      })();
+    }
+
     // ID-based update avoids index drift (history reloads, parallel state updates)
     // which was the root cause of mid-stream flicker / wrong-message overwrites.
     const updateAssistant = (mut: (m: Msg) => Msg) => {
