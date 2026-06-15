@@ -202,7 +202,7 @@ export function AIStudioCanvas({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/30">
+      <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/30 flex-wrap">
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom(z => Math.max(0.25, z * 0.9))} title="Zoom out">
           <Minus className="h-3.5 w-3.5" />
         </Button>
@@ -237,18 +237,19 @@ export function AIStudioCanvas({
         >
           <Crosshair className="h-3.5 w-3.5" />
         </Button>
-        <span className="text-[10px] text-muted-foreground ml-2">Ctrl/⌘+wheel to zoom · drag empty area to pan · click image to edit</span>
-        <div className="ml-auto flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground ml-2 hidden xl:inline truncate">Ctrl/⌘+wheel to zoom · drag empty area to pan · click image to edit</span>
+        <div className="ml-auto flex items-center gap-2 shrink-0">
           <span className="text-[10px] text-muted-foreground">{approvalCandidates.length} ready</span>
           <Button
             size="sm"
-            className="h-7 gap-1"
+            className="h-7 gap-1 whitespace-nowrap"
             disabled={sendingApproval || approvalCandidates.length === 0 || !clientId}
             onClick={sendToCreatives}
             title="Push every image/video on the canvas into the Creatives section as drafts for agency review"
           >
             {sendingApproval ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-            Send to Creatives for Approval
+            <span className="hidden sm:inline">Send to Creatives</span>
+            <span className="sm:hidden">Approve</span>
           </Button>
         </div>
       </div>
@@ -262,7 +263,7 @@ export function AIStudioCanvas({
         onWheel={onWheel}
       >
         <div
-          className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 origin-top-left transition-transform duration-75 auto-rows-min items-start"
+          className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 origin-top-left transition-transform duration-75 auto-rows-min items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
         >
       {entries.length === 0 && (
