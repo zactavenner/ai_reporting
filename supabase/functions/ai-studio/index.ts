@@ -1477,6 +1477,20 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
       "- If an avatar is selected (see AVATAR CONTEXT below), pass the SAME avatar image_url on every clip so the same face carries across all segments.",
     ].join("\n");
   })(),
+  // Sticky video frame slots (first frame, last frame, ingredient/product reference)
+  (() => {
+    const f = ctx.videoFrames || {};
+    const ff = f.firstFrameUrl, lf = f.lastFrameUrl, ig = f.ingredientUrl;
+    if (!ff && !lf && !ig) return null;
+    const lines = [
+      "VIDEO FRAME SLOTS (the user attached sticky frame references for video generation — ALWAYS apply to every generate_seedance_video call):",
+      ff ? `- FIRST FRAME image_url: ${ff} → pass as generate_seedance_video.image_url so the clip STARTS from this exact frame.` : "",
+      lf ? `- LAST FRAME image_url:  ${lf} → pass as generate_seedance_video.last_frame_url so the clip ENDS on this exact frame.` : "",
+      ig ? `- INGREDIENT / PRODUCT reference: ${ig} → describe this product faithfully in the video prompt and (if no first frame above) ALSO pass it as image_url so the product is preserved across frames.` : "",
+      "- When multi-clip splitting is required, reuse first/last frames sensibly: the FIRST frame seeds Clip 1, the LAST frame finishes the FINAL clip; intermediate clips chain (use the prior clip's last frame conceptually in the prompt).",
+    ].filter(Boolean);
+    return lines.join("\n");
+  })(),
   // Avatar selection (chat-side ingredient for video ads)
   ctx.avatar
     ? [
