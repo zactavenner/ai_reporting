@@ -24,6 +24,8 @@ function bucketize(tasks: any[]): Record<Bucket, any[]> {
   const in3 = new Date(today); in3.setDate(today.getDate() + 3);
   const out: Record<Bucket, any[]> = { overdue: [], today: [], upcoming: [] };
   for (const t of tasks) {
+    // Triage shows only active work — completed tasks still flow into stats below.
+    if (t.status === 'completed' || t.stage === 'done') continue;
     if (!t.due_date) { out.upcoming.push(t); continue; }
     const d = new Date(t.due_date); d.setHours(0,0,0,0);
     if (d < today) out.overdue.push(t);
