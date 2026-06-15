@@ -519,7 +519,7 @@ function PreviewActionBar({
   );
 }
 
-function ChatImagePreview({ image }: { image: ChatImage }) {
+function ChatImagePreview({ image, clientId }: { image: ChatImage; clientId?: string }) {
   const [open, setOpen] = useState(false);
   const onDragStart = (e: React.DragEvent) => {
     try {
@@ -536,6 +536,12 @@ function ChatImagePreview({ image }: { image: ChatImage }) {
   const filename = `aistudio-${Date.now()}.${ext.length <= 4 ? ext : "png"}`;
   return (
     <div className="shrink-0 snap-start w-56 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
+      {image.model && (
+        <div className="px-2 pt-1.5 pb-1 flex items-center gap-1 border-b border-border/40">
+          <Badge variant="secondary" className="text-[9px] h-4 px-1.5" title={image.model}>{modelLabel(image.model)}</Badge>
+          {image.aspect_ratio && <span className="text-[9px] text-muted-foreground">{image.aspect_ratio}</span>}
+        </div>
+      )}
       <div
         draggable
         onDragStart={onDragStart}
