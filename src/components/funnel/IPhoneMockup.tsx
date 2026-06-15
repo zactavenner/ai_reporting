@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { Signal, Wifi, Battery } from 'lucide-react';
+import { Signal, Wifi, Battery, ImageIcon, Monitor } from 'lucide-react';
 
 interface IPhoneMockupProps {
   url: string;
@@ -10,6 +10,44 @@ interface IPhoneMockupProps {
 
 export function IPhoneMockup({ url, title, className }: IPhoneMockupProps) {
   const [iframeKey, setIframeKey] = useState(0);
+  const [mode, setMode] = useState<'iframe' | 'screenshot'>('iframe');
+  const [iframeBlocked, setIframeBlocked] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const loadedRef = useRef(false);
+
+  // Auto-fallback to screenshot if iframe never fires onLoad (X-Frame-Options / CSP block)
+  useEffect(() => {
+    loadedRef.current = false;
+    setIframeBlocked(false);
+    const t = setTimeout(() => {
+      if (!loadedRef.current) {
+        setIframeBlocked(true);
+        setMode('screenshot');
+      } else {
+        // Loaded — probe for blank/blocked content (length 0 + no body)
+        try {
+          const win = iframeRef.current?.contentWindow;
+          if (win && win.length === 0) {
+            // Try touching body; cross-origin throws (means real page loaded)
+            try {
+              const body = iframeRef.current?.contentDocument?.body;
+              if (!body || body.childElementCount === 0) {
+                setIframeBlocked(true);
+                setMode('screenshot');
+              }
+            } catch {
+              // Security error => actual cross-origin page rendered, not blocked
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, 3500);
+    return () => clearTimeout(t);
+  }, [url, iframeKey]);
+
+  const screenshotSrc = `https://image.thum.io/get/width/780/iphone/noanimate/${url}`;
 
   const getDomain = (urlStr: string) => {
     try {
@@ -20,6 +58,9 @@ export function IPhoneMockup({ url, title, className }: IPhoneMockupProps) {
   };
 
   const handleRefresh = () => {
+    setMode('iframe');
+    loadedRef.current = false;
+    setIframeBlocked(false);
     setIframeKey(k => k + 1);
   };
 
@@ -56,20 +97,31 @@ export function IPhoneMockup({ url, title, className }: IPhoneMockupProps) {
               
               {/* Screen Content */}
               <div className="w-[320px] h-[620px] overflow-hidden bg-background">
-                <iframe
-                  key={iframeKey}
-                  src={url}
-                  className="w-full h-full border-0"
-                  style={{ 
-                    width: '390px', 
-                    height: '760px',
-                    transform: 'scale(0.82)',
-                    transformOrigin: 'top left',
-                    pointerEvents: 'auto'
-                  }}
-                  title={title || 'Funnel Preview'}
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                />
+                {mode === 'iframe' ? (
+                  <iframe
+                    key={iframeKey}
+                    ref={iframeRef}
+                    src={url}
+                    onLoad={() => { loadedRef.current = true; }}
+                    className="w-full h-full border-0"
+                    style={{
+                      width: '390px',
+                      height: '760px',
+                      transform: 'scale(0.82)',
+                      transformOrigin: 'top left',
+                      pointerEvents: 'auto'
+                    }}
+                    title={title || 'Funnel Preview'}
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                  />
+                ) : (
+                  <img
+                    key={`shot-${iframeKey}`}
+                    src={screenshotSrc}
+                    alt={title || 'Funnel Preview Screenshot'}
+                    className="w-full h-full object-cover object-top bg-background"
+                  />
+                )}
               </div>
               
               {/* Safari Bottom Navigation Bar */}
@@ -89,6 +141,17 @@ export function IPhoneMockup({ url, title, className }: IPhoneMockupProps) {
                     {getDomain(url)}
                   </p>
                 </div>
+                <button
+                  onClick={() => setMode(m => (m === 'iframe' ? 'screenshot' : 'iframe'))}
+                  className="p-2.5 bg-muted rounded-full hover:bg-muted/80 transition-colors"
+                  title={mode === 'iframe' ? 'View screenshot (if site blocks embedding)' : 'View live'}
+                >
+                  {mode === 'iframe' ? (
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Monitor className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
                 <button 
                   onClick={handleRefresh}
                   className="p-2.5 bg-muted rounded-full hover:bg-muted/80 transition-colors"
