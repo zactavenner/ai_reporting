@@ -1587,7 +1587,6 @@ Deno.serve(async (req) => {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
     "kwaivgi/kling-v3.0-std",
-    "kwaivgi/kling-v3.0-pro",
     "google/veo-3.1-fast",
   ];
   const selectedVideoModels: string[] = Array.isArray(videoModels)
