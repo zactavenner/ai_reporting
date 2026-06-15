@@ -521,8 +521,34 @@ export function EODView({ memberId }: { memberId: string }) {
                 return (
                   <div key={c.id} className="flex items-center justify-between gap-2 py-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{c.name}</p>
-                      {!any && <p className="text-[11px] text-muted-foreground">None</p>}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium truncate">{c.name}</p>
+                        {(() => {
+                          const last = lastEngagementByClient[c.id];
+                          if (!last) {
+                            return (
+                              <Badge className="h-5 px-1.5 text-[10px] bg-destructive/15 text-destructive border border-destructive/40">
+                                No engagement logged
+                              </Badge>
+                            );
+                          }
+                          const days = Math.floor((Date.now() - new Date(last.at).getTime()) / 86_400_000);
+                          const tone =
+                            days > 5
+                              ? 'bg-destructive/15 text-destructive border-destructive/40'
+                              : days >= 3
+                              ? 'bg-amber-500/15 text-amber-700 border-amber-500/40'
+                              : 'bg-emerald-500/15 text-emerald-700 border-emerald-500/40';
+                          const label =
+                            days <= 0 ? 'Today' : days === 1 ? '1 day ago' : `${days} days ago`;
+                          return (
+                            <Badge className={cn('h-5 px-1.5 text-[10px] border', tone)} title={new Date(last.at).toLocaleString()}>
+                              {label}
+                            </Badge>
+                          );
+                        })()}
+                      </div>
+                      {!any && <p className="text-[11px] text-muted-foreground mt-0.5">No touch logged for today</p>}
                     </div>
                     <div className="flex gap-1.5 shrink-0">
                       <Btn k="message" icon={MessageSquare} label="Message" />
