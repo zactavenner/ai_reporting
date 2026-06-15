@@ -2006,6 +2006,62 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
                   )}
                 </div>
+                {videoModels.length > 0 && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Frames:</span>
+                    <input
+                      ref={frameInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        const slot = frameSlotRef.current;
+                        if (f && slot) uploadFrame(slot, f);
+                        e.target.value = "";
+                      }}
+                    />
+                    {([
+                      { slot: "firstFrame" as const, label: "First", url: videoFrames.firstFrameUrl, tip: "First frame — Seedance starts from this image" },
+                      { slot: "lastFrame" as const,  label: "Last",  url: videoFrames.lastFrameUrl,  tip: "Last frame — Seedance ends on this image" },
+                      { slot: "ingredient" as const, label: "Ingredient", url: videoFrames.ingredientUrl, tip: "Product / ingredient reference — model preserves this in the clip" },
+                    ]).map(({ slot, label, url, tip }) => (
+                      <button
+                        key={slot}
+                        type="button"
+                        title={tip}
+                        onClick={() => { frameSlotRef.current = slot; frameInputRef.current?.click(); }}
+                        className={`h-7 px-1.5 rounded-lg text-[10px] border transition inline-flex items-center gap-1 ${url ? "bg-primary/15 border-primary text-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                      >
+                        {url ? (
+                          <img src={url} alt="" className="h-5 w-5 rounded object-cover" />
+                        ) : uploadingSlot === slot ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Paperclip className="h-3 w-3" />
+                        )}
+                        <span>{label}</span>
+                        {url && (
+                          <span
+                            role="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setVideoFrames(curr => ({
+                                ...curr,
+                                ...(slot === "firstFrame" ? { firstFrameUrl: undefined } : {}),
+                                ...(slot === "lastFrame" ? { lastFrameUrl: undefined } : {}),
+                                ...(slot === "ingredient" ? { ingredientUrl: undefined } : {}),
+                              }));
+                            }}
+                            className="ml-0.5 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
                   <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
