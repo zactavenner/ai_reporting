@@ -2124,6 +2124,16 @@ Deno.serve(async (req) => {
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
+  if (typeof offerContext === "string" && offerContext.trim()) {
+    // Inject the selected offer(s) as authoritative copy/research context.
+    // Place right after SYSTEM so it conditions every downstream tool call.
+    convo.splice(1, 0, {
+      role: "system",
+      content:
+        `ACTIVE OFFER CONTEXT (read this carefully — every ad, script, email, hook MUST be tailored to THIS offer; ` +
+        `if multiple offers are listed, treat them as separate campaigns and label outputs by offer title):\n\n${offerContext.trim()}`,
+    });
+  }
   if (agentMode) {
     convo.splice(1, 0, {
       role: "system",
