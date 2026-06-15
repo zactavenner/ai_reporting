@@ -1961,7 +1961,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                           });
                         }}
                         title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
-                        className={`h-7 px-2 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                        className={`px-2 py-1 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
                         <span>{m.label}</span>
                         <span className={`text-[9px] ${active ? "text-primary-foreground/80" : "text-muted-foreground/70"}`}>
