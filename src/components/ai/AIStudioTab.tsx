@@ -432,6 +432,9 @@ function PreviewActionBar({
   recreateText,
   canvasPayload,
   canvasKind,
+  clientId,
+  assetKind,
+  aspectRatio,
 }: {
   url: string;
   prompt?: string;
@@ -439,7 +442,37 @@ function PreviewActionBar({
   recreateText: string;
   canvasPayload: Record<string, any>;
   canvasKind: "image" | "scene_video";
+  clientId?: string;
+  assetKind: "image" | "video";
+  aspectRatio?: string;
 }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const sendToCreatives = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!url || !clientId) { toast.error("No client selected"); return; }
+    setSending(true);
+    try {
+      const row = {
+        client_id: clientId,
+        title: `AI Studio — ${(prompt || "asset").slice(0, 80)}`,
+        type: assetKind,
+        platform: "meta",
+        file_url: url,
+        status: "draft" as const,
+        aspect_ratio: aspectRatio || null,
+        comments: [],
+        source: "ai_studio_chat",
+      };
+      window.dispatchEvent(new CustomEvent("aistudio:send-to-creatives", { detail: { rows: [row] } }));
+      setSent(true);
+      toast.success("Sent to Creatives for approval");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed");
+    } finally {
+      setSending(false);
+    }
+  };
   return (
     <div className="flex items-center gap-1">
       <button
@@ -473,6 +506,14 @@ function PreviewActionBar({
         title="Pin to canvas"
       >
         + Canvas
+      </button>
+      <button
+        onClick={sendToCreatives}
+        disabled={sending || sent || !clientId}
+        className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-emerald-600 text-white hover:opacity-90 disabled:opacity-50"
+        title="Send this asset to the client's Creatives section for approval"
+      >
+        {sent ? "✓ Sent" : sending ? "Sending…" : "→ Approve"}
       </button>
     </div>
   );
