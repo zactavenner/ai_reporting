@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -196,8 +196,30 @@ export function AIStudioCanvas({
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom(z => Math.min(3, z * 1.1))} title="Zoom in">
           <Plus className="h-3.5 w-3.5" />
         </Button>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Fit">
-          <Maximize2 className="h-3.5 w-3.5" />
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          title="Jump to most recent generation"
+          onClick={() => {
+            const el = viewportRef.current;
+            if (!el) return;
+            // Find the last canvas card in DOM order (most recent generation).
+            const cards = el.querySelectorAll<HTMLElement>("[data-canvas-card]");
+            const target = cards[cards.length - 1];
+            if (!target) {
+              el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+              return;
+            }
+            // Reset zoom so the target is legible, then center it.
+            setZoom(1);
+            setPan({ x: 0, y: 0 });
+            requestAnimationFrame(() => {
+              target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+            });
+          }}
+        >
+          <Crosshair className="h-3.5 w-3.5" />
         </Button>
         <span className="text-[10px] text-muted-foreground ml-2">Ctrl/⌘+wheel to zoom · drag empty area to pan · click image to edit</span>
         <div className="ml-auto flex items-center gap-2">
