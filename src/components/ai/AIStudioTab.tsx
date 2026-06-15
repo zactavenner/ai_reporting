@@ -803,6 +803,38 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => { try { localStorage.setItem("ai-studio:agent-mode", String(agentMode)); } catch {} }, [agentMode]);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Sticky frame slots for video generation (first frame / last frame / ingredient/product image)
+  type FrameSlot = "firstFrame" | "lastFrame" | "ingredient";
+  const [videoFrames, setVideoFrames] = useState<{ firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string }>(() => {
+    try { return JSON.parse(localStorage.getItem(`ai-studio:video-frames:${clientId}`) || "{}"); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`ai-studio:video-frames:${clientId}`, JSON.stringify(videoFrames)); } catch {}
+  }, [videoFrames, clientId]);
+  const frameInputRef = useRef<HTMLInputElement>(null);
+  const frameSlotRef = useRef<FrameSlot | null>(null);
+  const [uploadingSlot, setUploadingSlot] = useState<FrameSlot | null>(null);
+  const uploadFrame = useCallback(async (slot: FrameSlot, file: File) => {
+    if (file.size > 20 * 1024 * 1024) { toast.error("Frame exceeds 20MB"); return; }
+    setUploadingSlot(slot);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `ai-studio/${clientId}/frames/${slot}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+      const { error } = await supabase.storage.from("gpt-files").upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data: pub } = supabase.storage.from("gpt-files").getPublicUrl(path);
+      setVideoFrames(curr => ({
+        ...curr,
+        ...(slot === "firstFrame" ? { firstFrameUrl: pub.publicUrl } : {}),
+        ...(slot === "lastFrame" ? { lastFrameUrl: pub.publicUrl } : {}),
+        ...(slot === "ingredient" ? { ingredientUrl: pub.publicUrl } : {}),
+      }));
+    } catch (e: any) {
+      toast.error(`Upload failed: ${e?.message || e}`);
+    } finally {
+      setUploadingSlot(null);
+    }
+  }, [clientId]);
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recStreamRef = useRef<MediaStream | null>(null);
