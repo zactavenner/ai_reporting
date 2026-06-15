@@ -928,8 +928,8 @@ async function generateSeedanceVideo(opts: {
   const ALLOWED = [
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
-    "moonshotai/kling-v2.1",
-    "moonshotai/kling-v2.1-pro",
+    "moonshotai/kling-v3.0",
+    "moonshotai/kling-v3.0-pro",
   ];
   const model = (opts.model && ALLOWED.includes(opts.model))
     ? opts.model
@@ -1306,7 +1306,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality, 720p max). Default false." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "moonshotai/kling-v2.1", "moonshotai/kling-v2.1-pro", "google/veo-3.1-fast"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "moonshotai/kling-v3.0", "moonshotai/kling-v3.0-pro", "google/veo-3.1-fast"], description: "Explicit OpenRouter video model id. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
@@ -1395,8 +1395,8 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
   "bytedance/seedance-2.0":      { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, up to 1080p)" },
-  "moonshotai/kling-v2.1":       { maxDuration: 10, label: "Kling 2.1 (≤10s per clip)" },
-  "moonshotai/kling-v2.1-pro":   { maxDuration: 10, label: "Kling 2.1 Pro (≤10s per clip)" },
+  "moonshotai/kling-v3.0":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
+  "moonshotai/kling-v3.0-pro":   { maxDuration: 10, label: "Kling 3.0 Pro (≤10s per clip)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
@@ -1587,8 +1587,8 @@ Deno.serve(async (req) => {
   const ALLOWED_VIDEO_MODELS = [
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
-    "moonshotai/kling-v2.1",
-    "moonshotai/kling-v2.1-pro",
+    "moonshotai/kling-v3.0",
+    "moonshotai/kling-v3.0-pro",
     "google/veo-3.1-fast",
   ];
   const selectedVideoModels: string[] = Array.isArray(videoModels)
