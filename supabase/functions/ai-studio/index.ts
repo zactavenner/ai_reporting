@@ -929,7 +929,6 @@ async function generateSeedanceVideo(opts: {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
     "kwaivgi/kling-v3.0-std",
-    "kwaivgi/kling-v3.0-pro",
   ];
   const model = (opts.model && ALLOWED.includes(opts.model))
     ? opts.model
