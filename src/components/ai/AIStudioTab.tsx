@@ -624,6 +624,13 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
   };
   return (
     <div className="shrink-0 snap-start w-72 rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
+      {video.model && (
+        <div className="px-2 pt-1.5 pb-1 flex items-center gap-1 border-b border-border/40">
+          <Badge variant="secondary" className="text-[9px] h-4 px-1.5" title={video.model}>{modelLabel(video.model)}</Badge>
+          {video.aspect_ratio && <span className="text-[9px] text-muted-foreground">{video.aspect_ratio}</span>}
+          {video.resolution && <span className="text-[9px] text-muted-foreground">· {video.resolution}</span>}
+        </div>
+      )}
       <VideoPlayerCard
         src={video.url}
         aspect={aspect as any}
@@ -653,6 +660,9 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
             source: "chat_pin",
           }}
           canvasKind="scene_video"
+          clientId={clientId}
+          assetKind="video"
+          aspectRatio={video.aspect_ratio}
         />
         <button
           type="button"
