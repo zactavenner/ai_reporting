@@ -931,6 +931,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     if (compareModels.length > 0) {
       const cmpModels = [...compareModels];
       const cmpPrompt = text;
+      // Mark the in-flight assistant placeholder with a loading flag so the UI can render
+      // skeleton columns alongside the primary reply.
+      setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compareLoading: true } : m)));
       (async () => {
         try {
           const { data, error } = await supabase.functions.invoke("compare-models", {
@@ -938,15 +941,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           });
           if (error) throw error;
           const results = (data as any)?.results || [];
-          const md = results.map((r: any) => {
-            const label = CHAT_MODELS.find(m => m.value === r.model)?.label || r.model;
-            const meta = `_${(r.ms / 1000).toFixed(1)}s${r.usage?.total_tokens ? ` · ${r.usage.total_tokens} tok` : ""}_`;
-            const body = r.error ? `⚠️ ${r.error}` : (r.output || "_(empty)_");
-            return `### ${label}\n${meta}\n\n${body}`;
-          }).join("\n\n---\n\n");
-          setMessages(curr => [...curr, { role: "assistant", content: `**Comparison (${cmpModels.length} models)**\n\n${md}` }]);
+          const compare: CompareResult[] = results.map((r: any) => ({
+            model: r.model,
+            label: CHAT_MODELS.find(mm => mm.value === r.model)?.label || r.model,
+            output: r.output,
+            error: r.error,
+            ms: r.ms,
+            usage: r.usage,
+          }));
+          setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compare, compareLoading: false } : m)));
         } catch (e: any) {
           toast.error(`Compare failed: ${e?.message || e}`);
+          setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compareLoading: false } : m)));
         }
       })();
     }
