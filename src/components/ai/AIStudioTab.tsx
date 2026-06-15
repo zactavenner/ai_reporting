@@ -1381,15 +1381,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const d = (e as CustomEvent).detail || {};
       if (d.url) setEditVideo({ url: d.url, prompt: d.prompt, aspect_ratio: d.aspect_ratio });
     };
+    const onSendToCreatives = async (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      const rows = Array.isArray(d.rows) ? d.rows : [];
+      if (!rows.length || !clientId) return;
+      try {
+        const res = await studioFetch({ action: "send_to_creatives", clientId, creativeRows: rows });
+        if (!res.ok) throw new Error(await res.text().catch(() => "Failed"));
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to send to Creatives");
+      }
+    };
     window.addEventListener("aistudio:edit-video", onEditVideoEvt);
     window.addEventListener("aistudio:set-prompt", onSetPrompt);
     window.addEventListener("aistudio:add-canvas-asset", onAddCanvas);
+    window.addEventListener("aistudio:send-to-creatives", onSendToCreatives);
     return () => {
       window.removeEventListener("aistudio:use-image", onUse);
       window.removeEventListener("aistudio:edit-image", onEdit);
       window.removeEventListener("aistudio:set-prompt", onSetPrompt);
       window.removeEventListener("aistudio:add-canvas-asset", onAddCanvas);
       window.removeEventListener("aistudio:edit-video", onEditVideoEvt);
+      window.removeEventListener("aistudio:send-to-creatives", onSendToCreatives);
     };
   }, [addImageAsReference, inlineEdit, conversationId, clientId, studioFetch]);
 
