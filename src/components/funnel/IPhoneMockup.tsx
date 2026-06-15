@@ -11,17 +11,14 @@ interface IPhoneMockupProps {
 export function IPhoneMockup({ url, title, className }: IPhoneMockupProps) {
   const [iframeKey, setIframeKey] = useState(0);
   const [mode, setMode] = useState<'iframe' | 'screenshot'>('iframe');
-  const [iframeBlocked, setIframeBlocked] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const loadedRef = useRef(false);
 
   // Auto-fallback to screenshot if iframe never fires onLoad (X-Frame-Options / CSP block)
   useEffect(() => {
     loadedRef.current = false;
-    setIframeBlocked(false);
     const t = setTimeout(() => {
       if (!loadedRef.current) {
-        setIframeBlocked(true);
         setMode('screenshot');
       } else {
         // Loaded — probe for blank/blocked content (length 0 + no body)
@@ -32,7 +29,6 @@ export function IPhoneMockup({ url, title, className }: IPhoneMockupProps) {
             try {
               const body = iframeRef.current?.contentDocument?.body;
               if (!body || body.childElementCount === 0) {
-                setIframeBlocked(true);
                 setMode('screenshot');
               }
             } catch {
@@ -60,7 +56,6 @@ export function IPhoneMockup({ url, title, className }: IPhoneMockupProps) {
   const handleRefresh = () => {
     setMode('iframe');
     loadedRef.current = false;
-    setIframeBlocked(false);
     setIframeKey(k => k + 1);
   };
 
