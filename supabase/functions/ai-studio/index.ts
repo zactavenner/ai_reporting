@@ -1398,7 +1398,7 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
