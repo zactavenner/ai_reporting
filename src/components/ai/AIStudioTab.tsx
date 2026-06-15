@@ -746,6 +746,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { return localStorage.getItem("ai-studio:hook-framework") || "auto"; } catch { return "auto"; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:hook-framework", hookFramework); } catch {} }, [hookFramework]);
+  // Selected offer drives which client offer the AI uses as the active campaign context.
+  // "all" = pass every offer as context. Otherwise a single offer.id.
+  const [selectedOfferId, setSelectedOfferId] = useState<string>(() => {
+    try { return localStorage.getItem(`ai-studio:offer:${clientId}`) || "all"; } catch { return "all"; }
+  });
+  useEffect(() => { try { localStorage.setItem(`ai-studio:offer:${clientId}`, selectedOfferId); } catch {} }, [clientId, selectedOfferId]);
   const [burnCaptions, setBurnCaptions] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:burn-captions") === "1"; } catch { return false; }
   });
