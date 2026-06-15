@@ -9,18 +9,20 @@ const corsHeaders = {
 };
 
 const GHL_API = "https://services.leadconnectorhq.com";
-const GHL_VERSION = "2021-04-15";
+// Conversations/messages endpoints want 2021-04-15; Contacts endpoints want 2021-07-28.
+const GHL_VERSION_MESSAGES = "2021-04-15";
+const GHL_VERSION_CONTACTS = "2021-07-28";
 
 // Hard-coded fallback so the message lands even if agency_settings is empty.
 const ZAC_PHONE_FALLBACK = "+19167097345";
 const ZAC_NAME = "Zac";
 
-async function ghlFetch(path: string, init: RequestInit, token: string) {
+async function ghlFetch(path: string, init: RequestInit, token: string, version: string) {
   return fetch(`${GHL_API}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
-      Version: GHL_VERSION,
+      Version: version,
       Accept: "application/json",
       "Content-Type": "application/json",
       ...(init.headers || {}),
@@ -28,20 +30,33 @@ async function ghlFetch(path: string, init: RequestInit, token: string) {
   });
 }
 
-async function findOrCreateContact(locationId: string, token: string, phone: string, name: string): Promise<string | null> {
+async function findOrCreateContact(
+  locationId: string,
+  token: string,
+  phone: string,
+  name: string,
+): Promise<{ id: string | null; debug: string }> {
+  let debug = "";
   // 1. Try lookup by phone
   try {
     const search = await ghlFetch(
       `/contacts/search/duplicate?locationId=${encodeURIComponent(locationId)}&number=${encodeURIComponent(phone)}`,
       { method: "GET" },
       token,
+      GHL_VERSION_CONTACTS,
     );
+    const sTxt = await search.text();
     if (search.ok) {
-      const j = await search.json();
+      const j = sTxt ? JSON.parse(sTxt) : {};
       const id = j?.contact?.id || j?.contacts?.[0]?.id;
-      if (id) return id;
+      if (id) return { id, debug: "found via duplicate search" };
+      debug += `dup-search ok no-id; `;
+    } else {
+      debug += `dup-search ${search.status}: ${sTxt.slice(0, 160)}; `;
     }
-  } catch { /* fall through to create */ }
+  } catch (e) {
+    debug += `dup-search threw ${e instanceof Error ? e.message : e}; `;
+  }
 
   // 2. Create
   try {
@@ -53,19 +68,26 @@ async function findOrCreateContact(locationId: string, token: string, phone: str
         firstName: name,
         source: "EOD Bot",
       }),
-    }, token);
+    }, token, GHL_VERSION_CONTACTS);
+    const cTxt = await create.text();
     if (create.ok) {
-      const j = await create.json();
-      return j?.contact?.id || j?.id || null;
+      const j = cTxt ? JSON.parse(cTxt) : {};
+      const id = j?.contact?.id || j?.id || null;
+      return { id, debug: debug + "created" };
     }
     // Duplicate? Try search again
     if (create.status === 400 || create.status === 409) {
-      const j = await create.json().catch(() => ({} as any));
-      const id = j?.meta?.contactId || j?.contact?.id;
-      if (id) return id;
+      try {
+        const j = JSON.parse(cTxt);
+        const id = j?.meta?.contactId || j?.contact?.id;
+        if (id) return { id, debug: debug + "dup-on-create" };
+      } catch { /* noop */ }
     }
-  } catch { /* noop */ }
-  return null;
+    debug += `create ${create.status}: ${cTxt.slice(0, 200)}; `;
+  } catch (e) {
+    debug += `create threw ${e instanceof Error ? e.message : e}; `;
+  }
+  return { id: null, debug };
 }
 
 async function sendGhlSms(locationId: string, token: string, contactId: string, message: string) {
@@ -77,7 +99,7 @@ async function sendGhlSms(locationId: string, token: string, contactId: string, 
       locationId,
       message,
     }),
-  }, token);
+  }, token, GHL_VERSION_MESSAGES);
 }
 
 Deno.serve(async (req) => {
@@ -141,8 +163,9 @@ Deno.serve(async (req) => {
       deliveryError = "Agency GHL not configured (missing AGENCY_GHL_API_KEY / AGENCY_GHL_LOCATION_ID)";
     } else {
       try {
-        contactId = await findOrCreateContact(GHL_LOCATION, GHL_TOKEN, phone, ZAC_NAME);
-        if (!contactId) throw new Error("Failed to find or create GHL contact for Zac");
+        const r0 = await findOrCreateContact(GHL_LOCATION, GHL_TOKEN, phone, ZAC_NAME);
+        contactId = r0.id;
+        if (!contactId) throw new Error(`Failed to find or create GHL contact for Zac — ${r0.debug}`);
         const r = await sendGhlSms(GHL_LOCATION, GHL_TOKEN, contactId, text);
         delivered = r.ok;
         if (!r.ok) {
