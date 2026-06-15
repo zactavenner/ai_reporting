@@ -24,6 +24,8 @@ function bucketize(tasks: any[]): Record<Bucket, any[]> {
   const in3 = new Date(today); in3.setDate(today.getDate() + 3);
   const out: Record<Bucket, any[]> = { overdue: [], today: [], upcoming: [] };
   for (const t of tasks) {
+    // Triage shows only active work — completed tasks still flow into stats below.
+    if (t.status === 'completed' || t.stage === 'done') continue;
     if (!t.due_date) { out.upcoming.push(t); continue; }
     const d = new Date(t.due_date); d.setHours(0,0,0,0);
     if (d < today) out.overdue.push(t);
@@ -141,6 +143,35 @@ export function EODView({ memberId }: { memberId: string }) {
   });
   const isAM = amClients.length > 0;
 
+  // Pull every prior client engagement this AM has logged so we can show
+  // "X days since last touch" per client (red >5d). Touchpoint events are
+  // written to member_activity_log on EOD submit below.
+  const amClientIds = useMemo(() => (amClients as any[]).map((c) => c.id), [amClients]);
+  const { data: lastEngagementRows = [] } = useQuery({
+    queryKey: ['eod-last-engagement', memberId, amClientIds.join(',')],
+    queryFn: async () => {
+      if (!memberId || amClientIds.length === 0) return [] as any[];
+      const { data } = await (supabase as any)
+        .from('member_activity_log')
+        .select('entity_id, created_at, details')
+        .eq('member_id', memberId)
+        .eq('action', 'client_touchpoint')
+        .in('entity_id', amClientIds)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      return data || [];
+    },
+    enabled: !!memberId && amClientIds.length > 0,
+  });
+  const lastEngagementByClient = useMemo(() => {
+    const m: Record<string, { at: string; channels: string[] }> = {};
+    for (const r of lastEngagementRows as any[]) {
+      if (!r.entity_id) continue;
+      if (!m[r.entity_id]) m[r.entity_id] = { at: r.created_at, channels: r.details?.channels || [] };
+    }
+    return m;
+  }, [lastEngagementRows]);
+
   const [touchpointsByClient, setTouchpointsByClient] = useState<Record<string, Record<TouchKey, boolean>>>({});
   const [openSubtasks, setOpenSubtasks] = useState<Record<string, boolean>>({});
   const [openTask, setOpenTask] = useState<any | null>(null);
@@ -252,6 +283,24 @@ export function EODView({ memberId }: { memberId: string }) {
       },
       member_name: member?.name || 'Team Member',
     });
+
+    // Persist per-client touchpoints so "days since last engagement" stays accurate.
+    try {
+      const rows = clientTouchpoints
+        .filter((ct) => ct.channels.length > 0 && ct.channels[0] !== 'none')
+        .map((ct) => ({
+          member_id: memberId,
+          action: 'client_touchpoint',
+          entity_type: 'client',
+          entity_id: ct.client_id,
+          details: { channels: ct.channels, source: 'eod', report_date: new Date().toISOString().slice(0, 10) },
+        }));
+      if (rows.length > 0) {
+        await (supabase as any).from('member_activity_log').insert(rows);
+      }
+    } catch (e) {
+      console.warn('member_activity_log insert failed', e);
+    }
 
     // Fire off to Hermes → SMS Zac (GHL agency)
     try {
@@ -472,8 +521,34 @@ export function EODView({ memberId }: { memberId: string }) {
                 return (
                   <div key={c.id} className="flex items-center justify-between gap-2 py-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{c.name}</p>
-                      {!any && <p className="text-[11px] text-muted-foreground">None</p>}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium truncate">{c.name}</p>
+                        {(() => {
+                          const last = lastEngagementByClient[c.id];
+                          if (!last) {
+                            return (
+                              <Badge className="h-5 px-1.5 text-[10px] bg-destructive/15 text-destructive border border-destructive/40">
+                                No engagement logged
+                              </Badge>
+                            );
+                          }
+                          const days = Math.floor((Date.now() - new Date(last.at).getTime()) / 86_400_000);
+                          const tone =
+                            days > 5
+                              ? 'bg-destructive/15 text-destructive border-destructive/40'
+                              : days >= 3
+                              ? 'bg-amber-500/15 text-amber-700 border-amber-500/40'
+                              : 'bg-emerald-500/15 text-emerald-700 border-emerald-500/40';
+                          const label =
+                            days <= 0 ? 'Today' : days === 1 ? '1 day ago' : `${days} days ago`;
+                          return (
+                            <Badge className={cn('h-5 px-1.5 text-[10px] border', tone)} title={new Date(last.at).toLocaleString()}>
+                              {label}
+                            </Badge>
+                          );
+                        })()}
+                      </div>
+                      {!any && <p className="text-[11px] text-muted-foreground mt-0.5">No touch logged for today</p>}
                     </div>
                     <div className="flex gap-1.5 shrink-0">
                       <Btn k="message" icon={MessageSquare} label="Message" />
