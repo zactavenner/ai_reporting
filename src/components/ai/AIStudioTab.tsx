@@ -1960,10 +1960,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             return next.length === 0 ? [m.value] : next;
                           });
                         }}
-                        title={`${m.label} — ${m.hint}\nEst. ${m.price}${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
-                        className={`h-7 px-2 rounded-lg text-[10px] border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                        title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
+                        className={`h-7 px-2 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
-                        {m.label}
+                        <span>{m.label}</span>
+                        <span className={`text-[9px] ${active ? "text-primary-foreground/80" : "text-muted-foreground/70"}`}>
+                          {m.maxSeconds}s · ${ (m.maxSeconds * m.pricePerSecond).toFixed(2) }
+                        </span>
                       </button>
                     );
                   })}
