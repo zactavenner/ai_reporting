@@ -564,6 +564,9 @@ function ChatImagePreview({ image, clientId }: { image: ChatImage; clientId?: st
             source: "chat_pin",
           }}
           canvasKind="image"
+          clientId={clientId}
+          assetKind="image"
+          aspectRatio={image.aspect_ratio}
         />
         <button
           onClick={(e) => {
