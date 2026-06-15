@@ -65,15 +65,15 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 ];
 
 // Video models (all routed through OpenRouter /v1/videos)
-// `maxSeconds` = longest single clip supported. `pricePerSecond` = USD/sec.
+// `maxSeconds` = longest single clip supported. `pricePerSecond` = USD/sec from OpenRouter.
 // UI shows the total cost of generating a clip at maxSeconds so buyers
 // can compare apples-to-apples without doing math in their head.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts",                 maxSeconds: 15, pricePerSecond: 0.03 },
-  { value: "bytedance/seedance-2.0",      label: "Seedance Pro",   hint: "Best Seedance quality",                  maxSeconds: 15, pricePerSecond: 0.10 },
-  { value: "moonshotai/kling-v3.0",       label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion",   maxSeconds: 10, pricePerSecond: 0.056 },
-  { value: "moonshotai/kling-v3.0-pro",   label: "Kling 3.0 Pro",  hint: "Newest highest-quality Kling",           maxSeconds: 10, pricePerSecond: 0.14 },
-  { value: "google/veo-3.1-fast",         label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast",       maxSeconds: 8,  pricePerSecond: 0.40 },
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts",                 maxSeconds: 15, pricePerSecond: 0.0538 },
+  { value: "bytedance/seedance-2.0",      label: "Seedance Pro",   hint: "Best Seedance quality",                  maxSeconds: 15, pricePerSecond: 0.06726 },
+  { value: "kwaivgi/kling-v3.0-std",       label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion",   maxSeconds: 15, pricePerSecond: 0.126 },
+  { value: "kwaivgi/kling-v3.0-pro",       label: "Kling 3.0 Pro",  hint: "Newest highest-quality Kling",           maxSeconds: 15, pricePerSecond: 0.168 },
+  { value: "google/veo-3.1-fast",          label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast",       maxSeconds: 8,  pricePerSecond: 0.10 },
 ];
 function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): string {
   const total = m.maxSeconds * m.pricePerSecond;
