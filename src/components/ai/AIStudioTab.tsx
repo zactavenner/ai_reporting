@@ -36,7 +36,8 @@ interface Props {
   clientName: string;
 }
 
-type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null };
+type CompareResult = { model: string; label: string; output?: string; error?: string; ms?: number; usage?: any };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
 type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean };
@@ -104,6 +105,61 @@ function contextLimitFor(model: string): number {
   if (/deepseek/i.test(model)) return 128_000;
   if (/llama/i.test(model)) return 128_000;
   return 200_000;
+}
+
+function CompareGrid({ primary, isStreaming, compare, loading }: { primary: string; isStreaming: boolean; compare: CompareResult[]; loading: boolean }) {
+  const cols: Array<{ key: string; label: string; body: string; meta?: string; error?: string; streaming?: boolean }> = [
+    { key: "__primary", label: "Primary", body: primary || "", streaming: isStreaming },
+    ...compare.map((c) => ({
+      key: c.model,
+      label: c.label,
+      body: c.output || "",
+      error: c.error,
+      meta: `${c.ms ? (c.ms / 1000).toFixed(1) + "s" : ""}${c.usage?.total_tokens ? ` · ${c.usage.total_tokens} tok` : ""}`,
+    })),
+  ];
+  return (
+    <div className="mt-1">
+      <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+        <span>Side-by-side comparison</span>
+        {loading && <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> running compare…</span>}
+      </div>
+      <div className="grid gap-2 auto-cols-[minmax(280px,1fr)] grid-flow-col overflow-x-auto pb-2 snap-x">
+        {cols.map((c) => (
+          <div key={c.key} className="snap-start rounded-xl border border-border/60 bg-background/40 backdrop-blur p-3 min-w-[280px] max-h-[520px] overflow-y-auto">
+            <div className="flex items-center justify-between gap-2 mb-2 sticky top-0 bg-background/80 backdrop-blur -mx-3 px-3 py-1 border-b border-border/40">
+              <Badge variant={c.key === "__primary" ? "default" : "secondary"} className="text-[10px]">{c.label}</Badge>
+              {c.meta && <span className="text-[10px] text-muted-foreground">{c.meta}</span>}
+            </div>
+            {c.error ? (
+              <div className="text-xs text-destructive">⚠️ {c.error}</div>
+            ) : c.body ? (
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-3 prose-headings:mb-1 prose-headings:font-semibold prose-strong:text-foreground prose-h1:text-sm prose-h2:text-sm prose-h3:text-xs prose-code:bg-muted prose-code:px-1 prose-code:rounded">
+                <ReactMarkdown>{c.body}</ReactMarkdown>
+                {c.streaming && (
+                  <span className="inline-flex items-center gap-1 ml-1 text-muted-foreground align-middle">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse [animation-delay:120ms]" />
+                  </span>
+                )}
+              </div>
+            ) : c.streaming ? (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> thinking…</span>
+            ) : loading ? (
+              <div className="space-y-2 animate-pulse">
+                <div className="h-2 bg-muted rounded w-3/4" />
+                <div className="h-2 bg-muted rounded w-full" />
+                <div className="h-2 bg-muted rounded w-5/6" />
+                <div className="h-2 bg-muted rounded w-2/3" />
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">_(empty)_</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ChatMessage({ message: m, isStreaming, clientId, clientName }: { message: Msg; isStreaming: boolean; clientId: string; clientName?: string }) {
@@ -204,7 +260,9 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
           )}
         </div>
       )}
-      {m.content ? (
+      {(m.compare && m.compare.length > 0) || m.compareLoading ? (
+        <CompareGrid primary={m.content} isStreaming={isStreaming} compare={m.compare || []} loading={!!m.compareLoading} />
+      ) : m.content ? (
         <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:text-foreground prose-strong:font-semibold prose-h1:text-base prose-h2:text-sm prose-h3:text-sm prose-blockquote:border-l-primary/50 prose-code:bg-muted prose-code:px-1 prose-code:rounded">
           <ReactMarkdown>{m.content}</ReactMarkdown>
           {isStreaming && (
@@ -930,6 +988,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     if (compareModels.length > 0) {
       const cmpModels = [...compareModels];
       const cmpPrompt = text;
+      // Mark the in-flight assistant placeholder with a loading flag so the UI can render
+      // skeleton columns alongside the primary reply.
+      setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compareLoading: true } : m)));
       (async () => {
         try {
           const { data, error } = await supabase.functions.invoke("compare-models", {
@@ -937,15 +998,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           });
           if (error) throw error;
           const results = (data as any)?.results || [];
-          const md = results.map((r: any) => {
-            const label = CHAT_MODELS.find(m => m.value === r.model)?.label || r.model;
-            const meta = `_${(r.ms / 1000).toFixed(1)}s${r.usage?.total_tokens ? ` · ${r.usage.total_tokens} tok` : ""}_`;
-            const body = r.error ? `⚠️ ${r.error}` : (r.output || "_(empty)_");
-            return `### ${label}\n${meta}\n\n${body}`;
-          }).join("\n\n---\n\n");
-          setMessages(curr => [...curr, { role: "assistant", content: `**Comparison (${cmpModels.length} models)**\n\n${md}` }]);
+          const compare: CompareResult[] = results.map((r: any) => ({
+            model: r.model,
+            label: CHAT_MODELS.find(mm => mm.value === r.model)?.label || r.model,
+            output: r.output,
+            error: r.error,
+            ms: r.ms,
+            usage: r.usage,
+          }));
+          setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compare, compareLoading: false } : m)));
         } catch (e: any) {
           toast.error(`Compare failed: ${e?.message || e}`);
+          setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compareLoading: false } : m)));
         }
       })();
     }
