@@ -2242,18 +2242,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </div>
           </TabsContent>
 
-          <TabsContent value="doc" className="flex-1 m-0 overflow-hidden">
-            {docUrl ? (
-              <div className="h-full flex flex-col">
-                <div className="px-4 py-2 border-b flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground truncate">{docUrl}</span>
-                  <a href={docUrl} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1 text-primary"><ExternalLink className="h-3 w-3" /> Open</a>
-                </div>
-                <iframe src={docUrl.replace(/\/edit.*$/, "/preview")} className="flex-1 w-full" title="Doc preview" />
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Add a Google Doc URL above.</div>
-            )}
+          <TabsContent value="offers" className="flex-1 m-0 overflow-auto p-4">
+            <ClientOffersSection
+              clientId={clientId}
+              clientName={clientName}
+              brandColors={brandColors}
+              brandFonts={brandFonts}
+              clientDescription={(client as any)?.description ?? null}
+              websiteUrl={(client as any)?.website ?? null}
+              industry={(client as any)?.industry ?? null}
+              clientType={(client as any)?.client_type ?? null}
+            />
           </TabsContent>
 
           <TabsContent value="sheet" className="flex-1 m-0 overflow-hidden">
