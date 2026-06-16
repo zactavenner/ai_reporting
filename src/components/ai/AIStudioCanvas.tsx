@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3, Grid3x3 } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3, Grid3x3, RefreshCw, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -599,6 +599,39 @@ export function AIStudioCanvas({
                         onClick={() => onAddCaptions(p.video_url, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio })}
                       >
                         <Subtitles className="h-3.5 w-3.5" /> Captions
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      title="Re-create — load this video's prompt into chat"
+                      onClick={() => {
+                        const text = p.video_prompt || "";
+                        if (!text) { toast.error("No prompt found for this video"); return; }
+                        window.dispatchEvent(new CustomEvent("aistudio:set-prompt", { detail: { text } }));
+                        toast.success("Prompt loaded — tweak & send");
+                      }}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" /> Re-create
+                    </Button>
+                    {onSendMessage && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2 text-[11px] gap-1"
+                        title="Train — teach the AI to make more like this"
+                        onClick={() => {
+                          const promptText = p.video_prompt || "";
+                          const model = p.model || "this model";
+                          const ar = p.aspect_ratio || "";
+                          const dur = p.duration || "";
+                          const msg = `TRAIN: Remember this winning video as a reference style going forward. When I ask for similar videos, match its pacing, framing, tone, and structure.\n\nReference video URL: ${p.video_url}\nModel: ${model}\nAspect: ${ar}  Duration: ${dur}s\nOriginal prompt:\n"""${promptText}"""\n\nExtract the key style ingredients (camera, lighting, subject energy, edit rhythm, hook pattern) and save them as the preferred style for this client. Confirm what you've learned, then suggest 3 fresh variations I could generate next.`;
+                          onSendMessage(msg);
+                          toast.success("Training the AI on this video…");
+                        }}
+                      >
+                        <GraduationCap className="h-3.5 w-3.5" /> Train
                       </Button>
                     )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
