@@ -411,18 +411,18 @@ export function AIStudioCanvas({
                   onCancel={() => setAnimatingId(null)}
                 />
               )}
-              <div className="flex items-start gap-2 mt-2">
-                <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{p.prompt}</p>
+              <p className="text-xs text-muted-foreground line-clamp-2 mt-2">{p.prompt}</p>
+              <div className="flex items-center flex-wrap gap-1 mt-2">
                 {p.image_url && (
                   <>
                     {onEditImage && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Edit (offer / hook / colors / disclaimer)"
+                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Edit (offer / hook / colors / disclaimer)"
                         onClick={(ev) => { ev.stopPropagation(); onEditImage(p.image_url, p.aspect_ratio || "1:1"); }}>
                         <Wand2 className="h-3.5 w-3.5" />
                       </Button>
                     )}
                     {onSendMessage && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Animate this image (describe the motion)"
+                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Animate this image (describe the motion)"
                         onClick={(ev) => {
                           ev.stopPropagation();
                           setAnimatingId(prev => prev === e.id ? null : e.id);
@@ -431,11 +431,11 @@ export function AIStudioCanvas({
                         <Film className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Copy URL"
                       onClick={(ev) => { ev.stopPropagation(); navigator.clipboard.writeText(p.image_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Open" asChild>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Open" asChild>
                       <a href={p.image_url} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}>
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
@@ -443,7 +443,7 @@ export function AIStudioCanvas({
                   </>
                 )}
                 {p.parent_image_url && (
-                  <Badge variant="outline" className="text-[10px] mt-1">revision</Badge>
+                  <Badge variant="outline" className="text-[10px] ml-auto">revision</Badge>
                 )}
               </div>
             </Card>
@@ -550,14 +550,14 @@ export function AIStudioCanvas({
                 errorMessage={!p.video_url ? "Generation finished but no video URL was returned." : undefined}
                 onEdit={p.video_url && onEditVideo ? (u) => onEditVideo(u, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio }) : undefined}
               />
-              <div className="flex items-center gap-2 mt-2">
-                <p className="text-[10px] text-muted-foreground line-clamp-2 flex-1">{p.video_prompt}</p>
+              <p className="text-[10px] text-muted-foreground line-clamp-2 mt-2">{p.video_prompt}</p>
+              <div className="flex items-center flex-wrap gap-1.5 mt-2">
                 {p.video_url && (
                   <>
                     <Button
                       size="sm"
                       variant="default"
-                      className="h-7 px-2 text-[11px] gap-1"
+                      className="h-7 px-2 text-[11px] gap-1 shrink-0"
                       title="Download video"
                       onClick={async () => {
                         try {
@@ -583,7 +583,7 @@ export function AIStudioCanvas({
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="h-7 px-2 text-[11px] gap-1"
+                        className="h-7 px-2 text-[11px] gap-1 shrink-0"
                         title="Edit in Video Editor"
                         onClick={() => onEditVideo(p.video_url, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio })}
                       >
@@ -594,7 +594,7 @@ export function AIStudioCanvas({
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="h-7 px-2 text-[11px] gap-1"
+                        className="h-7 px-2 text-[11px] gap-1 shrink-0"
                         title="Add viral-pop captions (auto-transcribe)"
                         onClick={() => onAddCaptions(p.video_url, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio })}
                       >
@@ -604,7 +604,7 @@ export function AIStudioCanvas({
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="h-7 px-2 text-[11px] gap-1"
+                      className="h-7 px-2 text-[11px] gap-1 shrink-0"
                       title="Re-create — load this video's prompt into chat"
                       onClick={() => {
                         const text = p.video_prompt || "";
@@ -619,7 +619,7 @@ export function AIStudioCanvas({
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="h-7 px-2 text-[11px] gap-1"
+                        className="h-7 px-2 text-[11px] gap-1 shrink-0"
                         title="Train — teach the AI to make more like this"
                         onClick={() => {
                           const promptText = p.video_prompt || "";
@@ -634,7 +634,7 @@ export function AIStudioCanvas({
                         <GraduationCap className="h-3.5 w-3.5" /> Train
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Copy URL"
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Copy URL"
                       onClick={() => { navigator.clipboard.writeText(p.video_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
