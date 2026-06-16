@@ -73,6 +73,7 @@ export function AIStudioCanvas({
   const [zoom, setZoom] = useState(initialView?.zoom ?? 1);
   const [pan, setPan] = useState({ x: initialView?.panX ?? 0, y: initialView?.panY ?? 0 });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [animatingId, setAnimatingId] = useState<string | null>(null);
   const draggingRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const focusScrolledRef = useRef<string | null>(null);
@@ -215,7 +216,7 @@ export function AIStudioCanvas({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/30 flex-wrap">
+      <div className="sticky top-0 z-20 shrink-0 flex items-center gap-1 px-2 py-1 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex-wrap">
         <Button
           size="icon"
           variant="ghost"
