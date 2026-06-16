@@ -8348,6 +8348,143 @@ export type Database = {
           },
         ]
       }
+      meta_ai_creative_insights: {
+        Row: {
+          body: string | null
+          client_id: string | null
+          confidence: number | null
+          created_at: string
+          evidence: Json | null
+          generated_for_date: string | null
+          id: string
+          insight_type: string | null
+          meta_ad_id: string | null
+          model: string | null
+          scope: string
+          title: string | null
+        }
+        Insert: {
+          body?: string | null
+          client_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          evidence?: Json | null
+          generated_for_date?: string | null
+          id?: string
+          insight_type?: string | null
+          meta_ad_id?: string | null
+          model?: string | null
+          scope?: string
+          title?: string | null
+        }
+        Update: {
+          body?: string | null
+          client_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          evidence?: Json | null
+          generated_for_date?: string | null
+          id?: string
+          insight_type?: string | null
+          meta_ad_id?: string | null
+          model?: string | null
+          scope?: string
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ai_creative_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_ai_creative_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_ai_creative_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          client_id: string | null
+          created_at: string
+          dispatched_channels: Json | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          message: string | null
+          metadata: Json | null
+          severity: string
+          title: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type: string
+          client_id?: string | null
+          created_at?: string
+          dispatched_channels?: Json | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          severity?: string
+          title: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          client_id?: string | null
+          created_at?: string
+          dispatched_channels?: Json | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          severity?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       meta_api_calls: {
         Row: {
           client_id: string | null
@@ -8402,6 +8539,100 @@ export type Database = {
           },
           {
             foreignKeyName: "meta_api_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_campaign_templates: {
+        Row: {
+          attribution_setting: string | null
+          bid_strategy: string | null
+          client_id: string | null
+          config: Json | null
+          created_at: string
+          created_by: string | null
+          daily_budget: number | null
+          default_lead_form_id: string | null
+          description: string | null
+          exclusions: Json | null
+          id: string
+          lifetime_budget: number | null
+          name: string
+          naming_convention: Json | null
+          objective: string | null
+          optimization_goal: string | null
+          placements: Json | null
+          platform: string
+          targeting: Json | null
+          updated_at: string
+          utm_template: Json | null
+        }
+        Insert: {
+          attribution_setting?: string | null
+          bid_strategy?: string | null
+          client_id?: string | null
+          config?: Json | null
+          created_at?: string
+          created_by?: string | null
+          daily_budget?: number | null
+          default_lead_form_id?: string | null
+          description?: string | null
+          exclusions?: Json | null
+          id?: string
+          lifetime_budget?: number | null
+          name: string
+          naming_convention?: Json | null
+          objective?: string | null
+          optimization_goal?: string | null
+          placements?: Json | null
+          platform?: string
+          targeting?: Json | null
+          updated_at?: string
+          utm_template?: Json | null
+        }
+        Update: {
+          attribution_setting?: string | null
+          bid_strategy?: string | null
+          client_id?: string | null
+          config?: Json | null
+          created_at?: string
+          created_by?: string | null
+          daily_budget?: number | null
+          default_lead_form_id?: string | null
+          description?: string | null
+          exclusions?: Json | null
+          id?: string
+          lifetime_budget?: number | null
+          name?: string
+          naming_convention?: Json | null
+          objective?: string | null
+          optimization_goal?: string | null
+          placements?: Json | null
+          platform?: string
+          targeting?: Json | null
+          updated_at?: string
+          utm_template?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_campaign_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_templates_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
@@ -8548,6 +8779,578 @@ export type Database = {
           },
         ]
       }
+      meta_creative_comments: {
+        Row: {
+          approval_state: string | null
+          author_id: string | null
+          author_name: string | null
+          body: string
+          client_id: string | null
+          created_at: string
+          id: string
+          meta_ad_id: string | null
+          parent_id: string | null
+          swipe_file_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          approval_state?: string | null
+          author_id?: string | null
+          author_name?: string | null
+          body: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          meta_ad_id?: string | null
+          parent_id?: string | null
+          swipe_file_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approval_state?: string | null
+          author_id?: string | null
+          author_name?: string | null
+          body?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          meta_ad_id?: string | null
+          parent_id?: string | null
+          swipe_file_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_creative_comments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_creative_comments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_creative_comments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_creative_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "meta_creative_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_creative_comments_swipe_file_id_fkey"
+            columns: ["swipe_file_id"]
+            isOneToOne: false
+            referencedRelation: "meta_swipe_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_creative_tags: {
+        Row: {
+          client_id: string | null
+          computed_at: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          meta_ad_id: string
+          reasons: Json | null
+          score: number | null
+          source: string
+          tag: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          computed_at?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          meta_ad_id: string
+          reasons?: Json | null
+          score?: number | null
+          source?: string
+          tag: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          computed_at?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          meta_ad_id?: string
+          reasons?: Json | null
+          score?: number | null
+          source?: string
+          tag?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_creative_tags_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_creative_tags_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_creative_tags_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_lead_form_mappings: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          destination: string
+          destination_config: Json | null
+          field_mappings: Json | null
+          id: string
+          is_active: boolean | null
+          meta_form_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          destination: string
+          destination_config?: Json | null
+          field_mappings?: Json | null
+          id?: string
+          is_active?: boolean | null
+          meta_form_id: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          destination?: string
+          destination_config?: Json | null
+          field_mappings?: Json | null
+          id?: string
+          is_active?: boolean | null
+          meta_form_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_lead_form_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_lead_form_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_lead_form_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_lead_form_templates: {
+        Row: {
+          category: string | null
+          client_id: string | null
+          conditional_logic: Json | null
+          config: Json | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_global: boolean | null
+          name: string
+          questions: Json | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          client_id?: string | null
+          conditional_logic?: Json | null
+          config?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_global?: boolean | null
+          name: string
+          questions?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          client_id?: string | null
+          conditional_logic?: Json | null
+          config?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_global?: boolean | null
+          name?: string
+          questions?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_lead_form_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_lead_form_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_lead_form_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_lead_forms: {
+        Row: {
+          client_id: string | null
+          completion_rate: number | null
+          conditional_logic: Json | null
+          conversion_rate: number | null
+          cpl: number | null
+          created_at: string
+          id: string
+          last_synced_at: string | null
+          leads_count: number | null
+          locale: string | null
+          meta_ad_account_id: string | null
+          meta_form_id: string
+          meta_page_id: string | null
+          name: string | null
+          privacy_policy_url: string | null
+          questions: Json | null
+          raw: Json | null
+          spend: number | null
+          status: string | null
+          thank_you_page: Json | null
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          completion_rate?: number | null
+          conditional_logic?: Json | null
+          conversion_rate?: number | null
+          cpl?: number | null
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          leads_count?: number | null
+          locale?: string | null
+          meta_ad_account_id?: string | null
+          meta_form_id: string
+          meta_page_id?: string | null
+          name?: string | null
+          privacy_policy_url?: string | null
+          questions?: Json | null
+          raw?: Json | null
+          spend?: number | null
+          status?: string | null
+          thank_you_page?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          completion_rate?: number | null
+          conditional_logic?: Json | null
+          conversion_rate?: number | null
+          cpl?: number | null
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          leads_count?: number | null
+          locale?: string | null
+          meta_ad_account_id?: string | null
+          meta_form_id?: string
+          meta_page_id?: string | null
+          name?: string | null
+          privacy_policy_url?: string | null
+          questions?: Json | null
+          raw?: Json | null
+          spend?: number | null
+          status?: string | null
+          thank_you_page?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_lead_forms_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_lead_forms_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_lead_forms_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_rule_runs: {
+        Row: {
+          actions_taken: Json | null
+          after_metrics: Json | null
+          before_metrics: Json | null
+          client_id: string | null
+          error: string | null
+          id: string
+          matched_entities: Json | null
+          ran_at: string
+          rule_id: string
+          status: string
+        }
+        Insert: {
+          actions_taken?: Json | null
+          after_metrics?: Json | null
+          before_metrics?: Json | null
+          client_id?: string | null
+          error?: string | null
+          id?: string
+          matched_entities?: Json | null
+          ran_at?: string
+          rule_id: string
+          status?: string
+        }
+        Update: {
+          actions_taken?: Json | null
+          after_metrics?: Json | null
+          before_metrics?: Json | null
+          client_id?: string | null
+          error?: string | null
+          id?: string
+          matched_entities?: Json | null
+          ran_at?: string
+          rule_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_rule_runs_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "meta_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_rules: {
+        Row: {
+          action: string
+          action_config: Json | null
+          client_id: string | null
+          conditions: Json
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          name: string
+          next_run_at: string | null
+          notify_channels: Json | null
+          platform: string
+          schedule: string
+          scope_ids: Json | null
+          scope_level: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          action_config?: Json | null
+          client_id?: string | null
+          conditions?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          name: string
+          next_run_at?: string | null
+          notify_channels?: Json | null
+          platform?: string
+          schedule?: string
+          scope_ids?: Json | null
+          scope_level: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          action_config?: Json | null
+          client_id?: string | null
+          conditions?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          name?: string
+          next_run_at?: string | null
+          notify_channels?: Json | null
+          platform?: string
+          schedule?: string
+          scope_ids?: Json | null
+          scope_level?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_swipe_files: {
+        Row: {
+          ad_copy: string | null
+          brand_name: string | null
+          client_id: string | null
+          created_at: string
+          cta: string | null
+          headline: string | null
+          id: string
+          media_type: string | null
+          media_url: string | null
+          notes: string | null
+          raw: Json | null
+          saved_by: string | null
+          source: string
+          source_url: string | null
+          tags: Json | null
+          updated_at: string
+        }
+        Insert: {
+          ad_copy?: string | null
+          brand_name?: string | null
+          client_id?: string | null
+          created_at?: string
+          cta?: string | null
+          headline?: string | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          notes?: string | null
+          raw?: Json | null
+          saved_by?: string | null
+          source?: string
+          source_url?: string | null
+          tags?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          ad_copy?: string | null
+          brand_name?: string | null
+          client_id?: string | null
+          created_at?: string
+          cta?: string | null
+          headline?: string | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          notes?: string | null
+          raw?: Json | null
+          saved_by?: string | null
+          source?: string
+          source_url?: string | null
+          tags?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_swipe_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_swipe_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_swipe_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       meta_token_state: {
         Row: {
           access_token: string
@@ -8580,6 +9383,85 @@ export type Database = {
           last_validated_at?: string | null
         }
         Relationships: []
+      }
+      meta_weekly_briefs: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          doc_url: string | null
+          fatigued: Json | null
+          id: string
+          new_concepts: Json | null
+          notion_url: string | null
+          pdf_url: string | null
+          recommendations: Json | null
+          status: string
+          summary: string | null
+          totals: Json | null
+          updated_at: string
+          week_end: string
+          week_start: string
+          winners: Json | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          doc_url?: string | null
+          fatigued?: Json | null
+          id?: string
+          new_concepts?: Json | null
+          notion_url?: string | null
+          pdf_url?: string | null
+          recommendations?: Json | null
+          status?: string
+          summary?: string | null
+          totals?: Json | null
+          updated_at?: string
+          week_end: string
+          week_start: string
+          winners?: Json | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          doc_url?: string | null
+          fatigued?: Json | null
+          id?: string
+          new_concepts?: Json | null
+          notion_url?: string | null
+          pdf_url?: string | null
+          recommendations?: Json | null
+          status?: string
+          summary?: string | null
+          totals?: Json | null
+          updated_at?: string
+          week_end?: string
+          week_start?: string
+          winners?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_weekly_briefs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_weekly_briefs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_weekly_briefs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
       }
       monitoring_status: {
         Row: {
