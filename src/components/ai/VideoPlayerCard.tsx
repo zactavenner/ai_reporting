@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize2, PictureInPicture2, Loader2, AlertCircle, Wand2 } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, PictureInPicture2, Loader2, AlertCircle, Wand2, RotateCw, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function fmtTime(t: number) {
@@ -39,8 +39,9 @@ export function VideoPlayerCard({
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState<number>(1);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
-  useEffect(() => { setLoadFailed(false); }, [src]);
+  useEffect(() => { setLoadFailed(false); }, [src, retryKey]);
 
   const togglePlay = () => {
     const v = videoRef.current; if (!v) return;
@@ -95,6 +96,25 @@ export function VideoPlayerCard({
           <p className="text-xs text-destructive font-medium">Video unavailable</p>
           {errorMessage && <p className="text-[10px] text-muted-foreground max-w-[260px]">{errorMessage}</p>}
           {!errorMessage && loadFailed && <p className="text-[10px] text-muted-foreground">The video URL could not be loaded.</p>}
+          {src && (
+            <div className="flex items-center justify-center gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => { setLoadFailed(false); setRetryKey(k => k + 1); }}
+                className="h-7 px-2 inline-flex items-center gap-1 rounded bg-primary text-primary-foreground text-[10px] hover:bg-primary/90"
+              >
+                <RotateCw className="h-3 w-3" /> Retry
+              </button>
+              <a
+                href={src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-7 px-2 inline-flex items-center gap-1 rounded border text-[10px] hover:bg-muted"
+              >
+                <ExternalLink className="h-3 w-3" /> Open
+              </a>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -103,11 +123,12 @@ export function VideoPlayerCard({
   return (
     <div className={cn("relative w-full rounded-md border overflow-hidden bg-black group", aspectClass, className)}>
       <video
+        key={`${src}-${retryKey}`}
         ref={videoRef}
-        src={src}
         poster={poster || undefined}
         playsInline
         preload="metadata"
+        crossOrigin="anonymous"
         className="w-full h-full object-contain"
         onClick={togglePlay}
         onPlay={() => setPlaying(true)}
@@ -116,7 +137,9 @@ export function VideoPlayerCard({
         onLoadedMetadata={(e) => setDuration((e.target as HTMLVideoElement).duration || 0)}
         onVolumeChange={(e) => setMuted((e.target as HTMLVideoElement).muted)}
         onError={() => setLoadFailed(true)}
-      />
+      >
+        <source src={src} type="video/mp4" />
+      </video>
       {/* Big play overlay when paused */}
       {!playing && (
         <button
