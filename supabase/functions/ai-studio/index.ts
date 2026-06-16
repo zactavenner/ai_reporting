@@ -920,8 +920,7 @@ async function generateSeedanceVideo(opts: {
   resolution: string;          // "720p" | "1080p"
   imageUrl?: string | null;    // optional first-frame for image-to-video
   lastFrameUrl?: string | null;
-  fast?: boolean;              // use seedance-2.0-fast
-  model?: string | null;       // explicit OpenRouter model id (overrides `fast`)
+  model?: string | null;       // explicit OpenRouter model id
   clientId: string | null;
   conversationId: string;
   userId: string;
@@ -941,14 +940,12 @@ async function generateSeedanceVideo(opts: {
 
   const ALLOWED = [
     "bytedance/seedance-2.0-fast",
-    "bytedance/seedance-2.0",
-    "kwaivgi/kling-v3.0-std",
     "kwaivgi/kling-v3.0-std",
     "google/veo-3.1-fast",
   ];
   const model = (opts.model && ALLOWED.includes(opts.model))
     ? opts.model
-    : (opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0");
+    : "bytedance/seedance-2.0-fast";
   const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const effectiveResolution = isSeedanceFast && opts.resolution === "1080p" ? "720p" : opts.resolution;
