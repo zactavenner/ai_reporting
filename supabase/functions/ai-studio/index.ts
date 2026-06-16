@@ -660,7 +660,17 @@ async function planStoryboard(opts: {
   userId: string;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (8 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~8s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
+  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (8 seconds each) for a ${opts.aspectRatio} video.
+
+Output STRICT JSON:
+{
+  "style_anchor": string,   // 1–3 sentence visual DNA shared by EVERY scene — subject/character look, wardrobe, palette, lighting style, camera/lens, film stock/grade, mood. This is prepended to every scene's keyframe prompt so all frames look like they belong to ONE production.
+  "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }]
+}
+
+image_prompt = scene-specific composition only (what changes from frame to frame: subject pose, action, environment beat, framing). Do NOT repeat the style_anchor — the server prepends it automatically.
+video_prompt = motion/animation that begins from that keyframe (camera move, subject action, ~8s).
+No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -680,6 +690,7 @@ async function planStoryboard(opts: {
   try { parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}"); } catch {}
   const rawScenes: any[] = Array.isArray(parsed.scenes) ? parsed.scenes.slice(0, 8) : [];
   if (rawScenes.length === 0) throw new Error("Storyboard produced no scenes");
+  const styleAnchor = String(parsed.style_anchor || "").slice(0, 800);
   const storyboardId = crypto.randomUUID();
   const scenes = rawScenes.map((s, i) => ({
     id: `${storyboardId}-s${i + 1}`,
@@ -698,10 +709,11 @@ async function planStoryboard(opts: {
       brief: opts.brief.slice(0, 1000),
       aspect_ratio: opts.aspectRatio,
       style_notes: opts.styleNotes || "",
+      style_anchor: styleAnchor,
       scenes,
     },
   }).select("id, kind, payload, created_at").single();
-  return { storyboardItem: ci.data, storyboardId, scenes, aspect_ratio: opts.aspectRatio };
+  return { storyboardItem: ci.data, storyboardId, scenes, style_anchor: styleAnchor, aspect_ratio: opts.aspectRatio };
 }
 
 async function generateSceneImage(opts: {
