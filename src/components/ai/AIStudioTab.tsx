@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -175,13 +175,16 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
   const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   if (m.role === "user") {
     return (
-      <div className="flex flex-col items-end gap-0.5">
+      <div className="flex flex-col items-end gap-1 group">
         <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2 text-sm whitespace-pre-wrap text-foreground">
           {m.content}
         </div>
         {m.actorName && (
           <div className="text-[10px] text-muted-foreground/70 pr-1">— {m.actorName}</div>
         )}
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <CopyButton text={m.content} />
+        </div>
       </div>
     );
   }
@@ -792,6 +795,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:show-chat", String(showChat)); } catch {} }, [showChat]);
   useEffect(() => { try { localStorage.setItem("ai-studio:show-canvas", String(showCanvas)); } catch {} }, [showCanvas]);
+  const [wideChat, setWideChat] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:wide-chat") === "true"; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:wide-chat", String(wideChat)); } catch {} }, [wideChat]);
+  const [composerHeight, setComposerHeight] = useState<number>(() => {
+    try { const v = parseInt(localStorage.getItem("ai-studio:composer-h") || "", 10); return Number.isFinite(v) && v >= 80 ? v : 120; } catch { return 120; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:composer-h", String(composerHeight)); } catch {} }, [composerHeight]);
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -1496,6 +1507,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
               {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setWideChat(v => !v)} title={wideChat ? "Comfortable width" : "Expand chat width"}>
+              {wideChat ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={clearConversation} title="Clear conversation">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -1673,7 +1687,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </details>
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
-          <div className="px-4 sm:px-6 py-6 space-y-5 max-w-3xl mx-auto w-full">
+          <div className={`px-4 sm:px-6 py-6 space-y-5 mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
             {messages.length === 0 && hydrated && (
               <div className="py-8 space-y-6">
                 <div className="space-y-2">
@@ -1714,7 +1728,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </ScrollArea>
 
         <div className="px-4 sm:px-6 pb-4 pt-2">
-          <div className="max-w-3xl mx-auto w-full">
+          <div className={`mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
             {/* Context usage + auto doc toggle */}
             {(() => {
               const limit = contextLimitFor(chatModel);
@@ -1838,7 +1852,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   if (files.length) { e.preventDefault(); uploadFiles(files); }
                 }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
-                className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 pt-3 pb-2 text-sm"
+                style={{ height: composerHeight }}
+                onMouseUp={(e) => {
+                  const h = (e.target as HTMLTextAreaElement).offsetHeight;
+                  if (h && Math.abs(h - composerHeight) > 4) setComposerHeight(h);
+                }}
+                className="resize-y min-h-[80px] max-h-[70vh] border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 pt-3 pb-2 text-sm"
                 rows={1}
               />
               </div>

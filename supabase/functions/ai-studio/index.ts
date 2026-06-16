@@ -660,7 +660,17 @@ async function planStoryboard(opts: {
   userId: string;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (8 seconds each) for a ${opts.aspectRatio} video. Output STRICT JSON: { "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }] }. image_prompt must describe a single static keyframe (subject, environment, lighting, composition). video_prompt describes the motion/animation that begins from that keyframe (camera move, subject action, ~8s). No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
+  const sys = `You are a creative director. Break the brief into ${opts.sceneCount} cinematic scenes (8 seconds each) for a ${opts.aspectRatio} video.
+
+Output STRICT JSON:
+{
+  "style_anchor": string,   // 1–3 sentence visual DNA shared by EVERY scene — subject/character look, wardrobe, palette, lighting style, camera/lens, film stock/grade, mood. This is prepended to every scene's keyframe prompt so all frames look like they belong to ONE production.
+  "scenes": [{ "title": string, "image_prompt": string, "video_prompt": string }]
+}
+
+image_prompt = scene-specific composition only (what changes from frame to frame: subject pose, action, environment beat, framing). Do NOT repeat the style_anchor — the server prepends it automatically.
+video_prompt = motion/animation that begins from that keyframe (camera move, subject action, ~8s).
+No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -680,6 +690,7 @@ async function planStoryboard(opts: {
   try { parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}"); } catch {}
   const rawScenes: any[] = Array.isArray(parsed.scenes) ? parsed.scenes.slice(0, 8) : [];
   if (rawScenes.length === 0) throw new Error("Storyboard produced no scenes");
+  const styleAnchor = String(parsed.style_anchor || "").slice(0, 800);
   const storyboardId = crypto.randomUUID();
   const scenes = rawScenes.map((s, i) => ({
     id: `${storyboardId}-s${i + 1}`,
@@ -698,10 +709,11 @@ async function planStoryboard(opts: {
       brief: opts.brief.slice(0, 1000),
       aspect_ratio: opts.aspectRatio,
       style_notes: opts.styleNotes || "",
+      style_anchor: styleAnchor,
       scenes,
     },
   }).select("id, kind, payload, created_at").single();
-  return { storyboardItem: ci.data, storyboardId, scenes, aspect_ratio: opts.aspectRatio };
+  return { storyboardItem: ci.data, storyboardId, scenes, style_anchor: styleAnchor, aspect_ratio: opts.aspectRatio };
 }
 
 async function generateSceneImage(opts: {
@@ -714,9 +726,11 @@ async function generateSceneImage(opts: {
   conversationId: string;
   userId: string;
   model?: "nano-banana" | "openai" | null;
+  styleAnchor?: string | null;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-  const fullPrompt = `Create a single cinematic keyframe image for a video scene.\n\n${opts.prompt}\n\nAspect ratio: ${opts.aspectRatio}. Photoreal cinematic look. No text overlays or watermarks.`;
+  const anchor = (opts.styleAnchor || "").trim();
+  const fullPrompt = `Create a single cinematic keyframe image for a video scene.\n\n${anchor ? `SHARED STYLE (must match exactly across every scene of this storyboard): ${anchor}\n\n` : ""}SCENE: ${opts.prompt}\n\nAspect ratio: ${opts.aspectRatio}. Photoreal cinematic look. No text overlays or watermarks.`;
 
   let base64Image = "", mime = "image/png", modelUsed = "";
   const useOpenAI = opts.model === "openai";
@@ -1256,7 +1270,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_scene_image",
-      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel. Pick a model: 'openai' (GPT Image 2) or 'nano-banana' (Nano Banana 2). If the user selected MULTIPLE image models, emit one generate_scene_image call PER model PER scene so the user can compare keyframes side-by-side before videos render.",
+      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel. This is TEXT-TO-IMAGE (no reference image) by default so the model has freedom to compose each scene — cross-scene consistency comes from the shared `style_anchor` you pass through from plan_storyboard's result. Only set reference_image_url when the user explicitly tied a specific reference image to the storyboard. Pick a model: 'openai' (GPT Image 2) or 'nano-banana' (Nano Banana 2). If the user selected MULTIPLE image models, emit one generate_scene_image call PER model PER scene so the user can compare keyframes side-by-side before videos render.",
       parameters: {
         type: "object",
         properties: {
@@ -1266,6 +1280,7 @@ const tools = [
           prompt: { type: "string", description: "Scene image prompt." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
           model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use for this keyframe. Default = nano-banana (fast). Use openai for highest quality." },
+          style_anchor: { type: "string", description: "REQUIRED for cross-scene consistency. Pass the EXACT `style_anchor` string returned by plan_storyboard so every keyframe in this storyboard renders with the same visual DNA (palette, lighting, character look). Server prepends it to the prompt." },
         },
         required: ["storyboard_id", "scene_id", "scene_order", "prompt", "aspect_ratio"],
       },
@@ -1425,6 +1440,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- VARIANT EXPLOSION (Phase 2): When the user asks to 'explode variants', 'matrix', 'A/B 6 ideas', 'test multiple hooks', or wants a BATCH of static ads at once, call explode_ad_variants with arrays of hooks (2–6) and visual_styles (1–4). All variants render in parallel. Default quality='fast' (Nano Banana 2). Use this instead of looping generate_static_ad N times.",
   "- IMAGE → AD → REEL (Phase 2 one-click pipeline): When the user says 'image to reel', 'static + reel', 'one-click reel', 'turn this brief into a video ad', or 'animate this ad into a reel', call image_to_reel. Pass `image_url` when riffing on an existing canvas card; pass `brief` to generate the keyframe from scratch first. The tool handles BOTH the static keyframe (GPT Image 2) AND the Seedance image-to-video animation in one call.",
   "- PARALLEL STORYBOARDS: After plan_storyboard returns, IMMEDIATELY fire one generate_scene_image call per scene IN THE SAME tool-calls batch (parallel). After keyframes return, fire one generate_scene_video per scene IN THE SAME batch (parallel). Never serialize scenes.",
+  "- MULTI-FRAME CONSISTENCY (CRITICAL): Storyboard keyframes are TEXT-TO-IMAGE — do NOT pass reference_image_url between scenes. Cross-scene visual consistency comes ONLY from the `style_anchor` returned by plan_storyboard; you MUST pass that exact string as the `style_anchor` argument on EVERY generate_scene_image call. Use image-to-image (reference_image_url) ONLY when the user explicitly said 'use this image', 'match this exact look', 'keep this character', 'animate this ad', or tied a specific upload/canvas image to the request. Default behavior is dynamic: text-to-image when the prompt describes a scene from scratch, image-to-image when the prompt references a specific existing image.",
   "- Use the doc/sheet tools whenever the user asks to read, summarize, append to, or edit the active Doc/Sheet.",
   "- SHEET AUDITING (agentic, Manus-style): When the user asks to audit, summarize, review, or analyze the Google Sheet, you MUST cover EVERY tab — never stop after one. Step 1: call list_sheet_tabs. Step 2: call batch_read_sheet with one range per tab (e.g. 'TabTitle!A1:Z200'). Step 3: if any tab returned data that needs deeper inspection, call read_sheet again on a wider range for that tab. Step 4: write a clear markdown report covering EVERY tab found (per-tab section + cross-tab insights, trends, anomalies, recommendations). Keep iterating tool calls until the audit is complete — don't ask the user to confirm mid-audit. Long-form findings (>400 words) should go in a create_text_artifact card; short summaries can stay in chat.",
   "- DOC AUDITING: Same pattern for Google Docs — call read_doc, then produce a structured summary (key sections, action items, gaps) and drop any long-form deliverable on the canvas via create_text_artifact.",
@@ -2641,7 +2657,7 @@ Deno.serve(async (req) => {
                   conversationId,
                   userId: userId!,
                 });
-                result = { ok: true, storyboard_id: sb.storyboardId, aspect_ratio: sb.aspect_ratio, scenes: sb.scenes };
+                result = { ok: true, storyboard_id: sb.storyboardId, aspect_ratio: sb.aspect_ratio, style_anchor: sb.style_anchor, scenes: sb.scenes, note: "Pass the SAME `style_anchor` string to every generate_scene_image call so all keyframes share one visual identity." };
                 if (sb.storyboardItem) send({ type: "canvas_item", item: sb.storyboardItem });
               } else if (name === "generate_scene_image") {
                 const r = await generateSceneImage({
@@ -2654,6 +2670,7 @@ Deno.serve(async (req) => {
                   conversationId,
                   userId: userId!,
                   model: (args.model === "openai" || args.model === "nano-banana") ? args.model : null,
+                  styleAnchor: typeof args.style_anchor === "string" ? args.style_anchor : null,
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, image_url: r.image_url, model: r.model };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
