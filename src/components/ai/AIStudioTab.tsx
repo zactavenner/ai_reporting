@@ -795,6 +795,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:show-chat", String(showChat)); } catch {} }, [showChat]);
   useEffect(() => { try { localStorage.setItem("ai-studio:show-canvas", String(showCanvas)); } catch {} }, [showCanvas]);
+  const [wideChat, setWideChat] = useState<boolean>(() => {
+    try { return localStorage.getItem("ai-studio:wide-chat") === "true"; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:wide-chat", String(wideChat)); } catch {} }, [wideChat]);
+  const [composerHeight, setComposerHeight] = useState<number>(() => {
+    try { const v = parseInt(localStorage.getItem("ai-studio:composer-h") || "", 10); return Number.isFinite(v) && v >= 80 ? v : 120; } catch { return 120; }
+  });
+  useEffect(() => { try { localStorage.setItem("ai-studio:composer-h", String(composerHeight)); } catch {} }, [composerHeight]);
   const [followups, setFollowups] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
