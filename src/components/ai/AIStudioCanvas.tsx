@@ -73,6 +73,7 @@ export function AIStudioCanvas({
   const [zoom, setZoom] = useState(initialView?.zoom ?? 1);
   const [pan, setPan] = useState({ x: initialView?.panX ?? 0, y: initialView?.panY ?? 0 });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [animatingId, setAnimatingId] = useState<string | null>(null);
   const draggingRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const focusScrolledRef = useRef<string | null>(null);
@@ -215,7 +216,7 @@ export function AIStudioCanvas({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/30 flex-wrap">
+      <div className="sticky top-0 z-20 shrink-0 flex items-center gap-1 px-2 py-1 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex-wrap">
         <Button
           size="icon"
           variant="ghost"
@@ -375,6 +376,22 @@ export function AIStudioCanvas({
                   onCancel={() => setEditingId(null)}
                 />
               )}
+              {animatingId === e.id && p.image_url && onSendMessage && (
+                <InlineAnimateBar
+                  defaultPrompt={`Animate this image into a cinematic clip. Subject, brand colors, and composition stay consistent. Add subtle natural camera motion and lighting.`}
+                  onSubmit={(instr) => {
+                    const text =
+                      `Animate this image into a 15-second 1080p cinematic clip using Seedance 2.0 image-to-video. ` +
+                      `${instr.trim()} ` +
+                      `Keep the subject, brand colors, and composition consistent. ` +
+                      `image_url: ${p.image_url} aspect_ratio: ${p.aspect_ratio || "1:1"}`;
+                    onSendMessage(text);
+                    toast.success("Animating with Seedance 2.0…");
+                    setAnimatingId(null);
+                  }}
+                  onCancel={() => setAnimatingId(null)}
+                />
+              )}
               <div className="flex items-start gap-2 mt-2">
                 <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{p.prompt}</p>
                 {p.image_url && (
@@ -386,11 +403,11 @@ export function AIStudioCanvas({
                       </Button>
                     )}
                     {onSendMessage && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Animate with Seedance 2.0 (image→video, 15s 1080p)"
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Animate this image (describe the motion)"
                         onClick={(ev) => {
                           ev.stopPropagation();
-                          onSendMessage(`Animate this image into a 15-second 1080p cinematic clip using Seedance 2.0 image-to-video. Keep the subject, brand colors, and composition consistent. Add subtle natural camera motion and lighting. image_url: ${p.image_url} aspect_ratio: ${p.aspect_ratio || "1:1"}`);
-                          toast.success("Sending to Seedance 2.0…");
+                          setAnimatingId(prev => prev === e.id ? null : e.id);
+                          setEditingId(null);
                         }}>
                         <Film className="h-3.5 w-3.5" />
                       </Button>
@@ -637,6 +654,42 @@ function InlineEditBar({ onSubmit, onCancel }: { onSubmit: (instr: string) => Pr
       </Button>
       <Button size="icon" className="h-7 w-7 shrink-0" onClick={submit} disabled={!val.trim() || busy} title="Send edit">
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+      </Button>
+    </div>
+  );
+}
+
+function InlineAnimateBar({
+  defaultPrompt,
+  onSubmit,
+  onCancel,
+}: {
+  defaultPrompt?: string;
+  onSubmit: (instr: string) => void;
+  onCancel: () => void;
+}) {
+  const [val, setVal] = useState("");
+  const submit = () => {
+    const text = val.trim() || defaultPrompt || "Add subtle natural camera motion.";
+    onSubmit(text);
+    setVal("");
+  };
+  return (
+    <div className="mt-2 flex items-center gap-1.5 bg-primary/5 rounded-lg p-1.5 border border-primary/30" onClick={(e) => e.stopPropagation()}>
+      <Film className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+      <Input
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } if (e.key === "Escape") onCancel(); }}
+        placeholder="Describe the motion… (slow push-in, gentle parallax, product rotates, etc.)"
+        className="h-7 text-xs border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+      />
+      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={onCancel} title="Cancel">
+        <X className="h-3.5 w-3.5" />
+      </Button>
+      <Button size="icon" className="h-7 w-7 shrink-0" onClick={submit} title="Animate">
+        <Send className="h-3.5 w-3.5" />
       </Button>
     </div>
   );
