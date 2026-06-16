@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3 } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3, Grid3x3 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -239,6 +239,25 @@ export function AIStudioCanvas({
         </button>
         <Button size="icon" variant="ghost" className="h-7 w-7" disabled={feedMode} onClick={() => setZoom(z => Math.min(3, z * 1.1))} title="Zoom in">
           <Plus className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 px-2"
+          title="Overview — zoom out so every creative on the canvas is visible at once, with same-turn cards lined up in rows"
+          onClick={() => {
+            // One-click overview: leave feed mode, reset pan, drop zoom so a
+            // full row of creatives fits, and scroll to the top of the canvas.
+            setFeedMode(false);
+            setPan({ x: 0, y: 0 });
+            setZoom(0.6);
+            requestAnimationFrame(() => {
+              viewportRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+            });
+          }}
+        >
+          <Grid3x3 className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline text-xs">Overview</span>
         </Button>
         <Button
           size="icon"
