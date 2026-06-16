@@ -1687,7 +1687,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </details>
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
-          <div className="px-4 sm:px-6 py-6 space-y-5 max-w-3xl mx-auto w-full">
+          <div className={`px-4 sm:px-6 py-6 space-y-5 mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
             {messages.length === 0 && hydrated && (
               <div className="py-8 space-y-6">
                 <div className="space-y-2">
@@ -1728,7 +1728,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </ScrollArea>
 
         <div className="px-4 sm:px-6 pb-4 pt-2">
-          <div className="max-w-3xl mx-auto w-full">
+          <div className={`mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
             {/* Context usage + auto doc toggle */}
             {(() => {
               const limit = contextLimitFor(chatModel);
