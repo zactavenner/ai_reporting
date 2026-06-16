@@ -202,9 +202,32 @@ export function VideoPlayerCard({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => setCurrent((e.target as HTMLVideoElement).currentTime)}
-        onLoadedMetadata={(e) => setDuration((e.target as HTMLVideoElement).duration || 0)}
+        onLoadedMetadata={(e) => {
+          setDuration((e.target as HTMLVideoElement).duration || 0);
+          if (autoRetries > 0 && failedAtRef.current) {
+            const recoveredInMs = Date.now() - failedAtRef.current;
+            console.info("[VideoPlayback] recovered after retry", {
+              src,
+              attempts: autoRetries,
+              recoveredInMs,
+              lastError: lastErrorRef.current,
+            });
+            failedAtRef.current = null;
+            lastErrorRef.current = null;
+          }
+        }}
         onVolumeChange={(e) => setMuted((e.target as HTMLVideoElement).muted)}
-        onError={() => setLoadFailed(true)}
+        onError={(e) => {
+          const details = describeVideoError(e.currentTarget as HTMLVideoElement);
+          lastErrorRef.current = details;
+          if (failedAtRef.current === null) failedAtRef.current = Date.now();
+          console.error("[VideoPlayback] load/playback failed", {
+            src,
+            attempt: autoRetries,
+            ...details,
+          });
+          setLoadFailed(true);
+        }}
       >
         <source src={src} type="video/mp4" />
       </video>
