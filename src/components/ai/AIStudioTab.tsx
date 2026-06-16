@@ -1504,7 +1504,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <History className="h-3.5 w-3.5" />
             </Button>
             <AgentFolderInline clientId={clientId} clientName={clientName} compact />
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
               {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setWideChat(v => !v)} title={wideChat ? "Comfortable width" : "Expand chat width"}>
