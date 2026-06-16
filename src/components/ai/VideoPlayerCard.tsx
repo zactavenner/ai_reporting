@@ -40,8 +40,25 @@ export function VideoPlayerCard({
   const [speed, setSpeed] = useState<number>(1);
   const [loadFailed, setLoadFailed] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [autoRetries, setAutoRetries] = useState(0);
+  const MAX_AUTO_RETRIES = 4;
 
   useEffect(() => { setLoadFailed(false); }, [src, retryKey]);
+  useEffect(() => { setAutoRetries(0); }, [src]);
+
+  // Automatically retry a failed video load with exponential backoff
+  // before showing the manual "Video unavailable" fallback.
+  useEffect(() => {
+    if (!loadFailed || !src) return;
+    if (autoRetries >= MAX_AUTO_RETRIES) return;
+    const delayMs = Math.min(8000, 800 * Math.pow(2, autoRetries));
+    const t = setTimeout(() => {
+      setAutoRetries(n => n + 1);
+      setLoadFailed(false);
+      setRetryKey(k => k + 1);
+    }, delayMs);
+    return () => clearTimeout(t);
+  }, [loadFailed, src, autoRetries]);
 
   const togglePlay = () => {
     const v = videoRef.current; if (!v) return;
@@ -88,7 +105,23 @@ export function VideoPlayerCard({
     );
   }
 
-  if (status === "failed" || loadFailed || !src) {
+  const exhaustedAutoRetries = autoRetries >= MAX_AUTO_RETRIES;
+  const showAutoRetrying = loadFailed && !!src && !exhaustedAutoRetries && status !== "failed";
+
+  if (showAutoRetrying) {
+    return (
+      <div className={cn("relative w-full rounded-md border bg-muted/40 grid place-items-center text-center p-6", aspectClass, className)}>
+        <div className="space-y-2">
+          <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />
+          <p className="text-xs text-muted-foreground">
+            Reconnecting to video… (attempt {autoRetries + 1}/{MAX_AUTO_RETRIES})
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "failed" || (loadFailed && exhaustedAutoRetries) || !src) {
     return (
       <div className={cn("relative w-full rounded-md border bg-destructive/5 grid place-items-center text-center p-6", aspectClass, className)}>
         <div className="space-y-2">
