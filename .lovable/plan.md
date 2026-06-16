@@ -1,55 +1,99 @@
-# Email Management Module
+## Meta Ads Manager v1 — Implementation Plan
 
-Replaces the Feedback tab end-to-end. Multi-Gmail via your own Google OAuth app, 3-minute polling cron, AI classify + auto-archive, AI draft replies, daily executive briefing, analytics.
+Extends the existing Creatives and Reporting modules. Uses existing `meta_*` tables and the approved `ads_management` Meta App. Phased to ship usable value fast.
 
-## What you need to provide
+---
 
-Before I can finish wiring auth, you'll need to create a Google Cloud OAuth 2.0 Web App (5 min) and give me:
-- `GOOGLE_OAUTH_CLIENT_ID`
-- `GOOGLE_OAUTH_CLIENT_SECRET`
+### Phase 1 — Foundation (week 1)
 
-I'll give you the exact redirect URI to paste into Google Cloud once the edge function is deployed. I'll request these via the secrets tool at the right step.
+**Schema additions** (new tables, all RLS + GRANTs):
+- `meta_campaign_templates` — saved campaign blueprints (objective, budget, placements, targeting JSON, optimization goal, naming convention, default lead form, UTM template).
+- `meta_lead_forms` — synced lead forms per ad account (questions JSON, completion_rate, cpl, conversion_rate, status).
+- `meta_lead_form_templates` — reusable form blueprints (Investor / Accredited / Real Estate / etc.).
+- `meta_lead_form_mappings` — field → CRM mapping (GHL / HubSpot / Salesforce / webhook).
+- `meta_creative_tags` — Winner / Emerging / Fatigued / Underperforming (computed daily + manual override).
+- `meta_ai_creative_insights` — daily AI analysis output per ad (hooks, headlines, angles, scores).
+- `meta_weekly_briefs` — generated weekly winners reports.
+- `meta_rules` — automated rule definitions (trigger, condition JSON, action, schedule).
+- `meta_rule_runs` — execution log with before/after metrics.
+- `meta_alerts` — CPL spike / ROAS drop / fatigue / rejection / pixel issue events.
+- `meta_swipe_files` — saved competitor ads from Meta Ad Library.
+- `meta_creative_comments` — team comments + approval state on creatives.
 
-## Build steps
+**Edge functions (new)**:
+- `meta-leadforms-sync` — pulls all forms from connected ad accounts, computes CPL/conversion.
+- `meta-creative-tagger` — daily job, tags ads as Winner/Emerging/Fatigued/Underperforming using spend/CPL/CTR/frequency thresholds.
+- `meta-ai-analyze-creatives` — daily, runs `openrouter/owl-alpha` over top-spending ads, extracts hooks/angles/insights.
 
-1. **Cleanup.** Delete `FeedbackTab.tsx`, remove the Feedback nav item, drop the `app_feedback` table.
-2. **Schema migration.** New tables:
-   - `gmail_accounts` — connected inboxes (email, refresh_token, access_token, expiry, history_id, owner team member, status)
-   - `emails` — synced messages (gmail_id, thread_id, account_id, from/to/cc, subject, snippet, body_text, body_html, received_at, labels, classification, priority, requires_response, waiting_on_customer, archived, status)
-   - `email_drafts` — AI drafts (email_id, body, confidence, urgency, status: pending/approved/sent/edited)
-   - `email_assignments` — assign to team members
-   - `email_notes` — internal notes / @mentions
-   - `email_briefings` — daily executive briefing snapshots
-   - `email_sync_log` — per-account sync runs
-3. **Edge functions.**
-   - `gmail-oauth-start` — returns Google auth URL with state
-   - `gmail-oauth-callback` — exchanges code, stores refresh token, creates `gmail_accounts` row
-   - `gmail-sync` — cron-triggered every 3 min: for each active account, refresh token if needed, pull new messages since last `history_id` (fallback to `q=newer_than:1d`), upsert into `emails`, fire `email-classify` per new message
-   - `email-classify` — calls Lovable AI to assign classification + priority + requires_response; auto-archives newsletter/promo/cold/spam via Gmail `modify` (remove `INBOX` label) and updates row
-   - `email-draft` — generates AI reply draft (tone matched, confidence, urgency)
-   - `email-action` — archive/star/mark-read/send/assign via Gmail API
-   - `email-briefing` — cron-triggered daily 7am: build executive briefing
-4. **Cron jobs.** pg_cron entries for `gmail-sync` (every 3 min) and `email-briefing` (daily 7am PST).
-5. **Frontend.** New `EmailManagementTab.tsx` with sub-routes:
-   - **Inbox** — unified list, filters (inbox/owner/priority/unread/needs-response/waiting/archived), three-pane layout (folders | list | reader), keyboard shortcuts (j/k/e/r/a), AI draft panel inline (Approve & Send / Edit / Regenerate)
-   - **Briefing** — today's executive summary, top emails, pending replies, urgent items, follow-ups
-   - **Analytics** — received/archived/spam-removed/drafts/avg-response-time/inbox-zero rate
-   - **Inboxes (Settings)** — connect Gmail button → OAuth flow, list of connected accounts, remove/reconnect
-6. **Nav.** Swap Feedback → Email Management in `AppSidebar.tsx` and `Index.tsx` tab router. Position as a top-level operational module above Reporting.
-7. **Polish.** Apple-style minimal UI matching the rest of the app, dark mode tokens, mobile responsive, real-time via Supabase Realtime on `emails` table.
+**Cron**: tagger + AI analyzer at 4 AM PST daily; lead forms sync hourly.
 
-## Technical notes
+---
 
-- Auth: standard Google OAuth 2.0 server-side flow. Scopes: `gmail.modify`, `gmail.send`, `gmail.readonly`, `userinfo.email`. Refresh tokens stored encrypted via Vault (or as restricted column with service-role-only RLS).
-- Classification model: `google/gemini-2.5-flash` for cost. Drafts: same model with system prompt locked to your tone.
-- Auto-archive = remove `INBOX` label via Gmail `messages.modify`, set `archived=true` locally.
-- Inbox Zero % = `1 - (active_inbox_count / received_today)`.
-- Cron password gate: existing `HPA1234$` pattern.
+### Phase 2 — Campaign Launch Center (week 2)
 
-## Out of scope for v1 (can add later)
+Lives as a new tab inside the existing **Creatives** module: `Creatives → Launch`.
 
-- Team collaboration (assign, notes, @mentions) — schema is created, UI deferred per your selection
-- Push notifications via Gmail Pub/Sub — using polling per your selection
-- SMS/Slack alerts on urgent emails
+- **Template library** — list, create, edit, duplicate templates.
+- **Naming engine** — live preview of `CLIENT | OFFER | GOAL | MONTH` etc., overridable per launch.
+- **One-click launch wizard**: pick template → adjust budget/audience/geo/lead form/creative/dates → preview → launch.
+- **Edge function `meta-campaign-launch`**: validates payload, calls Meta Graph API to create campaign + ad set + ads, writes back to `meta_campaigns/_ad_sets/_ads`, logs to `sync_outbound_events`.
+- **Duplicate previous campaign** — pulls existing campaign config, opens wizard pre-filled.
 
-Confirm and I'll start with the migration + cleanup, then walk you through Google Cloud setup before requesting the OAuth secrets.
+---
+
+### Phase 3 — Lead Form Management (week 2)
+
+New tab `Creatives → Lead Forms`:
+- Library view (search/filter by client, account, status, CPL).
+- Form detail drawer: questions, conditional logic, completion rate, CPL, conversion.
+- Template library (save form as template, instantiate from template via `meta-leadforms-create` edge fn).
+- **Drag-and-drop CRM mapping UI** (uses dnd-kit, already in project) — maps form fields to GHL / HubSpot / Salesforce / generic webhook. Stored in `meta_lead_form_mappings`. Routed at lead intake.
+
+---
+
+### Phase 4 — Creative Intelligence + AI (week 3)
+
+New tab inside Reporting: `Reporting → Creative Intelligence`.
+
+- **Creative library**: searchable grid of every historical + active ad with HD asset, filters (client/campaign/objective/date/spend/leads/CPL/ROAS), winner tags.
+- **Winner panel**: top CTR / top conversion / lowest CPL / highest ROAS / fastest scaling.
+- **AI insights feed**: cards from `meta_ai_creative_insights` ("Ads mentioning passive income generated 37% lower CPL").
+- **AI Creative Generator**: one-click "Generate variants" → calls `meta-ai-generate-creatives` edge fn → returns hooks/headlines/primary text/image prompts/video scripts/UGC concepts. Export to OpenAI/Claude/Google AI Studio prompts (clipboard) or save to `meta_swipe_files`.
+- **Weekly Brief**: button + cron (Mon 7 AM PST) → `meta-weekly-brief` edge fn → builds Winners Report (spend/leads/CPL/CTR/ROAS/frequency + AI recommendations Scale/Refresh/Pause/Duplicate + 10–20 new creative concepts). Export PDF / Google Doc / Notion / ClickUp task.
+
+---
+
+### Phase 5 — Rules Engine + Dashboards + Alerts (week 4)
+
+New tab `Reporting → Automation`:
+- **Rule builder UI**: trigger (schedule), condition (metric op threshold, e.g. CPL > $80 for 2d AND spend > $50), action (pause / scale +10/20/30% / notify / duplicate), scope (account/campaign/ad set/ad).
+- Edge fn `meta-rules-runner` (every 30 min via pg_cron) — evaluates conditions, executes via Graph API write, logs to `meta_rule_runs`.
+- **Executive / Creative / Account dashboards** — three new dashboard views built on existing `daily_metrics` + new creative tag aggregates.
+- **Alerts**: CPL spike, ROAS drop, fatigue, campaign rejected, lead form disconnected, pixel issue. Fan-out via Slack (existing connector), email (Resend connector), in-app toast/badge. Settings panel per user/client for channel preferences.
+
+---
+
+### Phase 6 — Stubs for v2 (week 4 tail)
+
+- `meta_swipe_files` table + simple "Save from Ad Library URL" form (full Ad Library scraper deferred).
+- `meta_creative_comments` + comment thread on creative detail drawer (full approval workflow + roles deferred).
+
+---
+
+### Out of scope for v1 (explicit)
+- Google / TikTok / LinkedIn / YouTube Ads (architecture leaves room — `platform` column on rules/insights/templates).
+- Hyros / Cometly / Triple Whale / Northbeam (read-only display only; no ingestion).
+- Full role matrix (Admin/Buyer/Strategist/Designer/Client) — uses existing `user_roles`.
+- SMS alerts (Slack + email + in-app only).
+
+---
+
+### Tech notes
+- All Meta writes go through `meta-campaign-launch` / `meta-rules-runner` with retry + exponential backoff and `sync_outbound_events` logging (matches existing GHL outbound pattern).
+- AI defaults to `openrouter/owl-alpha` per project memory.
+- All new tables: `GRANT` to `authenticated` + `service_role`, RLS scoped by client/agency membership matching existing `meta_*` policies.
+- No new client-side secrets; reuses `META_APP_ID`, `META_APP_SECRET`, `META_SHARED_ACCESS_TOKEN`, `LOVABLE_API_KEY`, `SLACK_BOT_TOKEN`.
+
+---
+
+Approve to start Phase 1 (schema + lead form sync + creative tagger + AI analyzer). I'll surface each phase's migration for review before running it.

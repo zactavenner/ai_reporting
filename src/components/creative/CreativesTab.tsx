@@ -29,6 +29,7 @@ import {
 import { CreativeHorizontalPreview } from './CreativeHorizontalPreview';
 import { CreativeAIActions } from './CreativeAIActions';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
+const MetaOpsTabLazy = lazy(() => import('@/components/meta-ops/MetaOpsTab'));
 import { formatFileSize } from '@/lib/uploadWithProgress';
 import {
   Search,
@@ -249,6 +250,7 @@ export function CreativesTab() {
           <TabsTrigger value="video-editor" className="gap-2"><Scissors className="h-4 w-4" />Video Editor</TabsTrigger>
           <TabsTrigger value="broll" className="gap-2"><Film className="h-4 w-4" />B-Roll</TabsTrigger>
           <TabsTrigger value="winning-ads" className="gap-2"><Trophy className="h-4 w-4" />Winning Ads</TabsTrigger>
+          <TabsTrigger value="meta-ops" className="gap-2"><Rocket className="h-4 w-4" />Meta Ops</TabsTrigger>
           <TabsTrigger value="manage-styles" className="gap-2"><Palette className="h-4 w-4" />Styles</TabsTrigger>
           <TabsTrigger value="history" className="gap-2"><History className="h-4 w-4" />History</TabsTrigger>
           <TabsTrigger value="export" className="gap-2"><Download className="h-4 w-4" />Export</TabsTrigger>
@@ -822,6 +824,9 @@ export function CreativesTab() {
         </TabsContent>
         <TabsContent value="winning-ads" className="mt-4">
           <Suspense fallback={SuspenseFallback}><WinningAdsGalleryLazy embedded /></Suspense>
+        </TabsContent>
+        <TabsContent value="meta-ops" className="mt-4">
+          <Suspense fallback={SuspenseFallback}><MetaOpsTabLazy /></Suspense>
         </TabsContent>
         <TabsContent value="manage-styles" className="mt-4">
           <Suspense fallback={SuspenseFallback}><ManageStylesTabLazy embedded /></Suspense>
