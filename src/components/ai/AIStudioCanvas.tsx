@@ -290,7 +290,7 @@ export function AIStudioCanvas({
         onWheel={feedMode ? undefined : onWheel}
       >
         <div
-          className={`p-3 sm:p-4 grid grid-cols-1 ${feedMode ? "" : "lg:grid-cols-2 2xl:grid-cols-3"} gap-4 sm:gap-6 origin-top-left transition-transform duration-75 auto-rows-min items-start`}
+          className={`p-3 sm:p-4 grid grid-cols-1 ${feedMode ? "" : "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"} gap-4 sm:gap-6 origin-top-left transition-transform duration-75 auto-rows-min items-start`}
           style={feedMode ? { width: "100%" } : { transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
         >
       {entries.length === 0 && (
