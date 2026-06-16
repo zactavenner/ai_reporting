@@ -2317,64 +2317,90 @@ Deno.serve(async (req) => {
           if (aborted.v) break;
           send({ type: "step", step });
 
-          const llm = await fetch(CHAT_API_URL, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${CHAT_API_KEY}`,
-              "Content-Type": "application/json",
-              ...(USE_OPENROUTER ? { "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" } : {}),
-            },
-            body: JSON.stringify({
-              model: CHAT_MODEL_ID,
-              messages: convo,
-              tools,
-              tool_choice: "auto",
-              stream: true,
-            }),
-            signal: req.signal,
-          });
-          if (!llm.ok) {
-            const err = await llm.text();
-            if (llm.status === 429) throw new Error("Rate limit exceeded. Try again shortly.");
-            if (llm.status === 402) throw new Error("AI credits exhausted. Add credits in Settings.");
-            throw new Error(`AI gateway [${llm.status}]: ${err}`);
-          }
-
-          const reader = llm.body!.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let stepText = "";
-          const toolCallsAcc: any[] = [];
-
-          outer: while (true) {
-            if (aborted.v) { try { reader.cancel(); } catch {} break; }
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-            for (const raw of lines) {
-              const line = raw.trim();
-              if (!line.startsWith("data:")) continue;
-              const payload = line.slice(5).trim();
-              if (payload === "[DONE]") break outer;
-              let evt: any; try { evt = JSON.parse(payload); } catch { continue; }
-              const delta = evt.choices?.[0]?.delta;
-              if (!delta) continue;
-              if (typeof delta.content === "string" && delta.content) {
-                stepText += delta.content;
-                send({ type: "text", delta: delta.content });
-              }
-              if (Array.isArray(delta.tool_calls)) {
-                for (const tc of delta.tool_calls) {
-                  const idx = tc.index ?? 0;
-                  if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: tc.id, name: "", args: "" };
-                  if (tc.id) toolCallsAcc[idx].id = tc.id;
-                  if (tc.function?.name) toolCallsAcc[idx].name += tc.function.name;
-                  if (tc.function?.arguments) toolCallsAcc[idx].args += tc.function.arguments;
+          // Run one LLM streaming pass. Returns { stepText, toolCallsAcc }.
+          // Internal helper so we can retry with a fallback model when the
+          // primary returns nothing (which happens with owl-alpha on heavy
+          // prompts + tool schemas — we'd otherwise silently save an empty
+          // assistant message and the user sees nothing happen).
+          const runStreamingStep = async (apiUrl: string, apiKey: string, modelId: string, useOR: boolean) => {
+            const llm = await fetch(apiUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+                ...(useOR ? { "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" } : {}),
+              },
+              body: JSON.stringify({
+                model: modelId,
+                messages: convo,
+                tools,
+                tool_choice: "auto",
+                stream: true,
+              }),
+              signal: req.signal,
+            });
+            if (!llm.ok) {
+              const err = await llm.text();
+              if (llm.status === 429) throw new Error("Rate limit exceeded. Try again shortly.");
+              if (llm.status === 402) throw new Error("AI credits exhausted. Add credits in Settings.");
+              throw new Error(`AI gateway [${llm.status}]: ${err}`);
+            }
+            const reader = llm.body!.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let stepText = "";
+            const toolCallsAcc: any[] = [];
+            outer: while (true) {
+              if (aborted.v) { try { reader.cancel(); } catch {} break; }
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+              for (const raw of lines) {
+                const line = raw.trim();
+                if (!line.startsWith("data:")) continue;
+                const payload = line.slice(5).trim();
+                if (payload === "[DONE]") break outer;
+                let evt: any; try { evt = JSON.parse(payload); } catch { continue; }
+                const delta = evt.choices?.[0]?.delta;
+                if (!delta) continue;
+                if (typeof delta.content === "string" && delta.content) {
+                  stepText += delta.content;
+                  send({ type: "text", delta: delta.content });
+                }
+                if (Array.isArray(delta.tool_calls)) {
+                  for (const tc of delta.tool_calls) {
+                    const idx = tc.index ?? 0;
+                    if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: tc.id, name: "", args: "" };
+                    if (tc.id) toolCallsAcc[idx].id = tc.id;
+                    if (tc.function?.name) toolCallsAcc[idx].name += tc.function.name;
+                    if (tc.function?.arguments) toolCallsAcc[idx].args += tc.function.arguments;
+                  }
                 }
               }
             }
+            return { stepText, toolCallsAcc };
+          };
+
+          let { stepText, toolCallsAcc } = await runStreamingStep(CHAT_API_URL, CHAT_API_KEY, CHAT_MODEL_ID, USE_OPENROUTER);
+
+          // FALLBACK: if the primary model produced no text AND no tool calls
+          // on the FIRST step, automatically retry with Gemini 2.5 Flash via
+          // Lovable AI Gateway. owl-alpha occasionally returns an empty stream
+          // on heavy script + tool-schema prompts, which previously left the
+          // user with a silent "nothing happened" (no video generated).
+          if (step === 0 && !aborted.v && !stepText && toolCallsAcc.length === 0) {
+            console.warn("ai-studio: primary chat model returned empty response, falling back to gemini-2.5-flash");
+            send({ type: "text", delta: "" });
+            const fallback = await runStreamingStep(
+              "https://ai.gateway.lovable.dev/v1/chat/completions",
+              LOVABLE_API_KEY,
+              "google/gemini-2.5-flash",
+              false,
+            );
+            stepText = fallback.stepText;
+            toolCallsAcc = fallback.toolCallsAcc;
           }
 
           finalAssistantText += (finalAssistantText ? "\n\n" : "") + stepText;
@@ -2388,6 +2414,11 @@ Deno.serve(async (req) => {
           convo.push(assistantMsg);
 
           if (!toolCallsAcc.length) {
+            // If we STILL have nothing after fallback, surface a clear error
+            // to the user instead of saving a silent empty turn.
+            if (step === 0 && !stepText) {
+              send({ type: "error", message: "The model returned an empty response. Please try again or rephrase your request." });
+            }
             send({ type: "done" });
             break;
           }
