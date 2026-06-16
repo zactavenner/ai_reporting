@@ -32,6 +32,7 @@ import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } f
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useClientOffers } from "@/hooks/useClientOffers";
 import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
+import { VideoStylesBar, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
 
 interface Props {
   clientId: string;
@@ -741,6 +742,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [videoModels]);
   // first selection drives single-clip default model passed to the server
   const videoModel = videoModels[0] || "bytedance/seedance-2.0-fast";
+  // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
+  // Selected style's prompt block is prepended to the user's text before sending.
+  const videoStyles = useVideoStyles();
   const [adFormat, setAdFormat] = useState<string>(() => {
     try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
   });
@@ -1142,7 +1146,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const mentioned = extractAgentMentions(text, clientAgents as any);
           const agentBlock = mentioned.length ? buildAgentContextBlock(mentioned) : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          return masterBlock + agentBlock + text;
+          const styleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
+          return masterBlock + agentBlock + styleBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
@@ -2035,6 +2040,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
                   )}
                 </div>
+                {videoModels.length > 0 && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60 flex-wrap">
+                    <VideoStylesBar
+                      styles={videoStyles.styles}
+                      setStyles={videoStyles.setStyles}
+                      selectedId={videoStyles.selectedId}
+                      setSelectedId={videoStyles.setSelectedId}
+                    />
+                  </div>
+                )}
                 {videoModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Frames:</span>
