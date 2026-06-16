@@ -524,7 +524,27 @@ Deno.serve(async (req) => {
     const merged = mergeResults(results, knownFirstName, knownLastName);
 
     if (!merged.primary) {
-      return new Response(JSON.stringify({ success: false, error: 'No enrichment data found for this contact' }), {
+      // RetargetIQ returned no identities for this contact. This is a normal
+      // "no match" — not a failure. Persist a stub row so cron sweeps skip
+      // this lead for the configured refresh window instead of re-spending
+      // API quota on the same dead lookup every cycle.
+      try {
+        if (client_id && external_id) {
+          await supabase.from('lead_enrichment').upsert({
+            client_id,
+            external_id,
+            lead_id: lead_id || null,
+            enriched_at: new Date().toISOString(),
+            last_enriched_at: new Date().toISOString(),
+            enrichment_match_count: 0,
+            enrichment_methods_used: ['no_match'],
+            enrichment_version: 2,
+          }, { onConflict: 'client_id,external_id' });
+        }
+      } catch (stubErr) {
+        console.error('[RetargetIQ] no-match stub upsert failed:', stubErr);
+      }
+      return new Response(JSON.stringify({ success: true, matched: false, reason: 'no_match' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
