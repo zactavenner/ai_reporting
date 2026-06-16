@@ -364,54 +364,54 @@ export default function ClientDetail() {
 
         {/* Grouped Tabs - matching 6.0 */}
         <Tabs value={resolvedTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="bg-muted/50 overflow-x-auto flex-nowrap w-full justify-start h-auto py-1 px-1">
+          <TabsList className="bg-muted/50 overflow-x-auto flex-nowrap w-full justify-start h-auto py-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {isLeasing && (
-              <TabsTrigger value="properties" className="gap-2">
+              <TabsTrigger value="properties" className="gap-2 whitespace-nowrap">
                 <Building2 className="h-4 w-4" />
                 Properties
               </TabsTrigger>
             )}
-            <TabsTrigger value="tasks" className="gap-2">
+            <TabsTrigger value="tasks" className="gap-2 whitespace-nowrap">
               <CheckSquare className="h-4 w-4" />
               Tasks
             </TabsTrigger>
-            <TabsTrigger value="creatives" className="gap-2">
+            <TabsTrigger value="creatives" className="gap-2 whitespace-nowrap">
               <Palette className="h-4 w-4" />
               Creatives
             </TabsTrigger>
-            <TabsTrigger value="ai-studio" className="gap-2">
+            <TabsTrigger value="ai-studio" className="gap-2 whitespace-nowrap">
               <Sparkles className="h-4 w-4" />
               AI Studio
             </TabsTrigger>
-            <TabsTrigger value="folder" className="gap-2">
+            <TabsTrigger value="folder" className="gap-2 whitespace-nowrap">
               <FolderOpen className="h-4 w-4" />
               Folder
             </TabsTrigger>
-            <TabsTrigger value="master-doc" className="gap-2">
+            <TabsTrigger value="master-doc" className="gap-2 whitespace-nowrap">
               <FileText className="h-4 w-4" />
               Master Doc
             </TabsTrigger>
-            <TabsTrigger value="reporting-sheet" className="gap-2">
+            <TabsTrigger value="reporting-sheet" className="gap-2 whitespace-nowrap">
               <ClipboardList className="h-4 w-4" />
               Reporting Sheet
             </TabsTrigger>
-            <TabsTrigger value="sheet-stats" className="gap-2">
+            <TabsTrigger value="sheet-stats" className="gap-2 whitespace-nowrap">
               <ClipboardList className="h-4 w-4" />
               Sheet Stats
             </TabsTrigger>
-            <TabsTrigger value="company-info" className="gap-2">
+            <TabsTrigger value="company-info" className="gap-2 whitespace-nowrap">
               <Building2 className="h-4 w-4" />
               Company Info
             </TabsTrigger>
-            <TabsTrigger value="pipeline" className="gap-2">
+            <TabsTrigger value="pipeline" className="gap-2 whitespace-nowrap">
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
-            <TabsTrigger value="activity" className="gap-2">
+            <TabsTrigger value="activity" className="gap-2 whitespace-nowrap">
               <ActivityIcon className="h-4 w-4" />
               Activity
             </TabsTrigger>
-            <TabsTrigger value="client-settings" className="gap-2">
+            <TabsTrigger value="client-settings" className="gap-2 whitespace-nowrap">
               <Cog className="h-4 w-4" />
               Settings
             </TabsTrigger>
