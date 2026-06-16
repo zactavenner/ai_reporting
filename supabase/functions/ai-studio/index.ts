@@ -1508,6 +1508,58 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
+function inferVideoDurationSeconds(text: string, fallback = 15): number {
+  const t = text || "";
+  const explicit =
+    t.match(/(?:length|duration|runtime)\s*[:=\-]?\s*(\d{1,3})\s*(?:seconds?|secs?|s)\b/i)?.[1] ||
+    t.match(/\b(\d{1,3})\s*(?:seconds?|secs?)\s+(?:video|reel|clip|ad)\b/i)?.[1];
+  if (explicit) return Math.max(4, Math.min(120, Number(explicit)));
+  const stamps = [...t.matchAll(/\b(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})\b/g)];
+  if (stamps.length) {
+    const last = stamps[stamps.length - 1];
+    const end = Number(last[3]) * 60 + Number(last[4]);
+    if (Number.isFinite(end) && end > 0) return Math.max(4, Math.min(120, end));
+  }
+  return fallback;
+}
+
+function inferVideoAspectRatio(text: string): "9:16" | "16:9" | "1:1" {
+  const t = (text || "").toLowerCase();
+  if (/\b16\s*:\s*9\b|landscape|youtube\s+(?:ad|video)|wide\b/.test(t)) return "16:9";
+  if (/\b1\s*:\s*1\b|square/.test(t)) return "1:1";
+  return "9:16";
+}
+
+function shouldDirectGenerateVideoPrompt(text: string): boolean {
+  const t = (text || "").trim();
+  if (t.length < 80) return false;
+  const lower = t.toLowerCase();
+  const hasVideoLanguage = /\b(video|reel|clip|shorts?|tiktok|instagram reels?|meta ad|youtube shorts?|vertical social ad)\b/.test(lower);
+  const looksLikePrompt = /\b(format|length|duration|style|talent|location|creative direction|spoken script|production notes|compliance disclaimer)\s*[:\n]/i.test(t) || /\b0:00\s*[–-]\s*0:\d{2}\b/.test(t);
+  const asksForReviewOnly = /\b(give me the script before producing|for review|review only|do not generate|don't generate|wait for approval|shall i proceed|should i proceed)\b/i.test(t);
+  return hasVideoLanguage && looksLikePrompt && !asksForReviewOnly;
+}
+
+function splitVideoPromptForModel(prompt: string, totalDuration: number, maxDuration: number): Array<{ prompt: string; duration: number; index: number; count: number }> {
+  const count = Math.max(1, Math.ceil(totalDuration / maxDuration));
+  if (count === 1) return [{ prompt, duration: Math.min(totalDuration, maxDuration), index: 0, count: 1 }];
+  const sections = prompt
+    .split(/\n(?=(?:\*\*)?\s*(?:part|clip)\s+[a-z0-9]+\b|\b\d{1,2}:\d{2}\s*[–-]\s*\d{1,2}:\d{2}\b)/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 40);
+  return Array.from({ length: count }, (_, i) => {
+    const start = i * maxDuration;
+    const end = Math.min(totalDuration, (i + 1) * maxDuration);
+    const segment = sections[i] || prompt;
+    return {
+      index: i,
+      count,
+      duration: Math.max(4, Math.min(maxDuration, end - start || maxDuration)),
+      prompt: `Render clip ${i + 1}/${count} (${start}-${end}s) from this continuous video prompt. Keep talent, wardrobe, location, lighting, pacing, brand, and compliance consistent across clips. Render ONLY this time segment; it must feel like it can stitch seamlessly with the surrounding clips.\n\n${segment}`,
+    };
+  });
+}
+
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
