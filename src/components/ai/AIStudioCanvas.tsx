@@ -216,13 +216,27 @@ export function AIStudioCanvas({
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/30 flex-wrap">
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom(z => Math.max(0.25, z * 0.9))} title="Zoom out">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => setFeedMode(f => !f)}
+          title={feedMode ? "Switch to free canvas (pan + zoom)" : "Switch to stacked feed (easier on mobile)"}
+        >
+          {feedMode ? <LayoutGrid className="h-3.5 w-3.5" /> : <Rows3 className="h-3.5 w-3.5" />}
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7" disabled={feedMode} onClick={() => setZoom(z => Math.max(0.25, z * 0.9))} title="Zoom out">
           <Minus className="h-3.5 w-3.5" />
         </Button>
-        <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="text-xs tabular-nums w-14 text-center hover:bg-muted rounded px-1 py-0.5" title="Reset">
-          {Math.round(zoom * 100)}%
+        <button
+          onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+          disabled={feedMode}
+          className="text-xs tabular-nums w-14 text-center hover:bg-muted rounded px-1 py-0.5 disabled:opacity-40 disabled:hover:bg-transparent"
+          title="Reset"
+        >
+          {feedMode ? "Feed" : `${Math.round(zoom * 100)}%`}
         </button>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setZoom(z => Math.min(3, z * 1.1))} title="Zoom in">
+        <Button size="icon" variant="ghost" className="h-7 w-7" disabled={feedMode} onClick={() => setZoom(z => Math.min(3, z * 1.1))} title="Zoom in">
           <Plus className="h-3.5 w-3.5" />
         </Button>
         <Button
@@ -241,8 +255,7 @@ export function AIStudioCanvas({
               return;
             }
             // Reset zoom so the target is legible, then center it.
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
+            if (!feedMode) { setZoom(1); setPan({ x: 0, y: 0 }); }
             requestAnimationFrame(() => {
               target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
             });
@@ -268,16 +281,16 @@ export function AIStudioCanvas({
       </div>
       <div
         ref={viewportRef}
-        className="flex-1 overflow-auto bg-muted/10 cursor-grab active:cursor-grabbing"
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={stopDrag}
-        onMouseLeave={stopDrag}
-        onWheel={onWheel}
+        className={`flex-1 overflow-auto bg-muted/10 ${feedMode ? "" : "cursor-grab active:cursor-grabbing"}`}
+        onMouseDown={feedMode ? undefined : onMouseDown}
+        onMouseMove={feedMode ? undefined : onMouseMove}
+        onMouseUp={feedMode ? undefined : stopDrag}
+        onMouseLeave={feedMode ? undefined : stopDrag}
+        onWheel={feedMode ? undefined : onWheel}
       >
         <div
-          className="p-4 grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 origin-top-left transition-transform duration-75 auto-rows-min items-start"
-          style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
+          className={`p-3 sm:p-4 grid grid-cols-1 ${feedMode ? "" : "lg:grid-cols-2 2xl:grid-cols-3"} gap-4 sm:gap-6 origin-top-left transition-transform duration-75 auto-rows-min items-start`}
+          style={feedMode ? { width: "100%" } : { transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0", width: "100%" }}
         >
       {entries.length === 0 && (
         <div className="col-span-full flex items-center justify-center text-sm text-muted-foreground p-12 text-center">
