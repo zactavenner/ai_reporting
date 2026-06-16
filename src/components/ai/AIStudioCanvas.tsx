@@ -79,6 +79,19 @@ export function AIStudioCanvas({
   const lastEntryCountRef = useRef<number>(0);
   const lastEntryKeyRef = useRef<string>("");
   const [sendingApproval, setSendingApproval] = useState(false);
+  // Mobile-friendly: default to a simple stacked "feed" mode on small screens
+  // (no pan/zoom transform — easier to scroll with thumbs). Users can flip back
+  // to the free canvas via the toolbar toggle, persisted in localStorage.
+  const [feedMode, setFeedMode] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem("ai-studio:canvas-feed-mode");
+      if (stored !== null) return stored === "true";
+    } catch {}
+    return typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:canvas-feed-mode", String(feedMode)); } catch {}
+  }, [feedMode]);
 
   const approvalCandidates = entries.filter(
     (e) =>
