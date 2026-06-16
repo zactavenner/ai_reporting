@@ -70,7 +70,7 @@ export function AIStudioCanvas({
   onViewChange?: (view: { zoom: number; panX: number; panY: number }) => void;
   onFocusItem?: (itemId: string | null) => void;
 }) {
-  const [zoom, setZoom] = useState(initialView?.zoom ?? 0.6);
+  const [zoom, setZoom] = useState(initialView?.zoom ?? 1);
   const [pan, setPan] = useState({ x: initialView?.panX ?? 0, y: initialView?.panY ?? 0 });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
