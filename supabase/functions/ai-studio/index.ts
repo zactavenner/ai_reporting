@@ -1591,7 +1591,8 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
       "VIDEO MODEL CAPABILITIES (CRITICAL — respect per-clip duration limits):",
       lines,
       "- When the requested total video length EXCEEDS the chosen model's per-clip max, you MUST split the script into MULTIPLE generate_seedance_video tool_calls in the SAME assistant turn (parallel). Example: a 30s script on Seedance (15s max) → 2 calls of 15s each; a 24s script on Veo 3.1 Fast (8s max) → 3 calls of 8s each.",
-      "- For each split clip, assign the matching segment of the script to the prompt (Clip 1 = first segment, Clip 2 = next segment, …) and keep aspect_ratio/resolution identical across clips.",
+      "- COMBINED MATH (CRITICAL when multiple video models are selected): total tool_calls = (clips_needed_per_model) × (number_of_selected_models). Example: 30s script + 2 selected models (Seedance Fast 15s max, Kling 3.0 15s max) → 2 clips × 2 models = 4 generate_seedance_video tool_calls in the SAME assistant turn. Example: 24s script + 3 selected models with 8s caps → 3 × 3 = 9 calls. Never reduce a model's clip count just because another model is also rendering — each model gets the FULL split independently.",
+      "- For each split clip, assign the matching segment of the script to the prompt (Clip 1 = first segment, Clip 2 = next segment, …) and keep aspect_ratio/resolution identical across clips AND across models so the comparison is apples-to-apples.",
       "- If an avatar is selected (see AVATAR CONTEXT below), pass the SAME avatar image_url on every clip so the same face carries across all segments.",
     ].join("\n");
   })(),
