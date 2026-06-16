@@ -1662,54 +1662,6 @@ export type Database = {
           },
         ]
       }
-      app_feedback: {
-        Row: {
-          admin_notes: string | null
-          category: string | null
-          created_at: string
-          description: string | null
-          id: string
-          priority: string | null
-          reviewed_at: string | null
-          reviewed_by_name: string | null
-          status: string
-          submitted_by_id: string | null
-          submitted_by_name: string | null
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          admin_notes?: string | null
-          category?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          priority?: string | null
-          reviewed_at?: string | null
-          reviewed_by_name?: string | null
-          status?: string
-          submitted_by_id?: string | null
-          submitted_by_name?: string | null
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          admin_notes?: string | null
-          category?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          priority?: string | null
-          reviewed_at?: string | null
-          reviewed_by_name?: string | null
-          status?: string
-          submitted_by_id?: string | null
-          submitted_by_name?: string | null
-          title?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       assets: {
         Row: {
           client_id: string | null
@@ -5242,6 +5194,192 @@ export type Database = {
           },
         ]
       }
+      email_assignments: {
+        Row: {
+          assigned_by: string | null
+          assigned_to: string | null
+          completed_at: string | null
+          created_at: string
+          due_date: string | null
+          email_id: string
+          id: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          email_id: string
+          id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          email_id?: string
+          id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_assignments_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_assignments_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "emails"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_briefings: {
+        Row: {
+          briefing_date: string
+          created_at: string
+          follow_ups: Json | null
+          id: string
+          metrics: Json | null
+          pending_replies: Json | null
+          summary: string | null
+          top_emails: Json | null
+          urgent_items: Json | null
+        }
+        Insert: {
+          briefing_date: string
+          created_at?: string
+          follow_ups?: Json | null
+          id?: string
+          metrics?: Json | null
+          pending_replies?: Json | null
+          summary?: string | null
+          top_emails?: Json | null
+          urgent_items?: Json | null
+        }
+        Update: {
+          briefing_date?: string
+          created_at?: string
+          follow_ups?: Json | null
+          id?: string
+          metrics?: Json | null
+          pending_replies?: Json | null
+          summary?: string | null
+          top_emails?: Json | null
+          urgent_items?: Json | null
+        }
+        Relationships: []
+      }
+      email_drafts: {
+        Row: {
+          body: string
+          confidence: number | null
+          created_at: string
+          edited_body: string | null
+          email_id: string
+          id: string
+          model: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["email_draft_status"] | null
+          updated_at: string
+          urgency: Database["public"]["Enums"]["email_priority"] | null
+        }
+        Insert: {
+          body: string
+          confidence?: number | null
+          created_at?: string
+          edited_body?: string | null
+          email_id: string
+          id?: string
+          model?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["email_draft_status"] | null
+          updated_at?: string
+          urgency?: Database["public"]["Enums"]["email_priority"] | null
+        }
+        Update: {
+          body?: string
+          confidence?: number | null
+          created_at?: string
+          edited_body?: string | null
+          email_id?: string
+          id?: string
+          model?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["email_draft_status"] | null
+          updated_at?: string
+          urgency?: Database["public"]["Enums"]["email_priority"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_drafts_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "emails"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_notes: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          email_id: string
+          id: string
+          mentions: string[] | null
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          email_id: string
+          id?: string
+          mentions?: string[] | null
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          email_id?: string
+          id?: string
+          mentions?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_notes_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "emails"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_parsed_investors: {
         Row: {
           client_id: string
@@ -5333,6 +5471,165 @@ export type Database = {
             columns: ["funded_investor_id"]
             isOneToOne: false
             referencedRelation: "funded_investors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_sync_log: {
+        Row: {
+          account_id: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          messages_auto_archived: number | null
+          messages_classified: number | null
+          messages_synced: number | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          account_id?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          messages_auto_archived?: number | null
+          messages_classified?: number | null
+          messages_synced?: number | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          account_id?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          messages_auto_archived?: number | null
+          messages_classified?: number | null
+          messages_synced?: number | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_sync_log_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "gmail_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sync_log_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "v_gmail_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emails: {
+        Row: {
+          account_id: string
+          auto_archived: boolean | null
+          body_html: string | null
+          body_text: string | null
+          cc_emails: string[] | null
+          classification:
+            | Database["public"]["Enums"]["email_classification"]
+            | null
+          classified_at: string | null
+          created_at: string
+          from_email: string | null
+          from_name: string | null
+          gmail_id: string
+          id: string
+          is_archived: boolean | null
+          is_unread: boolean | null
+          labels: string[] | null
+          priority: Database["public"]["Enums"]["email_priority"] | null
+          raw_payload: Json | null
+          received_at: string | null
+          requires_response: boolean | null
+          responded_at: string | null
+          snippet: string | null
+          subject: string | null
+          thread_id: string | null
+          to_emails: string[] | null
+          updated_at: string
+          waiting_on_customer: boolean | null
+        }
+        Insert: {
+          account_id: string
+          auto_archived?: boolean | null
+          body_html?: string | null
+          body_text?: string | null
+          cc_emails?: string[] | null
+          classification?:
+            | Database["public"]["Enums"]["email_classification"]
+            | null
+          classified_at?: string | null
+          created_at?: string
+          from_email?: string | null
+          from_name?: string | null
+          gmail_id: string
+          id?: string
+          is_archived?: boolean | null
+          is_unread?: boolean | null
+          labels?: string[] | null
+          priority?: Database["public"]["Enums"]["email_priority"] | null
+          raw_payload?: Json | null
+          received_at?: string | null
+          requires_response?: boolean | null
+          responded_at?: string | null
+          snippet?: string | null
+          subject?: string | null
+          thread_id?: string | null
+          to_emails?: string[] | null
+          updated_at?: string
+          waiting_on_customer?: boolean | null
+        }
+        Update: {
+          account_id?: string
+          auto_archived?: boolean | null
+          body_html?: string | null
+          body_text?: string | null
+          cc_emails?: string[] | null
+          classification?:
+            | Database["public"]["Enums"]["email_classification"]
+            | null
+          classified_at?: string | null
+          created_at?: string
+          from_email?: string | null
+          from_name?: string | null
+          gmail_id?: string
+          id?: string
+          is_archived?: boolean | null
+          is_unread?: boolean | null
+          labels?: string[] | null
+          priority?: Database["public"]["Enums"]["email_priority"] | null
+          raw_payload?: Json | null
+          received_at?: string | null
+          requires_response?: boolean | null
+          responded_at?: string | null
+          snippet?: string | null
+          subject?: string | null
+          thread_id?: string | null
+          to_emails?: string[] | null
+          updated_at?: string
+          waiting_on_customer?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emails_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "gmail_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emails_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "v_gmail_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -6546,6 +6843,62 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      gmail_accounts: {
+        Row: {
+          access_token: string | null
+          access_token_expires_at: string | null
+          created_at: string
+          display_name: string | null
+          email: string
+          history_id: string | null
+          id: string
+          last_synced_at: string | null
+          owner_member_id: string | null
+          refresh_token: string
+          scope: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          email: string
+          history_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          owner_member_id?: string | null
+          refresh_token: string
+          scope?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          history_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          owner_member_id?: string | null
+          refresh_token?: string
+          scope?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_accounts_owner_member_id_fkey"
+            columns: ["owner_member_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -11279,6 +11632,50 @@ export type Database = {
           },
         ]
       }
+      v_gmail_accounts: {
+        Row: {
+          created_at: string | null
+          display_name: string | null
+          email: string | null
+          history_id: string | null
+          id: string | null
+          last_synced_at: string | null
+          owner_member_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          history_id?: string | null
+          id?: string | null
+          last_synced_at?: string | null
+          owner_member_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          history_id?: string | null
+          id?: string | null
+          last_synced_at?: string | null
+          owner_member_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_accounts_owner_member_id_fkey"
+            columns: ["owner_member_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       find_unenriched_leads: {
@@ -11364,7 +11761,24 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      email_classification:
+        | "important_human"
+        | "client"
+        | "sales"
+        | "partner_vendor"
+        | "internal"
+        | "newsletter"
+        | "promotional"
+        | "cold_outreach"
+        | "spam"
+        | "unclassified"
+      email_draft_status:
+        | "pending"
+        | "approved"
+        | "sent"
+        | "edited"
+        | "dismissed"
+      email_priority: "high" | "medium" | "low" | "none"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -11491,6 +11905,27 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      email_classification: [
+        "important_human",
+        "client",
+        "sales",
+        "partner_vendor",
+        "internal",
+        "newsletter",
+        "promotional",
+        "cold_outreach",
+        "spam",
+        "unclassified",
+      ],
+      email_draft_status: [
+        "pending",
+        "approved",
+        "sent",
+        "edited",
+        "dismissed",
+      ],
+      email_priority: ["high", "medium", "low", "none"],
+    },
   },
 } as const
