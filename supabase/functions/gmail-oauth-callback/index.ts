@@ -7,8 +7,11 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
-  const redirectUri = url.searchParams.get("redirect_uri") ||
-    `${url.origin}/functions/v1/gmail-oauth-callback`;
+  const projectRef = Deno.env.get("SUPABASE_URL")?.replace(/^https?:\/\//, "").split(".")[0];
+  const defaultRedirect = projectRef
+    ? `https://${projectRef}.supabase.co/functions/v1/gmail-oauth-callback`
+    : `${url.origin.replace(/^http:/, "https:")}/functions/v1/gmail-oauth-callback`;
+  const redirectUri = url.searchParams.get("redirect_uri") || defaultRedirect;
 
   if (error) return html(`<h1>Connection cancelled</h1><p>${error}</p>`);
   if (!code) return html(`<h1>Missing code</h1>`);
