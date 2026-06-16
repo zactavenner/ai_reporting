@@ -726,9 +726,11 @@ async function generateSceneImage(opts: {
   conversationId: string;
   userId: string;
   model?: "nano-banana" | "openai" | null;
+  styleAnchor?: string | null;
 }) {
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-  const fullPrompt = `Create a single cinematic keyframe image for a video scene.\n\n${opts.prompt}\n\nAspect ratio: ${opts.aspectRatio}. Photoreal cinematic look. No text overlays or watermarks.`;
+  const anchor = (opts.styleAnchor || "").trim();
+  const fullPrompt = `Create a single cinematic keyframe image for a video scene.\n\n${anchor ? `SHARED STYLE (must match exactly across every scene of this storyboard): ${anchor}\n\n` : ""}SCENE: ${opts.prompt}\n\nAspect ratio: ${opts.aspectRatio}. Photoreal cinematic look. No text overlays or watermarks.`;
 
   let base64Image = "", mime = "image/png", modelUsed = "";
   const useOpenAI = opts.model === "openai";
