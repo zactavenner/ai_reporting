@@ -175,13 +175,16 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
   const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   if (m.role === "user") {
     return (
-      <div className="flex flex-col items-end gap-0.5">
+      <div className="flex flex-col items-end gap-1 group">
         <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2 text-sm whitespace-pre-wrap text-foreground">
           {m.content}
         </div>
         {m.actorName && (
           <div className="text-[10px] text-muted-foreground/70 pr-1">— {m.actorName}</div>
         )}
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <CopyButton text={m.content} />
+        </div>
       </div>
     );
   }
