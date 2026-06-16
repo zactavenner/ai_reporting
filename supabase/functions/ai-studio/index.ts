@@ -2656,7 +2656,7 @@ Deno.serve(async (req) => {
                   conversationId,
                   userId: userId!,
                 });
-                result = { ok: true, storyboard_id: sb.storyboardId, aspect_ratio: sb.aspect_ratio, scenes: sb.scenes };
+                result = { ok: true, storyboard_id: sb.storyboardId, aspect_ratio: sb.aspect_ratio, style_anchor: sb.style_anchor, scenes: sb.scenes, note: "Pass the SAME `style_anchor` string to every generate_scene_image call so all keyframes share one visual identity." };
                 if (sb.storyboardItem) send({ type: "canvas_item", item: sb.storyboardItem });
               } else if (name === "generate_scene_image") {
                 const r = await generateSceneImage({
@@ -2669,6 +2669,7 @@ Deno.serve(async (req) => {
                   conversationId,
                   userId: userId!,
                   model: (args.model === "openai" || args.model === "nano-banana") ? args.model : null,
+                  styleAnchor: typeof args.style_anchor === "string" ? args.style_anchor : null,
                 });
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, image_url: r.image_url, model: r.model };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
