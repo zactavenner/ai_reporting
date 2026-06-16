@@ -1,52 +1,55 @@
-## AI Studio Video Overhaul
+# Email Management Module
 
-### 1. Auto Model Routing
-- **Default**: Seedance 2.0 **Fast** via OpenRouter (`bytedance/seedance-2.0-fast`), 15s chunks, 720p, 9:16
-- **Auto rule**: script has spoken dialogue/lipsync → Veo 3.1 (8s chunks). Otherwise → Seedance Fast 15s.
-- **Manual override dropdown** in UI: Auto / Seedance Fast 15s / Seedance Pro 15s / Veo 3.1 8s / Kling
-- **Splitter**: 30s script → 2× Seedance OR 4× Veo (ceil(total/chunk))
-- **Character consistency (Seedance multi-chunk)**: chunk 1 uses avatar/reference image as first frame; chunk N+1 uses extracted last frame of chunk N as first frame (server-side ffmpeg frame extract)
+Replaces the Feedback tab end-to-end. Multi-Gmail via your own Google OAuth app, 3-minute polling cron, AI classify + auto-archive, AI draft replies, daily executive briefing, analytics.
 
-### 2. Canvas Grouping + Combine
-- New `ai_studio_canvas_groups` table: groups multiple `canvas_items` under one "scene set"
-- Generated chunks land grouped on canvas with a **Combine** button
-- New edge fn `ai-studio-combine-video`: ffmpeg concat → single MP4 → uploaded to `creatives/` → new canvas_item
+## What you need to provide
 
-### 3. Native Captions Editor (kills Hyperframes iframe)
-- New `VideoCaptionsEditor.tsx` component on canvas
-- Auto-transcribe via Gemini (existing pattern): word-level timestamps
-- Live HTML overlay preview with drag handles to move caption block up/down (Y%)
-- Style controls: font, size, color, stroke, background
-- **Two-stage export**:
-  - Preview: client-side `<canvas>` + `MediaRecorder` (fast WebM)
-  - Final: new edge fn `ai-studio-burn-captions` → ffmpeg `drawtext`/ASS subtitle burn → MP4 to canvas
+Before I can finish wiring auth, you'll need to create a Google Cloud OAuth 2.0 Web App (5 min) and give me:
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
 
-### 4. Files
-**New:**
-- `supabase/functions/ai-studio-video-route/index.ts` — picks model, splits script, dispatches chunks
-- `supabase/functions/ai-studio-combine-video/index.ts` — ffmpeg concat
-- `supabase/functions/ai-studio-extract-last-frame/index.ts` — ffmpeg frame extract for Seedance chaining
-- `supabase/functions/ai-studio-transcribe/index.ts` — Gemini word-timestamps
-- `supabase/functions/ai-studio-burn-captions/index.ts` — ffmpeg burn-in
-- `src/components/ai-studio/VideoModelPicker.tsx`
-- `src/components/ai-studio/CanvasVideoGroup.tsx`
-- `src/components/ai-studio/VideoCaptionsEditor.tsx`
-- `src/lib/video-router.ts` — `pickModel(script, override)`, `splitScript(script, chunkSeconds)`
+I'll give you the exact redirect URI to paste into Google Cloud once the edge function is deployed. I'll request these via the secrets tool at the right step.
 
-**Modified:**
-- AI Studio chat edge fn — add `generate_video` tool that calls `ai-studio-video-route`
-- AI Studio canvas component — render groups + Combine button + open captions editor
+## Build steps
 
-**DB migration:** `ai_studio_canvas_groups` (id, conversation_id, user_id, client_id, kind, status, combined_url, created_at) + add nullable `group_id` to `ai_studio_canvas_items`. RLS on user_id. Grants to authenticated + service_role.
+1. **Cleanup.** Delete `FeedbackTab.tsx`, remove the Feedback nav item, drop the `app_feedback` table.
+2. **Schema migration.** New tables:
+   - `gmail_accounts` — connected inboxes (email, refresh_token, access_token, expiry, history_id, owner team member, status)
+   - `emails` — synced messages (gmail_id, thread_id, account_id, from/to/cc, subject, snippet, body_text, body_html, received_at, labels, classification, priority, requires_response, waiting_on_customer, archived, status)
+   - `email_drafts` — AI drafts (email_id, body, confidence, urgency, status: pending/approved/sent/edited)
+   - `email_assignments` — assign to team members
+   - `email_notes` — internal notes / @mentions
+   - `email_briefings` — daily executive briefing snapshots
+   - `email_sync_log` — per-account sync runs
+3. **Edge functions.**
+   - `gmail-oauth-start` — returns Google auth URL with state
+   - `gmail-oauth-callback` — exchanges code, stores refresh token, creates `gmail_accounts` row
+   - `gmail-sync` — cron-triggered every 3 min: for each active account, refresh token if needed, pull new messages since last `history_id` (fallback to `q=newer_than:1d`), upsert into `emails`, fire `email-classify` per new message
+   - `email-classify` — calls Lovable AI to assign classification + priority + requires_response; auto-archives newsletter/promo/cold/spam via Gmail `modify` (remove `INBOX` label) and updates row
+   - `email-draft` — generates AI reply draft (tone matched, confidence, urgency)
+   - `email-action` — archive/star/mark-read/send/assign via Gmail API
+   - `email-briefing` — cron-triggered daily 7am: build executive briefing
+4. **Cron jobs.** pg_cron entries for `gmail-sync` (every 3 min) and `email-briefing` (daily 7am PST).
+5. **Frontend.** New `EmailManagementTab.tsx` with sub-routes:
+   - **Inbox** — unified list, filters (inbox/owner/priority/unread/needs-response/waiting/archived), three-pane layout (folders | list | reader), keyboard shortcuts (j/k/e/r/a), AI draft panel inline (Approve & Send / Edit / Regenerate)
+   - **Briefing** — today's executive summary, top emails, pending replies, urgent items, follow-ups
+   - **Analytics** — received/archived/spam-removed/drafts/avg-response-time/inbox-zero rate
+   - **Inboxes (Settings)** — connect Gmail button → OAuth flow, list of connected accounts, remove/reconnect
+6. **Nav.** Swap Feedback → Email Management in `AppSidebar.tsx` and `Index.tsx` tab router. Position as a top-level operational module above Reporting.
+7. **Polish.** Apple-style minimal UI matching the rest of the app, dark mode tokens, mobile responsive, real-time via Supabase Realtime on `emails` table.
 
-### 5. ffmpeg in edge functions
-Use `https://deno.land/x/[email protected]` (WASM ffmpeg) or shell out via `Deno.Command` with the bundled `ffmpeg-static` npm package. WASM path is portable on Supabase Edge runtime.
+## Technical notes
 
-### Order of implementation
-1. DB migration (groups table)
-2. `video-router.ts` + `ai-studio-video-route` edge fn (Seedance Fast default, Veo for dialogue)
-3. Canvas grouping UI + Combine button + `ai-studio-combine-video`
-4. Last-frame chaining for Seedance multi-chunk
-5. Native captions editor + transcribe + burn-in
+- Auth: standard Google OAuth 2.0 server-side flow. Scopes: `gmail.modify`, `gmail.send`, `gmail.readonly`, `userinfo.email`. Refresh tokens stored encrypted via Vault (or as restricted column with service-role-only RLS).
+- Classification model: `google/gemini-2.5-flash` for cost. Drafts: same model with system prompt locked to your tone.
+- Auto-archive = remove `INBOX` label via Gmail `messages.modify`, set `archived=true` locally.
+- Inbox Zero % = `1 - (active_inbox_count / received_today)`.
+- Cron password gate: existing `HPA1234$` pattern.
 
-Ship in that order; each step is independently usable.
+## Out of scope for v1 (can add later)
+
+- Team collaboration (assign, notes, @mentions) — schema is created, UI deferred per your selection
+- Push notifications via Gmail Pub/Sub — using polling per your selection
+- SMS/Slack alerts on urgent emails
+
+Confirm and I'll start with the migration + cleanup, then walk you through Google Cloud setup before requesting the OAuth secrets.
