@@ -429,7 +429,7 @@ function buildRecreatePrompt(asset: { prompt?: string; toolName?: string; args?:
   if (asset.prompt) lines.push(`prompt: ${asset.prompt}`);
   lines.push(`type: ${kind}`);
   if (a.model) lines.push(`model: ${a.model}`);
-  if (asset.toolName === "generate_seedance_video") lines.push(`model: ${a.fast ? "seedance-2.0-fast" : "seedance-2.0"}`);
+  if (asset.toolName === "generate_seedance_video") lines.push(`model: seedance-2.0-fast`);
   if (a.aspect_ratio) lines.push(`aspect_ratio: ${a.aspect_ratio}`);
   if (a.duration) lines.push(`duration: ${a.duration}s`);
   if (a.resolution) lines.push(`resolution: ${a.resolution}`);
@@ -665,7 +665,7 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
             aspect_ratio: video.aspect_ratio || "9:16",
             duration: video.duration || 15,
             resolution: video.resolution || "1080p",
-            model: video.model || (video.args?.fast ? "seedance-2.0-fast" : "seedance-2.0"),
+            model: video.model || "seedance-2.0-fast",
             video_prompt: video.prompt,
             mode: video.args?.image_url ? "image_to_video" : "text_to_video",
             source: "chat_pin",
