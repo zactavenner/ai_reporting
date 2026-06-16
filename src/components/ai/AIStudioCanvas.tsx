@@ -659,6 +659,42 @@ function InlineEditBar({ onSubmit, onCancel }: { onSubmit: (instr: string) => Pr
   );
 }
 
+function InlineAnimateBar({
+  defaultPrompt,
+  onSubmit,
+  onCancel,
+}: {
+  defaultPrompt?: string;
+  onSubmit: (instr: string) => void;
+  onCancel: () => void;
+}) {
+  const [val, setVal] = useState("");
+  const submit = () => {
+    const text = val.trim() || defaultPrompt || "Add subtle natural camera motion.";
+    onSubmit(text);
+    setVal("");
+  };
+  return (
+    <div className="mt-2 flex items-center gap-1.5 bg-primary/5 rounded-lg p-1.5 border border-primary/30" onClick={(e) => e.stopPropagation()}>
+      <Film className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+      <Input
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } if (e.key === "Escape") onCancel(); }}
+        placeholder="Describe the motion… (slow push-in, gentle parallax, product rotates, etc.)"
+        className="h-7 text-xs border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+      />
+      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={onCancel} title="Cancel">
+        <X className="h-3.5 w-3.5" />
+      </Button>
+      <Button size="icon" className="h-7 w-7 shrink-0" onClick={submit} title="Animate">
+        <Send className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 function VariationSetCard({
   item, clientId, onUpdated,
 }: {
