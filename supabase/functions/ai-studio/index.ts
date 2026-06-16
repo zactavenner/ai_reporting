@@ -2375,7 +2375,7 @@ Deno.serve(async (req) => {
             return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({ model, cap, segment }));
           });
 
-          await Promise.all(jobs.map(async ({ model, segment }) => {
+          for (const { model, segment } of jobs) {
             if (aborted.v) return;
             const toolId = `direct-video-${crypto.randomUUID()}`;
             const placeholderId = crypto.randomUUID();
@@ -2424,7 +2424,7 @@ Deno.serve(async (req) => {
             }
             finalToolEvents.push({ name: "generate_seedance_video", args, result });
             send({ type: "tool_end", id: toolId, name: "generate_seedance_video", args, result });
-          }));
+          }
 
           const okCount = finalToolEvents.filter((t) => t.result?.ok).length;
           const failCount = finalToolEvents.length - okCount;
