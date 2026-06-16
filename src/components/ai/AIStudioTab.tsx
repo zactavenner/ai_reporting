@@ -753,10 +753,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { return localStorage.getItem(`ai-studio:offer:${clientId}`) || "all"; } catch { return "all"; }
   });
   useEffect(() => { try { localStorage.setItem(`ai-studio:offer:${clientId}`, selectedOfferId); } catch {} }, [clientId, selectedOfferId]);
-  const [burnCaptions, setBurnCaptions] = useState<boolean>(() => {
-    try { return localStorage.getItem("ai-studio:burn-captions") === "1"; } catch { return false; }
-  });
-  useEffect(() => { try { localStorage.setItem("ai-studio:burn-captions", burnCaptions ? "1" : "0"); } catch {} }, [burnCaptions]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
   const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
