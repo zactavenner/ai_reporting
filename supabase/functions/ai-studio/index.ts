@@ -2365,6 +2365,77 @@ Deno.serve(async (req) => {
       const finalToolEvents: any[] = [];
 
       try {
+        if (shouldDirectGenerateVideoPrompt(userText || "")) {
+          const totalDuration = inferVideoDurationSeconds(userText || "", 15);
+          const aspect = inferVideoAspectRatio(userText || "");
+          const modelsToRun = (selectedVideoModels.length ? selectedVideoModels : [selectedVideoModel])
+            .filter((m, i, arr) => arr.indexOf(m) === i);
+          const jobs = modelsToRun.flatMap((model) => {
+            const cap = VIDEO_MODEL_CAPS[model]?.maxDuration || 15;
+            return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({ model, cap, segment }));
+          });
+
+          await Promise.all(jobs.map(async ({ model, segment }) => {
+            if (aborted.v) return;
+            const toolId = `direct-video-${crypto.randomUUID()}`;
+            const placeholderId = crypto.randomUUID();
+            const imageUrl = segment.index === 0
+              ? (videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || selectedAvatar?.image_url || null)
+              : (selectedAvatar?.image_url || null);
+            const lastFrameUrl = segment.index === segment.count - 1 ? (videoFrames?.lastFrameUrl || null) : null;
+            const args = {
+              prompt: segment.prompt,
+              aspect_ratio: aspect,
+              duration: segment.duration,
+              resolution: "1080p",
+              image_url: imageUrl,
+              last_frame_url: lastFrameUrl,
+              model,
+            };
+            send({
+              type: "canvas_placeholder",
+              placeholder_id: placeholderId,
+              kind: "image",
+              prompt: `Video ${segment.index + 1}/${segment.count} • ${VIDEO_MODEL_CAPS[model]?.label || model}: ${String(userText || "").slice(0, 120)}`,
+              aspect_ratio: aspect,
+              quality: "video",
+            });
+            send({ type: "tool_start", id: toolId, name: "generate_seedance_video", args });
+            let result: any;
+            try {
+              const r = await generateSeedanceVideo({
+                prompt: segment.prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
+                aspectRatio: aspect,
+                duration: segment.duration,
+                resolution: "1080p",
+                imageUrl,
+                lastFrameUrl,
+                model,
+                clientId: clientId || null,
+                conversationId,
+                userId: userId!,
+                onProgress: (p) => send({ type: "canvas_placeholder_progress", placeholder_id: placeholderId, ...p }),
+              });
+              result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: aspect, duration: segment.duration, resolution: r.resolution, clip_index: segment.index + 1, clip_count: segment.count };
+              if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: placeholderId });
+            } catch (e: any) {
+              result = { error: e?.message || String(e), model, clip_index: segment.index + 1, clip_count: segment.count };
+              send({ type: "canvas_placeholder_failed", placeholder_id: placeholderId, error: result.error });
+            }
+            finalToolEvents.push({ name: "generate_seedance_video", args, result });
+            send({ type: "tool_end", id: toolId, name: "generate_seedance_video", args, result });
+          }));
+
+          const okCount = finalToolEvents.filter((t) => t.result?.ok).length;
+          const failCount = finalToolEvents.length - okCount;
+          finalAssistantText = failCount
+            ? `Generated ${okCount} video clip${okCount === 1 ? "" : "s"}; ${failCount} clip${failCount === 1 ? "" : "s"} failed and is shown on the canvas.`
+            : `Generated ${okCount} video clip${okCount === 1 ? "" : "s"} from your prompt and added ${okCount === 1 ? "it" : "them"} to the canvas.`;
+          send({ type: "text", delta: finalAssistantText });
+          send({ type: "done" });
+          return;
+        }
+
         for (let step = 0; step < 25; step++) {
           if (aborted.v) break;
           send({ type: "step", step });
