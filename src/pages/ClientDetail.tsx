@@ -319,18 +319,18 @@ export default function ClientDetail() {
   return (
     <div className="min-h-screen bg-background">
       {/* Slim header */}
-      <header className="border-b border-border bg-card/80 apple-blur sticky top-0 z-30 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+      <header className="border-b border-border bg-card/80 apple-blur sticky top-0 z-30 px-3 sm:px-6 py-2 sm:py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => navigate('/')}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div>
-              <h1 className="text-lg font-semibold tracking-tight">{client.name}</h1>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">{client.name}</h1>
               <p className="text-xs text-muted-foreground hidden sm:block">Client performance & management</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-[60vw] sm:max-w-none pb-0.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto max-w-[55vw] sm:max-w-none pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <MetricsSourceToggle
               source={metricsSource}
               onChange={setMetricsSource}
@@ -360,7 +360,7 @@ export default function ClientDetail() {
       </header>
 
       <main className="flex-1 overflow-auto">
-        <div className="p-6 space-y-6">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
 
         {/* Grouped Tabs - matching 6.0 */}
         <Tabs value={resolvedTab} onValueChange={handleTabChange} className="space-y-6">
@@ -454,7 +454,7 @@ export default function ClientDetail() {
               {/* Bound height so the chat & canvas panels scroll internally and
                   stay aligned as the conversation grows, instead of letting the
                   page itself scroll and pushing the canvas out of view. */}
-              <div className="h-[calc(100vh-220px)] min-h-[600px]">
+              <div className="h-[calc(100vh-180px)] sm:h-[calc(100vh-220px)] min-h-[520px]">
                 <AIStudioTab clientId={client.id} clientName={client.name} />
               </div>
             </SectionErrorBoundary>
