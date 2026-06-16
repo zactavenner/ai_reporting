@@ -1270,7 +1270,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_scene_image",
-      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel. Pick a model: 'openai' (GPT Image 2) or 'nano-banana' (Nano Banana 2). If the user selected MULTIPLE image models, emit one generate_scene_image call PER model PER scene so the user can compare keyframes side-by-side before videos render.",
+      description: "Generate the keyframe image for a planned scene from plan_storyboard. Call this for EVERY scene in the storyboard, in parallel. This is TEXT-TO-IMAGE (no reference image) by default so the model has freedom to compose each scene — cross-scene consistency comes from the shared `style_anchor` you pass through from plan_storyboard's result. Only set reference_image_url when the user explicitly tied a specific reference image to the storyboard. Pick a model: 'openai' (GPT Image 2) or 'nano-banana' (Nano Banana 2). If the user selected MULTIPLE image models, emit one generate_scene_image call PER model PER scene so the user can compare keyframes side-by-side before videos render.",
       parameters: {
         type: "object",
         properties: {
@@ -1280,6 +1280,7 @@ const tools = [
           prompt: { type: "string", description: "Scene image prompt." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
           model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use for this keyframe. Default = nano-banana (fast). Use openai for highest quality." },
+          style_anchor: { type: "string", description: "REQUIRED for cross-scene consistency. Pass the EXACT `style_anchor` string returned by plan_storyboard so every keyframe in this storyboard renders with the same visual DNA (palette, lighting, character look). Server prepends it to the prompt." },
         },
         required: ["storyboard_id", "scene_id", "scene_order", "prompt", "aspect_ratio"],
       },
