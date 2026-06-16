@@ -11,6 +11,26 @@ function fmtTime(t: number) {
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2] as const;
 
+const MEDIA_ERROR_CODES: Record<number, string> = {
+  1: "MEDIA_ERR_ABORTED",
+  2: "MEDIA_ERR_NETWORK",
+  3: "MEDIA_ERR_DECODE",
+  4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
+};
+
+function describeVideoError(v: HTMLVideoElement | null) {
+  if (!v) return { reason: "no_element" };
+  const err = v.error;
+  return {
+    code: err?.code ?? null,
+    codeName: err?.code ? MEDIA_ERROR_CODES[err.code] ?? "UNKNOWN" : null,
+    message: err?.message || null,
+    networkState: v.networkState,
+    readyState: v.readyState,
+    currentSrc: v.currentSrc || null,
+  };
+}
+
 export function VideoPlayerCard({
   src,
   poster,
@@ -42,6 +62,8 @@ export function VideoPlayerCard({
   const [retryKey, setRetryKey] = useState(0);
   const [autoRetries, setAutoRetries] = useState(0);
   const MAX_AUTO_RETRIES = 4;
+  const lastErrorRef = useRef<Record<string, unknown> | null>(null);
+  const failedAtRef = useRef<number | null>(null);
 
   useEffect(() => { setLoadFailed(false); }, [src, retryKey]);
   useEffect(() => { setAutoRetries(0); }, [src]);
@@ -50,8 +72,22 @@ export function VideoPlayerCard({
   // before showing the manual "Video unavailable" fallback.
   useEffect(() => {
     if (!loadFailed || !src) return;
-    if (autoRetries >= MAX_AUTO_RETRIES) return;
+    if (autoRetries >= MAX_AUTO_RETRIES) {
+      console.error("[VideoPlayback] retries exhausted", {
+        src,
+        attempts: autoRetries,
+        lastError: lastErrorRef.current,
+      });
+      return;
+    }
     const delayMs = Math.min(8000, 800 * Math.pow(2, autoRetries));
+    console.warn("[VideoPlayback] scheduling auto-retry", {
+      src,
+      attempt: autoRetries + 1,
+      maxAttempts: MAX_AUTO_RETRIES,
+      delayMs,
+      lastError: lastErrorRef.current,
+    });
     const t = setTimeout(() => {
       setAutoRetries(n => n + 1);
       setLoadFailed(false);
@@ -166,9 +202,32 @@ export function VideoPlayerCard({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => setCurrent((e.target as HTMLVideoElement).currentTime)}
-        onLoadedMetadata={(e) => setDuration((e.target as HTMLVideoElement).duration || 0)}
+        onLoadedMetadata={(e) => {
+          setDuration((e.target as HTMLVideoElement).duration || 0);
+          if (autoRetries > 0 && failedAtRef.current) {
+            const recoveredInMs = Date.now() - failedAtRef.current;
+            console.info("[VideoPlayback] recovered after retry", {
+              src,
+              attempts: autoRetries,
+              recoveredInMs,
+              lastError: lastErrorRef.current,
+            });
+            failedAtRef.current = null;
+            lastErrorRef.current = null;
+          }
+        }}
         onVolumeChange={(e) => setMuted((e.target as HTMLVideoElement).muted)}
-        onError={() => setLoadFailed(true)}
+        onError={(e) => {
+          const details = describeVideoError(e.currentTarget as HTMLVideoElement);
+          lastErrorRef.current = details;
+          if (failedAtRef.current === null) failedAtRef.current = Date.now();
+          console.error("[VideoPlayback] load/playback failed", {
+            src,
+            attempt: autoRetries,
+            ...details,
+          });
+          setLoadFailed(true);
+        }}
       >
         <source src={src} type="video/mp4" />
       </video>
