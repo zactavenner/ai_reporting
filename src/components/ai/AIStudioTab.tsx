@@ -1852,7 +1852,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   if (files.length) { e.preventDefault(); uploadFiles(files); }
                 }}
                 placeholder="Ask AI Studio to build, write, or edit anything…"
-                className="resize-none min-h-[80px] max-h-48 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 pt-3 pb-2 text-sm"
+                style={{ height: composerHeight }}
+                onMouseUp={(e) => {
+                  const h = (e.target as HTMLTextAreaElement).offsetHeight;
+                  if (h && Math.abs(h - composerHeight) > 4) setComposerHeight(h);
+                }}
+                className="resize-y min-h-[80px] max-h-[70vh] border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 pt-3 pb-2 text-sm"
                 rows={1}
               />
               </div>
