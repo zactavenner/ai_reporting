@@ -943,13 +943,114 @@ async function generateSeedanceVideo(opts: {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
     "kwaivgi/kling-v3.0-std",
+    "kwaivgi/kling-v3.0-pro",
+    "google/veo-3.1-fast",
   ];
   const model = (opts.model && ALLOWED.includes(opts.model))
     ? opts.model
     : (opts.fast ? "bytedance/seedance-2.0-fast" : "bytedance/seedance-2.0");
+  const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const effectiveResolution = isSeedanceFast && opts.resolution === "1080p" ? "720p" : opts.resolution;
-  const effectiveDuration = Math.max(4, Math.min(15, Math.round(opts.duration || 15)));
+  const veoMax = 8;
+  const effectiveDuration = isVeo
+    ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
+    : Math.max(4, Math.min(15, Math.round(opts.duration || 15)));
+
+  // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
+  if (isVeo) {
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY required for Veo model");
+    const t0v = Date.now();
+    const emitV = opts.onProgress || (() => {});
+    emitV({ stage: "submitting", label: "Submitting to Veo 3.1 Fast…", model, percent: 2 });
+    // Optional first-frame image
+    let imagePart: any = null;
+    if (opts.imageUrl) {
+      try {
+        const ir = await fetch(opts.imageUrl);
+        if (ir.ok) {
+          const b64 = arrayBufferToBase64(await ir.arrayBuffer());
+          imagePart = { bytesBase64Encoded: b64, mimeType: ir.headers.get("content-type") || "image/png" };
+        }
+      } catch (e) { console.warn("Veo first-frame fetch failed", e); }
+    }
+    const veoUrl = `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-fast-generate-preview:predictLongRunning?key=${GEMINI_API_KEY}`;
+    const startRes = await fetch(veoUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instances: [imagePart ? { prompt: opts.prompt, image: imagePart } : { prompt: opts.prompt }],
+        parameters: { aspectRatio: opts.aspectRatio, durationSeconds: effectiveDuration, sampleCount: 1 },
+      }),
+    });
+    if (!startRes.ok) {
+      const t = await startRes.text();
+      emitV({ stage: "failed", label: `Veo submit failed (${startRes.status})`, model, elapsed_s: (Date.now() - t0v) / 1000 });
+      throw new Error(`Veo start [${startRes.status}]: ${t.slice(0, 300)}`);
+    }
+    const startData = await startRes.json();
+    const opName: string | undefined = startData.name;
+    if (!opName) throw new Error("Veo did not return operation name");
+    emitV({ stage: "queued", label: "Queued — waiting for Veo GPU…", model, percent: 8 });
+    let veoUri: string | null = null;
+    const MAX_V = 60;
+    for (let i = 0; i < MAX_V; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${opName}?key=${GEMINI_API_KEY}`);
+      if (!pollRes.ok) continue;
+      const poll = await pollRes.json();
+      emitV({ stage: "polling", label: `Rendering (${i + 1}/${MAX_V})…`, attempt: i + 1, max_attempts: MAX_V, elapsed_s: (Date.now() - t0v) / 1000, model, percent: Math.min(85, 10 + (i + 1) * 1.3) });
+      if (poll.done) {
+        const uri = poll.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+        if (uri) { veoUri = uri; break; }
+        if (poll.error) throw new Error(`Veo failed: ${poll.error.message || "unknown"}`);
+        throw new Error("Veo finished with no video");
+      }
+    }
+    if (!veoUri) throw new Error("Veo timed out after 5 minutes");
+    emitV({ stage: "downloading", label: "Downloading reel…", model, percent: 92, elapsed_s: (Date.now() - t0v) / 1000 });
+    const sep = veoUri.includes("?") ? "&" : "?";
+    const dl = await fetch(`${veoUri}${sep}key=${GEMINI_API_KEY}`);
+    if (!dl.ok) throw new Error(`Veo download [${dl.status}]`);
+    const bytes = new Uint8Array(await dl.arrayBuffer());
+    const path = `ai-studio/${opts.clientId || "shared"}/veo/${crypto.randomUUID()}-${Date.now()}.mp4`;
+    emitV({ stage: "rehosting", label: "Saving to permanent storage…", model, percent: 96, elapsed_s: (Date.now() - t0v) / 1000 });
+    const up = await supa.storage.from("creatives").upload(path, bytes, { contentType: "video/mp4", upsert: false });
+    if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
+    const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
+    const storedUrlV = pub.publicUrl;
+    const ciV = await supa.from("ai_studio_canvas_items").insert({
+      conversation_id: opts.conversationId,
+      user_id: opts.userId,
+      kind: "scene_video",
+      payload: {
+        video_url: storedUrlV, storage_path: path, keyframe_url: opts.imageUrl || null,
+        aspect_ratio: opts.aspectRatio, video_prompt: opts.prompt, model, provider: "google",
+        duration: effectiveDuration, resolution: opts.resolution, scene_order: 1,
+        mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+      },
+    }).select("id, kind, payload, created_at").single();
+    if (opts.clientId) {
+      try {
+        await supa.from("client_videos").insert({
+          client_id: opts.clientId,
+          title: `Veo ${opts.imageUrl ? "image→video" : "text→video"}`,
+          prompt: opts.prompt,
+          storage_url: storedUrlV, storage_path: path,
+          poster_url: opts.imageUrl || null,
+          source: "ai_studio",
+          conversation_id: opts.conversationId || null,
+          canvas_item_id: ciV?.data?.id || null,
+          model, aspect_ratio: opts.aspectRatio,
+          duration_seconds: effectiveDuration, resolution: opts.resolution,
+          status: "completed", created_by: opts.userId || null,
+        });
+      } catch (e) { console.warn("client_videos insert (veo) failed", e); }
+    }
+    emitV({ stage: "completed", label: "Reel ready", model, percent: 100, elapsed_s: (Date.now() - t0v) / 1000 });
+    return { video_url: storedUrlV, model, resolution: opts.resolution, item: ciV?.data || null };
+  }
+
   const body: Record<string, unknown> = {
     model,
     prompt: opts.prompt,
