@@ -2161,8 +2161,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
       {/* RIGHT — Canvas */}
       {showCanvas && (
-      <Card className="flex flex-col overflow-hidden">
-        <Tabs defaultValue="canvas" className="flex-1 flex flex-col">
+      <Card className="flex flex-col overflow-hidden min-h-0">
+        <Tabs defaultValue="canvas" className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
@@ -2181,8 +2181,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Button>
           </div>
 
-          <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-hidden">
+          <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden flex flex-col min-h-0 data-[state=active]:flex data-[state=inactive]:hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
             <AIStudioCanvas
               entries={canvas}
               clientId={clientId}
