@@ -68,8 +68,8 @@ const navStructure = [
     icon: ClipboardCheck,
   },
   {
-    title: 'Feedback',
-    value: 'feedback',
+    title: 'Email',
+    value: 'email',
     icon: MessageSquare,
   },
   {
