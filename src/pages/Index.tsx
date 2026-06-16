@@ -24,7 +24,7 @@ import { AIHubTab } from '@/components/ai/AIHubTab';
 import { AgencyAIStudioTab } from '@/components/ai/AgencyAIStudioTab';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
-import { FeedbackTab } from '@/components/feedback/FeedbackTab';
+import { EmailManagementTab } from '@/components/email/EmailManagementTab';
 import { MetricsCustomizeModal } from '@/components/dashboard/MetricsCustomizeModal';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
@@ -511,10 +511,10 @@ const Index = () => {
               </SectionErrorBoundary>
             )}
 
-            {/* Feedback */}
-            {activeTab === 'feedback' && (
-              <SectionErrorBoundary sectionName="Feedback">
-                <FeedbackTab />
+            {/* Email Management */}
+            {activeTab === 'email' && (
+              <SectionErrorBoundary sectionName="Email Management">
+                <EmailManagementTab />
               </SectionErrorBoundary>
             )}
 
