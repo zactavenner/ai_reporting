@@ -72,7 +72,6 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // can compare apples-to-apples without doing math in their head.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
   { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts",                 maxSeconds: 15, pricePerSecond: 0.0538 },
-  { value: "bytedance/seedance-2.0",      label: "Seedance Pro",   hint: "Best Seedance quality",                  maxSeconds: 15, pricePerSecond: 0.06726 },
   { value: "kwaivgi/kling-v3.0-std",       label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion",   maxSeconds: 15, pricePerSecond: 0.126 },
   { value: "google/veo-3.1-fast",          label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast",       maxSeconds: 8,  pricePerSecond: 0.10 },
 ];
@@ -430,7 +429,7 @@ function buildRecreatePrompt(asset: { prompt?: string; toolName?: string; args?:
   if (asset.prompt) lines.push(`prompt: ${asset.prompt}`);
   lines.push(`type: ${kind}`);
   if (a.model) lines.push(`model: ${a.model}`);
-  if (asset.toolName === "generate_seedance_video") lines.push(`model: ${a.fast ? "seedance-2.0-fast" : "seedance-2.0"}`);
+  if (asset.toolName === "generate_seedance_video") lines.push(`model: seedance-2.0-fast`);
   if (a.aspect_ratio) lines.push(`aspect_ratio: ${a.aspect_ratio}`);
   if (a.duration) lines.push(`duration: ${a.duration}s`);
   if (a.resolution) lines.push(`resolution: ${a.resolution}`);
@@ -666,7 +665,7 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
             aspect_ratio: video.aspect_ratio || "9:16",
             duration: video.duration || 15,
             resolution: video.resolution || "1080p",
-            model: video.model || (video.args?.fast ? "seedance-2.0-fast" : "seedance-2.0"),
+            model: video.model || "seedance-2.0-fast",
             video_prompt: video.prompt,
             mode: video.args?.image_url ? "image_to_video" : "text_to_video",
             source: "chat_pin",
