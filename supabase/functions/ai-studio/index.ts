@@ -943,7 +943,7 @@ async function generateSeedanceVideo(opts: {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0",
     "kwaivgi/kling-v3.0-std",
-    "kwaivgi/kling-v3.0-pro",
+    "kwaivgi/kling-v3.0-std",
     "google/veo-3.1-fast",
   ];
   const model = (opts.model && ALLOWED.includes(opts.model))
@@ -1421,7 +1421,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           fast: { type: "boolean", description: "If true, use seedance-2.0-fast (cheaper, faster, slightly lower quality, 720p max). Default false." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. If provided, overrides `fast`. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
@@ -1511,7 +1511,7 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
   "bytedance/seedance-2.0":      { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, up to 1080p)" },
   "kwaivgi/kling-v3.0-std":       { maxDuration: 15, label: "Kling 3.0 (≤15s per clip)" },
-  "kwaivgi/kling-v3.0-pro":       { maxDuration: 15, label: "Kling 3.0 Pro (≤15s per clip)" },
+  "kwaivgi/kling-v3.0-std":       { maxDuration: 15, label: "Kling 3.0 (≤15s per clip)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
