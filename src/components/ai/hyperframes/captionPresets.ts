@@ -914,6 +914,7 @@ export function applyCaptionPreset(
   comp: HyperframesComposition,
   segments: CaptionSegment[],
   preset: CaptionStyle | "none" = "hormozi",
+  overrides?: CaptionOverrides,
 ): HyperframesComposition {
   const base = stripCaptionLayers(comp.layers);
   if (preset === "none") return { ...comp, layers: base };
@@ -936,5 +937,66 @@ export function applyCaptionPreset(
     case "simple-mono":
     default: caps = buildSimpleMonoLayers(segments, comp);
   }
+  if (overrides) caps = applyCaptionOverrides(caps, overrides);
   return { ...comp, layers: [...base, ...caps] };
+}
+
+// ---------------------------------------------------------------------------
+// Caption customization overrides
+// ---------------------------------------------------------------------------
+
+export type CaptionCasing = "preset" | "upper" | "lower" | "title" | "none";
+
+export interface CaptionOverrides {
+  fontFamily?: string;
+  /** Hex color applied to non-active (base) caption words. */
+  baseColor?: string;
+  /** Hex color applied to the highlighted/active caption word. */
+  activeColor?: string;
+  /** How to transform the rendered text. "preset" = keep what the preset chose. */
+  casing?: CaptionCasing;
+  /** Outline color override. */
+  strokeColor?: string;
+}
+
+function recase(text: string, mode: CaptionCasing): string {
+  switch (mode) {
+    case "upper": return text.toUpperCase();
+    case "lower": return text.toLowerCase();
+    case "title":
+      return text.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    case "none":
+    case "preset":
+    default:
+      return text;
+  }
+}
+
+/**
+ * Post-process caption layers to apply user overrides (font, casing, colors).
+ * Distinguishes "active" overlay layers from base layers by detecting the
+ * late-fade-in opacity animation pattern used by `layoutWordRow` — base layers
+ * fade in at row start, active overlays fade in mid-row at the spoken word's
+ * timestamp.
+ */
+export function applyCaptionOverrides(layers: Layer[], overrides: CaptionOverrides): Layer[] {
+  const { fontFamily, baseColor, activeColor, strokeColor, casing = "preset" } = overrides;
+  return layers.map((l) => {
+    if (l.type !== "text" && l.type !== "subtitle") return l;
+    if (!l.id.startsWith(CAP_PREFIX)) return l;
+    const tl = l as TextLayer;
+    const isActiveOverlay = (tl.animations || []).some(
+      (a) => a.prop === "opacity" && a.from === 0 && a.to === 1 && a.start > 0.05,
+    );
+    return {
+      ...tl,
+      text: casing === "preset" ? tl.text : recase(tl.text, casing),
+      uppercase: casing === "preset" ? tl.uppercase : false,
+      fontFamily: fontFamily ?? tl.fontFamily,
+      color: isActiveOverlay
+        ? (activeColor ?? tl.color)
+        : (baseColor ?? tl.color),
+      stroke: strokeColor ?? tl.stroke,
+    };
+  });
 }
