@@ -81,6 +81,7 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
   const addComment = useAddCreativeComment();
   const deleteCreative = useDeleteCreative();
   const { currentMember } = useTeamMember();
+  const queryClient = useQueryClient();
   
   const isAgencyUpload = !!currentMember && !isPublicView;
   
