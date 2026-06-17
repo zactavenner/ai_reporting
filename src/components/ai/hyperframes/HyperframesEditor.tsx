@@ -58,6 +58,8 @@ import {
   CAPTION_STYLES,
   type CaptionStyle,
   type CaptionSegment,
+  type CaptionOverrides,
+  type CaptionCasing,
 } from "./captionPresets";
 import { transcodeWebmToMp4 } from "./transcodeMp4";
 import { captureVideoAudioTracks } from "./captureAudio";
@@ -128,6 +130,9 @@ export function HyperframesEditor({
   const captionsRanRef = useRef(false);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("hormozi");
   const [segments, setSegments] = useState<CaptionSegment[]>([]);
+  const [captionOverrides, setCaptionOverrides] = useState<CaptionOverrides>({
+    casing: "preset",
+  });
   const [leftTab, setLeftTab] = useState<"style" | "edit" | "layers" | "ai">("style");
 
   const { comp, setComp, undo, redo, canUndo, canRedo } = useCompHistory(
@@ -261,7 +266,7 @@ export function HyperframesEditor({
       setCaptionStage("applying");
       setSegments(segments);
       const style = styleOverride ?? captionStyle;
-      setComp((c) => applyCaptionPreset(c, segments, style));
+      setComp((c) => applyCaptionPreset(c, segments, style, captionOverrides));
       setCaptionStage("done");
       toast.success(`Generated ${segments.reduce((n, s) => n + (s.words?.length || s.text.split(/\s+/).length), 0)} caption words`);
     } catch (e: any) {
@@ -281,7 +286,7 @@ export function HyperframesEditor({
       generateCaptions(style);
       return;
     }
-    setComp((c) => applyCaptionPreset(c, segments, style));
+    setComp((c) => applyCaptionPreset(c, segments, style, captionOverrides));
     setLeftTab("edit");
   };
 
@@ -307,7 +312,7 @@ export function HyperframesEditor({
             }
           : s,
       );
-      setComp((c) => applyCaptionPreset(c, next, captionStyle));
+      setComp((c) => applyCaptionPreset(c, next, captionStyle, captionOverrides));
       return next;
     });
   };
@@ -315,7 +320,18 @@ export function HyperframesEditor({
   const deleteSegment = (idx: number) => {
     setSegments((prev) => {
       const next = prev.filter((_, i) => i !== idx);
-      setComp((c) => applyCaptionPreset(c, next, captionStyle));
+      setComp((c) => applyCaptionPreset(c, next, captionStyle, captionOverrides));
+      return next;
+    });
+  };
+
+  // Live re-apply when overrides change (font / case / colors).
+  const updateCaptionOverrides = (patch: Partial<CaptionOverrides>) => {
+    setCaptionOverrides((prev) => {
+      const next = { ...prev, ...patch };
+      if (segments.length > 0) {
+        setComp((c) => applyCaptionPreset(c, segments, captionStyle, next));
+      }
       return next;
     });
   };
