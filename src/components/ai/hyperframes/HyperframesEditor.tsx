@@ -1366,3 +1366,46 @@ function CaptionPresetPreview({ id }: { id: CaptionStyle }) {
     </div>
   );
 }
+
+function ColorField({
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  fallback: string;
+  onChange: (v: string | undefined) => void;
+}) {
+  const isSet = !!value;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] text-muted-foreground">{label}</label>
+        {isSet && (
+          <button
+            type="button"
+            onClick={() => onChange(undefined)}
+            className="text-[9px] text-muted-foreground hover:text-foreground"
+            aria-label={`Reset ${label} color`}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 rounded-md border bg-background px-1.5 h-8">
+        <input
+          type="color"
+          value={value ?? fallback}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+          aria-label={`${label} color`}
+        />
+        <span className="text-[10px] font-mono uppercase text-muted-foreground truncate">
+          {(value ?? fallback).replace("#", "")}
+        </span>
+      </div>
+    </div>
+  );
+}
