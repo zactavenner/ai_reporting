@@ -41,6 +41,9 @@ export interface Creative {
   trigger_campaign_id: string | null;
   ai_performance_score: number | null;
   ai_variations?: CreativeVariation[];
+  source_type?: 'upload' | 'canva';
+  canva_url?: string | null;
+  canva_design_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +72,9 @@ export function useCreatives(clientId?: string) {
         trigger_campaign_id: (item as any).trigger_campaign_id || null,
         ai_performance_score: (item as any).ai_performance_score || null,
         ai_variations: ((item as any).ai_variations as CreativeVariation[]) || [],
+        source_type: ((item as any).source_type as 'upload' | 'canva') || 'upload',
+        canva_url: (item as any).canva_url || null,
+        canva_design_id: (item as any).canva_design_id || null,
       })) as Creative[];
     },
     enabled: !!clientId,
