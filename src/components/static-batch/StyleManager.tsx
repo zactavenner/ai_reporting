@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ReferenceImagesManager } from './ReferenceImagesManager';
+import { CanvaTemplateSync } from './CanvaTemplateSync';
 
 interface StyleManagerProps {
   open: boolean;
@@ -180,6 +181,7 @@ interface StyleCardProps {
     description: string;
     is_default: boolean;
     reference_images?: string[] | null;
+    canva_url?: string | null;
   };
   clientId?: string;
   onDelete?: () => void;
@@ -218,6 +220,15 @@ function StyleCard({ style, clientId, onDelete, onImagesChange }: StyleCardProps
         referenceImages={refImages}
         onImagesChange={() => onImagesChange()}
         clientId={clientId}
+      />
+
+      <CanvaTemplateSync
+        styleId={style.id}
+        styleName={style.name}
+        canvaUrl={style.canva_url ?? null}
+        referenceImages={refImages}
+        clientId={clientId}
+        onChanged={onImagesChange}
       />
     </div>
   );
