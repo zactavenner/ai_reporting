@@ -38,6 +38,7 @@ const OfferDetailPage = lazyRetry(() => import("./pages/OfferDetailPage"));
   const GhlWorkflowsPage = lazyRetry(() => import("./pages/GhlWorkflowsPage"));
   const DailyReportPage = lazyRetry(() => import("./pages/DailyReportPage"));
   const DailyReportThankYouPage = lazyRetry(() => import("./pages/DailyReportThankYouPage"));
+const WhatsAppPage = lazyRetry(() => import("./pages/WhatsAppPage"));
 
 function PageLoader() {
   return (
@@ -81,6 +82,7 @@ const App = () => (
             <Route path="/eod" element={<PasswordGate><DailyReportPage /></PasswordGate>} />
             <Route path="/daily" element={<PasswordGate><DailyReportPage /></PasswordGate>} />
             <Route path="/daily/thanks" element={<PasswordGate><DailyReportThankYouPage /></PasswordGate>} />
+            <Route path="/whatsapp" element={<PasswordGate><WhatsAppPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
