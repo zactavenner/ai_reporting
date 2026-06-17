@@ -50,13 +50,18 @@ RULES:
     id: "podcast",
     name: "Podcast",
     builtIn: true,
-    prompt: `STYLE: Modern podcast clip. Two-shot or medium close-up of the host on-camera, professional condenser mic in frame, soft warm key light, slightly blurred studio background with subtle ambient bokeh (acoustic panels, plants, neon accent allowed). Cinematic 24fps look, shallow depth of field, color-graded warm.
+    prompt: `STYLE: High-energy podcast clip with quick cuts between two hosts in a professional studio. Both wearing headsets and speaking into high-end podcast microphones. Cinematic lighting, 4k, photo-realistic. Shallow depth of field, warm color grade, subtle studio bokeh (acoustic panels, plants, neon accents allowed).
 
 RULES:
-- Single speaker delivering an insight directly to camera, conversational and authoritative.
-- Subtle b-roll cutaways are allowed but the host shot is hero.
-- Audio is clean spoken voice only — no music, no SFX.
-- Use the attached avatar as the host; reference any uploaded PDF/offer as the subject of the conversation.`,
+- Two on-camera hosts: a younger female interviewer and an older male expert/doctor figure (adapt ages/looks to attached avatars if provided).
+- Quick back-and-forth cuts that match the script's Q&A rhythm. Perfect lip sync on every line.
+- Conversational, high-energy delivery. Interviewer asks the hook question, expert delivers the punchy answer, closes with a clear CTA pointing the viewer to the form / link below the video.
+- Clean spoken voice only — no music, no SFX, no captions, no on-screen text.
+- 12–15s total. Structure: (0–4s) interviewer hook question. (4–10s) expert authoritative answer with key proof point. (10–13s) interviewer follow-up ("How can our audience get access?"). (13–15s) expert CTA ("Fill out your info below to see if you qualify…").
+- If an avatar is attached, cast that person as the expert; if a PDF/offer is attached, ground the expert's answer in its key claims.
+
+REFERENCE EXAMPLE (style + pacing to emulate, not script to copy verbatim):
+"Podcast style video, 15 seconds. High-energy quick cuts between a 29-year-old blonde woman and a 60-year-old male doctor in a professional studio. They are wearing headsets and speaking into high-end podcast microphones. Script: (Woman) 'Doctor, why healthcare real estate over anything else right now?' (Doctor) 'It's the only asset class that's recession-proof, AI-proof, and stable for long-term returns and quarterly payouts.' (Woman) 'Incredible. How can our audience get access?' (Doctor) 'Fill out your info below to see if you qualify for all the investor details.' Perfect lip sync, cinematic lighting, 4k, realistic. No captions. No text."`,
   },
   {
     id: "broll-vo",
