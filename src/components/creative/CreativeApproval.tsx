@@ -544,16 +544,6 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
           </Dialog>
 
           {!isPublicView && (
-            <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Creative
-                </Button>
-            </DialogTrigger>
-          </Dialog>
-          )}
-          {!isPublicView && (
             <Dialog open={canvaOpen} onOpenChange={setCanvaOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">
@@ -647,11 +637,6 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
               </DialogContent>
             </Dialog>
           )}
-          {/* unused placeholder removed below */}
-          {false && (
-            <Dialog open={false} onOpenChange={() => {}}>
-              <DialogTrigger asChild><Button /></DialogTrigger>
-            <DialogContent className="max-w-lg">
           {!isPublicView && (
             <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
               <DialogTrigger asChild>
