@@ -813,6 +813,109 @@ export function HyperframesEditor({
                   )}
                 </div>
 
+                {/* Customize: font, casing, colors — applies on top of the chosen preset */}
+                <div className="pt-3 border-t space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Customize
+                    </div>
+                    {(captionOverrides.fontFamily ||
+                      captionOverrides.baseColor ||
+                      captionOverrides.activeColor ||
+                      (captionOverrides.casing && captionOverrides.casing !== "preset")) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCaptionOverrides({
+                            fontFamily: undefined,
+                            baseColor: undefined,
+                            activeColor: undefined,
+                            strokeColor: undefined,
+                            casing: "preset",
+                          })
+                        }
+                        className="text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Font */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground">Font</label>
+                    <select
+                      value={captionOverrides.fontFamily ?? ""}
+                      onChange={(e) =>
+                        updateCaptionOverrides({ fontFamily: e.target.value || undefined })
+                      }
+                      className="w-full h-8 rounded-md border bg-background px-2 text-xs"
+                    >
+                      <option value="">Preset default</option>
+                      <option value="'Montserrat', system-ui, sans-serif">Montserrat (Hormozi)</option>
+                      <option value="'Bangers', 'Komika Axis', Impact, system-ui, sans-serif">Bangers (MrBeast)</option>
+                      <option value="Anton, 'Bebas Neue', Impact, sans-serif">Anton / Bebas</option>
+                      <option value="'Poppins', 'Inter', system-ui, sans-serif">Poppins</option>
+                      <option value="'Boogaloo', 'Lexend', system-ui, sans-serif">Boogaloo</option>
+                      <option value="'DM Serif Display', 'Playfair Display', serif">DM Serif</option>
+                      <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif">Impact</option>
+                      <option value="'Inter', system-ui, sans-serif">Inter</option>
+                      <option value="'Helvetica Neue', Helvetica, Arial, sans-serif">Helvetica</option>
+                    </select>
+                  </div>
+
+                  {/* Capitalization */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground">Capitalization</label>
+                    <div className="grid grid-cols-4 gap-1">
+                      {([
+                        { id: "preset", label: "Auto" },
+                        { id: "upper", label: "AA" },
+                        { id: "title", label: "Aa" },
+                        { id: "lower", label: "aa" },
+                      ] as { id: CaptionCasing; label: string }[]).map((opt) => {
+                        const active = (captionOverrides.casing ?? "preset") === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateCaptionOverrides({ casing: opt.id })}
+                            className={`h-8 rounded-md border text-[11px] font-semibold transition-colors ${
+                              active
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background hover:bg-muted"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Colors */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <ColorField
+                      label="Base"
+                      value={captionOverrides.baseColor}
+                      fallback="#FFFFFF"
+                      onChange={(v) => updateCaptionOverrides({ baseColor: v })}
+                    />
+                    <ColorField
+                      label="Active"
+                      value={captionOverrides.activeColor}
+                      fallback="#FFD93D"
+                      onChange={(v) => updateCaptionOverrides({ activeColor: v })}
+                    />
+                    <ColorField
+                      label="Stroke"
+                      value={captionOverrides.strokeColor}
+                      fallback="#000000"
+                      onChange={(v) => updateCaptionOverrides({ strokeColor: v })}
+                    />
+                  </div>
+                </div>
+
                 <div className="pt-3 border-t">
                   <div className="text-[10px] uppercase text-muted-foreground mb-2">Base video</div>
                   <div className="flex flex-wrap items-center gap-2">
