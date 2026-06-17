@@ -1,0 +1,16 @@
+services:
+  bridge:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      BRIDGE_TOKEN: ${BRIDGE_TOKEN}
+      LOVABLE_WEBHOOK_URL: ${LOVABLE_WEBHOOK_URL}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      SESSION_LABEL: default
+    volumes:
+      - wa_auth:/data
+
+volumes:
+  wa_auth:
