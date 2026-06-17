@@ -363,20 +363,13 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
       const { error: insErr } = await supabase.from('creatives').insert(insertPayload);
       if (insErr) throw insErr;
 
-      await (await import('@tanstack/react-query')).QueryClient; // no-op import guard
-      // refresh
-      window.dispatchEvent(new Event('focus'));
+      queryClient.invalidateQueries({ queryKey: ['creatives', clientId] });
       toast.success('Canva design added');
       setCanvaOpen(false);
       setCanvaForm({
         url: '', title: '', platform: 'meta', aspectRatio: '1:1',
         headline: '', body_copy: '', cta_text: '',
       });
-      // Force react-query refetch
-      try {
-        const qc = (await import('@tanstack/react-query'));
-        // best-effort: dispatch a custom event the parent already listens to via invalidate
-      } catch {}
     } catch (e: any) {
       toast.error(e?.message || 'Failed to add Canva link');
     } finally {
