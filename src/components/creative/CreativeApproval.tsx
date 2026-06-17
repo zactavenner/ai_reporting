@@ -551,6 +551,106 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
                   Upload Creative
                 </Button>
             </DialogTrigger>
+          </Dialog>
+          )}
+          {!isPublicView && (
+            <Dialog open={canvaOpen} onOpenChange={setCanvaOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Add Canva Link
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Add a Canva design</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div>
+                    <label className="text-sm font-medium">Canva share link *</label>
+                    <Input
+                      value={canvaForm.url}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, url: e.target.value })}
+                      placeholder="https://canva.link/... or https://www.canva.com/design/..."
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Make sure the design is shared with "Anyone with the link can view" so it embeds.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Title</label>
+                    <Input
+                      value={canvaForm.title}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, title: e.target.value })}
+                      placeholder="Q1 hero — Canva"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium">Platform</label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(['meta', 'tiktok', 'youtube', 'google'] as const).map((p) => (
+                          <Button
+                            key={p}
+                            type="button"
+                            size="sm"
+                            variant={canvaForm.platform === p ? 'default' : 'outline'}
+                            onClick={() => setCanvaForm({ ...canvaForm, platform: p })}
+                          >
+                            {p === 'meta' ? 'Meta/IG' : p === 'tiktok' ? 'TikTok' : p === 'youtube' ? 'YouTube' : 'Google'}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Aspect ratio</label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(['1:1', '4:5', '9:16', '16:9'] as const).map((r) => (
+                          <Button
+                            key={r}
+                            type="button"
+                            size="sm"
+                            variant={canvaForm.aspectRatio === r ? 'default' : 'outline'}
+                            onClick={() => setCanvaForm({ ...canvaForm, aspectRatio: r })}
+                          >
+                            {r}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Headline</label>
+                    <Input
+                      value={canvaForm.headline}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, headline: e.target.value })}
+                      placeholder="Ad headline (optional)"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Body copy</label>
+                    <Textarea
+                      value={canvaForm.body_copy}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, body_copy: e.target.value })}
+                      rows={2}
+                      placeholder="Ad body (optional)"
+                    />
+                  </div>
+                  <Button onClick={handleAddCanvaLink} className="w-full" disabled={resolvingCanva}>
+                    {resolvingCanva ? (
+                      <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Resolving Canva link...</>
+                    ) : (
+                      <><ExternalLink className="h-4 w-4 mr-2" /> Add Canva creative</>
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+          {/* unused placeholder removed below */}
+          {false && (
+            <Dialog open={false} onOpenChange={() => {}}>
+              <DialogTrigger asChild><Button /></DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>Upload New Creative</DialogTitle>
