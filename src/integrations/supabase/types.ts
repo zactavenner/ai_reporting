@@ -4464,6 +4464,8 @@ export type Database = {
           ai_variations: Json
           aspect_ratio: string | null
           body_copy: string | null
+          canva_design_id: string | null
+          canva_url: string | null
           client_id: string
           comments: Json | null
           created_at: string
@@ -4473,6 +4475,7 @@ export type Database = {
           id: string
           platform: string | null
           source: string
+          source_type: string
           status: string
           title: string
           trigger_campaign_id: string | null
@@ -4485,6 +4488,8 @@ export type Database = {
           ai_variations?: Json
           aspect_ratio?: string | null
           body_copy?: string | null
+          canva_design_id?: string | null
+          canva_url?: string | null
           client_id: string
           comments?: Json | null
           created_at?: string
@@ -4494,6 +4499,7 @@ export type Database = {
           id?: string
           platform?: string | null
           source?: string
+          source_type?: string
           status?: string
           title: string
           trigger_campaign_id?: string | null
@@ -4506,6 +4512,8 @@ export type Database = {
           ai_variations?: Json
           aspect_ratio?: string | null
           body_copy?: string | null
+          canva_design_id?: string | null
+          canva_url?: string | null
           client_id?: string
           comments?: Json | null
           created_at?: string
@@ -4515,6 +4523,7 @@ export type Database = {
           id?: string
           platform?: string | null
           source?: string
+          source_type?: string
           status?: string
           title?: string
           trigger_campaign_id?: string | null
