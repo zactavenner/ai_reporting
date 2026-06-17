@@ -1732,7 +1732,10 @@ function CreativeCard({
   };
 
   return (
-    <Card className="border hover:shadow-md transition-shadow overflow-hidden">
+    <Card className={`border hover:shadow-md transition-shadow overflow-hidden ${creative.source_type === 'canva' ? 'ring-1 ring-blue-500/15' : ''}`}>
+      {creative.source_type === 'canva' && (
+        <div className="h-1.5 bg-gradient-to-r from-blue-500 via-sky-400 to-blue-500" />
+      )}
       <CardContent className="p-0">
         {/* Media area */}
         <div className="relative">
