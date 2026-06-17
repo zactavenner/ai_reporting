@@ -652,6 +652,15 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
             <Dialog open={false} onOpenChange={() => {}}>
               <DialogTrigger asChild><Button /></DialogTrigger>
             <DialogContent className="max-w-lg">
+          {!isPublicView && (
+            <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Creative
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>Upload New Creative</DialogTitle>
               </DialogHeader>
