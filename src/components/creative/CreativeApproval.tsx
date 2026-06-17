@@ -59,7 +59,9 @@ import {
   Globe,
   Volume2,
   VolumeX,
-  MoreHorizontal
+  MoreHorizontal,
+  ExternalLink,
+  Edit3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -79,6 +81,7 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
   const addComment = useAddCreativeComment();
   const deleteCreative = useDeleteCreative();
   const { currentMember } = useTeamMember();
+  const queryClient = useQueryClient();
   
   const isAgencyUpload = !!currentMember && !isPublicView;
   
@@ -98,6 +101,19 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [bulkPlatform, setBulkPlatform] = useState<'meta' | 'tiktok' | 'youtube' | 'google'>('meta');
   const [downloadingAll, setDownloadingAll] = useState(false);
+
+  // Canva-link creative state
+  const [canvaOpen, setCanvaOpen] = useState(false);
+  const [canvaForm, setCanvaForm] = useState({
+    url: '',
+    title: '',
+    platform: 'meta' as 'meta' | 'tiktok' | 'youtube' | 'google',
+    aspectRatio: '1:1' as '1:1' | '4:5' | '9:16' | '16:9',
+    headline: '',
+    body_copy: '',
+    cta_text: '',
+  });
+  const [resolvingCanva, setResolvingCanva] = useState(false);
   
   const [newCreative, setNewCreative] = useState({
     title: '',
@@ -311,6 +327,56 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
     updateStatus.mutate({ id: creative.id, status, clientId, creativeTitle: creative.title });
   };
 
+  const handleAddCanvaLink = async () => {
+    if (!canvaForm.url.trim()) {
+      toast.error('Paste a Canva share link');
+      return;
+    }
+    setResolvingCanva(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('resolve-canva-link', {
+        body: { url: canvaForm.url.trim() },
+      });
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Could not resolve Canva link');
+      }
+      const { canvaUrl, designId } = data as { canvaUrl: string; designId: string };
+
+      const insertPayload: any = {
+        client_id: clientId,
+        title: canvaForm.title.trim() || 'Canva design',
+        type: 'image',
+        platform: canvaForm.platform,
+        file_url: null,
+        headline: canvaForm.headline || null,
+        body_copy: canvaForm.body_copy || null,
+        cta_text: canvaForm.cta_text || null,
+        status: isAgencyUpload ? 'draft' : 'pending',
+        comments: [],
+        aspect_ratio: canvaForm.aspectRatio,
+        source: 'canva',
+        source_type: 'canva',
+        canva_url: canvaUrl,
+        canva_design_id: designId,
+      };
+
+      const { error: insErr } = await supabase.from('creatives').insert(insertPayload);
+      if (insErr) throw insErr;
+
+      queryClient.invalidateQueries({ queryKey: ['creatives', clientId] });
+      toast.success('Canva design added');
+      setCanvaOpen(false);
+      setCanvaForm({
+        url: '', title: '', platform: 'meta', aspectRatio: '1:1',
+        headline: '', body_copy: '', cta_text: '',
+      });
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to add Canva link');
+    } finally {
+      setResolvingCanva(false);
+    }
+  };
+
   const handleAddComment = (creative: Creative, attachmentUrl?: string, attachmentType?: string) => {
     if (!commentText.trim() && !attachmentUrl) return;
     
@@ -478,14 +544,108 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
           </Dialog>
 
           {!isPublicView && (
+            <Dialog open={canvaOpen} onOpenChange={setCanvaOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Add Canva Link
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Add a Canva design</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div>
+                    <label className="text-sm font-medium">Canva share link *</label>
+                    <Input
+                      value={canvaForm.url}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, url: e.target.value })}
+                      placeholder="https://canva.link/... or https://www.canva.com/design/..."
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Make sure the design is shared with "Anyone with the link can view" so it embeds.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Title</label>
+                    <Input
+                      value={canvaForm.title}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, title: e.target.value })}
+                      placeholder="Q1 hero — Canva"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium">Platform</label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(['meta', 'tiktok', 'youtube', 'google'] as const).map((p) => (
+                          <Button
+                            key={p}
+                            type="button"
+                            size="sm"
+                            variant={canvaForm.platform === p ? 'default' : 'outline'}
+                            onClick={() => setCanvaForm({ ...canvaForm, platform: p })}
+                          >
+                            {p === 'meta' ? 'Meta/IG' : p === 'tiktok' ? 'TikTok' : p === 'youtube' ? 'YouTube' : 'Google'}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Aspect ratio</label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(['1:1', '4:5', '9:16', '16:9'] as const).map((r) => (
+                          <Button
+                            key={r}
+                            type="button"
+                            size="sm"
+                            variant={canvaForm.aspectRatio === r ? 'default' : 'outline'}
+                            onClick={() => setCanvaForm({ ...canvaForm, aspectRatio: r })}
+                          >
+                            {r}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Headline</label>
+                    <Input
+                      value={canvaForm.headline}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, headline: e.target.value })}
+                      placeholder="Ad headline (optional)"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Body copy</label>
+                    <Textarea
+                      value={canvaForm.body_copy}
+                      onChange={(e) => setCanvaForm({ ...canvaForm, body_copy: e.target.value })}
+                      rows={2}
+                      placeholder="Ad body (optional)"
+                    />
+                  </div>
+                  <Button onClick={handleAddCanvaLink} className="w-full" disabled={resolvingCanva}>
+                    {resolvingCanva ? (
+                      <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Resolving Canva link...</>
+                    ) : (
+                      <><ExternalLink className="h-4 w-4 mr-2" /> Add Canva creative</>
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+          {!isPublicView && (
             <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
               <DialogTrigger asChild>
                 <Button>
                   <Upload className="h-4 w-4 mr-2" />
                   Upload Creative
                 </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>Upload New Creative</DialogTitle>
               </DialogHeader>
@@ -1588,7 +1748,21 @@ function CreativeCard({
             ctaSubtext={null}
           >
             <div className={`${getCardAspectClass(creative.aspect_ratio)} bg-muted relative overflow-hidden`}>
-              {creative.type === 'image' && creative.file_url ? (
+              {creative.source_type === 'canva' && creative.canva_url ? (
+                <>
+                  <iframe
+                    src={`${creative.canva_url}?embed`}
+                    title={creative.title}
+                    className="w-full h-full border-0"
+                    loading="lazy"
+                    allow="fullscreen; clipboard-write"
+                    allowFullScreen
+                  />
+                  <Badge className="absolute top-2 left-2 z-10 text-[9px] bg-purple-600 hover:bg-purple-600 text-white">
+                    Canva
+                  </Badge>
+                </>
+              ) : creative.type === 'image' && creative.file_url ? (
                 <img 
                   src={creative.file_url} 
                   alt={creative.title}
@@ -1629,6 +1803,18 @@ function CreativeCard({
 
         {/* Action buttons - compact */}
         <div className="px-3 pb-1.5 flex items-center gap-1 flex-wrap">
+          {creative.source_type === 'canva' && creative.canva_design_id && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-[10px] gap-0.5"
+              onClick={() => window.open(`https://www.canva.com/design/${creative.canva_design_id}/edit`, '_blank')}
+              title="Opens this design in Canva for editing"
+            >
+              <Edit3 className="h-2.5 w-2.5" />
+              Edit in Canva
+            </Button>
+          )}
           {creative.status === 'draft' && !isPublicView && (
             <Button size="sm" className="h-6 text-[10px] gap-0.5 bg-primary hover:bg-primary/90" onClick={onSendToClient}>
               <SendHorizontal className="h-2.5 w-2.5" />

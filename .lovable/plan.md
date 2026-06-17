@@ -1,99 +1,50 @@
-## Meta Ads Manager v1 — Implementation Plan
+## Goal
+Let the team add a creative to the approval flow by pasting a **Canva share link** instead of uploading a file. The card shows a live Canva preview (iframe), supports approval/revision comments like any other creative, and an "Edit in Canva" button opens the design directly for editing — no upload/delete/re-upload churn.
 
-Extends the existing Creatives and Reporting modules. Uses existing `meta_*` tables and the approved `ads_management` Meta App. Phased to ship usable value fast.
+## How Canva embedding works
+Canva supports public embeds on shared designs:
 
----
+```text
+Share link:   https://canva.link/wo4sn4zhx5crkvm
+Resolved to:  https://www.canva.com/design/DAG.../view?utm_content=...
+Embed URL:    https://www.canva.com/design/DAG.../view?embed
+```
 
-### Phase 1 — Foundation (week 1)
+Short `canva.link/*` URLs 302 to the full `canva.com/design/<id>/view` URL. We resolve once (edge function follows the redirect), store the canonical design URL, and render `<iframe src="<designUrl>?embed">` for the preview. "Edit in Canva" opens `https://www.canva.com/design/<id>/edit` in a new tab.
 
-**Schema additions** (new tables, all RLS + GRANTs):
-- `meta_campaign_templates` — saved campaign blueprints (objective, budget, placements, targeting JSON, optimization goal, naming convention, default lead form, UTM template).
-- `meta_lead_forms` — synced lead forms per ad account (questions JSON, completion_rate, cpl, conversion_rate, status).
-- `meta_lead_form_templates` — reusable form blueprints (Investor / Accredited / Real Estate / etc.).
-- `meta_lead_form_mappings` — field → CRM mapping (GHL / HubSpot / Salesforce / webhook).
-- `meta_creative_tags` — Winner / Emerging / Fatigued / Underperforming (computed daily + manual override).
-- `meta_ai_creative_insights` — daily AI analysis output per ad (hooks, headlines, angles, scores).
-- `meta_weekly_briefs` — generated weekly winners reports.
-- `meta_rules` — automated rule definitions (trigger, condition JSON, action, schedule).
-- `meta_rule_runs` — execution log with before/after metrics.
-- `meta_alerts` — CPL spike / ROAS drop / fatigue / rejection / pixel issue events.
-- `meta_swipe_files` — saved competitor ads from Meta Ad Library.
-- `meta_creative_comments` — team comments + approval state on creatives.
+## Changes
 
-**Edge functions (new)**:
-- `meta-leadforms-sync` — pulls all forms from connected ad accounts, computes CPL/conversion.
-- `meta-creative-tagger` — daily job, tags ads as Winner/Emerging/Fatigued/Underperforming using spend/CPL/CTR/frequency thresholds.
-- `meta-ai-analyze-creatives` — daily, runs `openrouter/owl-alpha` over top-spending ads, extracts hooks/angles/insights.
+### 1. DB — extend `creatives` table
+Add nullable columns (no breaking changes to existing rows):
+- `canva_url text` — canonical `canva.com/design/<id>/view` URL
+- `canva_design_id text` — extracted design id (for the `/edit` deep link)
+- `source_type text` — `'upload' | 'canva'` (default `'upload'`)
 
-**Cron**: tagger + AI analyzer at 4 AM PST daily; lead forms sync hourly.
+### 2. Edge function — `resolve-canva-link`
+- Input: `{ url }` (accepts `canva.link/*` or full `canva.com/design/...`).
+- Follows redirects with `fetch(url, { redirect: 'manual' })` loop, returns `{ canvaUrl, designId }`.
+- Rejects non-Canva hosts.
 
----
+### 3. UI — "Add Canva creative" in `CreativeApproval`
+New button next to the existing upload action opens a small dialog:
+- Paste Canva share link
+- Name (optional, defaults to "Canva design")
+- Platform / aspect ratio selectors (same as upload flow)
+- On submit → call `resolve-canva-link` → insert row into `creatives` with `source_type='canva'`, `canva_url`, `canva_design_id`, `type='image'`.
 
-### Phase 2 — Campaign Launch Center (week 2)
+### 4. Creative card rendering
+In the existing creative card component, when `source_type === 'canva'`:
+- Replace the image/video preview with `<iframe src="${canva_url}?embed" loading="lazy" allow="fullscreen" />` inside an `AspectRatio` wrapper matching the selected ratio.
+- Show a Canva badge in the corner.
+- Add an **"Edit in Canva"** button (alongside Approve / Request revision) that opens `https://www.canva.com/design/<designId>/edit` in a new tab.
+- Approval, comments, revision-request flow stays identical — they operate on the `creatives` row, not the asset file.
 
-Lives as a new tab inside the existing **Creatives** module: `Creatives → Launch`.
+### 5. No changes to ad-launch flow
+Canva creatives are for **approval only**. When the team is ready to push to Meta, they still export from Canva and use the existing upload flow — Meta's API needs an actual image/video file. (Happy to add a "Mark as exported / attach final file" step in a follow-up if you want that loop tightened.)
 
-- **Template library** — list, create, edit, duplicate templates.
-- **Naming engine** — live preview of `CLIENT | OFFER | GOAL | MONTH` etc., overridable per launch.
-- **One-click launch wizard**: pick template → adjust budget/audience/geo/lead form/creative/dates → preview → launch.
-- **Edge function `meta-campaign-launch`**: validates payload, calls Meta Graph API to create campaign + ad set + ads, writes back to `meta_campaigns/_ad_sets/_ads`, logs to `sync_outbound_events`.
-- **Duplicate previous campaign** — pulls existing campaign config, opens wizard pre-filled.
+## Out of scope
+- Pushing Canva designs directly to Meta (Canva Connect API + OAuth — separate effort).
+- Auto-syncing edits from Canva (no webhook — the embed always shows the latest published version automatically).
 
----
-
-### Phase 3 — Lead Form Management (week 2)
-
-New tab `Creatives → Lead Forms`:
-- Library view (search/filter by client, account, status, CPL).
-- Form detail drawer: questions, conditional logic, completion rate, CPL, conversion.
-- Template library (save form as template, instantiate from template via `meta-leadforms-create` edge fn).
-- **Drag-and-drop CRM mapping UI** (uses dnd-kit, already in project) — maps form fields to GHL / HubSpot / Salesforce / generic webhook. Stored in `meta_lead_form_mappings`. Routed at lead intake.
-
----
-
-### Phase 4 — Creative Intelligence + AI (week 3)
-
-New tab inside Reporting: `Reporting → Creative Intelligence`.
-
-- **Creative library**: searchable grid of every historical + active ad with HD asset, filters (client/campaign/objective/date/spend/leads/CPL/ROAS), winner tags.
-- **Winner panel**: top CTR / top conversion / lowest CPL / highest ROAS / fastest scaling.
-- **AI insights feed**: cards from `meta_ai_creative_insights` ("Ads mentioning passive income generated 37% lower CPL").
-- **AI Creative Generator**: one-click "Generate variants" → calls `meta-ai-generate-creatives` edge fn → returns hooks/headlines/primary text/image prompts/video scripts/UGC concepts. Export to OpenAI/Claude/Google AI Studio prompts (clipboard) or save to `meta_swipe_files`.
-- **Weekly Brief**: button + cron (Mon 7 AM PST) → `meta-weekly-brief` edge fn → builds Winners Report (spend/leads/CPL/CTR/ROAS/frequency + AI recommendations Scale/Refresh/Pause/Duplicate + 10–20 new creative concepts). Export PDF / Google Doc / Notion / ClickUp task.
-
----
-
-### Phase 5 — Rules Engine + Dashboards + Alerts (week 4)
-
-New tab `Reporting → Automation`:
-- **Rule builder UI**: trigger (schedule), condition (metric op threshold, e.g. CPL > $80 for 2d AND spend > $50), action (pause / scale +10/20/30% / notify / duplicate), scope (account/campaign/ad set/ad).
-- Edge fn `meta-rules-runner` (every 30 min via pg_cron) — evaluates conditions, executes via Graph API write, logs to `meta_rule_runs`.
-- **Executive / Creative / Account dashboards** — three new dashboard views built on existing `daily_metrics` + new creative tag aggregates.
-- **Alerts**: CPL spike, ROAS drop, fatigue, campaign rejected, lead form disconnected, pixel issue. Fan-out via Slack (existing connector), email (Resend connector), in-app toast/badge. Settings panel per user/client for channel preferences.
-
----
-
-### Phase 6 — Stubs for v2 (week 4 tail)
-
-- `meta_swipe_files` table + simple "Save from Ad Library URL" form (full Ad Library scraper deferred).
-- `meta_creative_comments` + comment thread on creative detail drawer (full approval workflow + roles deferred).
-
----
-
-### Out of scope for v1 (explicit)
-- Google / TikTok / LinkedIn / YouTube Ads (architecture leaves room — `platform` column on rules/insights/templates).
-- Hyros / Cometly / Triple Whale / Northbeam (read-only display only; no ingestion).
-- Full role matrix (Admin/Buyer/Strategist/Designer/Client) — uses existing `user_roles`.
-- SMS alerts (Slack + email + in-app only).
-
----
-
-### Tech notes
-- All Meta writes go through `meta-campaign-launch` / `meta-rules-runner` with retry + exponential backoff and `sync_outbound_events` logging (matches existing GHL outbound pattern).
-- AI defaults to `openrouter/owl-alpha` per project memory.
-- All new tables: `GRANT` to `authenticated` + `service_role`, RLS scoped by client/agency membership matching existing `meta_*` policies.
-- No new client-side secrets; reuses `META_APP_ID`, `META_APP_SECRET`, `META_SHARED_ACCESS_TOKEN`, `LOVABLE_API_KEY`, `SLACK_BOT_TOKEN`.
-
----
-
-Approve to start Phase 1 (schema + lead form sync + creative tagger + AI analyzer). I'll surface each phase's migration for review before running it.
+## Open question
+Edit links: do you want **"Edit in Canva"** to open the team's shared Canva workspace edit URL (`/design/<id>/edit`, requires team membership), or keep it as **"Open in Canva"** (view link, anyone with the link)? Default plan = edit link.
