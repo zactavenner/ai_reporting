@@ -59,7 +59,9 @@ import {
   Globe,
   Volume2,
   VolumeX,
-  MoreHorizontal
+  MoreHorizontal,
+  ExternalLink,
+  Edit3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -98,6 +100,19 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [bulkPlatform, setBulkPlatform] = useState<'meta' | 'tiktok' | 'youtube' | 'google'>('meta');
   const [downloadingAll, setDownloadingAll] = useState(false);
+
+  // Canva-link creative state
+  const [canvaOpen, setCanvaOpen] = useState(false);
+  const [canvaForm, setCanvaForm] = useState({
+    url: '',
+    title: '',
+    platform: 'meta' as 'meta' | 'tiktok' | 'youtube' | 'google',
+    aspectRatio: '1:1' as '1:1' | '4:5' | '9:16' | '16:9',
+    headline: '',
+    body_copy: '',
+    cta_text: '',
+  });
+  const [resolvingCanva, setResolvingCanva] = useState(false);
   
   const [newCreative, setNewCreative] = useState({
     title: '',
@@ -309,6 +324,63 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
 
   const handleStatusChange = (creative: Creative, status: 'approved' | 'revisions' | 'rejected') => {
     updateStatus.mutate({ id: creative.id, status, clientId, creativeTitle: creative.title });
+  };
+
+  const handleAddCanvaLink = async () => {
+    if (!canvaForm.url.trim()) {
+      toast.error('Paste a Canva share link');
+      return;
+    }
+    setResolvingCanva(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('resolve-canva-link', {
+        body: { url: canvaForm.url.trim() },
+      });
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Could not resolve Canva link');
+      }
+      const { canvaUrl, designId } = data as { canvaUrl: string; designId: string };
+
+      const insertPayload: any = {
+        client_id: clientId,
+        title: canvaForm.title.trim() || 'Canva design',
+        type: 'image',
+        platform: canvaForm.platform,
+        file_url: null,
+        headline: canvaForm.headline || null,
+        body_copy: canvaForm.body_copy || null,
+        cta_text: canvaForm.cta_text || null,
+        status: isAgencyUpload ? 'draft' : 'pending',
+        comments: [],
+        aspect_ratio: canvaForm.aspectRatio,
+        source: 'canva',
+        source_type: 'canva',
+        canva_url: canvaUrl,
+        canva_design_id: designId,
+      };
+
+      const { error: insErr } = await supabase.from('creatives').insert(insertPayload);
+      if (insErr) throw insErr;
+
+      await (await import('@tanstack/react-query')).QueryClient; // no-op import guard
+      // refresh
+      window.dispatchEvent(new Event('focus'));
+      toast.success('Canva design added');
+      setCanvaOpen(false);
+      setCanvaForm({
+        url: '', title: '', platform: 'meta', aspectRatio: '1:1',
+        headline: '', body_copy: '', cta_text: '',
+      });
+      // Force react-query refetch
+      try {
+        const qc = (await import('@tanstack/react-query'));
+        // best-effort: dispatch a custom event the parent already listens to via invalidate
+      } catch {}
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to add Canva link');
+    } finally {
+      setResolvingCanva(false);
+    }
   };
 
   const handleAddComment = (creative: Creative, attachmentUrl?: string, attachmentType?: string) => {
