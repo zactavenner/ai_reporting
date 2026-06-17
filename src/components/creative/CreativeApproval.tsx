@@ -1732,7 +1732,10 @@ function CreativeCard({
   };
 
   return (
-    <Card className="border hover:shadow-md transition-shadow overflow-hidden">
+    <Card className={`border hover:shadow-md transition-shadow overflow-hidden ${creative.source_type === 'canva' ? 'ring-1 ring-blue-500/15' : ''}`}>
+      {creative.source_type === 'canva' && (
+        <div className="h-1.5 bg-gradient-to-r from-blue-500 via-sky-400 to-blue-500" />
+      )}
       <CardContent className="p-0">
         {/* Media area */}
         <div className="relative">
@@ -1784,11 +1787,21 @@ function CreativeCard({
         </div>
         
         {/* Info */}
-        <div className="px-3 pt-2 pb-1.5">
-          <div className="flex items-start justify-between">
+        <div className="px-3 pt-2.5 pb-1.5">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <h4 className="font-medium text-xs truncate">{creative.title}</h4>
-              <p className="text-[10px] text-muted-foreground">{clientName}</p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                {creative.source_type === 'canva' && (
+                  <span className="flex-shrink-0 w-4 h-4 rounded bg-blue-500/10 flex items-center justify-center">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-blue-500">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor" opacity="0.3"/>
+                      <path d="M12 6c-3.31 0-6 2.69-6 6 0 1.66.67 3.16 1.76 4.24l1.41-1.41C8.45 14.09 8 13.09 8 12c0-2.21 1.79-4 4-4 1.09 0 2.09.45 2.83 1.17l1.41-1.41C15.16 6.67 13.66 6 12 6z" fill="currentColor"/>
+                    </svg>
+                  </span>
+                )}
+                <h4 className="font-medium text-xs truncate">{creative.title}</h4>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{clientName}</p>
             </div>
             <Badge variant="outline" className="text-[10px] ml-1 flex-shrink-0">
               {creative.platform}
