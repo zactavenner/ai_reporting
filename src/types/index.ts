@@ -163,6 +163,7 @@ export interface AdStyle {
   prompt_template: string;
   example_image_url?: string;
   reference_images?: string[];
+  canva_url?: string | null;
   is_default: boolean;
   display_order: number;
   created_at: string;
