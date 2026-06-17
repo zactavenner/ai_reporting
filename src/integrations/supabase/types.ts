@@ -288,6 +288,7 @@ export type Database = {
       }
       ad_styles: {
         Row: {
+          canva_url: string | null
           client_id: string | null
           created_at: string | null
           description: string | null
@@ -303,6 +304,7 @@ export type Database = {
           thumbnail_url: string | null
         }
         Insert: {
+          canva_url?: string | null
           client_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -318,6 +320,7 @@ export type Database = {
           thumbnail_url?: string | null
         }
         Update: {
+          canva_url?: string | null
           client_id?: string | null
           created_at?: string | null
           description?: string | null

@@ -1,0 +1,2 @@
+ALTER TABLE public.ad_styles ADD COLUMN IF NOT EXISTS canva_url text;
+UPDATE public.ad_styles SET canva_url = 'https://www.canva.com/design/DAGhAdBlrrA/view' WHERE name = 'Capital Creative' AND is_default = true AND canva_url IS NULL;
