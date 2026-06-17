@@ -1748,7 +1748,21 @@ function CreativeCard({
             ctaSubtext={null}
           >
             <div className={`${getCardAspectClass(creative.aspect_ratio)} bg-muted relative overflow-hidden`}>
-              {creative.type === 'image' && creative.file_url ? (
+              {creative.source_type === 'canva' && creative.canva_url ? (
+                <>
+                  <iframe
+                    src={`${creative.canva_url}?embed`}
+                    title={creative.title}
+                    className="w-full h-full border-0"
+                    loading="lazy"
+                    allow="fullscreen; clipboard-write"
+                    allowFullScreen
+                  />
+                  <Badge className="absolute top-2 left-2 z-10 text-[9px] bg-purple-600 hover:bg-purple-600 text-white">
+                    Canva
+                  </Badge>
+                </>
+              ) : creative.type === 'image' && creative.file_url ? (
                 <img 
                   src={creative.file_url} 
                   alt={creative.title}
@@ -1789,6 +1803,18 @@ function CreativeCard({
 
         {/* Action buttons - compact */}
         <div className="px-3 pb-1.5 flex items-center gap-1 flex-wrap">
+          {creative.source_type === 'canva' && creative.canva_design_id && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-[10px] gap-0.5"
+              onClick={() => window.open(`https://www.canva.com/design/${creative.canva_design_id}/edit`, '_blank')}
+              title="Opens this design in Canva for editing"
+            >
+              <Edit3 className="h-2.5 w-2.5" />
+              Edit in Canva
+            </Button>
+          )}
           {creative.status === 'draft' && !isPublicView && (
             <Button size="sm" className="h-6 text-[10px] gap-0.5 bg-primary hover:bg-primary/90" onClick={onSendToClient}>
               <SendHorizontal className="h-2.5 w-2.5" />
