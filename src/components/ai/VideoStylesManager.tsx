@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Clapperboard, Plus, Trash2, Save, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { StyleReferencesEditor, buildReferencesPromptLines, type StyleReference } from "./StyleReferencesEditor";
 
 export type VideoStyle = {
   id: string;
@@ -22,6 +23,7 @@ export type VideoStyle = {
   /** Prompt template injected before the user's text when this style is active. */
   prompt: string;
   builtIn?: boolean;
+  references?: StyleReference[];
 };
 
 const STORAGE_KEY = "ai-studio:video-styles:v1";
@@ -135,8 +137,10 @@ export function useVideoStyles() {
 /** Build the prompt block that gets prepended to the user's message when a style is active. */
 export function buildVideoStyleBlock(style: VideoStyle | undefined, videoActive: boolean): string {
   if (!videoActive) return "";
-  if (!style || !style.prompt.trim() || style.id === "none") return "";
-  return `\n\n[ACTIVE VIDEO STYLE: ${style.name}]\n${style.prompt.trim()}\n\n[USER REQUEST]\n`;
+  if (!style || style.id === "none") return "";
+  const refsBlock = buildReferencesPromptLines(style.references, "video");
+  if (!style.prompt.trim() && !refsBlock) return "";
+  return `\n\n[ACTIVE VIDEO STYLE: ${style.name}]\n${style.prompt.trim()}${refsBlock}\n\n[USER REQUEST]\n`;
 }
 
 type Props = {
@@ -298,6 +302,11 @@ function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: Vid
           className="font-mono text-xs"
         />
       </div>
+      <StyleReferencesEditor
+        kind="video"
+        value={style.references || []}
+        onChange={(refs) => onChange({ ...style, references: refs })}
+      />
     </div>
   );
 }
