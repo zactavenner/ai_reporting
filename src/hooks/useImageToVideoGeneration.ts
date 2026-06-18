@@ -17,6 +17,7 @@ interface ImageToVideoParams {
   prompt: string;
   aspectRatio: '16:9' | '9:16';
   duration?: number;
+  model?: 'veo3' | 'seedance-pro';
   onStatusUpdate: (sceneId: string, result: GenerationResult) => void;
 }
 
@@ -39,6 +40,7 @@ export function useImageToVideoGeneration() {
     prompt,
     aspectRatio,
     duration = 8,
+    model = 'veo3',
     onStatusUpdate,
   }: ImageToVideoParams) => {
     // Validate image URL
@@ -78,6 +80,7 @@ export function useImageToVideoGeneration() {
           aspectRatio,
           duration,
           apiKey,
+          model,
         },
       });
 
