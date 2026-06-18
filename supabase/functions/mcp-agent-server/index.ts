@@ -590,8 +590,16 @@ async function handleJsonRpc(body: any): Promise<any> {
     case 'tools/call': {
       const toolName = params?.name;
       const toolArgs = params?.arguments || {};
+      const startedAt = Date.now();
       try {
         const result = await handleToolCall(toolName, toolArgs);
+        await logMetaToolCall({
+          tool_name: toolName,
+          args: toolArgs,
+          response: result,
+          success: true,
+          duration_ms: Date.now() - startedAt,
+        });
         return {
           jsonrpc: '2.0',
           id,
@@ -600,6 +608,14 @@ async function handleJsonRpc(body: any): Promise<any> {
           },
         };
       } catch (err: any) {
+        await logMetaToolCall({
+          tool_name: toolName,
+          args: toolArgs,
+          response: null,
+          success: false,
+          error: err?.message || String(err),
+          duration_ms: Date.now() - startedAt,
+        });
         return {
           jsonrpc: '2.0',
           id,
