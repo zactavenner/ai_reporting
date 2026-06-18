@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getGeminiApiKey } from '../_shared/get-gemini-key.ts';
 import { generateImage as openrouterGenerateImage } from '../_shared/openrouter.ts';
+import { enhancePromptWithGpt5 } from '../_shared/enhance-prompt-gpt5.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +18,91 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode.apply(null, Array.from(chunk));
   }
   return btoa(binary);
+}
+
+// ─── Rich prompt library (ported from Ads Generator 5.0) ───
+const REALISM_PREFIXES: Record<string, string> = {
+  'ultra-realistic': 'Photorealistic, ultra-detailed, 8K resolution, professional studio lighting, sharp focus, natural skin texture with pores and fine details, realistic hair strands, natural eye reflections, soft shadows, shot on Canon EOS R5 with 85mm f/1.4 lens, RAW unedited look',
+  'high': 'Highly realistic, detailed portrait, professional lighting, natural skin, sharp features, studio quality, DSLR quality',
+  'standard': '',
+};
+const NEGATIVE_PROMPT = 'NOT cartoon, NOT illustration, NOT anime, NOT 3D render, NOT CGI, NOT painting, NOT drawing, NOT digital art. ABSOLUTELY NO UI overlays, NO iPhone screenshot elements, NO camera interface, NO phone bezels, NO shutter buttons, NO flash icons, NO mode selectors, NO watermarks, NO text overlays, NO LIVE badges, NO recording indicators, NO app interfaces.';
+const POSE_PROMPTS: Record<string, string> = {
+  natural_standing: 'Standing naturally with relaxed posture, weight on one leg, arms at sides or one hand slightly gesturing',
+  seated_relaxed: 'Seated comfortably, leaned back slightly, one arm resting on chair or knee, relaxed open body language',
+  leaning: 'Leaning casually against wall or surface, confident relaxed stance',
+  walking: 'Mid-stride walking naturally, body in motion, candid street style capture',
+  arms_crossed: 'Arms crossed confidently but not defensively, slight smile, power pose energy',
+  hand_on_hip: 'One hand on hip, confident pose, direct eye contact with camera, strong posture',
+  looking_away: 'Candidly looking off to the side, thoughtful expression, profile partially visible',
+  selfie: 'Classic selfie pose, phone held up slightly above eye level, natural selfie angle',
+};
+const EXPRESSION_PROMPTS: Record<string, string> = {
+  genuine_smile: "Genuine warm smile with slight teeth showing, crow's feet at eyes, Duchenne smile with real emotion",
+  subtle_smile: 'Subtle closed-lip smile, Mona Lisa style, mysterious and confident',
+  laughing: 'Mid-laugh candid moment, eyes crinkled, mouth open, genuine joy',
+  serious: 'Serious confident expression, strong gaze, slight furrowed brow, editorial intensity',
+  thoughtful: 'Thoughtful contemplative expression, eyes slightly narrowed, slight head tilt',
+  neutral: 'Neutral relaxed expression, lips softly closed, calm confident eyes',
+  speaking: 'Mid-speech expression, mouth slightly open forming words, animated engaged face, talking to camera',
+};
+const LIGHTING_PROMPTS: Record<string, string> = {
+  golden_hour: 'Warm golden hour sunlight, orange/amber tones, long soft shadows, backlit hair glow',
+  studio_softbox: 'Professional softbox studio lighting, even diffused light, minimal shadows',
+  natural_window: 'Soft natural window light from side, gentle shadows on far side of face',
+  dramatic_rembrandt: 'Dramatic Rembrandt lighting, strong directional key light from 45°, moody shadows',
+  ring_light: 'Ring light catchlights in eyes, even front-facing illumination, social media creator aesthetic',
+  neon_ambient: 'Colored neon ambient lighting, pink/blue/purple tones, nightlife atmosphere',
+  overcast_soft: 'Overcast sky diffused soft light, no harsh shadows, natural flattering illumination',
+  backlit_silhouette: 'Strong backlight creating hair glow and rim light, ethereal dreamy atmosphere',
+};
+const STYLE_PRESET_PROMPTS: Record<string, string> = {
+  professional_headshot: 'Professional corporate headshot, business attire, clean neutral studio background, warm flattering key light, confident approachable expression, LinkedIn-ready',
+  lifestyle: 'Lifestyle portrait in casual setting, natural ambient light, relaxed authentic pose, candid feel, shallow depth of field',
+  editorial: 'High-fashion editorial portrait, dramatic directional lighting, fashion-forward styling, magazine cover quality',
+  social_media: 'Social media optimized portrait, bright even lighting, engaging direct eye contact, vibrant colors, trendy styling',
+};
+const LOOK_TYPE_PROMPTS: Record<string, string> = {
+  different_outfit: 'Same person wearing a completely different outfit and style. Maintain IDENTICAL facial features, bone structure, skin tone, and identity.',
+  different_setting: 'Same person in a completely different environment and setting. Maintain IDENTICAL facial features and identity.',
+  different_expression: 'Same person with a different facial expression and mood. Maintain IDENTICAL facial features and identity.',
+  different_angle: 'Same person photographed from a different camera angle. Maintain IDENTICAL facial features and identity.',
+};
+
+function buildRichAvatarPrompt(body: Record<string, any>): string {
+  const {
+    gender = 'female', ageRange = '26-35', ethnicity = 'caucasian', style = 'ugc',
+    backgroundPrompt, customPrompt, cameraDevice = 'iphone', aspectRatio = '3:4',
+    realism_level = 'high', style_preset, look_type, look_description, avatar_description,
+    pose, expression, lighting, hair_style, hair_color, outfit_description,
+    anglePromptModifier, angleFocalLength, angleFraming, angleType,
+  } = body;
+
+  const styleSection = style_preset && STYLE_PRESET_PROMPTS[style_preset]
+    ? `STYLE PRESET: ${STYLE_PRESET_PROMPTS[style_preset]}` : '';
+  const lookSection = look_type && LOOK_TYPE_PROMPTS[look_type]
+    ? `LOOK MODE: ${LOOK_TYPE_PROMPTS[look_type]}${look_description ? `\nSpecific: ${look_description}` : ''}${avatar_description ? `\nOriginal avatar: ${avatar_description}` : ''}` : '';
+  const poseSection = pose && POSE_PROMPTS[pose] ? `POSE: ${POSE_PROMPTS[pose]}` : '';
+  const exprSection = expression && EXPRESSION_PROMPTS[expression] ? `EXPRESSION: ${EXPRESSION_PROMPTS[expression]}` : '';
+  const lightSection = lighting && LIGHTING_PROMPTS[lighting] ? `LIGHTING: ${LIGHTING_PROMPTS[lighting]}` : '';
+  const hairSection = (hair_style || hair_color) ? `HAIR: ${hair_style ?? ''} ${hair_color ?? ''}`.trim() : '';
+  const outfitSection = outfit_description ? `OUTFIT: ${outfit_description}` : `STYLE: ${style}`;
+  const angleSection = angleType ? `CAMERA ANGLE — ${String(angleType).toUpperCase()}: ${anglePromptModifier ?? ''} ${angleFocalLength ?? ''} ${angleFraming ?? ''}` : '';
+
+  return [
+    REALISM_PREFIXES[realism_level] || '',
+    `ULTRA PHOTOREALISTIC portrait of a ${ageRange} ${ethnicity} ${gender}.`,
+    outfitSection, styleSection, lookSection, poseSection, exprSection, lightSection, hairSection, angleSection,
+    `CAMERA: ${cameraDevice === 'samsung' ? 'Samsung Galaxy S24 Ultra' : 'iPhone 15 Pro'} camera, natural color science.`,
+    `ASPECT: ${aspectRatio}.`,
+    'EYE CONTACT: Direct eye contact with camera (mandatory for video lip-sync compatibility) unless angle dictates otherwise.',
+    `ENVIRONMENT: ${backgroundPrompt || 'clean neutral background, natural ambient lighting'}.`,
+    'SKIN REALISM: visible pores on nose/cheeks/forehead, natural T-zone shine, real skin texture, authentic tone variations.',
+    'HAIR REALISM: individual strands visible, slight flyaways, natural shine.',
+    customPrompt ? `EXTRA: ${customPrompt}` : '',
+    `AVOID: ${NEGATIVE_PROMPT} NO plastic skin, NO uncanny dead eyes, NO extra fingers, NO floating limbs.`,
+    'Must look indistinguishable from a real photograph.',
+  ].filter(Boolean).join('\n');
 }
 
 serve(async (req) => {
@@ -53,6 +139,8 @@ serve(async (req) => {
       isStock,
       clientId,
       model: requestedModel,
+      useGpt5Enhancer,
+      styleReferenceAvatarIds,
     } = body;
 
     // model selection: 'openai' = GPT Image 2, default 'nano-banana-pro' = Gemini 3 Pro Image
@@ -75,51 +163,41 @@ serve(async (req) => {
       );
     }
 
-    // Build the prompt
-    let fullPrompt: string;
+    // Build the prompt with the rich library
+    let fullPrompt = directPrompt || buildRichAvatarPrompt(body);
 
-    if (directPrompt) {
-      fullPrompt = directPrompt;
-    } else {
-      const realismDesc = realism_level === 'ultra-realistic'
-        ? 'shot on Canon EOS R5 with RF 50mm f/1.2L, 8K resolution, natural skin texture with visible pores'
-        : realism_level === 'high'
-        ? 'high-resolution DSLR quality, natural skin texture, professional studio lighting'
-        : 'clean polished portrait, professional quality';
+    // Resolve style-reference avatars (image URLs + learned style_profiles)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+    let styleRefs: Array<{ name?: string; profile?: Record<string, unknown>; url?: string }> = [];
+    if (Array.isArray(styleReferenceAvatarIds) && styleReferenceAvatarIds.length > 0) {
+      const { data: refs } = await supabaseAdmin
+        .from('avatars')
+        .select('name, image_url, metadata')
+        .in('id', styleReferenceAvatarIds);
+      if (refs) {
+        styleRefs = refs.map((r) => ({
+          name: r.name,
+          url: r.image_url,
+          profile: ((r.metadata as Record<string, unknown>) || {}).style_profile as Record<string, unknown> | undefined,
+        }));
+      }
+    }
 
-      const cameraDesc = cameraDevice === 'samsung'
-        ? 'Samsung Galaxy S24 Ultra camera, vivid AMOLED-tuned colors, AI-enhanced sharpness'
-        : 'iPhone 15 Pro camera, natural Apple color science, ProRAW quality';
-
-      const bgDesc = backgroundPrompt || 'clean neutral studio backdrop, professional lighting';
-
-      const angleDesc = anglePromptModifier
-        ? `\nCamera angle: ${anglePromptModifier}. Focal: ${angleFocalLength || '50mm'}. Framing: ${angleFraming || 'standard'}.`
-        : '';
-
-      const lookDesc = look_type && look_description
-        ? `\nVariation type: ${look_type}. ${look_description}`
-        : '';
-
-      const avatarDesc = avatar_description
-        ? `\nIdentity reference: ${avatar_description}`
-        : '';
-
-      fullPrompt = `Generate a hyper-realistic ${gender} person, age ${ageRange}, ${ethnicity} ethnicity, ${style} style.
-${realismDesc}. ${cameraDesc}.
-Background/setting: ${bgDesc}
-${angleDesc}
-${lookDesc}
-${avatarDesc}
-${customPrompt ? `Additional instructions: ${customPrompt}` : ''}
-
-CRITICAL REQUIREMENTS:
-- Photorealistic human portrait, indistinguishable from a real photograph
-- Natural skin texture, subtle imperfections, realistic hair
-- Proper lighting with catchlights in eyes
-- NO artificial or AI-looking artifacts
-- NO watermarks or text
-- Authentic UGC creator aesthetic`.trim();
+    // GPT-5 enhancement (on by default; opt-out via useGpt5Enhancer === false)
+    if (useGpt5Enhancer !== false) {
+      const enhanced = await enhancePromptWithGpt5({
+        kind: look_type ? 'avatar-look' : 'avatar',
+        rawPrompt: fullPrompt,
+        context: { gender, ageRange, ethnicity, style, aspectRatio, realism_level, look_type, look_description },
+        styleReferences: styleRefs,
+      });
+      if (enhanced) {
+        console.log('GPT-5 enhanced avatar prompt (preview):', enhanced.slice(0, 200));
+        fullPrompt = enhanced;
+      }
     }
 
     // Generate the image
@@ -165,6 +243,17 @@ CRITICAL REQUIREMENTS:
         } catch (err) {
           console.warn('Failed to fetch reference image:', err);
         }
+      }
+      // Style-reference avatars (up to 2)
+      for (const ref of styleRefs.slice(0, 2)) {
+        if (!ref.url) continue;
+        try {
+          const r = await fetch(ref.url);
+          if (r.ok) {
+            const b64 = arrayBufferToBase64(await r.arrayBuffer());
+            parts.push({ inlineData: { mimeType: r.headers.get('content-type') || 'image/png', data: b64 } });
+          }
+        } catch (_e) { /* ignore */ }
       }
       const geminiResponse = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${geminiApiKey}`,

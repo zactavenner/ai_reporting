@@ -108,3 +108,35 @@ export function useDeleteAvatar() {
     },
   });
 }
+
+/** Clone a stock avatar (and all its looks) into a specific client's library. */
+export function useCloneStockAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ stockAvatarId, clientId }: { stockAvatarId: string; clientId: string }) => {
+      const { data, error } = await supabase.functions.invoke('clone-stock-avatar', {
+        body: { stockAvatarId, clientId },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Failed to clone avatar');
+      return data as { avatarId: string; alreadyAssigned?: boolean; looksCopied?: number };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['avatars'] }),
+  });
+}
+
+/** Run GPT-5 vision analysis on an avatar and persist the style profile to metadata. */
+export function useAnalyzeAvatarStyle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ avatarId }: { avatarId: string }) => {
+      const { data, error } = await supabase.functions.invoke('analyze-avatar-style', {
+        body: { avatarId, persist: true },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Analysis failed');
+      return data as { profile: Record<string, unknown> };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['avatars'] }),
+  });
+}
