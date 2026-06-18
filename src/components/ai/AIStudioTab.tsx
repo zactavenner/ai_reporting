@@ -32,7 +32,8 @@ import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } f
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useClientOffers } from "@/hooks/useClientOffers";
 import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
-import { VideoStylesBar, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
+import { VideoStylesPopover, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
+import { ImageStylesPopover, useImageStyles, buildImageStyleBlock } from "./ImageStylesManager";
 
 interface Props {
   clientId: string;
@@ -758,6 +759,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
+  const imageStyles = useImageStyles();
   const [adFormat, setAdFormat] = useState<string>(() => {
     try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
   });
@@ -1159,8 +1161,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const mentioned = extractAgentMentions(text, clientAgents as any);
           const agentBlock = mentioned.length ? buildAgentContextBlock(mentioned) : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          const styleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
-          return masterBlock + agentBlock + styleBlock + text;
+          const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
+          const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
+          return masterBlock + agentBlock + iStyleBlock + vStyleBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
@@ -2013,9 +2016,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                           });
                         }}
                         title={`${m.label} — ${m.hint}\nEst. ${m.price}${active && imageModels.length > 1 ? "\n(in comparison)" : ""}`}
-                        className={`h-7 px-2 rounded-lg text-[10px] border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                        className={`px-2 py-1 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
-                        {m.label}
+                        <span>{m.label}</span>
+                        <span className={`text-[9px] ${active ? "text-primary-foreground/80" : "text-muted-foreground/70"}`}>
+                          {m.price.replace(/^~/, "")}
+                        </span>
                       </button>
                     );
                   })}
@@ -2053,10 +2059,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
                   )}
                 </div>
+                {imageModels.length > 0 && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image Style:</span>
+                    <ImageStylesPopover
+                      styles={imageStyles.styles}
+                      setStyles={imageStyles.setStyles}
+                      selectedId={imageStyles.selectedId}
+                      setSelectedId={imageStyles.setSelectedId}
+                    />
+                  </div>
+                )}
                 {videoModels.length > 0 && (
-                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60 flex-wrap">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Style:</span>
-                    <VideoStylesBar
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video Style:</span>
+                    <VideoStylesPopover
                       styles={videoStyles.styles}
                       setStyles={videoStyles.setStyles}
                       selectedId={videoStyles.selectedId}
