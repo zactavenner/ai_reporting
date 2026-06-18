@@ -20,6 +20,49 @@ function getProdDb() {
   return createClient(prodUrl, prodKey);
 }
 
+const META_TOOL_PREFIX = 'meta_';
+
+async function logMetaToolCall(entry: {
+  tool_name: string;
+  args: Record<string, any>;
+  response: any;
+  success: boolean;
+  error?: string | null;
+  duration_ms: number;
+  source?: string;
+}) {
+  if (!entry.tool_name?.startsWith(META_TOOL_PREFIX)) return;
+  try {
+    const db = getCloudDb();
+    const clientId =
+      typeof entry.args?.client_id === 'string' && entry.args.client_id.length === 36
+        ? entry.args.client_id
+        : null;
+    // Truncate response payload to keep row size sane
+    let responseJson: any = entry.response;
+    try {
+      const str = JSON.stringify(responseJson);
+      if (str && str.length > 200_000) {
+        responseJson = { truncated: true, preview: str.slice(0, 200_000) };
+      }
+    } catch {
+      responseJson = { unserializable: true };
+    }
+    await db.from('meta_mcp_tool_calls').insert({
+      client_id: clientId,
+      tool_name: entry.tool_name,
+      arguments: entry.args ?? {},
+      response: entry.success ? responseJson : null,
+      success: entry.success,
+      error: entry.error ?? null,
+      duration_ms: Math.round(entry.duration_ms),
+      source: entry.source ?? 'mcp-agent-server',
+    });
+  } catch (e) {
+    console.error('[meta-mcp-log] failed to write log row', e);
+  }
+}
+
 const TOOLS = [
   {
     name: 'list_agents',
