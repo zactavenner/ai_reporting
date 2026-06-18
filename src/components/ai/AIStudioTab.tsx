@@ -742,7 +742,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { localStorage.setItem("ai-studio:video-models", JSON.stringify(videoModels)); } catch {}
   }, [videoModels]);
   // first selection drives single-clip default model passed to the server
-  const videoModel = videoModels[0] || "bytedance/seedance-2.0-fast";
+  const videoModel = videoModels[0] || undefined;
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
@@ -1155,9 +1155,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel,
         imageModels,
-        videoModel,
-        videoModels,
-        videoFrames,
+        ...(videoModel ? { videoModel, videoModels, videoFrames } : {}),
         avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
         offerContext: (() => {
@@ -2026,7 +2024,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             const next = curr.includes(m.value)
                               ? curr.filter((v) => v !== m.value)
                               : [...curr, m.value];
-                            return next.length === 0 ? [m.value] : next;
+                            return next;
                           });
                         }}
                         title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
