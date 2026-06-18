@@ -27,18 +27,18 @@ serve(async (req) => {
     const ids = new Set(avatars.map((a: any) => a.id));
     const looks = allLooks.filter((l: any) => ids.has(l.avatar_id));
 
-    const { error: aErr, count: aCount } = await supabase
+    const { error: aErr } = await supabase
       .from('avatars')
-      .upsert(avatars, { onConflict: 'id', ignoreDuplicates: true, count: 'exact' });
-    if (aErr) throw aErr;
+      .upsert(avatars, { onConflict: 'id', ignoreDuplicates: true });
+    if (aErr) throw new Error('avatars upsert: ' + JSON.stringify(aErr));
 
-    const { error: lErr, count: lCount } = await supabase
+    const { error: lErr } = await supabase
       .from('avatar_looks')
-      .upsert(looks, { onConflict: 'id', ignoreDuplicates: true, count: 'exact' });
-    if (lErr) throw lErr;
+      .upsert(looks, { onConflict: 'id', ignoreDuplicates: true });
+    if (lErr) throw new Error('looks upsert: ' + JSON.stringify(lErr));
 
     return new Response(
-      JSON.stringify({ ok: true, avatars: avatars.length, looks: looks.length, aCount, lCount }),
+      JSON.stringify({ ok: true, avatars: avatars.length, looks: looks.length }),
       { headers: { ...cors, 'Content-Type': 'application/json' } },
     );
   } catch (e) {
