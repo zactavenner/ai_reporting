@@ -1060,6 +1060,12 @@ async function generateSeedanceVideo(opts: {
   if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
   if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
   if (frames.length) body.frame_images = frames;
+  // Ingredient = subject/product reference image that Seedance keeps consistent across the clip.
+  // Sent as `reference_images` per ByteDance Seedance 2.0 spec (subject reference, distinct from
+  // first/last frame keyframing). Safe to include alongside frame_images.
+  if (opts.ingredientUrl) {
+    body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+  }
 
   const t0 = Date.now();
   const emit = opts.onProgress || (() => {});
