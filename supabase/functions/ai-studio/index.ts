@@ -2395,7 +2395,9 @@ Deno.serve(async (req) => {
             return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({ model, cap, segment }));
           });
 
-          for (const { model, segment } of jobs) {
+          // Fan ALL selected models × clips out in parallel so compare-x N works the same
+          // as a single model and slow clips never block fast ones.
+          await Promise.all(jobs.map(async ({ model, segment }) => {
             if (aborted.v) return;
             const toolId = `direct-video-${crypto.randomUUID()}`;
             const placeholderId = crypto.randomUUID();
@@ -2449,7 +2451,7 @@ Deno.serve(async (req) => {
             }
             finalToolEvents.push({ name: "generate_seedance_video", args, result });
             send({ type: "tool_end", id: toolId, name: "generate_seedance_video", args, result });
-          }
+          }));
 
           const okCount = finalToolEvents.filter((t) => t.result?.ok).length;
           const failCount = finalToolEvents.length - okCount;
@@ -2963,25 +2965,69 @@ Deno.serve(async (req) => {
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "generate_seedance_video") {
-                const r = await generateSeedanceVideo({
-                  prompt: String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
-                  aspectRatio: args.aspect_ratio || "9:16",
-                  duration: typeof args.duration === "number" ? args.duration : 15,
-                  resolution: args.resolution === "720p" ? "720p" : "1080p",
-                  imageUrl: args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null),
-                  lastFrameUrl: args.last_frame_url || videoFrames?.lastFrameUrl || null,
-                  ingredientUrl: args.ingredient_url || videoFrames?.ingredientUrl || null,
+                // COMPARE GUARANTEE: when the user selected MULTIPLE video models, fan a single
+                // tool call out across every selected model in parallel — same prompt/frames/dims,
+                // one canvas card per model — so compare always works even if the LLM emitted only one call.
+                const explicitModel = (typeof args.model === "string" && args.model) ? args.model : null;
+                const fanModels = (selectedVideoModels.length > 1 && !explicitModel)
+                  ? selectedVideoModels.slice()
+                  : [explicitModel || selectedVideoModel];
+                const baseDuration = typeof args.duration === "number" ? args.duration : 15;
+                const baseResolution = args.resolution === "720p" ? "720p" : "1080p";
+                const baseAspect = args.aspect_ratio || "9:16";
+                const baseImageUrl = args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null);
+                const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
+                const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
+                const promptText = String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : "");
+                const runOne = async (mdl: string, pid: string | null) => generateSeedanceVideo({
+                  prompt: promptText,
+                  aspectRatio: baseAspect,
+                  duration: baseDuration,
+                  resolution: baseResolution,
+                  imageUrl: baseImageUrl,
+                  lastFrameUrl: baseLastFrame,
+                  ingredientUrl: baseIngredient,
                   fast: !!args.fast,
-                  model: (typeof args.model === "string" && args.model) ? args.model : selectedVideoModel,
+                  model: mdl,
                   clientId: clientId || null,
                   conversationId,
                   userId: userId!,
-                  onProgress: (p) => {
-                    if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, ...p });
-                  },
+                  onProgress: (p) => { if (pid) send({ type: "canvas_placeholder_progress", placeholder_id: pid, ...p }); },
                 });
-                result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: args.aspect_ratio || "9:16", duration: typeof args.duration === "number" ? args.duration : 15, resolution: r.resolution, mode: args.image_url ? "image_to_video" : "text_to_video" };
-                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+                if (fanModels.length === 1) {
+                  const r = await runOne(fanModels[0], canvasPlaceholderId);
+                  result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: baseAspect, duration: baseDuration, resolution: r.resolution, mode: baseImageUrl ? "image_to_video" : "text_to_video" };
+                  if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+                } else {
+                  // First model reuses the placeholder the LLM-handler already emitted; the rest get fresh placeholders.
+                  const pids: (string | null)[] = fanModels.map((_, i) => i === 0 ? canvasPlaceholderId : crypto.randomUUID());
+                  pids.forEach((pid, i) => {
+                    if (i === 0) return;
+                    send({
+                      type: "canvas_placeholder",
+                      placeholder_id: pid!,
+                      kind: "image",
+                      prompt: `Compare • ${VIDEO_MODEL_CAPS[fanModels[i]]?.label || fanModels[i]}: ${String(args.prompt || "").slice(0, 120)}`,
+                      aspect_ratio: baseAspect,
+                      quality: "seedance",
+                    });
+                  });
+                  const settled = await Promise.allSettled(fanModels.map((m, i) => runOne(m, pids[i])));
+                  const okItems = settled.map((s, i) => ({ s, m: fanModels[i], pid: pids[i] }));
+                  let firstOk: any = null;
+                  for (const { s, m, pid } of okItems) {
+                    if (s.status === "fulfilled") {
+                      const r = s.value;
+                      if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: pid });
+                      if (!firstOk) firstOk = { video_url: r.video_url, model: r.model, resolution: r.resolution };
+                    } else {
+                      send({ type: "canvas_placeholder_failed", placeholder_id: pid, error: String((s as any).reason?.message || (s as any).reason || "failed") });
+                    }
+                  }
+                  result = firstOk
+                    ? { ok: true, compared_models: fanModels, ...firstOk, aspect_ratio: baseAspect, duration: baseDuration, mode: baseImageUrl ? "image_to_video" : "text_to_video" }
+                    : { error: "All compared video models failed", compared_models: fanModels };
+                }
               } else if (name === "explode_ad_variants") {
                 const hooks: string[] = Array.isArray(args.hooks) ? args.hooks.filter(Boolean).map(String).slice(0, 6) : [];
                 const styles: string[] = Array.isArray(args.visual_styles) ? args.visual_styles.filter(Boolean).map(String).slice(0, 4) : [];
