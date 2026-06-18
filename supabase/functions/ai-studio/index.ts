@@ -2530,7 +2530,7 @@ Deno.serve(async (req) => {
               body: JSON.stringify({
                 model: modelId,
                 messages: convo,
-                tools,
+                tools: gatedTools,
                 tool_choice: "auto",
                 stream: true,
               }),
