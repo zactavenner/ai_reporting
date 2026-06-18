@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { getGeminiApiKey } from '../_shared/get-gemini-key.ts';
 
+const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -12,12 +14,86 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey } = await req.json();
+    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey, model } = await req.json();
 
     if (!imageUrl) {
       return new Response(
         JSON.stringify({ error: 'imageUrl is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ---------- Seedance 2.0 Pro via OpenRouter (image-to-video, inline poll) ----------
+    if (model === 'seedance-pro') {
+      if (!OPENROUTER_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const seedanceBody: Record<string, unknown> = {
+        model: 'bytedance/seedance-2.0',
+        prompt: prompt || 'Animate this image with subtle, professional motion.',
+        resolution: '1080p',
+        aspect_ratio: aspectRatio || '16:9',
+        duration: Math.min(Math.max(duration || 5, 5), 15),
+        frame_images: [
+          { type: 'image_url', image_url: { url: imageUrl }, frame_type: 'first_frame' },
+        ],
+      };
+      const submit = await fetch('https://openrouter.ai/api/v1/videos', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://reporting.highperformanceads.com',
+          'X-Title': 'Batch Video — Seedance',
+        },
+        body: JSON.stringify(seedanceBody),
+      });
+      if (!submit.ok) {
+        const t = await submit.text();
+        console.error('Seedance submit failed', submit.status, t.slice(0, 400));
+        return new Response(
+          JSON.stringify({ error: `Seedance submit ${submit.status}`, details: t.slice(0, 400) }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const sj = await submit.json();
+      const pollingUrl: string | undefined = sj.polling_url;
+      if (!pollingUrl) {
+        return new Response(
+          JSON.stringify({ error: 'Seedance returned no polling_url', details: JSON.stringify(sj).slice(0, 300) }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      let videoUrl: string | null = null;
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+        if (!p.ok) continue;
+        const pj = await p.json();
+        if (pj.status === 'completed') {
+          const urls: string[] = pj.unsigned_urls || pj.urls || (pj.video?.url ? [pj.video.url] : []);
+          videoUrl = urls[0] || null;
+          break;
+        }
+        if (pj.status === 'failed') {
+          return new Response(
+            JSON.stringify({ error: `Seedance failed: ${pj.error || 'unknown'}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+      if (!videoUrl) {
+        return new Response(
+          JSON.stringify({ error: 'Seedance timed out after 5 minutes' }),
+          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ status: 'completed', videoUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
