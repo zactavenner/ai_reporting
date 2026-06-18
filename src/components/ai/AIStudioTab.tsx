@@ -724,7 +724,19 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [chatModel, setChatModel] = useState<string>("openrouter/owl-alpha");
   // Extra models for inline side-by-side comparison (besides chatModel).
   const [compareModels, setCompareModels] = useState<string[]>([]);
-  const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai" | "riverflow">>(["openai"]);
+  const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai" | "riverflow">>(() => {
+    try {
+      const raw = localStorage.getItem("ai-studio:image-models");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return arr.filter((v) => v === "nano-banana" || v === "openai" || v === "riverflow");
+      }
+    } catch {}
+    return [];
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:image-models", JSON.stringify(imageModels)); } catch {}
+  }, [imageModels]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("ai-studio:video-models");
