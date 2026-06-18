@@ -941,6 +941,7 @@ async function generateSeedanceVideo(opts: {
 
   const ALLOWED = [
     "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0-pro",
     "kwaivgi/kling-v3.0-std",
     "google/veo-3.1-fast",
   ];
@@ -949,11 +950,13 @@ async function generateSeedanceVideo(opts: {
     : "bytedance/seedance-2.0-fast";
   const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
+  const isSeedance = model.startsWith("bytedance/seedance");
+  const isKling = model.startsWith("kwaivgi/kling");
   const effectiveResolution = isSeedanceFast && opts.resolution === "1080p" ? "720p" : opts.resolution;
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
-    : Math.max(4, Math.min(15, Math.round(opts.duration || 15)));
+    : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
   // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
   if (isVeo) {
@@ -1052,19 +1055,27 @@ async function generateSeedanceVideo(opts: {
   const body: Record<string, unknown> = {
     model,
     prompt: opts.prompt,
-    resolution: effectiveResolution,
     aspect_ratio: opts.aspectRatio,
     duration: effectiveDuration,
   };
-  const frames: any[] = [];
-  if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
-  if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
-  if (frames.length) body.frame_images = frames;
-  // Ingredient = subject/product reference image that Seedance keeps consistent across the clip.
-  // Sent as `reference_images` per ByteDance Seedance 2.0 spec (subject reference, distinct from
-  // first/last frame keyframing). Safe to include alongside frame_images.
-  if (opts.ingredientUrl) {
-    body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+  if (isSeedance) {
+    // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
+    body.resolution = effectiveResolution;
+    const frames: any[] = [];
+    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
+    if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
+    if (frames.length) body.frame_images = frames;
+    if (opts.ingredientUrl) {
+      body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+    }
+  } else if (isKling) {
+    // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
+    // start frame (image-to-video). It does NOT accept `resolution`, `frame_images`,
+    // or `reference_images` — sending them returns a 400 and the run never starts.
+    // For an "ingredient" with no first frame, fall back to using it as the start frame.
+    const startFrame = opts.imageUrl || opts.ingredientUrl;
+    if (startFrame) body.image_url = startFrame;
+    if (opts.lastFrameUrl) body.tail_image_url = opts.lastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
   }
 
   const t0 = Date.now();
@@ -1424,7 +1435,7 @@ const tools = [
           resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 720p for Seedance Fast. Use 1080p only if explicitly requested." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "kwaivgi/kling-v3.0-std", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-pro", "kwaivgi/kling-v3.0-std", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
@@ -1511,7 +1522,8 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
-  "kwaivgi/kling-v3.0-std":       { maxDuration: 15, label: "Kling 3.0 (≤15s per clip)" },
+  "bytedance/seedance-2.0-pro":  { maxDuration: 12, label: "Seedance 2.0 Pro (≤12s per clip, 1080p)" },
+  "kwaivgi/kling-v3.0-std":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
@@ -1771,6 +1783,7 @@ Deno.serve(async (req) => {
 
   const ALLOWED_VIDEO_MODELS = [
     "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0-pro",
     "kwaivgi/kling-v3.0-std",
     "google/veo-3.1-fast",
   ];
