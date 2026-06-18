@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Image as ImageIcon, Plus, Trash2, Save, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { StyleReferencesEditor, buildReferencesPromptLines, type StyleReference } from "./StyleReferencesEditor";
 
 export type ImageStyle = {
   id: string;
@@ -22,6 +23,7 @@ export type ImageStyle = {
   /** Prompt template injected before the user's text when this style is active. */
   prompt: string;
   builtIn?: boolean;
+  references?: StyleReference[];
 };
 
 const STORAGE_KEY = "ai-studio:image-styles:v1";
@@ -118,8 +120,10 @@ export function useImageStyles() {
 
 export function buildImageStyleBlock(style: ImageStyle | undefined, imageActive: boolean): string {
   if (!imageActive) return "";
-  if (!style || !style.prompt.trim() || style.id === "none") return "";
-  return `\n\n[ACTIVE IMAGE STYLE: ${style.name}]\n${style.prompt.trim()}\n\n[USER REQUEST]\n`;
+  if (!style || style.id === "none") return "";
+  const refsBlock = buildReferencesPromptLines(style.references, "image");
+  if (!style.prompt.trim() && !refsBlock) return "";
+  return `\n\n[ACTIVE IMAGE STYLE: ${style.name}]\n${style.prompt.trim()}${refsBlock}\n\n[USER REQUEST]\n`;
 }
 
 type Props = {
@@ -249,6 +253,11 @@ export function ImageStylesPopover({ styles, setStyles, selectedId, setSelectedI
                   className="font-mono text-xs"
                 />
               </div>
+              <StyleReferencesEditor
+                kind="image"
+                value={editing.references || []}
+                onChange={(refs) => setEditing({ ...editing, references: refs })}
+              />
             </div>
           )}
           <DialogFooter className="flex items-center justify-between sm:justify-between">
