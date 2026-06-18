@@ -2026,7 +2026,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             const next = curr.includes(m.value)
                               ? curr.filter((v) => v !== m.value)
                               : [...curr, m.value];
-                            return next.length === 0 ? [m.value] : next;
+                            return next;
                           });
                         }}
                         title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
