@@ -9152,6 +9152,70 @@ export type Database = {
           },
         ]
       }
+      meta_mcp_tool_calls: {
+        Row: {
+          arguments: Json
+          client_id: string | null
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          id: string
+          response: Json | null
+          source: string
+          success: boolean
+          tool_name: string
+          user_id: string | null
+        }
+        Insert: {
+          arguments?: Json
+          client_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          response?: Json | null
+          source?: string
+          success?: boolean
+          tool_name: string
+          user_id?: string | null
+        }
+        Update: {
+          arguments?: Json
+          client_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          response?: Json | null
+          source?: string
+          success?: boolean
+          tool_name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_mcp_tool_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_mcp_tool_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_mcp_tool_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       meta_rule_runs: {
         Row: {
           actions_taken: Json | null
