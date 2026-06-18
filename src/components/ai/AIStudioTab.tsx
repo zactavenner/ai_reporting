@@ -742,7 +742,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { localStorage.setItem("ai-studio:video-models", JSON.stringify(videoModels)); } catch {}
   }, [videoModels]);
   // first selection drives single-clip default model passed to the server
-  const videoModel = videoModels[0] || "bytedance/seedance-2.0-fast";
+  const videoModel = videoModels[0] || undefined;
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
