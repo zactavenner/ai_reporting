@@ -13,11 +13,13 @@ interface GenerationResult {
 
 interface ImageToVideoParams {
   sceneId: string;
-  imageUrl: string;
+  imageUrl?: string;
   prompt: string;
   aspectRatio: '16:9' | '9:16';
   duration?: number;
   model?: 'veo3' | 'seedance-pro';
+  lastFrameUrl?: string;
+  ingredientUrl?: string;
   onStatusUpdate: (sceneId: string, result: GenerationResult) => void;
 }
 
@@ -41,10 +43,13 @@ export function useImageToVideoGeneration() {
     aspectRatio,
     duration = 8,
     model = 'veo3',
+    lastFrameUrl,
+    ingredientUrl,
     onStatusUpdate,
   }: ImageToVideoParams) => {
-    // Validate image URL
-    if (!imageUrl) {
+    // For Veo3 imageUrl is required (image-to-video). Seedance supports text-to-video and
+    // ingredient-only modes, so allow missing imageUrl when model is seedance-pro.
+    if (!imageUrl && model !== 'seedance-pro') {
       toast.error('No image provided', { description: 'Generate a scene image first' });
       onStatusUpdate(sceneId, { status: 'failed', error: 'No image provided' });
       return null;
@@ -81,6 +86,8 @@ export function useImageToVideoGeneration() {
           duration,
           apiKey,
           model,
+          lastFrameUrl,
+          ingredientUrl,
         },
       });
 

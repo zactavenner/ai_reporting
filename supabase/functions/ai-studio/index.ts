@@ -920,6 +920,7 @@ async function generateSeedanceVideo(opts: {
   resolution: string;          // "720p" | "1080p"
   imageUrl?: string | null;    // optional first-frame for image-to-video
   lastFrameUrl?: string | null;
+  ingredientUrl?: string | null; // optional product/subject reference (preserved across the clip)
   model?: string | null;       // explicit OpenRouter model id
   clientId: string | null;
   conversationId: string;
@@ -1059,6 +1060,12 @@ async function generateSeedanceVideo(opts: {
   if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
   if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
   if (frames.length) body.frame_images = frames;
+  // Ingredient = subject/product reference image that Seedance keeps consistent across the clip.
+  // Sent as `reference_images` per ByteDance Seedance 2.0 spec (subject reference, distinct from
+  // first/last frame keyframing). Safe to include alongside frame_images.
+  if (opts.ingredientUrl) {
+    body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+  }
 
   const t0 = Date.now();
   const emit = opts.onProgress || (() => {});
@@ -2380,9 +2387,12 @@ Deno.serve(async (req) => {
             const toolId = `direct-video-${crypto.randomUUID()}`;
             const placeholderId = crypto.randomUUID();
             const imageUrl = segment.index === 0
-              ? (videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || selectedAvatar?.image_url || null)
+              ? (videoFrames?.firstFrameUrl || selectedAvatar?.image_url || videoFrames?.ingredientUrl || null)
               : (selectedAvatar?.image_url || null);
             const lastFrameUrl = segment.index === segment.count - 1 ? (videoFrames?.lastFrameUrl || null) : null;
+            const ingredientUrl = videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl
+              ? videoFrames.ingredientUrl
+              : null;
             const args = {
               prompt: segment.prompt,
               aspect_ratio: aspect,
@@ -2390,6 +2400,7 @@ Deno.serve(async (req) => {
               resolution: "1080p",
               image_url: imageUrl,
               last_frame_url: lastFrameUrl,
+              ingredient_url: ingredientUrl,
               model,
             };
             send({
@@ -2410,6 +2421,7 @@ Deno.serve(async (req) => {
                 resolution: "1080p",
                 imageUrl,
                 lastFrameUrl,
+                ingredientUrl,
                 model,
                 clientId: clientId || null,
                 conversationId,
@@ -2943,8 +2955,9 @@ Deno.serve(async (req) => {
                   aspectRatio: args.aspect_ratio || "9:16",
                   duration: typeof args.duration === "number" ? args.duration : 15,
                   resolution: args.resolution === "720p" ? "720p" : "1080p",
-                  imageUrl: args.image_url || (selectedAvatar ? selectedAvatar.image_url : null),
-                  lastFrameUrl: args.last_frame_url || null,
+                  imageUrl: args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null),
+                  lastFrameUrl: args.last_frame_url || videoFrames?.lastFrameUrl || null,
+                  ingredientUrl: args.ingredient_url || videoFrames?.ingredientUrl || null,
                   fast: !!args.fast,
                   model: (typeof args.model === "string" && args.model) ? args.model : selectedVideoModel,
                   clientId: clientId || null,
@@ -3049,7 +3062,8 @@ Deno.serve(async (req) => {
                     duration,
                     resolution,
                     imageUrl,
-                    lastFrameUrl: null,
+                    lastFrameUrl: videoFrames?.lastFrameUrl || null,
+                    ingredientUrl: videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl ? videoFrames.ingredientUrl : null,
                     fast: !!args.fast,
                     model: selectedVideoModel,
                     clientId: clientId || null,

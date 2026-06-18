@@ -14,9 +14,11 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey, model } = await req.json();
+    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey, model, lastFrameUrl, ingredientUrl } = await req.json();
 
-    if (!imageUrl) {
+    // For Veo3 (default) imageUrl is required (image-to-video). For Seedance, imageUrl is optional
+    // because it also supports text-to-video and ingredient-only (subject reference) modes.
+    if (!imageUrl && model !== 'seedance-pro') {
       return new Response(
         JSON.stringify({ error: 'imageUrl is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -31,16 +33,23 @@ serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
+      const frameImages: Array<Record<string, unknown>> = [];
+      if (imageUrl) frameImages.push({ type: 'image_url', image_url: { url: imageUrl }, frame_type: 'first_frame' });
+      if (lastFrameUrl) frameImages.push({ type: 'image_url', image_url: { url: lastFrameUrl }, frame_type: 'last_frame' });
       const seedanceBody: Record<string, unknown> = {
         model: 'bytedance/seedance-2.0',
-        prompt: prompt || 'Animate this image with subtle, professional motion.',
+        prompt: prompt || (imageUrl
+          ? 'Animate this image with subtle, professional motion.'
+          : 'Cinematic short-form ad clip.'),
         resolution: '1080p',
         aspect_ratio: aspectRatio || '16:9',
         duration: Math.min(Math.max(duration || 5, 5), 15),
-        frame_images: [
-          { type: 'image_url', image_url: { url: imageUrl }, frame_type: 'first_frame' },
-        ],
       };
+      if (frameImages.length) seedanceBody.frame_images = frameImages;
+      if (ingredientUrl) {
+        // Subject/product reference image — preserved across the clip (distinct from keyframes).
+        seedanceBody.reference_images = [{ type: 'image_url', image_url: { url: ingredientUrl } }];
+      }
       const submit = await fetch('https://openrouter.ai/api/v1/videos', {
         method: 'POST',
         headers: {
