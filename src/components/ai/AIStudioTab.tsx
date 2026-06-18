@@ -759,6 +759,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
+  const imageStyles = useImageStyles();
   const [adFormat, setAdFormat] = useState<string>(() => {
     try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
   });
