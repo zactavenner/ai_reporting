@@ -11,8 +11,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { Clapperboard, Plus, Trash2, Save } from "lucide-react";
+import { Clapperboard, Plus, Trash2, Save, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 export type VideoStyle = {
