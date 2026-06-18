@@ -920,6 +920,7 @@ async function generateSeedanceVideo(opts: {
   resolution: string;          // "720p" | "1080p"
   imageUrl?: string | null;    // optional first-frame for image-to-video
   lastFrameUrl?: string | null;
+  ingredientUrl?: string | null; // optional product/subject reference (preserved across the clip)
   model?: string | null;       // explicit OpenRouter model id
   clientId: string | null;
   conversationId: string;
