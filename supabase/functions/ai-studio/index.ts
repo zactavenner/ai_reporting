@@ -2395,7 +2395,9 @@ Deno.serve(async (req) => {
             return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({ model, cap, segment }));
           });
 
-          for (const { model, segment } of jobs) {
+          // Fan ALL selected models × clips out in parallel so compare-x N works the same
+          // as a single model and slow clips never block fast ones.
+          await Promise.all(jobs.map(async ({ model, segment }) => {
             if (aborted.v) return;
             const toolId = `direct-video-${crypto.randomUUID()}`;
             const placeholderId = crypto.randomUUID();
@@ -2449,7 +2451,7 @@ Deno.serve(async (req) => {
             }
             finalToolEvents.push({ name: "generate_seedance_video", args, result });
             send({ type: "tool_end", id: toolId, name: "generate_seedance_video", args, result });
-          }
+          }));
 
           const okCount = finalToolEvents.filter((t) => t.result?.ok).length;
           const failCount = finalToolEvents.length - okCount;
