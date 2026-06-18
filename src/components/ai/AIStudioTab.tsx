@@ -1155,9 +1155,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel,
         imageModels,
-        videoModel,
-        videoModels,
-        videoFrames,
+        ...(videoModel ? { videoModel, videoModels, videoFrames } : {}),
         avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
         offerContext: (() => {
