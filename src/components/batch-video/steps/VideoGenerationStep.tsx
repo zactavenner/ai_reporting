@@ -68,6 +68,7 @@ export function VideoGenerationStep({
       prompt: videoPrompt,
       aspectRatio: (config.aspectRatio === '9:16' ? '9:16' : '16:9') as '16:9' | '9:16',
       duration: 8,
+      model: videoModel === 'seedance-pro' ? 'seedance-pro' : 'veo3',
       onStatusUpdate: (sceneId, result) => {
         if (result.status === 'completed' && result.videoUrl) {
           const updatedScene = { ...scene, status: 'video_completed' as const, videoUrl: result.videoUrl };
@@ -115,7 +116,7 @@ export function VideoGenerationStep({
   const eligible = scenes.filter(s => s.generatedImageUrl && s.status !== 'video_completed' && s.status !== 'video_generating').length;
 
   // Credit cost estimate
-  const creditCost = scenes.length * (videoModel === 'veo3' ? 5 : 2);
+  const creditCost = scenes.length * (videoModel === 'veo3' ? 5 : videoModel === 'seedance-pro' ? 4 : 2);
 
   return (
     <>
@@ -125,7 +126,7 @@ export function VideoGenerationStep({
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Model Selector */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button onClick={() => setVideoModel('nano-banana-pro')}
               className={cn('p-4 rounded-lg border-2 text-left transition-all', videoModel === 'nano-banana-pro' ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50')}>
               <div className="flex items-center gap-2 mb-1">
@@ -143,6 +144,15 @@ export function VideoGenerationStep({
                 {videoModel === 'veo3' && <Check className="h-4 w-4 text-primary ml-auto" />}
               </div>
               <p className="text-xs text-muted-foreground">Cinema-quality output. ~5 credits/scene</p>
+            </button>
+            <button onClick={() => setVideoModel('seedance-pro')}
+              className={cn('p-4 rounded-lg border-2 text-left transition-all', videoModel === 'seedance-pro' ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50')}>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="font-semibold text-sm">Seedance 2.0 Pro</span>
+                {videoModel === 'seedance-pro' && <Check className="h-4 w-4 text-primary ml-auto" />}
+              </div>
+              <p className="text-xs text-muted-foreground">ByteDance — strong character & motion consistency. ~4 credits/scene</p>
             </button>
           </div>
 
