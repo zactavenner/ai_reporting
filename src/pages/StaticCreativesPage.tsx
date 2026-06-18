@@ -5,6 +5,7 @@ import { useClientOffers } from '@/hooks/useClientOffers';
 import { useProjects, useCreateProject } from '@/hooks/useProjects';
 import { StaticBatchCreator } from '@/components/static-batch/StaticBatchCreator';
 import { StyleSettingsView } from '@/components/project/StyleSettingsView';
+import { AllClientsAdsHistory } from '@/components/static-batch/AllClientsAdsHistory';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -199,6 +200,11 @@ export default function StaticCreativesPage() {
             <p className="text-sm mt-1">Choose a client above, then pick an offer to use.</p>
           </div>
         )}
+
+        {/* Global history across all clients */}
+        <div className="pt-8 border-t">
+          <AllClientsAdsHistory />
+        </div>
       </div>
     </AppLayout>
   );
