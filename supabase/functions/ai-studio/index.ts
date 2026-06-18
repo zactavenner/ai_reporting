@@ -2387,9 +2387,12 @@ Deno.serve(async (req) => {
             const toolId = `direct-video-${crypto.randomUUID()}`;
             const placeholderId = crypto.randomUUID();
             const imageUrl = segment.index === 0
-              ? (videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || selectedAvatar?.image_url || null)
+              ? (videoFrames?.firstFrameUrl || selectedAvatar?.image_url || videoFrames?.ingredientUrl || null)
               : (selectedAvatar?.image_url || null);
             const lastFrameUrl = segment.index === segment.count - 1 ? (videoFrames?.lastFrameUrl || null) : null;
+            const ingredientUrl = videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl
+              ? videoFrames.ingredientUrl
+              : null;
             const args = {
               prompt: segment.prompt,
               aspect_ratio: aspect,
@@ -2397,6 +2400,7 @@ Deno.serve(async (req) => {
               resolution: "1080p",
               image_url: imageUrl,
               last_frame_url: lastFrameUrl,
+              ingredient_url: ingredientUrl,
               model,
             };
             send({
@@ -2417,6 +2421,7 @@ Deno.serve(async (req) => {
                 resolution: "1080p",
                 imageUrl,
                 lastFrameUrl,
+                ingredientUrl,
                 model,
                 clientId: clientId || null,
                 conversationId,
