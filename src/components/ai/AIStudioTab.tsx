@@ -32,7 +32,8 @@ import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } f
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useClientOffers } from "@/hooks/useClientOffers";
 import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
-import { VideoStylesBar, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
+import { VideoStylesPopover, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
+import { ImageStylesPopover, useImageStyles, buildImageStyleBlock } from "./ImageStylesManager";
 
 interface Props {
   clientId: string;
