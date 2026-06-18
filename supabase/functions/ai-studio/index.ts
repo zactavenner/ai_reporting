@@ -2514,6 +2514,27 @@ Deno.serve(async (req) => {
           if (aborted.v) break;
           send({ type: "step", step });
 
+          // Gate image/video generation tools by user selection in the composer.
+          // When the user has NOT selected any image or video model, the AI must
+          // not be able to call those tools — keeps generations explicit/opt-in.
+          const IMAGE_TOOL_NAMES = new Set([
+            "generate_static_ad", "compare_image_models", "edit_static_ad",
+            "generate_ad_variations", "generate_scene_image", "explode_ad_variants",
+          ]);
+          const VIDEO_TOOL_NAMES = new Set([
+            "generate_seedance_video", "generate_scene_video", "plan_storyboard",
+          ]);
+          const hasImage = selectedImageModels.length > 0;
+          const hasVideo = selectedVideoModels.length > 0 || !!selectedVideoModel;
+          const gatedTools = (tools as any[]).filter((t: any) => {
+            const n = t?.function?.name || t?.name;
+            if (!n) return true;
+            if (n === "image_to_reel") return hasImage && hasVideo;
+            if (IMAGE_TOOL_NAMES.has(n)) return hasImage;
+            if (VIDEO_TOOL_NAMES.has(n)) return hasVideo;
+            return true;
+          });
+
           // Run one LLM streaming pass. Returns { stepText, toolCallsAcc }.
           // Internal helper so we can retry with a fallback model when the
           // primary returns nothing (which happens with owl-alpha on heavy
