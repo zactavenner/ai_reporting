@@ -3215,6 +3215,12 @@ Deno.serve(async (req) => {
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
                 result = { ok: true, title, artifact_type: artifactType, chars: content.length, appended_to_doc: appendedToDoc, append_error: appendError };
+              } else if (META_TOOL_NAMES.has(name)) {
+                if (!clientId) {
+                  result = { error: "Meta Ads tools require an active client. Select a client in AI Studio first." };
+                } else {
+                  result = await callMetaMcpTool(name, { ...args, client_id: clientId });
+                }
               } else {
                 result = { error: `Unknown tool: ${name}` };
               }
