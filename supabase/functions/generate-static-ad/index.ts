@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCapitalCreativeDirective } from './capital-creative-style.ts';
+import { enhancePromptWithGpt5 } from '../_shared/enhance-prompt-gpt5.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,6 +28,8 @@ interface GenerateAdRequest {
   disclaimerText?: string;
   strictBrandAdherence?: boolean;
   adImageUrls?: string[];
+  useGpt5Enhancer?: boolean;
+  styleReferenceAvatarIds?: string[];
 }
 
 function getImageDimensions(aspectRatio: string): { width: number; height: number } {
@@ -191,7 +194,51 @@ serve(async (req) => {
 
     console.log('Generating ad with params:', { styleName, aspectRatio, projectId });
 
-    const prompt = buildAdPrompt(body);
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    // Resolve style-reference avatars → pull their image_url + style_profile
+    let styleRefs: Array<{ name?: string; profile?: Record<string, unknown>; url?: string }> = [];
+    if (body.styleReferenceAvatarIds && body.styleReferenceAvatarIds.length > 0) {
+      const { data: refs } = await supabaseAdmin
+        .from('avatars')
+        .select('name, image_url, metadata')
+        .in('id', body.styleReferenceAvatarIds);
+      if (refs) {
+        styleRefs = refs.map((r) => ({
+          name: r.name,
+          url: r.image_url,
+          profile: ((r.metadata as Record<string, unknown>) || {}).style_profile as Record<string, unknown> | undefined,
+        }));
+      }
+    }
+
+    let prompt = buildAdPrompt(body);
+
+    // GPT-5 enhancement pass (default on, opt-out via useGpt5Enhancer=false)
+    if (body.useGpt5Enhancer !== false) {
+      const enhanced = await enhancePromptWithGpt5({
+        kind: 'static-ad',
+        rawPrompt: prompt,
+        context: {
+          styleName, aspectRatio,
+          productDescription: body.productDescription,
+          offerDescription: body.offerDescription,
+          brandColors: body.brandColors,
+          brandFonts: body.brandFonts,
+          strictBrandAdherence: body.strictBrandAdherence,
+          hasPrimaryReference: !!body.primaryReferenceImage,
+          hasCharacter: !!body.characterImageUrl,
+        },
+        styleReferences: styleRefs,
+      });
+      if (enhanced) {
+        console.log('GPT-5 enhanced prompt (preview):', enhanced.slice(0, 200));
+        prompt = enhanced;
+      }
+    }
     console.log('Generated prompt:', prompt.slice(0, 300) + '...');
 
     // Build message content with prompt and optional reference images
@@ -232,6 +279,11 @@ serve(async (req) => {
     // PRIORITY 2: Character/avatar image
     if (body.characterImageUrl) {
       await addImageToContent(body.characterImageUrl, 'character reference');
+    }
+
+    // PRIORITY 2.5: style-reference avatar images (visual style transfer)
+    for (const ref of styleRefs.slice(0, 2)) {
+      if (ref.url) await addImageToContent(ref.url, 'style-reference avatar');
     }
 
     // PRIORITY 3: Remaining reference images
