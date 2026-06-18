@@ -1435,7 +1435,7 @@ const tools = [
           resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 720p for Seedance Fast. Use 1080p only if explicitly requested." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "kwaivgi/kling-v3.0-std", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-pro", "kwaivgi/kling-v3.0-std", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
