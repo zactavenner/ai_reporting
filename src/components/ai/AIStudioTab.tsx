@@ -736,7 +736,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const legacy = localStorage.getItem("ai-studio:video-model");
       if (legacy) return [legacy];
     } catch {}
-    return ["bytedance/seedance-2.0-fast"];
+    return [];
   });
   useEffect(() => {
     try { localStorage.setItem("ai-studio:video-models", JSON.stringify(videoModels)); } catch {}
@@ -1691,15 +1691,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </details>
 
-        {/* Video Styles — pinned at the top of chat for quick edit / add / delete */}
-        <div className="px-4 sm:px-6 py-2 border-b border-border/60 bg-muted/10 flex items-center gap-2 flex-wrap">
-          <VideoStylesBar
-            styles={videoStyles.styles}
-            setStyles={videoStyles.setStyles}
-            selectedId={videoStyles.selectedId}
-            setSelectedId={videoStyles.setSelectedId}
-          />
-        </div>
+        {/* Video Styles bar moved to the composer — only renders when a video model is selected. */}
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
           <div className={`px-4 sm:px-6 py-6 space-y-5 mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
