@@ -301,3 +301,124 @@ function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: Vid
     </div>
   );
 }
+
+export function VideoStylesPopover({ styles, setStyles, selectedId, setSelectedId }: Props) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<VideoStyle | null>(null);
+  const selected = styles.find((s) => s.id === selectedId) || styles[0];
+
+  function saveEditing() {
+    if (!editing) return;
+    const name = editing.name.trim();
+    if (!name) { toast.error("Name required"); return; }
+    const existsIdx = styles.findIndex((s) => s.id === editing.id);
+    const next = [...styles];
+    if (existsIdx >= 0) next[existsIdx] = editing;
+    else next.push(editing);
+    setStyles(next);
+    setEditing(null);
+    toast.success(`Saved "${editing.name}"`);
+  }
+
+  function deleteStyle(id: string) {
+    const s = styles.find((x) => x.id === id);
+    if (s?.builtIn) { toast.error("Built-in styles can't be deleted (edit instead)"); return; }
+    setStyles(styles.filter((x) => x.id !== id));
+    if (selectedId === id) setSelectedId("none");
+    setEditing(null);
+  }
+
+  return (
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={`h-7 px-2 rounded-lg text-[10px] border inline-flex items-center gap-1 transition ${selected && selected.id !== "none" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+            title="Pick a video style"
+          >
+            <Clapperboard className="h-3 w-3" />
+            <span>{selected?.name || "No Style"}</span>
+            <ChevronDown className="h-3 w-3 opacity-70" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 p-2">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Video Style</div>
+          <div className="flex flex-col gap-1 max-h-72 overflow-y-auto">
+            {styles.map((s) => {
+              const active = s.id === selectedId;
+              return (
+                <div key={s.id} className="flex items-stretch gap-1">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedId(s.id); setOpen(false); }}
+                    className={`flex-1 text-left px-2 py-1.5 rounded text-xs border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/30 hover:bg-muted border-border/60"}`}
+                    title={s.prompt || "No additional style instructions"}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium">{s.name}</span>
+                      {s.builtIn && <Badge variant="secondary" className="text-[9px] h-4">built-in</Badge>}
+                    </div>
+                    {s.prompt && (
+                      <div className={`text-[10px] mt-0.5 line-clamp-2 ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                        {s.prompt.split("\n")[0]}
+                      </div>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setEditing(s); }}
+                    className="px-2 rounded text-xs border bg-muted/30 hover:bg-muted border-border/60"
+                    title={`Edit ${s.name}`}
+                  >
+                    ✎
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="pt-2 border-t border-border/60 mt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[10px] w-full"
+              onClick={() => setEditing({ id: `vid-style-${Date.now()}`, name: "New Style", prompt: "" })}
+            >
+              <Plus className="h-3 w-3 mr-1" /> New Style
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{editing && styles.find((x) => x.id === editing.id) ? "Edit Video Style" : "New Video Style"}</DialogTitle>
+            <DialogDescription>
+              Prompt instructions are prepended to every video request when this style is active.
+            </DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <StyleEditor style={editing} onChange={(s) => setEditing(s)} />
+          )}
+          <DialogFooter className="flex items-center justify-between sm:justify-between">
+            <div>
+              {editing && !editing.builtIn && styles.find((x) => x.id === editing.id) && (
+                <Button variant="ghost" className="text-destructive" onClick={() => deleteStyle(editing.id)}>
+                  <Trash2 className="h-3 w-3 mr-1" /> Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button onClick={saveEditing}>
+                <Save className="h-3 w-3 mr-1" /> Save
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
