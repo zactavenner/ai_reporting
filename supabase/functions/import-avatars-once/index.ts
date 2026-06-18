@@ -25,7 +25,9 @@ serve(async (req) => {
     const avatars = await avatarsRes.json();
     const allLooks = await looksRes.json();
     const ids = new Set(avatars.map((a: any) => a.id));
-    const looks = allLooks.filter((l: any) => ids.has(l.avatar_id));
+    const looks = allLooks
+      .filter((l: any) => ids.has(l.avatar_id))
+      .map((l: any) => ({ ...l, name: l.name || l.angle || 'Look' }));
 
     const { error: aErr } = await supabase
       .from('avatars')
