@@ -1783,6 +1783,7 @@ Deno.serve(async (req) => {
 
   const ALLOWED_VIDEO_MODELS = [
     "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0-pro",
     "kwaivgi/kling-v3.0-std",
     "google/veo-3.1-fast",
   ];
