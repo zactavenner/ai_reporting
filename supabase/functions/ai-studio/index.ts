@@ -941,6 +941,7 @@ async function generateSeedanceVideo(opts: {
 
   const ALLOWED = [
     "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0-pro",
     "kwaivgi/kling-v3.0-std",
     "google/veo-3.1-fast",
   ];
@@ -949,11 +950,13 @@ async function generateSeedanceVideo(opts: {
     : "bytedance/seedance-2.0-fast";
   const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
+  const isSeedance = model.startsWith("bytedance/seedance");
+  const isKling = model.startsWith("kwaivgi/kling");
   const effectiveResolution = isSeedanceFast && opts.resolution === "1080p" ? "720p" : opts.resolution;
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
-    : Math.max(4, Math.min(15, Math.round(opts.duration || 15)));
+    : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
   // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
   if (isVeo) {
