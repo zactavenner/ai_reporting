@@ -1503,6 +1503,52 @@ const tools = [
   },
 ];
 
+// Meta Ads MCP tools — proxied through mcp-agent-server JSON-RPC.
+// Always pass the active clientId; the wrapper injects it before dispatch.
+const META_MCP_TOOLS = [
+  { name: "meta_list_campaigns", description: "List Meta Ads campaigns for THIS client. Optional status filter (ACTIVE / PAUSED). Sorted by spend desc.", parameters: { type: "object", properties: { status: { type: "string" }, limit: { type: "number" } }, required: [] } },
+  { name: "meta_list_adsets", description: "List Meta ad sets for this client. Optional campaign_id and status filter.", parameters: { type: "object", properties: { campaign_id: { type: "string" }, status: { type: "string" }, limit: { type: "number" } }, required: [] } },
+  { name: "meta_list_ads", description: "List Meta ads for this client. Optional adset_id / campaign_id / status filter.", parameters: { type: "object", properties: { adset_id: { type: "string" }, campaign_id: { type: "string" }, status: { type: "string" }, limit: { type: "number" } }, required: [] } },
+  { name: "meta_get_ad_performance", description: "Spend, CTR, CPC, CPM, reach, conversions, cost_per_conversion for a single ad or campaign.", parameters: { type: "object", properties: { ad_id: { type: "string" }, campaign_id: { type: "string" } }, required: [] } },
+  { name: "meta_toggle_status", description: "Pause or activate a Meta campaign, adset, or ad on the live Meta account. WRITE operation — only call when the user explicitly asks.", parameters: { type: "object", properties: { level: { type: "string", enum: ["campaign","adset","ad"] }, row_id: { type: "string", description: "The internal DB id" }, status: { type: "string", enum: ["ACTIVE","PAUSED"] } }, required: ["level","row_id","status"] } },
+  { name: "meta_update_budget", description: "Update daily or lifetime budget on a Meta campaign/adset/ad. WRITE operation.", parameters: { type: "object", properties: { level: { type: "string", enum: ["campaign","adset","ad"] }, row_id: { type: "string" }, daily_budget: { type: "number" }, lifetime_budget: { type: "number" } }, required: ["level","row_id"] } },
+  { name: "meta_duplicate", description: "Duplicate a Meta campaign/adset/ad. WRITE operation.", parameters: { type: "object", properties: { level: { type: "string", enum: ["campaign","adset","ad"] }, row_id: { type: "string" } }, required: ["level","row_id"] } },
+  { name: "meta_create_campaign", description: "Create a new Meta campaign. Defaults to PAUSED. WRITE operation.", parameters: { type: "object", properties: { name: { type: "string" }, objective: { type: "string" }, status: { type: "string", enum: ["ACTIVE","PAUSED"] }, daily_budget: { type: "number" } }, required: ["name","objective"] } },
+  { name: "meta_create_ad", description: "Create a new Meta ad inside an existing adset from a saved creative. Defaults to PAUSED. WRITE operation.", parameters: { type: "object", properties: { adset_id: { type: "string" }, name: { type: "string" }, creative_id: { type: "string" }, status: { type: "string", enum: ["ACTIVE","PAUSED"] } }, required: ["adset_id","name","creative_id"] } },
+  { name: "meta_sync_account", description: "Trigger a Meta Ads sync for this client (pulls latest spend/metrics from Meta Graph API). WRITE operation but safe; use when data feels stale.", parameters: { type: "object", properties: { days: { type: "number", description: "Days back to refresh. Default 7." } }, required: [] } },
+];
+for (const t of META_MCP_TOOLS) {
+  tools.push({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } } as any);
+}
+const META_TOOL_NAMES = new Set(META_MCP_TOOLS.map(t => t.name));
+
+async function callMetaMcpTool(name: string, args: Record<string, any>): Promise<any> {
+  const url = `${SUPABASE_URL}/functions/v1/mcp-agent-server`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+      "Authorization": `Bearer ${SUPABASE_ANON}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: Date.now(),
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+  });
+  const text = await res.text();
+  let parsed: any = null;
+  try { parsed = JSON.parse(text); } catch { return { error: `mcp-agent-server non-JSON response (${res.status}): ${text.slice(0, 500)}` }; }
+  if (parsed?.error) return { error: parsed.error?.message || String(parsed.error) };
+  const content = parsed?.result?.content?.[0]?.text;
+  if (typeof content === "string") {
+    try { return JSON.parse(content); } catch { return { text: content }; }
+  }
+  return parsed?.result ?? parsed;
+}
+
 const AD_FORMAT_RULES: Record<string, string> = {
   meta_feed_1x1: "AD FORMAT: Meta Feed 1:1 (1080×1080). Headline in the top third, single CTA pill bottom-center, generous safe padding (~80px) on all sides. Sound-off-friendly — use bold on-image text. Aspect ratio MUST be '1:1'.",
   meta_reel_9x16: "AD FORMAT: Meta Reel 9:16 (1080×1920). Keep ALL text/logos in the middle 60% safe zone — top ~250px is covered by the profile UI, bottom ~400px by caption + CTA. Lead with a 1-second pattern-interrupt hook in the first frame. Aspect ratio MUST be '9:16'.",
@@ -1701,6 +1747,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "BRAND GUARD (CRITICAL): Every generated ad must (a) use ONLY brand colors and fonts from the Company Info above, (b) include the client logo unless the user explicitly says no-logo, (c) include the required compliance disclaimer for investment / capital-raising clients ('Past performance is not indicative of future results. All investments carry risk.'), (d) never use the word 'guaranteed'. After generating, do a silent self-check; if any rule is violated, immediately call edit_static_ad with a corrective edit_instruction (max 1 retry).",
   ctx.brandSummary,
   "BRAND LOCK: Always respect the client's brand colors and fonts from Company Info. Do NOT invent new palettes or fonts. When calling generate_static_ad / edit_static_ad / generate_scene_image, the server already injects strict brand adherence from the client record — never override brand colors with arbitrary hexes unless the user explicitly says so.",
+  "META ADS TOOLS: You have live Meta Ads tools (meta_list_campaigns / meta_list_adsets / meta_list_ads / meta_get_ad_performance / meta_toggle_status / meta_update_budget / meta_duplicate / meta_create_campaign / meta_create_ad / meta_sync_account). Use the READ tools freely when the user asks about ad performance, what's running, top spenders, CTR/CPC, etc. The active client_id is injected automatically — never ask the user for it. WRITE tools (toggle/update_budget/duplicate/create/sync) MUST be confirmed explicitly by the user in chat before calling. After calling, summarize the result in plain English with concrete numbers; do not dump raw JSON.",
   ctx.docId ? `Active Google Doc: ${ctx.docUrl} (id ${ctx.docId})` : "No active Google Doc.",
   ctx.sheetId ? `Active Google Sheet: ${ctx.sheetUrl} (id ${ctx.sheetId})` : "No active Google Sheet.",
 ].filter(Boolean).join("\n");
@@ -3169,6 +3216,12 @@ Deno.serve(async (req) => {
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data });
                 result = { ok: true, title, artifact_type: artifactType, chars: content.length, appended_to_doc: appendedToDoc, append_error: appendError };
+              } else if (META_TOOL_NAMES.has(name)) {
+                if (!clientId) {
+                  result = { error: "Meta Ads tools require an active client. Select a client in AI Studio first." };
+                } else {
+                  result = await callMetaMcpTool(name, { ...args, client_id: clientId });
+                }
               } else {
                 result = { error: `Unknown tool: ${name}` };
               }
