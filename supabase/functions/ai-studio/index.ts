@@ -1055,19 +1055,27 @@ async function generateSeedanceVideo(opts: {
   const body: Record<string, unknown> = {
     model,
     prompt: opts.prompt,
-    resolution: effectiveResolution,
     aspect_ratio: opts.aspectRatio,
     duration: effectiveDuration,
   };
-  const frames: any[] = [];
-  if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
-  if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
-  if (frames.length) body.frame_images = frames;
-  // Ingredient = subject/product reference image that Seedance keeps consistent across the clip.
-  // Sent as `reference_images` per ByteDance Seedance 2.0 spec (subject reference, distinct from
-  // first/last frame keyframing). Safe to include alongside frame_images.
-  if (opts.ingredientUrl) {
-    body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+  if (isSeedance) {
+    // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
+    body.resolution = effectiveResolution;
+    const frames: any[] = [];
+    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
+    if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
+    if (frames.length) body.frame_images = frames;
+    if (opts.ingredientUrl) {
+      body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+    }
+  } else if (isKling) {
+    // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
+    // start frame (image-to-video). It does NOT accept `resolution`, `frame_images`,
+    // or `reference_images` — sending them returns a 400 and the run never starts.
+    // For an "ingredient" with no first frame, fall back to using it as the start frame.
+    const startFrame = opts.imageUrl || opts.ingredientUrl;
+    if (startFrame) body.image_url = startFrame;
+    if (opts.lastFrameUrl) body.tail_image_url = opts.lastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
   }
 
   const t0 = Date.now();
