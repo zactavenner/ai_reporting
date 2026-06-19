@@ -46,6 +46,7 @@ export function SODView({ memberId }: { memberId: string }) {
   const dueToday = useMemo(() => {
     const today = new Date(); today.setHours(0,0,0,0);
     return (tasks as any[]).filter((t) => {
+      if (t.status === 'completed' || t.stage === 'done') return false;
       if (!t.due_date) return false;
       const d = new Date(t.due_date); d.setHours(0,0,0,0);
       return d.getTime() <= today.getTime();
