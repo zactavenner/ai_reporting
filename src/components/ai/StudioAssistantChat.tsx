@@ -9,6 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
 type ToolEvent = { name: string; args: any; result: any };
 type Message = {
@@ -18,7 +19,9 @@ type Message = {
   attachments?: Attachment[];
 };
 type Attachment = { kind: 'image' | 'pdf'; url?: string; data?: string; name?: string };
-type Thread = { id: string; title: string; updatedAt: number; messages: Message[] };
+type Thread = { id: string; title: string; updatedAt: number; messages: Message[]; summary?: string; usedTokens?: number };
+
+const TOKEN_LIMIT = 100_000;
 
 const THREADS_KEY = 'studio-assistant-threads-v2';
 const ACTIVE_KEY = 'studio-assistant-active-v2';
@@ -59,6 +62,17 @@ export function StudioAssistantChat() {
 
   const active = threads.find(t => t.id === activeId);
   const messages = active?.messages || [];
+  const usedTokens = active?.usedTokens || 0;
+  const summary = active?.summary || '';
+  const pct = Math.min(100, Math.round((usedTokens / TOKEN_LIMIT) * 100));
+
+  const updateThread = (patch: Partial<Thread>) => {
+    setThreads(prev => {
+      const next = prev.map(t => t.id === activeId ? { ...t, ...patch, updatedAt: Date.now() } : t);
+      saveThreads(next);
+      return next;
+    });
+  };
 
   const updateActive = (fn: (m: Message[]) => Message[]) => {
     setThreads(prev => {
@@ -130,7 +144,7 @@ export function StudioAssistantChat() {
         attachments: m.attachments || [],
       }));
       const { data, error } = await supabase.functions.invoke('studio-assistant', {
-        body: { messages: apiMessages, attachments: sendAttachments },
+        body: { messages: apiMessages, attachments: sendAttachments, summary },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -139,6 +153,12 @@ export function StudioAssistantChat() {
         content: data?.content || '(no response)',
         tool_events: data?.tool_events || [],
       }]);
+      if (data?.summary || data?.usage) {
+        updateThread({
+          summary: data?.summary ?? summary,
+          usedTokens: data?.usage?.tokens ?? usedTokens,
+        });
+      }
     } catch (e: any) {
       toast({ title: 'Assistant error', description: e.message, variant: 'destructive' });
       updateActive(m => [...m, { role: 'assistant', content: `⚠️ ${e.message}` }]);
@@ -192,6 +212,15 @@ export function StudioAssistantChat() {
       </div>
 
       <ScrollArea className="flex-1 p-4" ref={scrollRef as any}>
+        {usedTokens > 0 && (
+          <div className="mb-3 px-1">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+              <span>Context · {Math.round(usedTokens/1000)}K / {Math.round(TOKEN_LIMIT/1000)}K tokens {summary ? '· auto-summarized' : ''}</span>
+              <span>{pct}%</span>
+            </div>
+            <Progress value={pct} className={cn('h-1', pct > 80 ? '[&>div]:bg-destructive' : pct > 60 ? '[&>div]:bg-yellow-500' : '[&>div]:bg-green-500')} />
+          </div>
+        )}
         {messages.length === 0 ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground text-center py-4">
