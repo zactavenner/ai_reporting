@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,13 +38,23 @@ function bucketize(tasks: any[]): Record<Bucket, any[]> {
 
 export function EODView({ memberId }: { memberId: string }) {
   const { data: tasks = [], isLoading } = useMemberTasks(memberId);
+  const queryClient = useQueryClient();
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const hideTask = (id: string) => {
+    setHiddenIds((prev) => { const n = new Set(prev); n.add(id); return n; });
+    queryClient.invalidateQueries({ queryKey: ['member-daily-tasks', memberId] });
+  };
   const { data: existing } = useTodayReport(memberId, 'eod');
   const { data: members = [] } = useAgencyMembers();
   const submit = useSubmitDailyReport();
   const updateTask = useUpdateTask();
 
   const member = members.find((m: any) => m.id === memberId);
-  const buckets = useMemo(() => bucketize(tasks as any[]), [tasks]);
+  const visibleTasks = useMemo(
+    () => (tasks as any[]).filter((t) => !hiddenIds.has(t.id) && t.stage !== 'agency_review' && t.stage !== 'review'),
+    [tasks, hiddenIds]
+  );
+  const buckets = useMemo(() => bucketize(visibleTasks), [visibleTasks]);
 
   // Pull related data for the tasks shown: client names, subtasks, assignees
   const taskIds = useMemo(() => (tasks as any[]).map((t) => t.id), [tasks]);
@@ -222,11 +232,14 @@ export function EODView({ memberId }: { memberId: string }) {
       description: `🚫 BLOCKED (${new Date().toLocaleDateString()}): ${blockerReason.trim()}`,
     } as any);
     toast.success('Marked blocked');
+    hideTask(blockerOpen.taskId);
     setBlockerOpen(null); setBlockerReason('');
   };
 
   const handleMarkDone = async (t: any) => {
     await updateTask.mutateAsync({ id: t.id, status: 'completed' as any, completed_at: new Date().toISOString() } as any);
+    hideTask(t.id);
+    toast.success('Marked done');
   };
 
   // EOD review routing:
@@ -243,6 +256,7 @@ export function EODView({ memberId }: { memberId: string }) {
         // AM moves it to Client Review
         await updateTask.mutateAsync({ id: t.id, stage: 'review' as any } as any);
         toast.success('Sent to client for review');
+        hideTask(t.id);
         return;
       }
       // Non-AM: send to AM for agency review
@@ -252,6 +266,14 @@ export function EODView({ memberId }: { memberId: string }) {
       if (am?.id) {
         await (supabase as any).from('task_assignees').insert({ task_id: t.id, member_id: am.id }).then(() => {}, () => {});
       }
+      // Remove the current member from this task's assignees so it drops off their daily list.
+      await (supabase as any)
+        .from('task_assignees')
+        .delete()
+        .eq('task_id', t.id)
+        .eq('member_id', memberId)
+        .then(() => {}, () => {});
+      hideTask(t.id);
       toast.success(amName ? `Sent to ${amName} for review` : 'Sent for agency review');
     } catch (e: any) {
       toast.error('Failed: ' + e.message);
