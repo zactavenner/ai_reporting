@@ -719,6 +719,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const brandColors: string[] = Array.isArray(client?.brand_colors) ? (client!.brand_colors as string[]) : [];
   const brandFonts: string[] = Array.isArray(client?.brand_fonts) ? (client!.brand_fonts as string[]) : [];
   const { data: clientOffers = [] } = useClientOffers(clientId);
+  // All files attached to this client's offers — used to build offerContext so the
+  // AI can see every PDF / image / asset attached to the active offer(s).
+  const { data: clientOfferFiles = [] } = useQuery({
+    queryKey: ["ai-studio-offer-files", clientId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("client_offer_files")
+        .select("offer_id, file_url, file_name, file_type")
+        .eq("client_id", clientId);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!clientId,
+  });
   const updateClientSettings = useUpdateClientSettings();
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
