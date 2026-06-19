@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -34,6 +34,12 @@ export function SODView({ memberId }: { memberId: string }) {
   const { data: tasks = [], isLoading, refetch } = useMemberTasks(memberId);
   const { data: members = [] } = useAgencyMembers();
   const updateTask = useUpdateTask();
+  const queryClient = useQueryClient();
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const hideTask = (id: string) => {
+    setHiddenIds((prev) => { const n = new Set(prev); n.add(id); return n; });
+    queryClient.invalidateQueries({ queryKey: ['member-daily-tasks', memberId] });
+  };
   const [topPriorities, setTopPriorities] = useState('');
   const [blockerOpen, setBlockerOpen] = useState<{ task: any } | null>(null);
   const [blockerReason, setBlockerReason] = useState('');
@@ -46,12 +52,13 @@ export function SODView({ memberId }: { memberId: string }) {
   const dueToday = useMemo(() => {
     const today = new Date(); today.setHours(0,0,0,0);
     return (tasks as any[]).filter((t) => {
+      if (hiddenIds.has(t.id)) return false;
       if (t.status === 'completed' || t.stage === 'done') return false;
       if (!t.due_date) return false;
       const d = new Date(t.due_date); d.setHours(0,0,0,0);
       return d.getTime() <= today.getTime();
     });
-  }, [tasks]);
+  }, [tasks, hiddenIds]);
 
   // Map client_id -> client name (for visibility)
   const clientIds = useMemo(() => Array.from(new Set((tasks as any[]).map((t) => t.client_id).filter(Boolean))), [tasks]);
@@ -67,6 +74,7 @@ export function SODView({ memberId }: { memberId: string }) {
 
   const handleMarkDone = async (t: any) => {
     await updateTask.mutateAsync({ id: t.id, status: 'completed' as any, completed_at: new Date().toISOString() } as any);
+    hideTask(t.id);
     toast.success('Marked done');
   };
 
@@ -123,6 +131,7 @@ export function SODView({ memberId }: { memberId: string }) {
       } else {
         toast.message('Marked stuck — no AM assigned to this client');
       }
+      hideTask(t.id);
       setBlockerOpen(null);
       setBlockerReason('');
       refetch();
