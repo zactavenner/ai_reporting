@@ -440,7 +440,77 @@ Rules:
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    const { messages = [], attachments = [] } = await req.json();
+    const { messages = [], attachments = [], summary: prevSummary = '' } = await req.json();
+
+    // ===== Context window management =====
+    const MAX_CONTEXT_TOKENS = 100_000; // soft budget for non-system context
+    const KEEP_RECENT = 6;              // always keep last N messages verbatim w/ attachments
+    const SUMMARY_TRIGGER = 0.7;        // summarize when usage exceeds 70% of budget
+
+    const estimateText = (s: any): number => {
+      if (!s) return 0;
+      if (typeof s === 'string') return Math.ceil(s.length / 4);
+      try { return Math.ceil(JSON.stringify(s).length / 4); } catch { return 0; }
+    };
+    const estimateAttachment = (a: any): number => {
+      if (!a) return 0;
+      if (a.kind === 'image') return 1500;
+      if (a.kind === 'pdf' && typeof a.data === 'string') return Math.ceil(a.data.length / 4);
+      return 0;
+    };
+    const estimateMessage = (m: any): number => {
+      let t = estimateText(m.content);
+      for (const a of (m.attachments || [])) t += estimateAttachment(a);
+      return t + 8; // small role overhead
+    };
+
+    // Compose working message list (preserve order)
+    let working: any[] = messages.map((m: any) => ({ ...m }));
+    // Attach the new attachments onto the last user message (so they count in budget too)
+    if (Array.isArray(attachments) && attachments.length) {
+      const lastUserIdx = (() => { for (let i = working.length - 1; i >= 0; i--) if (working[i].role === 'user') return i; return -1; })();
+      if (lastUserIdx >= 0) {
+        working[lastUserIdx] = {
+          ...working[lastUserIdx],
+          attachments: [...(working[lastUserIdx].attachments || []), ...attachments],
+        };
+      }
+    }
+
+    let runningSummary: string = String(prevSummary || '');
+
+    const totalTokens = (msgs: any[]) =>
+      estimateText(SYSTEM_PROMPT) + estimateText(runningSummary) + msgs.reduce((s, m) => s + estimateMessage(m), 0);
+
+    // If over budget, summarize oldest messages (everything before the last KEEP_RECENT) via a cheap LLM call
+    if (totalTokens(working) > MAX_CONTEXT_TOKENS * SUMMARY_TRIGGER && working.length > KEEP_RECENT) {
+      const toSummarize = working.slice(0, working.length - KEEP_RECENT);
+      const recent = working.slice(working.length - KEEP_RECENT);
+      const transcript = toSummarize.map((m: any) => {
+        const atts = (m.attachments || []).map((a: any) => `[${a.kind}:${a.name || 'file'}]`).join(' ');
+        return `${m.role.toUpperCase()}: ${typeof m.content === 'string' ? m.content : ''} ${atts}`.trim();
+      }).join('\n');
+      try {
+        const sumRes = await fetch(GATEWAY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LOVABLE_API_KEY}` },
+          body: JSON.stringify({
+            model: 'openrouter/owl-alpha',
+            messages: [
+              { role: 'system', content: 'You compress chat history into a dense, factual running summary. Preserve: user goals, key facts, decisions, names/IDs, file references (mention which images/PDFs were shared and what they contained), pending actions, tool results. Output plain text, no preamble. Under 400 words.' },
+              { role: 'user', content: `Previous summary:\n${runningSummary || '(none)'}\n\nNew transcript to fold in:\n${transcript}` },
+            ],
+          }),
+        });
+        if (sumRes.ok) {
+          const sd = await sumRes.json();
+          const newSum = sd.choices?.[0]?.message?.content?.trim();
+          if (newSum) runningSummary = newSum;
+        }
+      } catch { /* non-fatal */ }
+      working = recent;
+    }
+
     // Build conversation with per-message attachments preserved so the model has
     // FULL context of every image/PDF ever uploaded in this thread, not just the last turn.
     const expandMessage = (m: any, extraAttachments: any[] = []) => {
@@ -455,13 +525,16 @@ Deno.serve(async (req) => {
       }
       return { role: 'user', content: parts };
     };
-    const lastIdx = messages.length - 1;
     const convo: any[] = [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...messages.map((m: any, i: number) =>
-        expandMessage(m, i === lastIdx && Array.isArray(attachments) ? attachments : []),
-      ),
+      ...(runningSummary ? [{ role: 'system', content: `Conversation summary so far (older turns compressed):\n${runningSummary}` }] : []),
+      ...working.map((m: any) => expandMessage(m, [])),
     ];
+    const usage = {
+      tokens: totalTokens(working),
+      limit: MAX_CONTEXT_TOKENS,
+      summarized: working.length < messages.length,
+    };
     const toolEvents: any[] = [];
 
     for (let step = 0; step < 8; step++) {
@@ -504,6 +577,8 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({
           content: msg.content || '',
           tool_events: toolEvents,
+          summary: runningSummary || undefined,
+          usage,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
@@ -524,6 +599,8 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       content: 'Reached max tool iterations.',
       tool_events: toolEvents,
+      summary: runningSummary || undefined,
+      usage,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ error: (e as Error).message }), {
