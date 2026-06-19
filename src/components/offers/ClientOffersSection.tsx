@@ -38,6 +38,7 @@ import { Plus, FileText, Image, File, Trash2, Download, ExternalLink, Upload, Pe
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { OfferAssetHub } from './OfferAssetHub';
+import { BrandTemplateEditor } from './BrandTemplateEditor';
 
 interface ClientOffersSectionProps {
   clientId: string;
@@ -267,6 +268,13 @@ export function ClientOffersSection({ clientId, clientName, isPublicView = false
 
   return (
     <div className="space-y-4">
+      {!isPublicView && (
+        <BrandTemplateEditor
+          clientId={clientId}
+          initialColors={brandColors}
+          initialFonts={brandFonts}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold">Offers & Files</h2>
