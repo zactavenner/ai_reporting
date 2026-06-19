@@ -441,19 +441,27 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
     const { messages = [], attachments = [] } = await req.json();
-    // Accept attachments on the last user message (image_url[] or pdf data URLs)
-    const convo: any[] = [{ role: 'system', content: SYSTEM_PROMPT }, ...messages];
-    if (Array.isArray(attachments) && attachments.length && convo.length > 1) {
-      const last = convo[convo.length - 1];
-      if (last.role === 'user') {
-        const parts: any[] = [{ type: 'text', text: typeof last.content === 'string' ? last.content : '' }];
-        for (const a of attachments) {
-          if (a.kind === 'image' && a.url) parts.push({ type: 'image_url', image_url: { url: a.url } });
-          else if (a.kind === 'pdf' && a.data) parts.push({ type: 'file', file: { filename: a.name || 'file.pdf', file_data: a.data } });
-        }
-        last.content = parts;
+    // Build conversation with per-message attachments preserved so the model has
+    // FULL context of every image/PDF ever uploaded in this thread, not just the last turn.
+    const expandMessage = (m: any, extraAttachments: any[] = []) => {
+      const atts = [...(Array.isArray(m.attachments) ? m.attachments : []), ...extraAttachments];
+      if (m.role !== 'user' || atts.length === 0) {
+        return { role: m.role, content: typeof m.content === 'string' ? m.content : (m.content ?? '') };
       }
-    }
+      const parts: any[] = [{ type: 'text', text: typeof m.content === 'string' ? m.content : '' }];
+      for (const a of atts) {
+        if (a.kind === 'image' && a.url) parts.push({ type: 'image_url', image_url: { url: a.url } });
+        else if (a.kind === 'pdf' && a.data) parts.push({ type: 'file', file: { filename: a.name || 'file.pdf', file_data: a.data } });
+      }
+      return { role: 'user', content: parts };
+    };
+    const lastIdx = messages.length - 1;
+    const convo: any[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...messages.map((m: any, i: number) =>
+        expandMessage(m, i === lastIdx && Array.isArray(attachments) ? attachments : []),
+      ),
+    ];
     const toolEvents: any[] = [];
 
     for (let step = 0; step < 8; step++) {
