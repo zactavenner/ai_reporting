@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { CheckCircle2, AlertOctagon, Sunrise, Loader2, Quote } from 'lucide-react';
-import { useMemberTasks } from '@/hooks/useDailyReports';
+import { CheckCircle2, AlertOctagon, Sunrise, Loader2, Quote, Send } from 'lucide-react';
+import { useMemberTasks, useSubmitDailyReport } from '@/hooks/useDailyReports';
 import { useUpdateTask, useAgencyMembers } from '@/hooks/useTasks';
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,6 +34,7 @@ export function SODView({ memberId }: { memberId: string }) {
   const { data: tasks = [], isLoading, refetch } = useMemberTasks(memberId);
   const { data: members = [] } = useAgencyMembers();
   const updateTask = useUpdateTask();
+  const submit = useSubmitDailyReport();
   const queryClient = useQueryClient();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const hideTask = (id: string) => {
@@ -48,6 +49,31 @@ export function SODView({ memberId }: { memberId: string }) {
 
   const quote = useMemo(() => QUOTES[Math.floor(Math.random() * QUOTES.length)], []);
   const member = members.find((m: any) => m.id === memberId);
+
+  const handleSendPriorities = async () => {
+    const lines = topPriorities.split('\n').map((l) => l.replace(/^\s*\d+[\.\)]\s*/, '').trim()).filter(Boolean);
+    if (lines.length === 0) { toast.error('Add at least one priority'); return; }
+    try {
+      await submit.mutateAsync({
+        report: {
+          member_id: memberId,
+          report_date: new Date().toISOString().slice(0, 10),
+          report_type: 'sod',
+          top_priorities: lines.slice(0, 3),
+          tasks_snapshot: dueToday.map((t: any) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: 'in_progress' as const })),
+          touchpoint_count: null,
+          touchpoint_notes: null,
+          client_experience_done: null,
+          wins_shared: null,
+          self_assessment: null,
+        },
+        member_name: member?.name || 'Team Member',
+      });
+      toast.success('Top 3 sent');
+    } catch (e: any) {
+      toast.error('Failed: ' + e.message);
+    }
+  };
 
   const dueToday = useMemo(() => {
     const today = new Date(); today.setHours(0,0,0,0);
@@ -166,13 +192,22 @@ export function SODView({ memberId }: { memberId: string }) {
       {/* Top priorities */}
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm">Top 3 priorities today</CardTitle></CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="pt-0 space-y-2">
           <Textarea
             value={topPriorities}
             onChange={(e) => setTopPriorities(e.target.value)}
             placeholder={"1. \n2. \n3. "}
             rows={4}
           />
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={handleSendPriorities}
+            disabled={submit.isPending || !topPriorities.trim()}
+          >
+            {submit.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            Send Top 3
+          </Button>
         </CardContent>
       </Card>
 
