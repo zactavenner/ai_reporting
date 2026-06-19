@@ -1197,6 +1197,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             const parts = [`OFFER ${i + 1}: ${o.title}`];
             if (o.description) parts.push(o.description);
             if (o.file_name) parts.push(`Primary file: ${o.file_name}${o.file_url ? ` (${o.file_url})` : ""}`);
+            const files = (clientOfferFiles as any[]).filter(f => f.offer_id === o.id);
+            if (files.length > 0) {
+              parts.push(`Attached files (${files.length}) — review each PDF / asset:`);
+              files.forEach((f: any, idx: number) => {
+                parts.push(`  ${idx + 1}. ${f.file_name}${f.file_type ? ` [${f.file_type}]` : ""} → ${f.file_url}`);
+              });
+            }
             return parts.join("\n");
           }).join("\n\n---\n\n");
         })(),
