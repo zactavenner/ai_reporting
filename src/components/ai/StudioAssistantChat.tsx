@@ -123,7 +123,12 @@ export function StudioAssistantChat() {
     setAttachments([]);
     setLoading(true);
     try {
-      const apiMessages = next.map(m => ({ role: m.role, content: m.content }));
+      // Send full per-message attachments so the model retains image/PDF context across turns
+      const apiMessages = next.map(m => ({
+        role: m.role,
+        content: m.content,
+        attachments: m.attachments || [],
+      }));
       const { data, error } = await supabase.functions.invoke('studio-assistant', {
         body: { messages: apiMessages, attachments: sendAttachments },
       });
