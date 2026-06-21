@@ -2218,6 +2218,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             />
           </TabsContent>
 
+          <TabsContent value="batch" className="flex-1 m-0 overflow-auto">
+            <MultiScriptBatchPanel clientId={clientId} />
+          </TabsContent>
+
           <TabsContent value="sheet" className="flex-1 m-0 overflow-hidden">
             {sheetUrl ? (
               <div className="h-full flex flex-col">
