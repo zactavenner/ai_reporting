@@ -94,9 +94,9 @@ export function useVideoBatch(batchId?: string | null) {
 }
 
 export const MODEL_OPTIONS = [
-  { id: "bytedance/seedance-2.0-fast", label: "Seedance Fast",   durations: [4, 5, 8, 10, 12, 15], defaultDuration: 5,  maxRes: "720p" as const },
-  { id: "bytedance/seedance-2.0-pro",  label: "Seedance Pro",    durations: [4, 5, 8, 10, 12, 15], defaultDuration: 10, maxRes: "1080p" as const },
-  { id: "kwaivgi/kling-v3.0-std",      label: "Kling Standard",  durations: [5, 10],                defaultDuration: 5,  maxRes: "1080p" as const },
+  { id: "bytedance/seedance-2.0-fast", label: "Seedance Fast",   durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "720p" as const },
+  { id: "bytedance/seedance-2.0-pro",  label: "Seedance Pro",    durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "1080p" as const },
+  { id: "kwaivgi/kling-v3.0-std",      label: "Kling Standard",  durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" as const },
   { id: "kwaivgi/kling-v2.1-master",   label: "Kling Pro",       durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" as const },
   { id: "google/veo-3.1-fast",         label: "Veo 3.1",         durations: [4, 6, 8],              defaultDuration: 8,  maxRes: "1080p" as const },
 ];
