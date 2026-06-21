@@ -11810,6 +11810,176 @@ export type Database = {
           },
         ]
       }
+      video_batch_jobs: {
+        Row: {
+          aspect_ratio: string
+          character_description: string | null
+          client_id: string | null
+          completed_scenes: number
+          created_at: string
+          default_duration: number
+          error: string | null
+          failed_scenes: number
+          id: string
+          model: string
+          offer_description: string | null
+          resolution: string
+          status: string
+          total_scenes: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aspect_ratio?: string
+          character_description?: string | null
+          client_id?: string | null
+          completed_scenes?: number
+          created_at?: string
+          default_duration?: number
+          error?: string | null
+          failed_scenes?: number
+          id?: string
+          model: string
+          offer_description?: string | null
+          resolution?: string
+          status?: string
+          total_scenes?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aspect_ratio?: string
+          character_description?: string | null
+          client_id?: string | null
+          completed_scenes?: number
+          created_at?: string
+          default_duration?: number
+          error?: string | null
+          failed_scenes?: number
+          id?: string
+          model?: string
+          offer_description?: string | null
+          resolution?: string
+          status?: string
+          total_scenes?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      video_batch_scenes: {
+        Row: {
+          asset_id: string | null
+          batch_id: string
+          created_at: string
+          duration: number
+          error: string | null
+          id: string
+          poll_attempts: number
+          polling_url: string | null
+          prompt: string
+          provider_job_id: string | null
+          raw_video_url: string | null
+          scene_order: number
+          script_id: string
+          status: string
+          stored_video_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_id?: string | null
+          batch_id: string
+          created_at?: string
+          duration: number
+          error?: string | null
+          id?: string
+          poll_attempts?: number
+          polling_url?: string | null
+          prompt: string
+          provider_job_id?: string | null
+          raw_video_url?: string | null
+          scene_order: number
+          script_id: string
+          status?: string
+          stored_video_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_id?: string | null
+          batch_id?: string
+          created_at?: string
+          duration?: number
+          error?: string | null
+          id?: string
+          poll_attempts?: number
+          polling_url?: string | null
+          prompt?: string
+          provider_job_id?: string | null
+          raw_video_url?: string | null
+          scene_order?: number
+          script_id?: string
+          status?: string
+          stored_video_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_batch_scenes_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "video_batch_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_batch_scenes_script_id_fkey"
+            columns: ["script_id"]
+            isOneToOne: false
+            referencedRelation: "video_batch_scripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_batch_scripts: {
+        Row: {
+          batch_id: string
+          content: string
+          created_at: string
+          id: string
+          script_order: number
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          batch_id: string
+          content: string
+          created_at?: string
+          id?: string
+          script_order: number
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          batch_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          script_order?: number
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_batch_scripts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "video_batch_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       video_edit_messages: {
         Row: {
           client_id: string
