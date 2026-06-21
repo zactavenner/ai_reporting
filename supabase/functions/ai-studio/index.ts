@@ -943,6 +943,7 @@ async function generateSeedanceVideo(opts: {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0-pro",
     "kwaivgi/kling-v3.0-std",
+    "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
   ];
   const model = (opts.model && ALLOWED.includes(opts.model))
@@ -1435,7 +1436,7 @@ const tools = [
           resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 720p for Seedance Fast. Use 1080p only if explicitly requested." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-pro", "kwaivgi/kling-v3.0-std", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-pro", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
         },
         required: ["prompt"],
       },
@@ -1570,6 +1571,7 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
   "bytedance/seedance-2.0-pro":  { maxDuration: 12, label: "Seedance 2.0 Pro (≤12s per clip, 1080p)" },
   "kwaivgi/kling-v3.0-std":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
+  "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
@@ -1832,6 +1834,7 @@ Deno.serve(async (req) => {
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0-pro",
     "kwaivgi/kling-v3.0-std",
+    "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
   ];
   const selectedVideoModels: string[] = Array.isArray(videoModels)
