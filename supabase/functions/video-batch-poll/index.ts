@@ -124,11 +124,13 @@ Deno.serve(async (req) => {
         if (batchData?.client_id) {
           const { data: assetRow } = await supa.from("client_assets").insert({
             client_id: batchData.client_id,
-            user_id: sc.user_id,
-            type: "video",
-            url: pub.publicUrl,
-            metadata: {
-              source: "video_batch",
+            asset_type: "scene_video",
+            title: `Batch scene ${sc.scene_order}`,
+            status: "completed",
+            content: {
+              video_url: pub.publicUrl,
+              storage_path: path,
+              source: "ai_studio_batch",
               batch_id: sc.batch_id,
               scene_id: sc.id,
               model: batchData.model,
