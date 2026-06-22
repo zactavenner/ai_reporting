@@ -38,10 +38,32 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   let skipSteps: string[] = [];
+  let force = false;
   try {
     const body = await req.json();
     skipSteps = body.skipSteps || [];
+    force = !!body.force;
   } catch {}
+
+  // Dispatch lock: if another master run started <10min ago, skip.
+  // Prevents the watchdog + cron from double-firing concurrent syncs.
+  if (!force) {
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: recent } = await supabase
+      .from("sync_runs")
+      .select("id, started_at")
+      .eq("function_name", "daily-master-sync")
+      .eq("source", "master")
+      .gte("started_at", tenMinAgo)
+      .limit(1);
+    if (recent && recent.length > 0) {
+      console.log("[daily-master-sync] dispatch lock: recent run exists, skipping");
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: "recent run <10min" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+  }
 
   const orchestrate = async () => {
     // Clean up stale "running" sync runs older than 2 hours
