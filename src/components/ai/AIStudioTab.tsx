@@ -910,6 +910,43 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // --- Per-client agents (@mention support in AI Studio) ---
   const { data: clientAgents = [] } = useClientAgents(clientId);
 
+  // --- Auto-import the selected offer's image assets as references in the composer.
+  // Whenever the offer picker changes, drop any previously-imported offer images and
+  // pull in the new offer's image files so the AI uses them as reference for any
+  // creative it generates. The user can still delete individual ones with the × button.
+  const selectedOfferTitle = clientOffers.find(o => o.id === selectedOfferId)?.title || "";
+  const offerImageFiles = (() => {
+    if (!selectedOfferId || selectedOfferId === "all") return [] as any[];
+    const IMG = /(png|jpe?g|gif|webp|svg|heic|avif)/i;
+    return (clientOfferFiles as any[]).filter(f =>
+      f.offer_id === selectedOfferId && (IMG.test(f.file_type || "") || IMG.test(f.file_name || ""))
+    );
+  })();
+  const offerImageKey = offerImageFiles.map(f => f.file_url).sort().join("|");
+  useEffect(() => {
+    setPendingAttachments(curr => {
+      const userOnly = curr.filter(a => !a.fromOffer);
+      const imported: Attachment[] = offerImageFiles.map((f: any) => ({
+        url: f.file_url,
+        name: f.file_name,
+        mime: `image/${(f.file_type || "png").toLowerCase()}`,
+        fromOffer: true,
+      }));
+      // dedupe by url
+      const seen = new Set<string>();
+      const merged = [...imported, ...userOnly].filter(a => {
+        if (seen.has(a.url)) return false;
+        seen.add(a.url);
+        return true;
+      });
+      return merged;
+    });
+    if (offerImageFiles.length > 0 && selectedOfferTitle) {
+      toast.success(`Using ${offerImageFiles.length} image${offerImageFiles.length === 1 ? "" : "s"} from "${selectedOfferTitle}" as references`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offerImageKey]);
+
   const getStudioAuth = useCallback(async (requireIdentity = false) => {
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token || null;
