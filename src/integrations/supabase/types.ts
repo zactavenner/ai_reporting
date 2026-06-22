@@ -3064,7 +3064,9 @@ export type Database = {
           file_url: string
           id: string
           offer_id: string
+          role: string | null
           sort_order: number | null
+          tags: string[]
           uploaded_by: string | null
         }
         Insert: {
@@ -3076,7 +3078,9 @@ export type Database = {
           file_url: string
           id?: string
           offer_id: string
+          role?: string | null
           sort_order?: number | null
+          tags?: string[]
           uploaded_by?: string | null
         }
         Update: {
@@ -3088,7 +3092,9 @@ export type Database = {
           file_url?: string
           id?: string
           offer_id?: string
+          role?: string | null
           sort_order?: number | null
+          tags?: string[]
           uploaded_by?: string | null
         }
         Relationships: [
