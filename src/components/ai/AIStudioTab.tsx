@@ -1055,7 +1055,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     setConversationId(conversation.id);
     setMessages([]);
     setCanvas([]);
-    setPendingAttachments([]);
+    setPendingAttachments(curr => curr.filter(a => a.fromOffer));
     setFollowups([]);
     await loadThreads();
   }, [clientId, quality, chatModel, studioFetch, loadThreads]);
@@ -1177,7 +1177,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [] };
     setMessages(curr => [...curr, userMsg, placeholder]);
     setInput("");
-    setPendingAttachments([]);
+    setPendingAttachments(curr => curr.filter(a => a.fromOffer));
     setLoading(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
