@@ -456,6 +456,7 @@ export function AIStudioCanvas({
               <div className="flex items-center gap-2 mb-1">
                 <FileText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Doc {p.action === "replace" ? "find & replace" : "append"}</span>
+                {p.model && <Badge variant="secondary" className="text-[10px]" title={p.model}>{modelLabel(p.model)}</Badge>}
                 <span className="text-xs text-muted-foreground ml-auto">{new Date(e.created_at).toLocaleTimeString()}</span>
               </div>
               {p.action === "append" ? (
@@ -478,6 +479,7 @@ export function AIStudioCanvas({
               <div className="flex items-center gap-2 mb-1">
                 <TableIcon className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Sheet {p.action === "append" ? "row append" : "range update"}</span>
+                {p.model && <Badge variant="secondary" className="text-[10px]" title={p.model}>{modelLabel(p.model)}</Badge>}
                 <span className="text-xs text-muted-foreground ml-auto">{new Date(e.created_at).toLocaleTimeString()}</span>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -654,6 +656,7 @@ export function AIStudioCanvas({
                 <span className="text-sm font-medium truncate flex-1" title={p.title}>{p.title || "Untitled"}</span>
                 <Badge variant="outline" className="text-[10px] capitalize">{typeLabel}</Badge>
                 <Badge variant="secondary" className="text-[10px]">{p.chars || (p.content?.length ?? 0)} chars</Badge>
+                {p.model && <Badge variant="secondary" className="text-[10px]" title={p.model}>{modelLabel(p.model)}</Badge>}
                 <span className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleTimeString()}</span>
               </div>
               {p.notes && <p className="text-xs text-muted-foreground italic mb-2">{p.notes}</p>}
