@@ -1792,9 +1792,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               {pendingAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-3 pt-2">
                   {pendingAttachments.map((a, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-[10px] bg-muted rounded-md px-2 py-1">
-                      {a.uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
+                    <div key={i} className={`flex items-center gap-1.5 text-[10px] rounded-md px-2 py-1 ${a.fromOffer ? "bg-primary/10 text-foreground border border-primary/30" : "bg-muted"}`}>
+                      {a.uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : a.fromOffer ? <Sparkles className="h-3 w-3 text-primary" /> : <Paperclip className="h-3 w-3" />}
                       <span className="max-w-[140px] truncate">{a.name}</span>
+                      {a.fromOffer && <span className="text-[9px] text-muted-foreground">offer</span>}
                       <button onClick={() => setPendingAttachments(curr => curr.filter((_, j) => j !== i))} className="hover:text-destructive"><X className="h-3 w-3" /></button>
                     </div>
                   ))}
