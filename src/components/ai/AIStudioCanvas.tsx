@@ -826,6 +826,11 @@ function VariationSetCard({
         <span className="text-sm font-medium">Variations</span>
         <Badge variant="outline" className="text-[10px]">{p.aspect_ratio || "1:1"}</Badge>
         <Badge variant="secondary" className="text-[10px]">{variants.length} options</Badge>
+        {(p.model || variants[0]?.model) && (
+          <Badge variant="secondary" className="text-[10px]" title={p.model || variants[0]?.model}>
+            {modelLabel(p.model || variants[0]?.model)}
+          </Badge>
+        )}
         <span className="text-xs text-muted-foreground ml-auto">{new Date(item.created_at).toLocaleTimeString()}</span>
       </div>
       <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{p.prompt}</p>
