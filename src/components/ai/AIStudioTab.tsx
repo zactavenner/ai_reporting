@@ -1891,14 +1891,71 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setAgentMode(v => !v)}
-                  title="Agent mode — plan + auto-execute multi-step tasks"
-                  className={`h-7 px-2 rounded-lg text-[10px] border transition inline-flex items-center gap-1 ${agentMode ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
-                >
-                  <Bot className="h-3 w-3" /> Agent
-                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      title="Pick an agent — Master delegates to the best specialist, or pick one directly"
+                      className={`h-7 px-2 rounded-lg text-[10px] border transition inline-flex items-center gap-1 ${selectedAgentId !== "off" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                    >
+                      <Bot className="h-3 w-3" />
+                      {(() => {
+                        if (selectedAgentId === "off") return "Agent";
+                        if (selectedAgentId === "master") return "Master";
+                        const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
+                        return a ? `@${a.handle}` : "Agent";
+                      })()}
+                      <ChevronDown className="h-3 w-3 opacity-60" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-64 p-2">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Agent</div>
+                    <div className="space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAgentId("off")}
+                        className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === "off" ? "bg-primary/10 font-medium" : ""}`}
+                      >
+                        {selectedAgentId === "off" ? "● " : "○ "}No agent — plain chat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAgentId("master")}
+                        className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === "master" ? "bg-primary/10 font-medium" : ""}`}
+                      >
+                        {selectedAgentId === "master" ? "● " : "○ "}Master Agent <span className="text-muted-foreground">— auto-delegates</span>
+                      </button>
+                    </div>
+                    {(clientAgents as any[]).filter((a: any) => a.enabled).length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border/60">
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Specialists</div>
+                        <div className="space-y-0.5 max-h-56 overflow-y-auto">
+                          {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => setSelectedAgentId(a.id)}
+                              className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === a.id ? "bg-primary/10 font-medium" : ""}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate">
+                                  {selectedAgentId === a.id ? "● " : "○ "}@{a.handle}
+                                  <span className="text-muted-foreground"> · {a.name}</span>
+                                </span>
+                                {a.model && <span className="text-[9px] text-muted-foreground shrink-0">{a.model.split("/").pop()}</span>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
+                      <div className="mt-2 pt-2 border-t border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
+                        No specialists yet — create one in the Agents tab.
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
