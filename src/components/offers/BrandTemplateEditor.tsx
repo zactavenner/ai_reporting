@@ -1,12 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Palette, Type, Plus, X, Loader2, Save } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Palette, Type, Plus, X, Loader2, Save, Pipette } from "lucide-react";
 import { toast } from "sonner";
+
+const PRESET_COLORS = [
+  "#0B2B26", "#1A3C34", "#C5A55A", "#D4AF37", "#FFFFFF",
+  "#000000", "#1E293B", "#334155", "#64748B", "#94A3B8",
+  "#0F172A", "#1E1B4B", "#312E81", "#4338CA", "#6366F1",
+  "#7C3AED", "#A855F7", "#C026D3", "#DB2777", "#E11D48",
+  "#F43F5E", "#FB7185", "#F97316", "#FB923C", "#FBBF24",
+  "#FACC15", "#A3E635", "#4ADE80", "#34D399", "#2DD4BF",
+  "#38BDF8", "#60A5FA", "#818CF8", "#A78BFA", "#C084FC",
+  "#F0ABFC", "#F9A8D4", "#FDA4AF", "#FECACA", "#FDE047",
+];
 
 interface BrandTemplateEditorProps {
   clientId: string;
