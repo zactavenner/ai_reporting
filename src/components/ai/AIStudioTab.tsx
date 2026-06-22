@@ -1224,16 +1224,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         conversationId: conversationId || undefined,
         userText: (() => {
           const mentioned = extractAgentMentions(text, clientAgents as any);
-          const agentBlock = mentioned.length ? buildAgentContextBlock(mentioned) : "";
+          // Explicit picker overrides @mentions when set to a specific agent.
+          const pickedAgent = (selectedAgentId !== "off" && selectedAgentId !== "master")
+            ? (clientAgents as any[]).find(a => a.id === selectedAgentId)
+            : null;
+          const agentBlock = pickedAgent
+            ? buildAgentContextBlock([pickedAgent])
+            : (mentioned.length ? buildAgentContextBlock(mentioned) : "");
+          const masterAgentBlock = selectedAgentId === "master" && (clientAgents as any[]).length > 0
+            ? `You are the MASTER AGENT. Inspect the user's request and silently delegate to the most appropriate specialist agent from the roster below. Adopt that specialist's role, knowledge and tone for this turn. Available specialists:\n${(clientAgents as any[]).filter(a => a.enabled).map(a => `- @${a.handle} (${a.agent_type}) — ${a.name}`).join("\n")}\n\n---\n`
+            : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
-          return masterBlock + agentBlock + iStyleBlock + vStyleBlock + text;
+          return masterBlock + masterAgentBlock + agentBlock + iStyleBlock + vStyleBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
         quality,
-        chatModel,
+        chatModel: (() => {
+          if (selectedAgentId !== "off" && selectedAgentId !== "master") {
+            const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
+            if (a?.model) return a.model;
+          }
+          return chatModel;
+        })(),
         imageModels,
         ...(videoModel ? { videoModel, videoModels, videoFrames } : {}),
         avatarId: selectedAvatarId,
