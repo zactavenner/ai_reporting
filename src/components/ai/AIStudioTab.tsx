@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, Layers } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,7 +18,6 @@ import { useClient } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder, modelLabel } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
-import { MultiScriptBatchPanel } from "./MultiScriptBatchPanel";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
@@ -2274,7 +2273,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
-              <TabsTrigger value="batch"><Layers className="h-4 w-4 mr-1" /> Batch Videos</TabsTrigger>
               <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
@@ -2376,10 +2374,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               industry={(client as any)?.industry ?? null}
               clientType={(client as any)?.client_type ?? null}
             />
-          </TabsContent>
-
-          <TabsContent value="batch" className="flex-1 m-0 overflow-auto">
-            <MultiScriptBatchPanel clientId={clientId} />
           </TabsContent>
 
           <TabsContent value="sheet" className="flex-1 m-0 overflow-hidden">
