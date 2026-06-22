@@ -30,6 +30,73 @@ interface BrandTemplateEditorProps {
  * Edits brand_colors / brand_fonts on the clients row. Used inside the AI Studio Offers
  * tab so users can tune the brand template that drives every generated ad.
  */
+function ColorPickerPopover({
+  color,
+  onChange,
+  children,
+}: {
+  color: string;
+  onChange: (c: string) => void;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState(color);
+  useEffect(() => { setLocal(color); }, [color]);
+
+  const apply = () => {
+    onChange(local);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent className="w-[280px] p-3 space-y-3" align="start">
+        <div className="text-xs font-medium text-foreground">Pick a color</div>
+        <div className="grid grid-cols-8 gap-1.5">
+          {PRESET_COLORS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => { setLocal(preset); }}
+              className="w-6 h-6 rounded-full border border-border/50 ring-2 ring-transparent focus:outline-none focus:ring-primary"
+              style={{
+                backgroundColor: preset,
+                boxShadow: local.toLowerCase() === preset.toLowerCase() ? `0 0 0 2px hsl(var(--primary))` : undefined,
+              }}
+              aria-label={`Select ${preset}`}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <input
+              type="color"
+              value={local}
+              onChange={(e) => setLocal(e.target.value)}
+              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+            />
+            <div
+              className="w-8 h-8 rounded-lg border border-border/60 cursor-pointer"
+              style={{ backgroundColor: local }}
+            />
+          </div>
+          <Input
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); apply(); } }}
+            className="h-8 text-xs font-mono flex-1"
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button size="sm" className="h-7 text-xs" onClick={apply}>Apply</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function BrandTemplateEditor({ clientId, initialColors, initialFonts }: BrandTemplateEditorProps) {
   const qc = useQueryClient();
   const [colors, setColors] = useState<string[]>(initialColors || []);
@@ -37,6 +104,7 @@ export function BrandTemplateEditor({ clientId, initialColors, initialFonts }: B
   const [newColor, setNewColor] = useState("#000000");
   const [newFont, setNewFont] = useState("");
   const [saving, setSaving] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => { setColors(initialColors || []); }, [initialColors]);
   useEffect(() => { setFonts(initialFonts || []); }, [initialFonts]);
