@@ -851,6 +851,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { return localStorage.getItem("ai-studio:agent-mode") === "true"; } catch { return false; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:agent-mode", String(agentMode)); } catch {} }, [agentMode]);
+  // Active agent selector — replaces the old binary "Agent" toggle.
+  // Values: "off" (no agent), "master" (delegating master agent that picks the right
+  // specialist), or a specific client_agents.id. When a specific agent is picked we also
+  // override chatModel with that agent's preferred model, if it has one.
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(() => {
+    try { return localStorage.getItem(`ai-studio:agent-id:${clientId}`) || (agentMode ? "master" : "off"); } catch { return "off"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`ai-studio:agent-id:${clientId}`, selectedAgentId); } catch {}
+    // Keep legacy agentMode flag in sync so backend keeps receiving it
+    setAgentMode(selectedAgentId !== "off");
+  }, [selectedAgentId, clientId]);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Sticky frame slots for video generation (first frame / last frame / ingredient/product image)
