@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { VIDEO_MODELS, type VideoModelSpec } from "@/lib/modelRegistry";
 
 export type BatchScene = {
   id: string;
@@ -93,10 +94,6 @@ export function useVideoBatch(batchId?: string | null) {
   return { job, scripts, scenes, loading, dispatch, refresh };
 }
 
-export const MODEL_OPTIONS = [
-  { id: "bytedance/seedance-2.0-fast", label: "Seedance Fast",   durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "720p" as const },
-  { id: "bytedance/seedance-2.0-pro",  label: "Seedance Pro",    durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "1080p" as const },
-  { id: "kwaivgi/kling-v3.0-std",      label: "Kling Standard",  durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" as const },
-  { id: "kwaivgi/kling-v2.1-master",   label: "Kling Pro",       durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" as const },
-  { id: "google/veo-3.1-fast",         label: "Veo 3.1",         durations: [4, 6, 8],              defaultDuration: 8,  maxRes: "1080p" as const },
-];
+// Re-export from the shared registry so all UIs stay in lockstep with the
+// server-side `MODEL_CAPS` in supabase/functions/video-batch-dispatch.
+export const MODEL_OPTIONS: VideoModelSpec[] = VIDEO_MODELS;

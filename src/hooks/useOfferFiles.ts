@@ -14,6 +14,8 @@ export interface OfferFile {
   uploaded_by: string | null;
   sort_order: number;
   created_at: string;
+  tags: string[];
+  role: string | null;
 }
 
 export function useOfferFiles(offerId?: string) {
@@ -36,14 +38,18 @@ export function useOfferFiles(offerId?: string) {
 export function useAddOfferFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ offerId, clientId, file, uploadedBy }: {
+    mutationFn: async ({ offerId, clientId, file, uploadedBy, role }: {
       offerId: string;
       clientId: string;
       file: File;
       uploadedBy?: string;
+      role?: string;
     }) => {
       const result = await uploadOfferFile(clientId, file);
       const fileType = file.name.split('.').pop()?.toLowerCase() || 'unknown';
+      // Auto-pick a sensible default role for image uploads.
+      const isImage = /^(png|jpe?g|gif|webp|svg)$/i.test(fileType);
+      const defaultRole = role || (isImage ? 'reference' : null);
 
       const { data, error } = await supabase
         .from('client_offer_files' as any)
@@ -55,6 +61,8 @@ export function useAddOfferFile() {
           file_type: fileType,
           file_size_bytes: file.size,
           uploaded_by: uploadedBy || 'Unknown',
+          role: defaultRole,
+          tags: defaultRole ? [defaultRole] : [],
         } as any)
         .select()
         .single();
@@ -68,6 +76,28 @@ export function useAddOfferFile() {
     onError: (err: Error) => {
       toast.error(`Failed to upload: ${err.message}`);
     },
+  });
+}
+
+export function useUpdateOfferFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, offerId, updates }: {
+      id: string;
+      offerId: string;
+      updates: Partial<Pick<OfferFile, 'role' | 'tags'>>;
+    }) => {
+      const { error } = await supabase
+        .from('client_offer_files' as any)
+        .update(updates as any)
+        .eq('id', id);
+      if (error) throw error;
+      return offerId;
+    },
+    onSuccess: (offerId) => {
+      queryClient.invalidateQueries({ queryKey: ['offer-files', offerId] });
+    },
+    onError: (err: Error) => toast.error(`Failed to update tag: ${err.message}`),
   });
 }
 
