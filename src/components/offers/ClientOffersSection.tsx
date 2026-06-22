@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useClientOffers, useCreateOffer, useUpdateOffer, useDeleteOffer, uploadOfferFile, ClientOffer } from '@/hooks/useClientOffers';
-import { useOfferFiles, useAddOfferFile, useDeleteOfferFile, OfferFile } from '@/hooks/useOfferFiles';
+import { useOfferFiles, useAddOfferFile, useDeleteOfferFile, useUpdateOfferFile, OfferFile } from '@/hooks/useOfferFiles';
+import { OFFER_IMAGE_ROLES } from '@/lib/modelRegistry';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -608,6 +609,7 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
   const { data: files = [], isLoading } = useOfferFiles(offer.id);
   const addFile = useAddOfferFile();
   const deleteFile = useDeleteOfferFile();
+  const updateFile = useUpdateOfferFile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentMember } = useTeamMember();
   const [dragOver, setDragOver] = useState(false);
@@ -646,6 +648,8 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
     return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
+  const isImage = (f: OfferFile) => /^(png|jpe?g|gif|webp|svg)$/i.test(f.file_type || '');
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg">
@@ -672,23 +676,60 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading files...</p>
           ) : files.length > 0 ? (
-            files.map((f) => (
-              <div key={f.id} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm truncate">{f.file_name}</span>
-                  {f.file_size_bytes && <span className="text-xs text-muted-foreground">({formatFileSize(f.file_size_bytes)})</span>}
+            <div className="space-y-2">
+              {files.map((f) => (
+                <div key={f.id} className="flex items-center justify-between gap-2 bg-muted/50 rounded-md px-2 py-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {isImage(f) ? (
+                      <img
+                        src={f.file_url}
+                        alt={f.file_name}
+                        className="h-10 w-10 rounded object-cover border border-border shrink-0"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm truncate">{f.file_name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {f.file_size_bytes ? formatFileSize(f.file_size_bytes) : ''}
+                      </p>
+                    </div>
+                  </div>
+                  {isImage(f) && (
+                    <Select
+                      value={f.role || 'reference'}
+                      onValueChange={(role) =>
+                        updateFile.mutate({ id: f.id, offerId: offer.id, updates: { role, tags: [role] } })
+                      }
+                    >
+                      <SelectTrigger className="h-7 w-[110px] text-[11px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OFFER_IMAGE_ROLES.map((r) => (
+                          <SelectItem key={r.key} value={r.key} className="text-xs">
+                            {r.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => window.open(f.file_url, '_blank')}>
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteFile.mutate({ id: f.id, offerId: offer.id })}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => window.open(f.file_url, '_blank')}>
-                    <ExternalLink className="h-3 w-3" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => deleteFile.mutate({ id: f.id, offerId: offer.id })}>
-                    <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-            ))
+              ))}
+              <p className="text-[10px] text-muted-foreground px-1">
+                Tags drive how the AI uses each image (product = hero, logo = lockup, etc.).
+              </p>
+            </div>
           ) : !offer.file_url ? (
             <p className="text-sm text-muted-foreground text-center py-4">No files attached</p>
           ) : null}

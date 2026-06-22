@@ -46,7 +46,7 @@ type CompareResult = { model: string; label: string; output?: string; error?: st
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
 type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string };
-type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean };
+type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
 
 const CHAT_MODELS = [
   { value: "openrouter/owl-alpha", label: "Owl Alpha (default)" },
@@ -931,6 +931,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         name: f.file_name,
         mime: `image/${(f.file_type || "png").toLowerCase()}`,
         fromOffer: true,
+        role: f.role || (Array.isArray(f.tags) && f.tags[0]) || "reference",
       }));
       // dedupe by url
       const seen = new Set<string>();
@@ -1795,7 +1796,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <div key={i} className={`flex items-center gap-1.5 text-[10px] rounded-md px-2 py-1 ${a.fromOffer ? "bg-primary/10 text-foreground border border-primary/30" : "bg-muted"}`}>
                       {a.uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : a.fromOffer ? <Sparkles className="h-3 w-3 text-primary" /> : <Paperclip className="h-3 w-3" />}
                       <span className="max-w-[140px] truncate">{a.name}</span>
-                      {a.fromOffer && <span className="text-[9px] text-muted-foreground">offer</span>}
+                      {a.fromOffer && (
+                        <span className="text-[9px] text-muted-foreground capitalize">
+                          {a.role && a.role !== "reference" ? a.role : "offer"}
+                        </span>
+                      )}
                       <button onClick={() => setPendingAttachments(curr => curr.filter((_, j) => j !== i))} className="hover:text-destructive"><X className="h-3 w-3" /></button>
                     </div>
                   ))}
