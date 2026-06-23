@@ -2290,7 +2290,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
       {/* RIGHT — Canvas */}
       {showCanvas && (
-      <Card className="flex flex-col overflow-hidden min-h-0">
+      <Card className={`${showChat && mobileView !== "canvas" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden min-h-0`}>
         <Tabs defaultValue="canvas" className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start">
