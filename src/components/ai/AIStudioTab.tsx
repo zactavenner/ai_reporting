@@ -2305,7 +2305,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
       {/* RIGHT — Canvas */}
       {showCanvas && (
-      <Card className={`${showChat && mobileView !== "canvas" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden min-h-0`}>
+      <Card className={`${showChat && mobileView !== "canvas" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden min-h-0 ${canvasFsClass}`}>
         <Tabs defaultValue="canvas" className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start">
@@ -2314,6 +2314,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
             </TabsList>
+            <div className="flex items-center gap-1 ml-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 shrink-0"
+              onClick={() => setFullscreen(f => f === "canvas" ? "none" : "canvas")}
+              title={fullscreen === "canvas" ? "Exit fullscreen" : "Fullscreen canvas"}
+            >
+              {fullscreen === "canvas" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -2323,6 +2333,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             >
               {showChat ? <PanelRightClose className="h-3.5 w-3.5 rotate-180" /> : <PanelRightOpen className="h-3.5 w-3.5 rotate-180" />}
             </Button>
+            </div>
           </div>
 
           <TabsContent value="canvas" className="flex-1 m-0 overflow-hidden flex flex-col min-h-0 data-[state=active]:flex data-[state=inactive]:hidden">
