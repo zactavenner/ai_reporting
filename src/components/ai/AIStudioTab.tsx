@@ -846,6 +846,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { return localStorage.getItem("ai-studio:show-threads") !== "false"; } catch { return true; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:show-threads", String(showThreads)); } catch {} }, [showThreads]);
+  // Mobile-only view switcher: shows either Chat or Canvas at < lg width
+  // so both panels don't stack into a giant scroll on phones.
+  const [mobileView, setMobileView] = useState<"chat" | "canvas">("chat");
   const [agentMode, setAgentMode] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:agent-mode") === "true"; } catch { return false; }
   });
