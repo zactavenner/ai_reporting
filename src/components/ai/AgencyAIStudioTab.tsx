@@ -47,21 +47,21 @@ export function AgencyAIStudioTab() {
   }, [activeId, selected?.name]);
 
   return (
-    <div className="flex flex-col gap-3 h-[calc(100vh-7.5rem)] min-h-0">
+    <div className="flex flex-col gap-3 h-[calc(100dvh-7.5rem)] min-h-0">
       {/* Header */}
-      <Card className="p-4 flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
+      <Card className="p-3 sm:p-4 flex flex-wrap items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 min-w-0">
           <div className="h-9 w-9 rounded-xl bg-primary/10 grid place-items-center">
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-base font-semibold leading-tight">AI Studio</h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground hidden sm:block">
               Agentic workspace across all clients — chat, audit sheets, generate brand-locked ads, trigger & track agent tasks.
             </p>
           </div>
         </div>
-        <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="ml-auto">
+        <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="ml-auto w-full sm:w-auto order-3 sm:order-none overflow-x-auto">
           <TabsList className="h-9 rounded-xl">
             <TabsTrigger value="studio" className="rounded-lg text-xs">Studio</TabsTrigger>
             <TabsTrigger value="tasks" className="rounded-lg text-xs">Task Board</TabsTrigger>
@@ -69,11 +69,11 @@ export function AgencyAIStudioTab() {
             <TabsTrigger value="activity" className="rounded-lg text-xs">Activity</TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Client:</span>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground shrink-0">Client:</span>
           <Select value={activeId} onValueChange={handleChange}>
-            <SelectTrigger className="h-9 w-[260px] rounded-xl">
+            <SelectTrigger className="h-9 w-full sm:w-[260px] rounded-xl">
               <SelectValue placeholder="Pick a client" />
             </SelectTrigger>
             <SelectContent>

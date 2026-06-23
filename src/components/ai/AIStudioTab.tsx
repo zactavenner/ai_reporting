@@ -846,6 +846,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { return localStorage.getItem("ai-studio:show-threads") !== "false"; } catch { return true; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:show-threads", String(showThreads)); } catch {} }, [showThreads]);
+  // Mobile-only view switcher: shows either Chat or Canvas at < lg width
+  // so both panels don't stack into a giant scroll on phones.
+  const [mobileView, setMobileView] = useState<"chat" | "canvas">("chat");
   const [agentMode, setAgentMode] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:agent-mode") === "true"; } catch { return false; }
   });
@@ -1593,9 +1596,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </Card>
       )}
       <div className={`grid grid-cols-1 ${showChat && showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-3 min-w-0 min-h-0`}>
+      {/* Mobile-only Chat / Canvas switcher */}
+      {showChat && showCanvas && (
+        <div className="lg:hidden flex items-center gap-1 p-1 rounded-xl bg-muted/40 border border-border/60 sticky top-0 z-10">
+          <button
+            type="button"
+            onClick={() => setMobileView("chat")}
+            className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition ${mobileView === "chat" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileView("canvas")}
+            className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition ${mobileView === "canvas" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+          >
+            Canvas
+          </button>
+        </div>
+      )}
       {/* LEFT — Chat */}
       {showChat && (
-      <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm min-h-0">
+      <Card className={`${showCanvas && mobileView !== "chat" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden border-border/60 shadow-sm min-h-0`}>
         <div className="px-5 pt-4 pb-3 border-b border-border/60">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -2268,7 +2290,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
       {/* RIGHT — Canvas */}
       {showCanvas && (
-      <Card className="flex flex-col overflow-hidden min-h-0">
+      <Card className={`${showChat && mobileView !== "canvas" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden min-h-0`}>
         <Tabs defaultValue="canvas" className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start">
