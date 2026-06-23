@@ -849,6 +849,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Mobile-only view switcher: shows either Chat or Canvas at < lg width
   // so both panels don't stack into a giant scroll on phones.
   const [mobileView, setMobileView] = useState<"chat" | "canvas">("chat");
+  // Fullscreen mode for either pane — useful on phones/tablets.
+  const [fullscreen, setFullscreen] = useState<"none" | "chat" | "canvas">("none");
+  useEffect(() => {
+    if (fullscreen === "none") return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen("none"); };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [fullscreen]);
+  const chatFsClass = fullscreen === "chat" ? "fixed inset-0 z-[60] rounded-none" : "";
+  const canvasFsClass = fullscreen === "canvas" ? "fixed inset-0 z-[60] rounded-none" : "";
   const [agentMode, setAgentMode] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:agent-mode") === "true"; } catch { return false; }
   });
