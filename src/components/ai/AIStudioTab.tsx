@@ -1629,7 +1629,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       )}
       {/* LEFT — Chat */}
       {showChat && (
-      <Card className={`${showCanvas && mobileView !== "chat" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden border-border/60 shadow-sm min-h-0`}>
+      <Card className={`${showCanvas && mobileView !== "chat" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden border-border/60 shadow-sm min-h-0 ${chatFsClass}`}>
         <div className="px-5 pt-4 pb-3 border-b border-border/60">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -1648,6 +1648,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setWideChat(v => !v)} title={wideChat ? "Comfortable width" : "Expand chat width"}>
               {wideChat ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setFullscreen(f => f === "chat" ? "none" : "chat")} title={fullscreen === "chat" ? "Exit fullscreen" : "Fullscreen chat"}>
+              {fullscreen === "chat" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={clearConversation} title="Clear conversation">
               <Trash2 className="h-3.5 w-3.5" />
