@@ -1596,9 +1596,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         </Card>
       )}
       <div className={`grid grid-cols-1 ${showChat && showCanvas ? "lg:grid-cols-[1fr,1.1fr]" : "lg:grid-cols-1"} gap-3 min-w-0 min-h-0`}>
+      {/* Mobile-only Chat / Canvas switcher */}
+      {showChat && showCanvas && (
+        <div className="lg:hidden flex items-center gap-1 p-1 rounded-xl bg-muted/40 border border-border/60 sticky top-0 z-10">
+          <button
+            type="button"
+            onClick={() => setMobileView("chat")}
+            className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition ${mobileView === "chat" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileView("canvas")}
+            className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition ${mobileView === "canvas" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+          >
+            Canvas
+          </button>
+        </div>
+      )}
       {/* LEFT — Chat */}
       {showChat && (
-      <Card className="flex flex-col overflow-hidden border-border/60 shadow-sm min-h-0">
+      <Card className={`${showCanvas && mobileView !== "chat" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden border-border/60 shadow-sm min-h-0`}>
         <div className="px-5 pt-4 pb-3 border-b border-border/60">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
