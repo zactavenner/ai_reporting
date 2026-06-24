@@ -1585,7 +1585,7 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
-  "bytedance/seedance-2.0":  { maxDuration: 15, label: "Seedance 2.0 Pro (≤15s per clip, 1080p)" },
+  "bytedance/seedance-2.0":  { maxDuration: 15, label: "Seedance 2.0 Pro (≤15s per clip, up to 4K)" },
   "kwaivgi/kling-v3.0-std":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
