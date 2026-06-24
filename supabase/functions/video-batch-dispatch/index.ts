@@ -60,7 +60,10 @@ async function submitOpenRouterVideo(opts: {
     aspect_ratio: opts.aspect,
     duration: opts.duration,
   };
-  if (isSeedance) body.resolution = opts.resolution;
+  if (isSeedance) {
+    // OpenRouter's Seedance expects "4K" (uppercase) per /videos/models supported_resolutions.
+    body.resolution = opts.resolution === "4k" ? "4K" : opts.resolution;
+  }
   // Kling rejects extra params; only prompt/aspect/duration.
   if (!isSeedance && !isKling) {
     // (unused — Veo handled separately below)

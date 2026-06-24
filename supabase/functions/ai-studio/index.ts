@@ -965,9 +965,11 @@ async function generateSeedanceVideo(opts: {
   const isKling = model.startsWith("kwaivgi/kling");
   // Clamp to the model's max resolution. Only Seedance Pro supports 4K; Fast caps at 720p.
   const isSeedancePro = model === "bytedance/seedance-2.0";
-  let effectiveResolution = opts.resolution;
-  if (isSeedanceFast) effectiveResolution = "720p";
+  let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
+  if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
+  // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
+  const wireResolution = effectiveResolution === "4k" ? "4K" : effectiveResolution;
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
@@ -1075,7 +1077,7 @@ async function generateSeedanceVideo(opts: {
   };
   if (isSeedance) {
     // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
-    body.resolution = effectiveResolution;
+    body.resolution = wireResolution;
     const frames: any[] = [];
     if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
     if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
@@ -1583,7 +1585,7 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
-  "bytedance/seedance-2.0":  { maxDuration: 15, label: "Seedance 2.0 Pro (≤15s per clip, 1080p)" },
+  "bytedance/seedance-2.0":  { maxDuration: 15, label: "Seedance 2.0 Pro (≤15s per clip, up to 4K)" },
   "kwaivgi/kling-v3.0-std":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
@@ -2547,9 +2549,11 @@ Deno.serve(async (req) => {
               ? (videoFrames?.firstFrameUrl || selectedAvatar?.image_url || videoFrames?.ingredientUrl || null)
               : (selectedAvatar?.image_url || null);
             const lastFrameUrl = segment.index === segment.count - 1 ? (videoFrames?.lastFrameUrl || null) : null;
-            const ingredientUrl = videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl
+            // When an avatar is selected, ALSO pass it as a reference image so Seedance
+            // locks identity across clips (first-frame alone can drift on clip 2+).
+            const ingredientUrl = (videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl)
               ? videoFrames.ingredientUrl
-              : null;
+              : (selectedAvatar?.image_url || null);
             const segRes = clampResForModel(model);
             // Avatar verification: confirm this clip starts from the expected avatar frame.
             const avatarMapping = selectedAvatar
