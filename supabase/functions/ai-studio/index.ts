@@ -1849,7 +1849,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -1858,6 +1858,7 @@ Deno.serve(async (req) => {
     videoModel?: string | null;
     videoModels?: string[] | null;
     videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
+    videoResolution?: "720p" | "1080p" | "4k" | null;
     avatarId?: string | null;
     adFormat?: string | null;
     hookFramework?: string | null;
@@ -1894,6 +1895,24 @@ Deno.serve(async (req) => {
   const selectedVideoModel = (typeof videoModel === "string" && ALLOWED_VIDEO_MODELS.includes(videoModel))
     ? videoModel
     : (selectedVideoModels[0] || "bytedance/seedance-2.0-fast");
+
+  // Resolution clamping per model. Only Seedance Pro supports 4K.
+  const MODEL_MAX_RES: Record<string, "720p" | "1080p" | "4k"> = {
+    "bytedance/seedance-2.0-fast": "720p",
+    "bytedance/seedance-2.0":      "4k",
+    "kwaivgi/kling-v3.0-std":      "1080p",
+    "kwaivgi/kling-v2.1-master":   "1080p",
+    "google/veo-3.1-fast":         "1080p",
+  };
+  const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "4k": 3 };
+  const requestedRes: "720p" | "1080p" | "4k" =
+    rawVideoResolution === "720p" || rawVideoResolution === "1080p" || rawVideoResolution === "4k"
+      ? rawVideoResolution
+      : "1080p";
+  function clampResForModel(model: string): "720p" | "1080p" | "4k" {
+    const cap = MODEL_MAX_RES[model] || "1080p";
+    return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
+  }
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "openrouter/owl-alpha";
 
