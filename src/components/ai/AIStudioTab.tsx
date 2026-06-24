@@ -42,7 +42,7 @@ interface Props {
 }
 
 type CompareResult = { model: string; label: string; output?: string; error?: string; ms?: number; usage?: any };
-type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean; streaming?: boolean };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
 type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
@@ -843,7 +843,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
-  const [loading, setLoading] = useState(false);
+  // Counter of in-flight `send()` calls. Treated as boolean (0 = idle, >0 = running)
+  // so the user can submit additional prompts while earlier ones stream in the background.
+  const [loading, setLoading] = useState<number>(0);
   const [hydrated, setHydrated] = useState(false);
   const [showCanvas, setShowCanvas] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:show-canvas") !== "false"; } catch { return true; }
@@ -943,7 +945,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [docTest, setDocTest] = useState<null | { ok: boolean; source?: string; title?: string; char_count?: number; doc_id?: string; latency_ms?: number; error?: string; client?: { name?: string } }>(null);
   const [testingDoc, setTestingDoc] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const abortRefs = useRef<Set<AbortController>>(new Set());
   const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
 
   // --- Per-client agents (@mention support in AI Studio) ---
@@ -1216,7 +1218,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   })();
 
   async function send(text: string) {
-    if (!text.trim() || loading) return;
+    if (!text.trim()) return;
     if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
     const attSnapshot = pendingAttachments.slice();
@@ -1227,13 +1229,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       (typeof window !== "undefined" && localStorage.getItem("team_member_name")) || null;
     const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName };
     const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0 };
+    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0, streaming: true };
     setMessages(curr => [...curr, userMsg, placeholder]);
     setInput("");
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
-    setLoading(true);
+    setLoading(n => n + 1);
     const ctrl = new AbortController();
-    abortRef.current = ctrl;
+    abortRefs.current.add(ctrl);
 
     // ID-based update avoids index drift (history reloads, parallel state updates)
     // which was the root cause of mid-stream flicker / wrong-message overwrites.
@@ -1415,13 +1417,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\nError: ${e?.message || e}` }));
       }
     } finally {
-      abortRef.current = null;
-      setLoading(false);
+      abortRefs.current.delete(ctrl);
+      updateAssistant(m => ({ ...m, streaming: false }));
+      setLoading(n => Math.max(0, n - 1));
       loadThreads();
     }
   }
 
-  function stop() { abortRef.current?.abort(); }
+  function stop() {
+    for (const c of abortRefs.current) c.abort();
+    abortRefs.current.clear();
+  }
 
   const startRecording = useCallback(async () => {
     // Prefer the native Web Speech API for live, in-input transcription.
@@ -1767,14 +1773,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </div>
             )}
             {messages.map((m, i) => {
-              const isLast = i === messages.length - 1;
               const isEmptyAssistant = m.role === "assistant" && !m.content && (!m.tools || m.tools.length === 0);
-              if (isEmptyAssistant && !(loading && isLast)) return null;
+              if (isEmptyAssistant && !m.streaming) return null;
               return (
                 <ChatMessage
                   key={m.id || i}
                   message={m}
-                  isStreaming={loading && isLast && m.role === "assistant"}
+                  isStreaming={!!m.streaming && m.role === "assistant"}
                   clientId={clientId}
                   clientName={clientName}
                 />
@@ -2327,28 +2332,36 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
-                 {loading ? (
-                   <Button onClick={stop} size="icon" variant="destructive" className="h-11 w-11 md:h-9 md:w-9 rounded-xl" title="Stop">
-                     <Square className="h-4 w-4" />
-                   </Button>
-                 ) : (
-                   <div className="flex items-center gap-1.5">
-                     <Button
-                       type="button"
-                       onClick={isRecording ? stopRecording : startRecording}
-                       size="icon"
-                       variant={isRecording ? "destructive" : "ghost"}
-                       className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
-                       title={isRecording ? "Stop recording" : "Record voice"}
-                       disabled={isTranscribing}
-                     >
-                       {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                     </Button>
-                     <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-11 w-11 md:h-9 md:w-9 rounded-xl shadow-sm">
-                       <Send className="h-4 w-4" />
-                     </Button>
-                   </div>
-                 )}
+                  {/* Send is always available so the user can queue new prompts while
+                      earlier generations stream in the background. A Stop-all control
+                      appears alongside it whenever there is at least one in-flight run. */}
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      size="icon"
+                      variant={isRecording ? "destructive" : "ghost"}
+                      className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
+                      title={isRecording ? "Stop recording" : "Record voice"}
+                      disabled={isTranscribing}
+                    >
+                      {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    </Button>
+                    {loading > 0 && (
+                      <Button
+                        onClick={stop}
+                        size="icon"
+                        variant="destructive"
+                        className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
+                        title={`Stop ${loading} running ${loading === 1 ? "generation" : "generations"}`}
+                      >
+                        <Square className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-11 w-11 md:h-9 md:w-9 rounded-xl shadow-sm" title={loading > 0 ? "Send (will run alongside current generations)" : "Send"}>
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
