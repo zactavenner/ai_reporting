@@ -1922,8 +1922,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 rows={1}
               />
               </div>
-              <div className="flex items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
-                <div className="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
+              <div className="flex flex-col md:flex-row md:items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
+                <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible -mx-1 px-1 pb-1 md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
                   <Select value={adFormat} onValueChange={setAdFormat}>
@@ -2260,7 +2260,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   )}
                 </div>
                 </div>
-                <div className="shrink-0">
+                <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
                 {loading ? (
                   <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
                     <Square className="h-4 w-4" />
