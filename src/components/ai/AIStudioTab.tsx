@@ -2332,28 +2332,36 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
-                 {loading ? (
-                   <Button onClick={stop} size="icon" variant="destructive" className="h-11 w-11 md:h-9 md:w-9 rounded-xl" title="Stop">
-                     <Square className="h-4 w-4" />
-                   </Button>
-                 ) : (
-                   <div className="flex items-center gap-1.5">
-                     <Button
-                       type="button"
-                       onClick={isRecording ? stopRecording : startRecording}
-                       size="icon"
-                       variant={isRecording ? "destructive" : "ghost"}
-                       className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
-                       title={isRecording ? "Stop recording" : "Record voice"}
-                       disabled={isTranscribing}
-                     >
-                       {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                     </Button>
-                     <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-11 w-11 md:h-9 md:w-9 rounded-xl shadow-sm">
-                       <Send className="h-4 w-4" />
-                     </Button>
-                   </div>
-                 )}
+                  {/* Send is always available so the user can queue new prompts while
+                      earlier generations stream in the background. A Stop-all control
+                      appears alongside it whenever there is at least one in-flight run. */}
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      size="icon"
+                      variant={isRecording ? "destructive" : "ghost"}
+                      className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
+                      title={isRecording ? "Stop recording" : "Record voice"}
+                      disabled={isTranscribing}
+                    >
+                      {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    </Button>
+                    {loading > 0 && (
+                      <Button
+                        onClick={stop}
+                        size="icon"
+                        variant="destructive"
+                        className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
+                        title={`Stop ${loading} running ${loading === 1 ? "generation" : "generations"}`}
+                      >
+                        <Square className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-11 w-11 md:h-9 md:w-9 rounded-xl shadow-sm" title={loading > 0 ? "Send (will run alongside current generations)" : "Send"}>
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
