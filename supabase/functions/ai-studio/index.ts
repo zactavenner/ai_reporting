@@ -1426,14 +1426,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality short video clip (4–15s) using ByteDance Seedance 2.0 Fast via OpenRouter. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url (and optionally last_frame_url) to animate a reference frame. Strong at character consistency, camera motion, and brand-style preservation. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance 2.0 Fast supports up to 720p.",
+      description: "Generate a single high-quality short video clip (4–15s) using Seedance 2.0 (Fast or Pro) or Kling via OpenRouter. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url (and optionally last_frame_url) to animate a reference frame. Strong at character consistency, camera motion, and brand-style preservation. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance 2.0 Pro supports up to 1080p and 15s; Seedance 2.0 Fast supports up to 720p.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1"], description: "Default 9:16 for reels/stories." },
           duration: { type: "integer", minimum: 4, maximum: 15, description: "Clip length in seconds. Default 15." },
-          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 720p for Seedance Fast. Use 1080p only if explicitly requested." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p for Seedance Pro, 720p for Seedance Fast. Use 1080p only when the selected model supports it." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-pro", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
@@ -1569,7 +1569,7 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
-  "bytedance/seedance-2.0-pro":  { maxDuration: 12, label: "Seedance 2.0 Pro (≤12s per clip, 1080p)" },
+  "bytedance/seedance-2.0-pro":  { maxDuration: 15, label: "Seedance 2.0 Pro (≤15s per clip, 1080p)" },
   "kwaivgi/kling-v3.0-std":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },

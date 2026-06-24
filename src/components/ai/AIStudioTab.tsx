@@ -75,7 +75,7 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // can compare apples-to-apples without doing math in their head.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
   { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts",                 maxSeconds: 15, pricePerSecond: 0.0538 },
-  { value: "bytedance/seedance-2.0-pro",  label: "Seedance Pro",   hint: "Highest-quality Seedance, 1080p",         maxSeconds: 12, pricePerSecond: 0.15 },
+  { value: "bytedance/seedance-2.0-pro",  label: "Seedance Pro",   hint: "Highest-quality Seedance, 1080p",         maxSeconds: 15, pricePerSecond: 0.15 },
   { value: "kwaivgi/kling-v3.0-std",       label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion",   maxSeconds: 15, pricePerSecond: 0.126 },
   { value: "google/veo-3.1-fast",          label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast",       maxSeconds: 8,  pricePerSecond: 0.10 },
 ];
