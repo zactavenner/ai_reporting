@@ -3203,9 +3203,35 @@ Deno.serve(async (req) => {
                 // tool call out across every selected model in parallel — same prompt/frames/dims,
                 // one canvas card per model — so compare always works even if the LLM emitted only one call.
                 const explicitModel = (typeof args.model === "string" && args.model) ? args.model : null;
-                const fanModels = (selectedVideoModels.length > 1 && !explicitModel)
+                const forceModel = !!args.force_model;
+                const rawFanModels = (selectedVideoModels.length > 1 && !explicitModel)
                   ? selectedVideoModels.slice()
                   : [explicitModel || selectedVideoModel];
+                // Avatar routing: when an avatar is selected, swap Seedance → Veo
+                // unless the LLM explicitly passed force_model=true. Dedupe so we
+                // don't render Veo twice if it was already in the list.
+                const fanRoutings = rawFanModels.map((m) => ({
+                  requested: m,
+                  ...resolveModelForAvatar(m, !!selectedAvatar, forceModel),
+                }));
+                const seenModels = new Set<string>();
+                const fanModels: string[] = [];
+                for (const r of fanRoutings) {
+                  if (seenModels.has(r.model)) continue;
+                  seenModels.add(r.model);
+                  fanModels.push(r.model);
+                  if (r.rerouted) {
+                    console.log(`[avatar-route][tool] ${r.requested} → ${r.model} (avatar=${selectedAvatar?.id}, force=${forceModel})`);
+                    send({
+                      type: "model_rerouted",
+                      placeholder_id: canvasPlaceholderId,
+                      requested_model: r.requested,
+                      effective_model: r.model,
+                      reason: r.reason,
+                      message: `Avatar locked to ${VIDEO_MODEL_CAPS[r.model]?.label || r.model} — Seedance rejects synthetic faces.`,
+                    });
+                  }
+                }
                 const baseDuration = typeof args.duration === "number" ? args.duration : 15;
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
                 const argRes = (args.resolution === "720p" || args.resolution === "1080p" || args.resolution === "4k") ? args.resolution : null;
