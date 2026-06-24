@@ -1752,7 +1752,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </ScrollArea>
 
-        <div className="px-4 sm:px-6 pb-4 pt-2">
+        <div className="px-3 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           <div className={`mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
             {/* Context usage + auto doc toggle */}
             {(() => {
@@ -2263,28 +2263,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
-                {loading ? (
-                  <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
-                    <Square className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      onClick={isRecording ? stopRecording : startRecording}
-                      size="icon"
-                      variant={isRecording ? "destructive" : "ghost"}
-                      className="h-9 w-9 rounded-xl"
-                      title={isRecording ? "Stop recording" : "Record voice"}
-                      disabled={isTranscribing}
-                    >
-                      {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                    </Button>
-                    <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+                 {loading ? (
+                   <Button onClick={stop} size="icon" variant="destructive" className="h-11 w-11 md:h-9 md:w-9 rounded-xl" title="Stop">
+                     <Square className="h-4 w-4" />
+                   </Button>
+                 ) : (
+                   <div className="flex items-center gap-1.5">
+                     <Button
+                       type="button"
+                       onClick={isRecording ? stopRecording : startRecording}
+                       size="icon"
+                       variant={isRecording ? "destructive" : "ghost"}
+                       className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
+                       title={isRecording ? "Stop recording" : "Record voice"}
+                       disabled={isTranscribing}
+                     >
+                       {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                     </Button>
+                     <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-11 w-11 md:h-9 md:w-9 rounded-xl shadow-sm">
+                       <Send className="h-4 w-4" />
+                     </Button>
+                   </div>
+                 )}
                 </div>
               </div>
             </div>
