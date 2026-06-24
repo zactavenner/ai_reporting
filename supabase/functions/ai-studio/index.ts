@@ -2722,7 +2722,7 @@ Deno.serve(async (req) => {
             "generate_ad_variations", "generate_scene_image", "explode_ad_variants",
           ]);
           const VIDEO_TOOL_NAMES = new Set([
-            "generate_seedance_video", "generate_scene_video", "plan_storyboard",
+            "generate_seedance_video", "generate_scene_video", "plan_storyboard", "generate_script_batch",
           ]);
           const hasImage = selectedImageModels.length > 0;
           const hasVideo = selectedVideoModels.length > 0 || !!selectedVideoModel;
