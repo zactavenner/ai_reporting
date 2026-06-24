@@ -37,7 +37,7 @@ export type DispatchInput = {
   model: string;
   aspectRatio: "9:16" | "1:1" | "16:9";
   duration: number;
-  resolution?: "720p" | "1080p";
+  resolution?: "720p" | "1080p" | "4k";
   clientId?: string;
   characterDescription?: string;
   offerDescription?: string;
