@@ -2346,6 +2346,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </button>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setBatchScriptsOpen(true)}
+                  title="Render multiple video scripts in parallel — each auto-splits to fit the model's per-clip cap."
+                  className="h-7 px-2 rounded-lg text-[10px] inline-flex items-center gap-1 border border-border/60 bg-muted/40 hover:bg-muted hover:border-primary/40 transition text-muted-foreground hover:text-foreground"
+                >
+                  <Film className="h-3 w-3" />
+                  Batch scripts
+                </button>
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
                   {/* Send is always available so the user can queue new prompts while
