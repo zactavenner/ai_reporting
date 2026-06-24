@@ -2607,10 +2607,10 @@ Deno.serve(async (req) => {
                 userId: userId!,
                 onProgress: (p) => send({ type: "canvas_placeholder_progress", placeholder_id: placeholderId, ...p }),
               });
-              result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: aspect, duration: segment.duration, resolution: r.resolution, clip_index: segment.index + 1, clip_count: segment.count };
+              result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: aspect, duration: segment.duration, resolution: r.resolution, clip_index: segment.index + 1, clip_count: segment.count, avatar_mapping: avatarMapping };
               if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: placeholderId });
             } catch (e: any) {
-              result = { error: e?.message || String(e), model, clip_index: segment.index + 1, clip_count: segment.count };
+              result = { error: e?.message || String(e), model, clip_index: segment.index + 1, clip_count: segment.count, avatar_mapping: avatarMapping };
               send({ type: "canvas_placeholder_failed", placeholder_id: placeholderId, error: result.error });
             }
             finalToolEvents.push({ name: "generate_seedance_video", args, result });
