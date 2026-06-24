@@ -2551,6 +2551,26 @@ Deno.serve(async (req) => {
               ? videoFrames.ingredientUrl
               : null;
             const segRes = clampResForModel(model);
+            // Avatar verification: confirm this clip starts from the expected avatar frame.
+            const avatarMapping = selectedAvatar
+              ? {
+                  avatar_id: selectedAvatar.id,
+                  avatar_name: selectedAvatar.name,
+                  avatar_image_url: selectedAvatar.image_url,
+                  actual_image_url: imageUrl,
+                  clip_index: segment.index + 1,
+                  clip_count: segment.count,
+                  model,
+                  verified: imageUrl === selectedAvatar.image_url || (segment.index === 0 && !!videoFrames?.firstFrameUrl),
+                  source: segment.index === 0
+                    ? (videoFrames?.firstFrameUrl ? "user_first_frame" : "avatar")
+                    : "avatar",
+                }
+              : null;
+            if (avatarMapping) {
+              console.log(`[avatar-mapping][direct] clip ${avatarMapping.clip_index}/${avatarMapping.clip_count} model=${model} avatar=${avatarMapping.avatar_id} verified=${avatarMapping.verified} source=${avatarMapping.source}`);
+              send({ type: "clip_avatar_mapping", ...avatarMapping, placeholder_id: placeholderId });
+            }
             const args = {
               prompt: segment.prompt,
               aspect_ratio: aspect,
@@ -2560,6 +2580,7 @@ Deno.serve(async (req) => {
               last_frame_url: lastFrameUrl,
               ingredient_url: ingredientUrl,
               model,
+              avatar_mapping: avatarMapping,
             };
             send({
               type: "canvas_placeholder",
