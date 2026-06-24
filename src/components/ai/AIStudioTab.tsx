@@ -1372,7 +1372,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       }
     } catch (e: any) {
       if (e?.name === "AbortError") {
-        updateAssistant(m => ({ ...m, content: (m.content || "") + "\n\n_(stopped)_" }));
+        updateAssistant(m => ({ ...m, content: (m.content || "") + "\n\n_(continuing in background — reopen this thread to see results)_" }));
       } else {
         toast.error(e?.message || "AI Studio failed");
         updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\nError: ${e?.message || e}` }));
