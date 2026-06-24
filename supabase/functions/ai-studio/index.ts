@@ -1736,6 +1736,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- VIDEO / REEL / SCENE WORKFLOW (storyboard review gate):",
   "- SEEDANCE 2.0 (single-clip video, OpenRouter):",
   "  • Use generate_seedance_video when the user wants ONE standalone clip (3–15s, up to 1080p): a single hero shot, animated still, product loop, short reel, or 'turn this image into a video'.",
+  "- MULTI-SCRIPT BATCH (CRITICAL): If the user pastes 2+ video scripts in one message (numbered list '1. ... 2. ...', or visibly distinct script blocks with their own Avatar/Environment headers, or a 'Batch scripts' payload with a JSON `scripts` array), call generate_script_batch ONCE with the full scripts array — do NOT emit N separate generate_seedance_video calls. The server auto-splits each script into per-clip segments, locks the avatar across clips, and renders all scripts × clips in parallel. Avatar scripts auto-route to Veo unless the user said 'use Seedance anyway'.",
   "  • Text-to-video: just pass `prompt` (+ aspect_ratio, duration, resolution).",
   "  • Image-to-video: pass `image_url` (a canvas keyframe / static ad URL) — Seedance preserves character, style, and brand from the reference. Optionally pass `last_frame_url` for precise motion endpoints.",
   "  • Default to duration=15, resolution=1080p, aspect_ratio=9:16 unless the user says otherwise. Use fast=true only when the user explicitly asks for a quick/cheap draft.",
