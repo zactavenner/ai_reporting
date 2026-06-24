@@ -3222,6 +3222,36 @@ Deno.serve(async (req) => {
                       quality: "seedance",
                     });
                   });
+                  // Avatar verification: confirm each split clip reuses the SAME avatar image.
+                  // We emit one mapping per clip + a single audit summary on the result.
+                  const clipAvatarMappings = segs.map((seg, i) => ({
+                    clip_index: seg.index + 1,
+                    clip_count: seg.count,
+                    model: mdl,
+                    placeholder_id: segPids[i]!,
+                    avatar_id: selectedAvatar?.id || null,
+                    avatar_name: selectedAvatar?.name || null,
+                    avatar_image_url: selectedAvatar?.image_url || null,
+                    actual_image_url: seg.imageUrl,
+                    source: !selectedAvatar
+                      ? (seg.imageUrl ? "user_frame" : "text_only")
+                      : seg.imageUrl === selectedAvatar.image_url
+                        ? "avatar"
+                        : (seg.index === 0 && seg.imageUrl === baseImageUrl ? "user_first_frame" : "mismatch"),
+                    verified: selectedAvatar
+                      ? (seg.imageUrl === selectedAvatar.image_url || (seg.index === 0 && seg.imageUrl === baseImageUrl))
+                      : true,
+                  }));
+                  if (selectedAvatar) {
+                    for (const m of clipAvatarMappings) {
+                      console.log(`[avatar-mapping][tool] clip ${m.clip_index}/${m.clip_count} model=${m.model} avatar=${m.avatar_id} verified=${m.verified} source=${m.source}`);
+                      send({ type: "clip_avatar_mapping", ...m });
+                    }
+                    const allVerified = clipAvatarMappings.every(m => m.verified);
+                    if (!allVerified) {
+                      console.warn(`[avatar-mapping] WARNING: ${clipAvatarMappings.filter(m=>!m.verified).length}/${clipAvatarMappings.length} clips did NOT reuse the selected avatar image.`);
+                    }
+                  }
                   const settled = await Promise.allSettled(segs.map((seg, i) => runOne(mdl, segPids[i]!, seg.prompt, seg.duration, seg.imageUrl, seg.lastFrameUrl)));
                   let firstOk: any = null;
                   settled.forEach((s, i) => {
@@ -3234,7 +3264,24 @@ Deno.serve(async (req) => {
                     }
                   });
                   const okCount = settled.filter(s => s.status === "fulfilled").length;
-                  result = { ok: okCount > 0, video_url: firstOk?.video_url, model: firstOk?.model || mdl, aspect_ratio: baseAspect, duration: baseDuration, resolution: firstOk?.resolution, clips: segs.length, ok_clips: okCount, mode: baseImageUrl ? "image_to_video" : "text_to_video" };
+                  result = {
+                    ok: okCount > 0,
+                    video_url: firstOk?.video_url,
+                    model: firstOk?.model || mdl,
+                    aspect_ratio: baseAspect,
+                    duration: baseDuration,
+                    resolution: firstOk?.resolution,
+                    clips: segs.length,
+                    ok_clips: okCount,
+                    mode: baseImageUrl ? "image_to_video" : "text_to_video",
+                    avatar_mapping: selectedAvatar ? {
+                      avatar_id: selectedAvatar.id,
+                      avatar_name: selectedAvatar.name,
+                      avatar_image_url: selectedAvatar.image_url,
+                      all_clips_verified: clipAvatarMappings.every(m => m.verified),
+                      clips: clipAvatarMappings,
+                    } : null,
+                  };
                 } else {
                   // First model reuses the placeholder the LLM-handler already emitted; the rest get fresh placeholders.
                   const pids: (string | null)[] = fanModels.map((_, i) => i === 0 ? canvasPlaceholderId : crypto.randomUUID());
