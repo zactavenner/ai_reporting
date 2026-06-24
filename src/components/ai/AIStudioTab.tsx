@@ -35,6 +35,7 @@ import { useClientOffers } from "@/hooks/useClientOffers";
 import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
 import { VideoStylesPopover, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
 import { ImageStylesPopover, useImageStyles, buildImageStyleBlock } from "./ImageStylesManager";
+import { BatchScriptsDialog } from "./BatchScriptsDialog";
 
 interface Props {
   clientId: string;
