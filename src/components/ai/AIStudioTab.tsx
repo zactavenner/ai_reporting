@@ -1216,7 +1216,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   })();
 
   async function send(text: string) {
-    if (!text.trim() || loading) return;
+    if (!text.trim()) return;
     if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
     const attSnapshot = pendingAttachments.slice();
@@ -1227,13 +1227,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       (typeof window !== "undefined" && localStorage.getItem("team_member_name")) || null;
     const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName };
     const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0 };
+    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0, streaming: true };
     setMessages(curr => [...curr, userMsg, placeholder]);
     setInput("");
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
-    setLoading(true);
+    setLoading(n => (typeof n === "number" ? n + 1 : 1) as any);
     const ctrl = new AbortController();
-    abortRef.current = ctrl;
+    abortRefs.current.add(ctrl);
 
     // ID-based update avoids index drift (history reloads, parallel state updates)
     // which was the root cause of mid-stream flicker / wrong-message overwrites.
@@ -1415,13 +1415,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\nError: ${e?.message || e}` }));
       }
     } finally {
-      abortRef.current = null;
-      setLoading(false);
+      abortRefs.current.delete(ctrl);
+      updateAssistant(m => ({ ...m, streaming: false }));
+      setLoading(n => Math.max(0, ((typeof n === "number" ? n : 1) - 1)) as any);
       loadThreads();
     }
   }
 
-  function stop() { abortRef.current?.abort(); }
+  function stop() {
+    for (const c of abortRefs.current) c.abort();
+    abortRefs.current.clear();
+  }
 
   const startRecording = useCallback(async () => {
     // Prefer the native Web Speech API for live, in-input transcription.
