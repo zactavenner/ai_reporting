@@ -2569,6 +2569,44 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           autoCaptions={editVideo.autoCaptions}
         />
       )}
+      <BatchScriptsDialog
+        open={batchScriptsOpen}
+        onOpenChange={setBatchScriptsOpen}
+        hasAvatar={!!selectedAvatar}
+        avatarName={selectedAvatar?.name || null}
+        defaultModel={videoModel || "bytedance/seedance-2.0"}
+        onSubmit={(payload) => {
+          // Build a chat message that nudges the LLM to call generate_script_batch.
+          // Server-side handler validates and dispatches; results stream as
+          // script_group + canvas_placeholder events.
+          const lines: string[] = [];
+          lines.push(`Render this batch of ${payload.scripts.length} video script${payload.scripts.length === 1 ? "" : "s"} now using the generate_script_batch tool.`);
+          lines.push(`Pass model="${payload.model}", aspect_ratio="${payload.aspect_ratio}", resolution="${payload.resolution}".`);
+          if (payload.use_avatar) {
+            lines.push(`Use the selected avatar for every script (set use_avatar=true on each).`);
+            if (payload.force_seedance) lines.push(`Set force_model=true on every script (user explicitly opted out of Veo auto-routing).`);
+          } else {
+            lines.push(`Do NOT use the avatar (set use_avatar=false on each).`);
+          }
+          lines.push("");
+          lines.push("```json");
+          lines.push(JSON.stringify({
+            scripts: payload.scripts.map(s => ({
+              title: s.title || undefined,
+              voiceover: s.voiceover,
+              environment: s.environment || undefined,
+              target_duration_s: s.target_duration_s,
+              use_avatar: payload.use_avatar,
+              force_model: payload.force_seedance,
+            })),
+            model: payload.model,
+            aspect_ratio: payload.aspect_ratio,
+            resolution: payload.resolution,
+          }, null, 2));
+          lines.push("```");
+          send(lines.join("\n"));
+        }}
+      />
     </div>
   );
 }
