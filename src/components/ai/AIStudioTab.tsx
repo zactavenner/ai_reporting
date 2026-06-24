@@ -843,7 +843,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
-  const [loading, setLoading] = useState(false);
+  // Counter of in-flight `send()` calls. Treated as boolean (0 = idle, >0 = running)
+  // so the user can submit additional prompts while earlier ones stream in the background.
+  const [loading, setLoading] = useState<number>(0);
   const [hydrated, setHydrated] = useState(false);
   const [showCanvas, setShowCanvas] = useState<boolean>(() => {
     try { return localStorage.getItem("ai-studio:show-canvas") !== "false"; } catch { return true; }
