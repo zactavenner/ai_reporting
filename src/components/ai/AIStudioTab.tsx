@@ -1403,6 +1403,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (evt.verified === false) {
               toast.warning(`Clip ${evt.clip_index}/${evt.clip_count} did not reuse the selected avatar image (${evt.source})`);
             }
+          } else if (evt.type === "model_rerouted") {
+            // Server auto-routed a Seedance request to Veo because an avatar
+            // is selected (Seedance rejects synthetic faces). Surface once
+            // per reroute so the user understands the model change.
+            // eslint-disable-next-line no-console
+            console.log(`[model-route] ${evt.requested_model} → ${evt.effective_model} (${evt.reason})`);
+            toast.info(evt.message || `Routed to ${evt.effective_model} for avatar compatibility`);
+          } else if (evt.type === "script_group") {
+            // Multi-script batch: one group per script. Log so user can audit.
+            // eslint-disable-next-line no-console
+            console.log(
+              `[script-batch] script#${evt.script_index} "${evt.script_title}" → ${evt.clip_count} clip(s) on ${evt.model}${evt.rerouted ? " (rerouted)" : ""}`,
+              { group_id: evt.group_id, has_avatar: evt.has_avatar }
+            );
           } else if (evt.type === "error") {
             updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\n⚠️ ${evt.message}` }));
             toast.error(evt.message);
