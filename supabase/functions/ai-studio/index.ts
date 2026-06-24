@@ -1519,6 +1519,39 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "generate_script_batch",
+      description: "MULTI-SCRIPT BATCH (preferred when the user pastes 2+ video scripts in one message, e.g. '1. Script A ... 2. Script B ...'): take an array of scripts and render each as a fully-cut video. Per script the server auto-splits the voiceover into clips that fit the model's per-clip cap (Seedance 15s, Veo 8s), reuses the same avatar image_url across every clip in that script for identity lock, and runs all scripts × clips in parallel. Avatar scripts auto-route to Veo unless force_model=true. Returns one grouped canvas card per script. Use this INSTEAD of emitting N individual generate_seedance_video calls when the user gave you a numbered list of scripts.",
+      parameters: {
+        type: "object",
+        properties: {
+          scripts: {
+            type: "array",
+            minItems: 1,
+            maxItems: 12,
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Short label for this script (e.g. 'AI-Proof Real Estate')." },
+                voiceover: { type: "string", description: "The spoken VO / on-camera dialogue, exactly as written. The server splits this into clips." },
+                environment: { type: "string", description: "One-line scene description applied to every clip in this script (e.g. 'Walking through a luxury RV resort')." },
+                target_duration_s: { type: "integer", minimum: 4, maximum: 120, description: "Total length in seconds. If omitted, inferred from word count (~2.4 wps)." },
+                use_avatar: { type: "boolean", description: "If true and an avatar is selected on the conversation, use that avatar for every clip in this script. Default true when an avatar is selected." },
+                force_model: { type: "boolean", description: "If true, do NOT auto-route Seedance → Veo for avatar scripts. Default false." },
+              },
+              required: ["voiceover"],
+            },
+          },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Model to use for non-avatar scripts. Avatar scripts auto-route to Veo." },
+          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
+          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. 4K only on Seedance Pro." },
+        },
+        required: ["scripts"],
+      },
+    },
+  },
 ];
 
 // Meta Ads MCP tools — proxied through mcp-agent-server JSON-RPC.
