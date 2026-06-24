@@ -35,7 +35,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     estCostPerSecondUsd: 0.05,
   },
   {
-    id: "bytedance/seedance-2.0-pro",
+    id: "bytedance/seedance-2.0",
     label: "Seedance Pro",
     provider: "openrouter",
     durations: [4, 5, 8, 10, 12, 15],
