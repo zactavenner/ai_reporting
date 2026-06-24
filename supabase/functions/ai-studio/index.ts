@@ -1453,6 +1453,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          force_model: { type: "boolean", description: "If true, do NOT auto-route Seedance → Veo when an avatar is selected. Only set when the user explicitly says 'use Seedance anyway' or 'force Seedance with my avatar'. Default false (avatar clips auto-route to Veo)." },
         },
         required: ["prompt"],
       },
