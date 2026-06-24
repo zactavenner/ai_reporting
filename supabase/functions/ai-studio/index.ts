@@ -3530,6 +3530,157 @@ Deno.serve(async (req) => {
                   if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
                   result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution: r.resolution, aspect_ratio: aspect };
                 }
+              } else if (name === "generate_script_batch") {
+                // Multi-script batch renderer. Each script gets its own grouped
+                // canvas card; clips within a script run in parallel and reuse
+                // the same avatar image for identity lock.
+                const rawScripts = Array.isArray(args.scripts) ? args.scripts : [];
+                if (!rawScripts.length) {
+                  result = { error: "generate_script_batch requires scripts[] with at least one script." };
+                } else {
+                  const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
+                  const requestedRes = (args.resolution === "720p" || args.resolution === "4k") ? args.resolution : "1080p";
+                  const requestedModel = typeof args.model === "string" && args.model ? args.model : selectedVideoModel;
+                  const groupId = crypto.randomUUID();
+                  const scriptResults: any[] = [];
+
+                  await Promise.all(rawScripts.slice(0, 12).map(async (s: any, scriptIdx: number) => {
+                    const voiceover = String(s?.voiceover || "").trim();
+                    if (!voiceover) {
+                      scriptResults.push({ script_index: scriptIdx, error: "Missing voiceover" });
+                      return;
+                    }
+                    const title = String(s?.title || `Script ${scriptIdx + 1}`).slice(0, 200);
+                    const environment = String(s?.environment || "").trim();
+                    const useAvatar = (s?.use_avatar !== false) && !!selectedAvatar;
+                    const forceModel = !!s?.force_model;
+                    // Estimate duration from word count if not given (~2.4 wps spoken pace).
+                    const wordCount = voiceover.split(/\s+/).filter(Boolean).length;
+                    const targetDuration = typeof s?.target_duration_s === "number"
+                      ? Math.max(4, Math.min(120, Math.round(s.target_duration_s)))
+                      : Math.max(8, Math.min(120, Math.ceil(wordCount / 2.4)));
+                    // Route per-script: avatar scripts auto-route to Veo unless force_model.
+                    const routed = resolveModelForAvatar(requestedModel, useAvatar, forceModel);
+                    const mdl = routed.model;
+                    const cap = VIDEO_MODEL_CAPS[mdl]?.maxDuration || 15;
+                    const segs = splitVideoPromptForModel(
+                      environment ? `${voiceover}\n\nSCENE / ENVIRONMENT (every clip): ${environment}` : voiceover,
+                      targetDuration,
+                      cap,
+                    );
+                    const avatarImg = useAvatar ? selectedAvatar?.image_url : null;
+                    // Emit a script_group event so the UI can group these clips.
+                    send({
+                      type: "script_group",
+                      group_id: groupId,
+                      script_index: scriptIdx,
+                      script_title: title,
+                      clip_count: segs.length,
+                      model: mdl,
+                      requested_model: requestedModel,
+                      rerouted: routed.rerouted,
+                      routing_reason: routed.reason,
+                      has_avatar: useAvatar,
+                      avatar_id: useAvatar ? selectedAvatar?.id : null,
+                    });
+                    if (routed.rerouted) {
+                      console.log(`[script-batch][avatar-route] script#${scriptIdx} ${routed.reason}: ${requestedModel} → ${mdl}`);
+                    }
+
+                    // Per-clip placeholders + parallel dispatch.
+                    const placeholderIds = segs.map(() => crypto.randomUUID());
+                    segs.forEach((seg, i) => {
+                      send({
+                        type: "canvas_placeholder",
+                        placeholder_id: placeholderIds[i],
+                        kind: "image",
+                        prompt: `${title} • Clip ${seg.index + 1}/${seg.count} • ${VIDEO_MODEL_CAPS[mdl]?.label || mdl}`,
+                        aspect_ratio: aspect,
+                        quality: "video",
+                        script_group_id: groupId,
+                        script_index: scriptIdx,
+                      });
+                    });
+
+                    const clipSettled = await Promise.allSettled(segs.map(async (seg, i) => {
+                      const segRes = clampResForModel(mdl) === "720p"
+                        ? "720p"
+                        : (requestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : requestedRes);
+                      // One retry on transient failure.
+                      let lastErr: any = null;
+                      for (let attempt = 0; attempt < 2; attempt++) {
+                        try {
+                          const r = await generateSeedanceVideo({
+                            prompt: seg.prompt,
+                            aspectRatio: aspect,
+                            duration: seg.duration,
+                            resolution: segRes,
+                            imageUrl: avatarImg,
+                            lastFrameUrl: null,
+                            ingredientUrl: avatarImg,
+                            model: mdl,
+                            clientId: clientId || null,
+                            conversationId,
+                            userId: userId!,
+                            onProgress: (p) => send({ type: "canvas_placeholder_progress", placeholder_id: placeholderIds[i], ...p }),
+                          });
+                          if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: placeholderIds[i] });
+                          return {
+                            ok: true,
+                            clip_index: seg.index + 1,
+                            clip_count: seg.count,
+                            video_url: r.video_url,
+                            model: r.model,
+                            avatar_id: useAvatar ? selectedAvatar?.id : null,
+                            routing_reason: routed.reason,
+                          };
+                        } catch (e: any) {
+                          lastErr = e;
+                          if (attempt === 0) {
+                            console.warn(`[script-batch] script#${scriptIdx} clip ${seg.index + 1}/${seg.count} attempt 1 failed, retrying:`, e?.message || e);
+                            await new Promise(res => setTimeout(res, 1500));
+                          }
+                        }
+                      }
+                      send({ type: "canvas_placeholder_failed", placeholder_id: placeholderIds[i], error: String(lastErr?.message || lastErr || "failed") });
+                      return {
+                        ok: false,
+                        clip_index: seg.index + 1,
+                        clip_count: seg.count,
+                        error: String(lastErr?.message || lastErr || "failed"),
+                        model: mdl,
+                      };
+                    }));
+                    const clips = clipSettled.map((c) => c.status === "fulfilled" ? c.value : { ok: false, error: String((c as any).reason) });
+                    const okClips = clips.filter((c: any) => c.ok).length;
+                    scriptResults.push({
+                      script_index: scriptIdx,
+                      title,
+                      model_used: mdl,
+                      requested_model: requestedModel,
+                      routing_reason: routed.reason,
+                      rerouted: routed.rerouted,
+                      has_avatar: useAvatar,
+                      avatar_id: useAvatar ? selectedAvatar?.id : null,
+                      target_duration_s: targetDuration,
+                      clip_count: segs.length,
+                      ok_clips: okClips,
+                      clips,
+                    });
+                  }));
+
+                  const totalClips = scriptResults.reduce((n, s) => n + (s.clip_count || 0), 0);
+                  const okTotal = scriptResults.reduce((n, s) => n + (s.ok_clips || 0), 0);
+                  result = {
+                    ok: okTotal > 0,
+                    group_id: groupId,
+                    script_count: scriptResults.length,
+                    total_clips: totalClips,
+                    ok_clips: okTotal,
+                    failed_clips: totalClips - okTotal,
+                    scripts: scriptResults,
+                  };
+                }
               } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);
                 const artifactType = String(args.artifact_type || "other");
