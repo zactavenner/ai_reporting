@@ -943,7 +943,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [docTest, setDocTest] = useState<null | { ok: boolean; source?: string; title?: string; char_count?: number; doc_id?: string; latency_ms?: number; error?: string; client?: { name?: string } }>(null);
   const [testingDoc, setTestingDoc] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const abortRefs = useRef<Set<AbortController>>(new Set());
   const aiStudioUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ai-studio`;
 
   // --- Per-client agents (@mention support in AI Studio) ---
