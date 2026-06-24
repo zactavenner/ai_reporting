@@ -2547,11 +2547,12 @@ Deno.serve(async (req) => {
             const ingredientUrl = videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl
               ? videoFrames.ingredientUrl
               : null;
+            const segRes = clampResForModel(model);
             const args = {
               prompt: segment.prompt,
               aspect_ratio: aspect,
               duration: segment.duration,
-              resolution: "1080p",
+              resolution: segRes,
               image_url: imageUrl,
               last_frame_url: lastFrameUrl,
               ingredient_url: ingredientUrl,
@@ -2572,7 +2573,7 @@ Deno.serve(async (req) => {
                 prompt: segment.prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
                 aspectRatio: aspect,
                 duration: segment.duration,
-                resolution: "1080p",
+                resolution: segRes,
                 imageUrl,
                 lastFrameUrl,
                 ingredientUrl,
