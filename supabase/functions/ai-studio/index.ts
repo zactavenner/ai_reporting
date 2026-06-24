@@ -1591,6 +1591,28 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
 
+// Models known to RELIABLY render synthetic / AI-generated human avatars.
+// Seedance's content filter rejects most photoreal AI avatars as "real people";
+// Veo and Kling handle them. When an avatar is selected we auto-route to a
+// compatible model unless the caller passes forceModel=true (explicit override).
+const AVATAR_SAFE_MODELS = new Set<string>([
+  "google/veo-3.1-fast",
+  "kwaivgi/kling-v3.0-std",
+  "kwaivgi/kling-v2.1-master",
+]);
+const AVATAR_FALLBACK_MODEL = "google/veo-3.1-fast";
+
+export function resolveModelForAvatar(
+  requestedModel: string,
+  hasAvatar: boolean,
+  forceModel = false,
+): { model: string; rerouted: boolean; reason: "user_choice" | "auto_veo_for_avatar" | "force_override" } {
+  if (!hasAvatar) return { model: requestedModel, rerouted: false, reason: "user_choice" };
+  if (forceModel) return { model: requestedModel, rerouted: false, reason: "force_override" };
+  if (AVATAR_SAFE_MODELS.has(requestedModel)) return { model: requestedModel, rerouted: false, reason: "user_choice" };
+  return { model: AVATAR_FALLBACK_MODEL, rerouted: true, reason: "auto_veo_for_avatar" };
+}
+
 function inferVideoDurationSeconds(text: string, fallback = 15): number {
   const t = text || "";
   const explicit =
