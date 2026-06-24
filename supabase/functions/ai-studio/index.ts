@@ -965,9 +965,11 @@ async function generateSeedanceVideo(opts: {
   const isKling = model.startsWith("kwaivgi/kling");
   // Clamp to the model's max resolution. Only Seedance Pro supports 4K; Fast caps at 720p.
   const isSeedancePro = model === "bytedance/seedance-2.0";
-  let effectiveResolution = opts.resolution;
-  if (isSeedanceFast) effectiveResolution = "720p";
+  let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
+  if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
+  // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
+  const wireResolution = effectiveResolution === "4k" ? "4K" : effectiveResolution;
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
@@ -1075,7 +1077,7 @@ async function generateSeedanceVideo(opts: {
   };
   if (isSeedance) {
     // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
-    body.resolution = effectiveResolution;
+    body.resolution = wireResolution;
     const frames: any[] = [];
     if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
     if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
