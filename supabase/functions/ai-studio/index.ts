@@ -963,7 +963,11 @@ async function generateSeedanceVideo(opts: {
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const isSeedance = model.startsWith("bytedance/seedance");
   const isKling = model.startsWith("kwaivgi/kling");
-  const effectiveResolution = isSeedanceFast && opts.resolution === "1080p" ? "720p" : opts.resolution;
+  // Clamp to the model's max resolution. Only Seedance Pro supports 4K; Fast caps at 720p.
+  const isSeedancePro = model === "bytedance/seedance-2.0";
+  let effectiveResolution = opts.resolution;
+  if (isSeedanceFast) effectiveResolution = "720p";
+  else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
@@ -1443,7 +1447,7 @@ const tools = [
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1"], description: "Default 9:16 for reels/stories." },
           duration: { type: "integer", minimum: 4, maximum: 15, description: "Clip length in seconds. Default 15." },
-          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p for Seedance Pro, 720p for Seedance Fast. Use 1080p only when the selected model supports it." },
+          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' is supported only by bytedance/seedance-2.0 (Seedance Pro). Seedance Fast caps at 720p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
@@ -1506,7 +1510,7 @@ const tools = [
           motion_prompt: { type: "string", description: "Optional explicit camera/motion description for Seedance. If omitted, one will be auto-derived from the brief." },
           aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
           duration: { type: "integer", minimum: 5, maximum: 15, description: "Reel length in seconds. Default 8." },
-          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 720p. Use 1080p only if explicitly requested." },
+          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' Seedance Pro only." },
         },
         required: [],
       },
@@ -1637,7 +1641,7 @@ function splitVideoPromptForModel(prompt: string, totalDuration: number, maxDura
   });
 }
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   "OUTPUT RULES (CRITICAL):",
@@ -1703,6 +1707,9 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
     : (ctx.videoModel
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
+  ctx.videoResolution
+    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. NOTE: "4k" is only supported by bytedance/seedance-2.0 (Seedance Pro); for any other model, the server will clamp to that model's max automatically — still pass the user's preference.`
+    : null,
   // Per-model duration caps + automatic multi-clip splitting
   (() => {
     const ids = (ctx.videoModels && ctx.videoModels.length ? ctx.videoModels : (ctx.videoModel ? [ctx.videoModel] : []))
@@ -1849,7 +1856,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -1858,6 +1865,7 @@ Deno.serve(async (req) => {
     videoModel?: string | null;
     videoModels?: string[] | null;
     videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
+    videoResolution?: "720p" | "1080p" | "4k" | null;
     avatarId?: string | null;
     adFormat?: string | null;
     hookFramework?: string | null;
@@ -1894,6 +1902,24 @@ Deno.serve(async (req) => {
   const selectedVideoModel = (typeof videoModel === "string" && ALLOWED_VIDEO_MODELS.includes(videoModel))
     ? videoModel
     : (selectedVideoModels[0] || "bytedance/seedance-2.0-fast");
+
+  // Resolution clamping per model. Only Seedance Pro supports 4K.
+  const MODEL_MAX_RES: Record<string, "720p" | "1080p" | "4k"> = {
+    "bytedance/seedance-2.0-fast": "720p",
+    "bytedance/seedance-2.0":      "4k",
+    "kwaivgi/kling-v3.0-std":      "1080p",
+    "kwaivgi/kling-v2.1-master":   "1080p",
+    "google/veo-3.1-fast":         "1080p",
+  };
+  const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "4k": 3 };
+  const requestedRes: "720p" | "1080p" | "4k" =
+    rawVideoResolution === "720p" || rawVideoResolution === "1080p" || rawVideoResolution === "4k"
+      ? rawVideoResolution
+      : "1080p";
+  function clampResForModel(model: string): "720p" | "1080p" | "4k" {
+    const cap = MODEL_MAX_RES[model] || "1080p";
+    return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
+  }
 
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "openrouter/owl-alpha";
 
@@ -2404,7 +2430,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: selectedVideoModels, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: selectedVideoModels, videoResolution: requestedRes, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
@@ -2524,11 +2550,12 @@ Deno.serve(async (req) => {
             const ingredientUrl = videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl
               ? videoFrames.ingredientUrl
               : null;
+            const segRes = clampResForModel(model);
             const args = {
               prompt: segment.prompt,
               aspect_ratio: aspect,
               duration: segment.duration,
-              resolution: "1080p",
+              resolution: segRes,
               image_url: imageUrl,
               last_frame_url: lastFrameUrl,
               ingredient_url: ingredientUrl,
@@ -2549,7 +2576,7 @@ Deno.serve(async (req) => {
                 prompt: segment.prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
                 aspectRatio: aspect,
                 duration: segment.duration,
-                resolution: "1080p",
+                resolution: segRes,
                 imageUrl,
                 lastFrameUrl,
                 ingredientUrl,
@@ -3111,31 +3138,82 @@ Deno.serve(async (req) => {
                   ? selectedVideoModels.slice()
                   : [explicitModel || selectedVideoModel];
                 const baseDuration = typeof args.duration === "number" ? args.duration : 15;
-                const baseResolution = args.resolution === "720p" ? "720p" : "1080p";
+                // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
+                const argRes = (args.resolution === "720p" || args.resolution === "1080p" || args.resolution === "4k") ? args.resolution : null;
                 const baseAspect = args.aspect_ratio || "9:16";
                 const baseImageUrl = args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null);
                 const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
                 const promptText = String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : "");
-                const runOne = async (mdl: string, pid: string | null) => generateSeedanceVideo({
-                  prompt: promptText,
-                  aspectRatio: baseAspect,
-                  duration: baseDuration,
-                  resolution: baseResolution,
-                  imageUrl: baseImageUrl,
-                  lastFrameUrl: baseLastFrame,
-                  ingredientUrl: baseIngredient,
-                  fast: !!args.fast,
-                  model: mdl,
-                  clientId: clientId || null,
-                  conversationId,
-                  userId: userId!,
-                  onProgress: (p) => { if (pid) send({ type: "canvas_placeholder_progress", placeholder_id: pid, ...p }); },
-                });
+                const runOne = async (mdl: string, pid: string | null, segPrompt: string, segDuration: number, segImageUrl: string | null, segLastFrame: string | null) => {
+                  const segRes = argRes
+                    ? (RES_RANK[argRes] <= RES_RANK[MODEL_MAX_RES[mdl] || "1080p"] ? argRes : (MODEL_MAX_RES[mdl] || "1080p"))
+                    : clampResForModel(mdl);
+                  return generateSeedanceVideo({
+                    prompt: segPrompt,
+                    aspectRatio: baseAspect,
+                    duration: segDuration,
+                    resolution: segRes,
+                    imageUrl: segImageUrl,
+                    lastFrameUrl: segLastFrame,
+                    ingredientUrl: baseIngredient,
+                    fast: !!args.fast,
+                    model: mdl,
+                    clientId: clientId || null,
+                    conversationId,
+                    userId: userId!,
+                    onProgress: (p) => { if (pid) send({ type: "canvas_placeholder_progress", placeholder_id: pid, ...p }); },
+                  });
+                };
+
+                // AUTO-SPLIT: if requested duration exceeds the model's per-clip cap (e.g. 30s on Seedance 15s),
+                // generate N sequential clips reusing the same avatar/first-frame so the same face carries across.
+                // This guarantees "30s avatar video" works even if the LLM emitted a single tool call with duration=30.
+                const planSegmentsForModel = (mdl: string) => {
+                  const cap = VIDEO_MODEL_CAPS[mdl]?.maxDuration || 15;
+                  if (baseDuration <= cap) {
+                    return [{ prompt: promptText, duration: baseDuration, imageUrl: baseImageUrl, lastFrameUrl: baseLastFrame, index: 0, count: 1 }];
+                  }
+                  const segs = splitVideoPromptForModel(promptText, baseDuration, cap);
+                  return segs.map((s) => ({
+                    prompt: s.prompt,
+                    duration: s.duration,
+                    // Reuse avatar/first-frame on every clip so the avatar's face stays consistent across segments.
+                    imageUrl: s.index === 0 ? baseImageUrl : (selectedAvatar?.image_url || baseImageUrl || null),
+                    lastFrameUrl: s.index === s.count - 1 ? baseLastFrame : null,
+                    index: s.index,
+                    count: s.count,
+                  }));
+                };
                 if (fanModels.length === 1) {
-                  const r = await runOne(fanModels[0], canvasPlaceholderId);
-                  result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: baseAspect, duration: baseDuration, resolution: r.resolution, mode: baseImageUrl ? "image_to_video" : "text_to_video" };
-                  if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+                  const mdl = fanModels[0];
+                  const segs = planSegmentsForModel(mdl);
+                  // First segment reuses the existing placeholder; extras get their own placeholder cards.
+                  const segPids = segs.map((_, i) => i === 0 ? canvasPlaceholderId : crypto.randomUUID());
+                  segs.forEach((seg, i) => {
+                    if (i === 0) return;
+                    send({
+                      type: "canvas_placeholder",
+                      placeholder_id: segPids[i]!,
+                      kind: "image",
+                      prompt: `Clip ${seg.index + 1}/${seg.count} • ${VIDEO_MODEL_CAPS[mdl]?.label || mdl}: ${String(args.prompt || "").slice(0, 100)}`,
+                      aspect_ratio: baseAspect,
+                      quality: "seedance",
+                    });
+                  });
+                  const settled = await Promise.allSettled(segs.map((seg, i) => runOne(mdl, segPids[i]!, seg.prompt, seg.duration, seg.imageUrl, seg.lastFrameUrl)));
+                  let firstOk: any = null;
+                  settled.forEach((s, i) => {
+                    if (s.status === "fulfilled") {
+                      const r = s.value;
+                      if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: segPids[i]! });
+                      if (!firstOk) firstOk = r;
+                    } else {
+                      send({ type: "canvas_placeholder_failed", placeholder_id: segPids[i]!, error: String(s.reason?.message || s.reason || "failed") });
+                    }
+                  });
+                  const okCount = settled.filter(s => s.status === "fulfilled").length;
+                  result = { ok: okCount > 0, video_url: firstOk?.video_url, model: firstOk?.model || mdl, aspect_ratio: baseAspect, duration: baseDuration, resolution: firstOk?.resolution, clips: segs.length, ok_clips: okCount, mode: baseImageUrl ? "image_to_video" : "text_to_video" };
                 } else {
                   // First model reuses the placeholder the LLM-handler already emitted; the rest get fresh placeholders.
                   const pids: (string | null)[] = fanModels.map((_, i) => i === 0 ? canvasPlaceholderId : crypto.randomUUID());
@@ -3150,7 +3228,9 @@ Deno.serve(async (req) => {
                       quality: "seedance",
                     });
                   });
-                  const settled = await Promise.allSettled(fanModels.map((m, i) => runOne(m, pids[i])));
+                  // Compare-models path: keep this 1 clip per model (no auto-split) so cards align side-by-side.
+                  const segDur = (mdl: string) => Math.min(baseDuration, VIDEO_MODEL_CAPS[mdl]?.maxDuration || 15);
+                  const settled = await Promise.allSettled(fanModels.map((m, i) => runOne(m, pids[i], promptText, segDur(m), baseImageUrl, baseLastFrame)));
                   const okItems = settled.map((s, i) => ({ s, m: fanModels[i], pid: pids[i] }));
                   let firstOk: any = null;
                   for (const { s, m, pid } of okItems) {

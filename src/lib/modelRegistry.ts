@@ -11,7 +11,7 @@ export interface VideoModelSpec {
   provider: "openrouter" | "gemini";
   durations: number[];              // Allowed scene durations (seconds)
   defaultDuration: number;
-  maxRes: "720p" | "1080p";
+  maxRes: "720p" | "1080p" | "4k";
   aspectRatios: ("9:16" | "1:1" | "16:9")[];
   estCostPerSecondUsd?: number;     // Rough credit estimate for UI preview
 }
@@ -40,9 +40,9 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     provider: "openrouter",
     durations: [4, 5, 8, 10, 12, 15],
     defaultDuration: 15,
-    maxRes: "1080p",
+    maxRes: "4k",
     aspectRatios: ["9:16", "1:1", "16:9"],
-    estCostPerSecondUsd: 0.12,
+    estCostPerSecondUsd: 0.15,
   },
   {
     id: "kwaivgi/kling-v3.0-std",

@@ -75,10 +75,23 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // can compare apples-to-apples without doing math in their head.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
   { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts (≤15s, 720p)",    maxSeconds: 15, pricePerSecond: 0.0538 },
-  { value: "bytedance/seedance-2.0",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, 1080p)", maxSeconds: 15, pricePerSecond: 0.15 },
+  { value: "bytedance/seedance-2.0",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, up to 4K)", maxSeconds: 15, pricePerSecond: 0.15 },
   { value: "kwaivgi/kling-v3.0-std",      label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion (≤10s)", maxSeconds: 10, pricePerSecond: 0.126 },
   { value: "google/veo-3.1-fast",         label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast (8s)",  maxSeconds: 8,  pricePerSecond: 0.10 },
 ];
+// Resolution caps per model. 4K is currently Seedance Pro only.
+const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
+  "bytedance/seedance-2.0-fast": ["720p"],
+  "bytedance/seedance-2.0":      ["720p", "1080p", "4k"],
+  "kwaivgi/kling-v3.0-std":      ["1080p"],
+  "google/veo-3.1-fast":         ["1080p"],
+};
+// 4K is ~2.5× the rendering cost on Seedance Pro; surface that in the UI.
+function resolutionMultiplier(res: "720p" | "1080p" | "4k"): number {
+  if (res === "4k") return 2.5;
+  if (res === "720p") return 0.7;
+  return 1;
+}
 function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): string {
   const total = m.maxSeconds * m.pricePerSecond;
   const fmt = total >= 1 ? total.toFixed(2) : total.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
@@ -771,6 +784,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [videoModels]);
   // first selection drives single-clip default model passed to the server
   const videoModel = videoModels[0] || undefined;
+  // Resolution selection for video generation. Persisted per browser.
+  // Validated against the active video model's supported resolutions on render.
+  const [videoResolution, setVideoResolution] = useState<"720p" | "1080p" | "4k">(() => {
+    try {
+      const v = localStorage.getItem("ai-studio:video-resolution");
+      if (v === "720p" || v === "1080p" || v === "4k") return v;
+    } catch {}
+    return "1080p";
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-resolution", videoResolution); } catch {}
+  }, [videoResolution]);
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
@@ -1249,7 +1274,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         })(),
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
-        ...(videoModel ? { videoModel, videoModels, videoFrames } : {}),
+        ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution } : {}),
         avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
         offerContext: (() => {
@@ -2153,6 +2178,39 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
                   )}
                 </div>
+                {videoModels.length > 0 && (() => {
+                  // Union of supported resolutions across selected models (Pro = 4K capable).
+                  const supportedSet = new Set<"720p" | "1080p" | "4k">();
+                  for (const id of videoModels) {
+                    for (const r of (VIDEO_MODEL_RES[id] || ["1080p"])) supportedSet.add(r);
+                  }
+                  const supported = (["720p", "1080p", "4k"] as const).filter(r => supportedSet.has(r));
+                  const activeRes = supported.includes(videoResolution) ? videoResolution : supported[supported.length - 1];
+                  if (activeRes !== videoResolution) {
+                    // auto-correct when user switches to a model that doesn't support current res
+                    setTimeout(() => setVideoResolution(activeRes), 0);
+                  }
+                  return (
+                    <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                      <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Res:</span>
+                      {supported.map((r) => {
+                        const active = activeRes === r;
+                        const proOnly = r === "4k";
+                        return (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setVideoResolution(r)}
+                            title={proOnly ? "4K — Seedance Pro only. ~2.5× cost." : r === "720p" ? "720p draft quality" : "1080p Full HD"}
+                            className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                          >
+                            {r === "4k" ? "4K" : r}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {imageModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image Style:</span>
