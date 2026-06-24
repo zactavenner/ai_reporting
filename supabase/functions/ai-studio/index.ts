@@ -2413,8 +2413,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const stream = new ReadableStream({
-    async start(controller) {
+  const runStudioTurn = async (controller: any) => {
       const enc = new TextEncoder();
       let disconnected = false;
       const send = (obj: any) => {
@@ -3324,6 +3323,18 @@ Deno.serve(async (req) => {
         } catch (e) { console.error("followups failed", e); }
         try { controller.close(); } catch {}
       }
+  };
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const turnPromise = runStudioTurn(controller);
+      const edgeRuntime = (globalThis as any).EdgeRuntime;
+      if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
+        edgeRuntime.waitUntil(turnPromise.catch((e: any) => {
+          console.error("ai-studio background turn failed", e);
+        }));
+      }
+      return turnPromise;
     },
   });
 
