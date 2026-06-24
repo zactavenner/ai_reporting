@@ -963,7 +963,11 @@ async function generateSeedanceVideo(opts: {
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const isSeedance = model.startsWith("bytedance/seedance");
   const isKling = model.startsWith("kwaivgi/kling");
-  const effectiveResolution = isSeedanceFast && opts.resolution === "1080p" ? "720p" : opts.resolution;
+  // Clamp to the model's max resolution. Only Seedance Pro supports 4K; Fast caps at 720p.
+  const isSeedancePro = model === "bytedance/seedance-2.0";
+  let effectiveResolution = opts.resolution;
+  if (isSeedanceFast) effectiveResolution = "720p";
+  else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
