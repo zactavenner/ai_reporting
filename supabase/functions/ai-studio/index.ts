@@ -2416,9 +2416,19 @@ Deno.serve(async (req) => {
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
-      const send = (obj: any) => { try { controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch {} };
-      const aborted = { v: false };
-      req.signal.addEventListener("abort", () => { aborted.v = true; });
+      let disconnected = false;
+      const send = (obj: any) => {
+        if (disconnected) return;
+        try { controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`)); }
+        catch { disconnected = true; }
+      };
+      // BACKGROUND MODE: do NOT cancel in-flight generation when the client
+      // disconnects (closes the tab, backgrounds the iPhone Safari tab, loses
+      // network, etc). Seedance/Veo/static-ad jobs persist results to
+      // ai_studio_canvas_items + client_videos, so they MUST run to completion
+      // and be visible when the user returns. We only stop emitting SSE.
+      const aborted = { v: false }; // kept for backwards-compat reads below; never flipped
+      try { req.signal.addEventListener("abort", () => { disconnected = true; }); } catch {}
 
       send({ type: "conversation", conversationId });
       // Tell the client roughly how much context is being shipped so it can
@@ -2558,7 +2568,8 @@ Deno.serve(async (req) => {
                 tool_choice: "auto",
                 stream: true,
               }),
-              signal: req.signal,
+              // No req.signal: the LLM step must keep running even if the
+              // user disconnects so any tool_calls it emits still fire.
             });
             if (!llm.ok) {
               const err = await llm.text();
