@@ -1707,6 +1707,9 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
     : (ctx.videoModel
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
+  ctx.videoResolution
+    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. NOTE: "4k" is only supported by bytedance/seedance-2.0 (Seedance Pro); for any other model, the server will clamp to that model's max automatically — still pass the user's preference.`
+    : null,
   // Per-model duration caps + automatic multi-clip splitting
   (() => {
     const ids = (ctx.videoModels && ctx.videoModels.length ? ctx.videoModels : (ctx.videoModel ? [ctx.videoModel] : []))
