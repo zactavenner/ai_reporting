@@ -1389,6 +1389,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             updateAssistant(m => ({ ...m, compare, compareLoading: false }));
           } else if (evt.type === "suggested_followups") {
             setFollowups(Array.isArray(evt.suggestions) ? evt.suggestions : []);
+          } else if (evt.type === "clip_avatar_mapping") {
+            // Log avatar verification on the client so it's visible in browser DevTools
+            // and gets picked up by any session replay. Server also logs in edge logs.
+            const ok = evt.verified ? "✓" : "✗";
+            // eslint-disable-next-line no-console
+            console.log(
+              `[avatar-mapping] ${ok} clip ${evt.clip_index}/${evt.clip_count} model=${evt.model} avatar=${evt.avatar_name || evt.avatar_id} source=${evt.source}`,
+              { actual_image_url: evt.actual_image_url, avatar_image_url: evt.avatar_image_url }
+            );
+            if (evt.verified === false) {
+              toast.warning(`Clip ${evt.clip_index}/${evt.clip_count} did not reuse the selected avatar image (${evt.source})`);
+            }
           } else if (evt.type === "error") {
             updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\n⚠️ ${evt.message}` }));
             toast.error(evt.message);
