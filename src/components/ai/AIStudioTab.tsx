@@ -2178,6 +2178,39 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
                   )}
                 </div>
+                {videoModels.length > 0 && (() => {
+                  // Union of supported resolutions across selected models (Pro = 4K capable).
+                  const supportedSet = new Set<"720p" | "1080p" | "4k">();
+                  for (const id of videoModels) {
+                    for (const r of (VIDEO_MODEL_RES[id] || ["1080p"])) supportedSet.add(r);
+                  }
+                  const supported = (["720p", "1080p", "4k"] as const).filter(r => supportedSet.has(r));
+                  const activeRes = supported.includes(videoResolution) ? videoResolution : supported[supported.length - 1];
+                  if (activeRes !== videoResolution) {
+                    // auto-correct when user switches to a model that doesn't support current res
+                    setTimeout(() => setVideoResolution(activeRes), 0);
+                  }
+                  return (
+                    <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                      <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Res:</span>
+                      {supported.map((r) => {
+                        const active = activeRes === r;
+                        const proOnly = r === "4k";
+                        return (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setVideoResolution(r)}
+                            title={proOnly ? "4K — Seedance Pro only. ~2.5× cost." : r === "720p" ? "720p draft quality" : "1080p Full HD"}
+                            className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                          >
+                            {r === "4k" ? "4K" : r}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {imageModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image Style:</span>
