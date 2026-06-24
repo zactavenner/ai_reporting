@@ -1773,14 +1773,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </div>
             )}
             {messages.map((m, i) => {
-              const isLast = i === messages.length - 1;
               const isEmptyAssistant = m.role === "assistant" && !m.content && (!m.tools || m.tools.length === 0);
-              if (isEmptyAssistant && !(loading && isLast)) return null;
+              if (isEmptyAssistant && !m.streaming) return null;
               return (
                 <ChatMessage
                   key={m.id || i}
                   message={m}
-                  isStreaming={loading && isLast && m.role === "assistant"}
+                  isStreaming={!!m.streaming && m.role === "assistant"}
                   clientId={clientId}
                   clientName={clientName}
                 />
