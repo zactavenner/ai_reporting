@@ -1764,6 +1764,46 @@ function sanitizeAssistantText(t: string) {
     .trim();
 }
 
+async function compareChatModelsInBackground(opts: { prompt: string; models: string[]; system?: string | null }) {
+  if (!OPENROUTER_API_KEY) {
+    return opts.models.map((model) => ({ model, error: "OPENROUTER_API_KEY not configured" }));
+  }
+  const safeModels = opts.models
+    .filter((model) => typeof model === "string" && /^[a-z0-9._:/-]+$/i.test(model))
+    .map((model) => model.replace(/^openrouter\//, ""))
+    .filter((model, index, arr) => model && arr.indexOf(model) === index)
+    .slice(0, 6);
+  const messages = [
+    ...(opts.system ? [{ role: "system", content: opts.system }] : []),
+    { role: "user", content: opts.prompt },
+  ];
+  return await Promise.all(safeModels.map(async (model) => {
+    const t0 = Date.now();
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://lovable.dev",
+          "X-Title": "AI Studio Compare",
+        },
+        body: JSON.stringify({ model, messages }),
+      });
+      const text = await res.text();
+      let json: any = null;
+      try { json = JSON.parse(text); } catch {}
+      if (!res.ok) {
+        return { model, error: json?.error?.message || text || `HTTP ${res.status}`, ms: Date.now() - t0 };
+      }
+      const output = json?.choices?.[0]?.message?.content ?? "";
+      return { model, output: typeof output === "string" ? output : JSON.stringify(output), usage: json?.usage ?? null, ms: Date.now() - t0 };
+    } catch (e: any) {
+      return { model, error: e?.message || String(e), ms: Date.now() - t0 };
+    }
+  }));
+}
+
 // ---------- Main handler ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -1799,10 +1839,11 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, imageModels, videoModel, videoModels, videoFrames, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
+    compareModels?: string[] | null;
     imageModels?: Array<"nano-banana" | "openai"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
@@ -2413,8 +2454,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const stream = new ReadableStream({
-    async start(controller) {
+  const runStudioTurn = async (controller: any) => {
       const enc = new TextEncoder();
       let disconnected = false;
       const send = (obj: any) => {
@@ -2443,6 +2483,12 @@ Deno.serve(async (req) => {
 
       let finalAssistantText = "";
       const finalToolEvents: any[] = [];
+      const compareModelsToRun = Array.isArray(compareModels)
+        ? compareModels.filter((model) => typeof model === "string" && model && model !== CHAT_MODEL).slice(0, 6)
+        : [];
+      const comparePromise = compareModelsToRun.length
+        ? compareChatModelsInBackground({ prompt: persistedUserText, models: compareModelsToRun, system: brandSummary })
+        : null;
 
       try {
         if (shouldDirectGenerateVideoPrompt(userText || "")) {
@@ -3282,6 +3328,17 @@ Deno.serve(async (req) => {
       } finally {
         // Persist final assistant message
         const cleaned = sanitizeAssistantText(finalAssistantText);
+        if (comparePromise) {
+          try {
+            const results = await comparePromise;
+            finalToolEvents.push({ name: "compare_chat_models", args: { models: compareModelsToRun }, result: { results } });
+            send({ type: "compare_results", results });
+          } catch (e: any) {
+            const result = { error: e?.message || String(e), results: [] };
+            finalToolEvents.push({ name: "compare_chat_models", args: { models: compareModelsToRun }, result });
+            send({ type: "compare_results", results: [], error: result.error });
+          }
+        }
         try {
           await supa.from("ai_studio_messages").insert({
             conversation_id: conversationId,
@@ -3324,6 +3381,18 @@ Deno.serve(async (req) => {
         } catch (e) { console.error("followups failed", e); }
         try { controller.close(); } catch {}
       }
+  };
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const turnPromise = runStudioTurn(controller);
+      const edgeRuntime = (globalThis as any).EdgeRuntime;
+      if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
+        edgeRuntime.waitUntil(turnPromise.catch((e: any) => {
+          console.error("ai-studio background turn failed", e);
+        }));
+      }
+      return turnPromise;
     },
   });
 

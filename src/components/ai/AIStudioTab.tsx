@@ -1027,13 +1027,26 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           panY: Number((convo as any).canvas_pan_y ?? 0) || 0,
         });
         setFocusedItemId(((convo as any).focused_canvas_item_id as string) || null);
-        setMessages((msgs || []).map((m: any) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content || "",
-          tools: Array.isArray(m.tools) ? m.tools : [],
-          actorName: m.actor_member_id ? (members?.[m.actor_member_id]?.name || null) : null,
-        })));
+        setMessages((msgs || []).map((m: any) => {
+          const tools = Array.isArray(m.tools) ? m.tools : [];
+          const compareTool = tools.find((t: any) => t?.name === "compare_chat_models");
+          const compareResults = Array.isArray(compareTool?.result?.results) ? compareTool.result.results : [];
+          return {
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content || "",
+            tools,
+            compare: compareResults.length ? compareResults.map((r: any) => ({
+              model: r.model,
+              label: CHAT_MODELS.find(mm => mm.value === r.model || mm.value === `openrouter/${r.model}`)?.label || r.model,
+              output: r.output,
+              error: r.error,
+              ms: r.ms,
+              usage: r.usage,
+            })) : undefined,
+            actorName: m.actor_member_id ? (members?.[m.actor_member_id]?.name || null) : null,
+          };
+        }));
         // Canvas builds downward (oldest → newest) to align with chat flow.
         // DB returns newest-first; reverse for chronological top-to-bottom render.
         setCanvas(((items || []) as CanvasItem[]).slice().reverse());
@@ -1189,43 +1202,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       (typeof window !== "undefined" && localStorage.getItem("team_member_name")) || null;
     const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName };
     const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [] };
+    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0 };
     setMessages(curr => [...curr, userMsg, placeholder]);
     setInput("");
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
     setLoading(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-
-    // Fire side-by-side comparison in parallel (best-effort, results appended after main reply).
-    if (compareModels.length > 0) {
-      const cmpModels = [...compareModels];
-      const cmpPrompt = text;
-      // Mark the in-flight assistant placeholder with a loading flag so the UI can render
-      // skeleton columns alongside the primary reply.
-      setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compareLoading: true } : m)));
-      (async () => {
-        try {
-          const { data, error } = await supabase.functions.invoke("compare-models", {
-            body: { prompt: cmpPrompt, models: cmpModels },
-          });
-          if (error) throw error;
-          const results = (data as any)?.results || [];
-          const compare: CompareResult[] = results.map((r: any) => ({
-            model: r.model,
-            label: CHAT_MODELS.find(mm => mm.value === r.model)?.label || r.model,
-            output: r.output,
-            error: r.error,
-            ms: r.ms,
-            usage: r.usage,
-          }));
-          setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compare, compareLoading: false } : m)));
-        } catch (e: any) {
-          toast.error(`Compare failed: ${e?.message || e}`);
-          setMessages(curr => curr.map(m => (m.id === placeholderId ? { ...m, compareLoading: false } : m)));
-        }
-      })();
-    }
 
     // ID-based update avoids index drift (history reloads, parallel state updates)
     // which was the root cause of mid-stream flicker / wrong-message overwrites.
@@ -1264,6 +1247,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           }
           return chatModel;
         })(),
+        compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
         ...(videoModel ? { videoModel, videoModels, videoFrames } : {}),
         avatarId: selectedAvatarId,
@@ -1368,6 +1352,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               // Append newest at the bottom so canvas grows downward with the chat.
               return [...filtered, evt.item as CanvasItem];
             });
+          } else if (evt.type === "compare_results") {
+            const compare: CompareResult[] = (Array.isArray(evt.results) ? evt.results : []).map((r: any) => ({
+              model: r.model,
+              label: CHAT_MODELS.find(mm => mm.value === r.model || mm.value === `openrouter/${r.model}`)?.label || r.model,
+              output: r.output,
+              error: r.error,
+              ms: r.ms,
+              usage: r.usage,
+            }));
+            updateAssistant(m => ({ ...m, compare, compareLoading: false }));
           } else if (evt.type === "suggested_followups") {
             setFollowups(Array.isArray(evt.suggestions) ? evt.suggestions : []);
           } else if (evt.type === "error") {
@@ -1378,7 +1372,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       }
     } catch (e: any) {
       if (e?.name === "AbortError") {
-        updateAssistant(m => ({ ...m, content: (m.content || "") + "\n\n_(stopped)_" }));
+        updateAssistant(m => ({ ...m, content: (m.content || "") + "\n\n_(continuing in background — reopen this thread to see results)_" }));
       } else {
         toast.error(e?.message || "AI Studio failed");
         updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\nError: ${e?.message || e}` }));
