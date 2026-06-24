@@ -1233,7 +1233,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     setMessages(curr => [...curr, userMsg, placeholder]);
     setInput("");
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
-    setLoading(n => (typeof n === "number" ? n + 1 : 1) as any);
+    setLoading(n => n + 1);
     const ctrl = new AbortController();
     abortRefs.current.add(ctrl);
 
@@ -1419,7 +1419,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     } finally {
       abortRefs.current.delete(ctrl);
       updateAssistant(m => ({ ...m, streaming: false }));
-      setLoading(n => Math.max(0, ((typeof n === "number" ? n : 1) - 1)) as any);
+      setLoading(n => Math.max(0, n - 1));
       loadThreads();
     }
   }
