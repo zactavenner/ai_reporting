@@ -17,7 +17,7 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
 
 const MODEL_CAPS: Record<string, { durations: number[]; defaultDuration: number; maxRes: "720p" | "1080p" }> = {
   "bytedance/seedance-2.0-fast":  { durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "720p" },
-  "bytedance/seedance-2.0-pro":   { durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "1080p" },
+  "bytedance/seedance-2.0":   { durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "1080p" },
   "kwaivgi/kling-v3.0-std":       { durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" },
   "kwaivgi/kling-v2.1-master":    { durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" },
   "google/veo-3.1-fast":          { durations: [4, 6, 8],              defaultDuration: 8,  maxRes: "1080p" },
