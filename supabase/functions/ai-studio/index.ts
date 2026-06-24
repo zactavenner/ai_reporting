@@ -2549,9 +2549,11 @@ Deno.serve(async (req) => {
               ? (videoFrames?.firstFrameUrl || selectedAvatar?.image_url || videoFrames?.ingredientUrl || null)
               : (selectedAvatar?.image_url || null);
             const lastFrameUrl = segment.index === segment.count - 1 ? (videoFrames?.lastFrameUrl || null) : null;
-            const ingredientUrl = videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl
+            // When an avatar is selected, ALSO pass it as a reference image so Seedance
+            // locks identity across clips (first-frame alone can drift on clip 2+).
+            const ingredientUrl = (videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl)
               ? videoFrames.ingredientUrl
-              : null;
+              : (selectedAvatar?.image_url || null);
             const segRes = clampResForModel(model);
             // Avatar verification: confirm this clip starts from the expected avatar frame.
             const avatarMapping = selectedAvatar
