@@ -946,9 +946,19 @@ async function generateSeedanceVideo(opts: {
     "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
   ];
-  const model = (opts.model && ALLOWED.includes(opts.model))
-    ? opts.model
-    : "bytedance/seedance-2.0-fast";
+  // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
+  const rawModel = (opts.model || "").trim();
+  const ALIASES: Record<string, string> = {
+    "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
+    "bytedance/seedance-pro": "bytedance/seedance-2.0",
+    "bytedance/seedance-2-pro": "bytedance/seedance-2.0",
+    "seedance-pro": "bytedance/seedance-2.0",
+    "seedance-2.0-pro": "bytedance/seedance-2.0",
+    "seedance-fast": "bytedance/seedance-2.0-fast",
+    "seedance-2.0-fast": "bytedance/seedance-2.0-fast",
+  };
+  const normalized = ALIASES[rawModel] || rawModel;
+  const model = ALLOWED.includes(normalized) ? normalized : "bytedance/seedance-2.0-fast";
   const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const isSeedance = model.startsWith("bytedance/seedance");

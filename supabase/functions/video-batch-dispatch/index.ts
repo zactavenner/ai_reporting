@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const {
       scripts,
-      model,
+      model: rawModel,
       aspectRatio = "9:16",
       duration,
       resolution,
@@ -143,6 +143,16 @@ Deno.serve(async (req) => {
       characterDescription,
       offerDescription,
     } = body || {};
+    const MODEL_ALIASES: Record<string, string> = {
+      "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
+      "bytedance/seedance-pro": "bytedance/seedance-2.0",
+      "bytedance/seedance-2-pro": "bytedance/seedance-2.0",
+      "seedance-pro": "bytedance/seedance-2.0",
+      "seedance-2.0-pro": "bytedance/seedance-2.0",
+      "seedance-fast": "bytedance/seedance-2.0-fast",
+      "seedance-2.0-fast": "bytedance/seedance-2.0-fast",
+    };
+    const model = MODEL_ALIASES[(rawModel || "").trim()] || rawModel;
 
     if (!Array.isArray(scripts) || scripts.length === 0) {
       return new Response(JSON.stringify({ error: "scripts[] required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
