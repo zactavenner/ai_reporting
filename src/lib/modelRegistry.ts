@@ -14,6 +14,11 @@ export interface VideoModelSpec {
   maxRes: "720p" | "1080p" | "4k";
   aspectRatios: ("9:16" | "1:1" | "16:9")[];
   estCostPerSecondUsd?: number;     // Rough credit estimate for UI preview
+  // Whether this model reliably renders synthetic / AI-generated human avatars
+  // without rejecting them as "real people". Seedance currently rejects most
+  // photoreal AI avatars; Veo handles them. Used by AI Studio to auto-route
+  // avatar clips to a compatible model.
+  supportsRealisticAvatars: boolean;
 }
 
 export interface TextModelSpec {
@@ -33,6 +38,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     maxRes: "720p",
     aspectRatios: ["9:16", "1:1", "16:9"],
     estCostPerSecondUsd: 0.05,
+    supportsRealisticAvatars: false,
   },
   {
     id: "bytedance/seedance-2.0",
@@ -43,6 +49,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     maxRes: "4k",
     aspectRatios: ["9:16", "1:1", "16:9"],
     estCostPerSecondUsd: 0.15,
+    supportsRealisticAvatars: false,
   },
   {
     id: "kwaivgi/kling-v3.0-std",
@@ -53,6 +60,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     maxRes: "1080p",
     aspectRatios: ["9:16", "1:1", "16:9"],
     estCostPerSecondUsd: 0.09,
+    supportsRealisticAvatars: true,
   },
   {
     id: "kwaivgi/kling-v2.1-master",
@@ -63,6 +71,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     maxRes: "1080p",
     aspectRatios: ["9:16", "1:1", "16:9"],
     estCostPerSecondUsd: 0.18,
+    supportsRealisticAvatars: true,
   },
   {
     id: "google/veo-3.1-fast",
@@ -73,6 +82,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     maxRes: "1080p",
     aspectRatios: ["9:16", "16:9"],
     estCostPerSecondUsd: 0.40,
+    supportsRealisticAvatars: true,
   },
 ];
 

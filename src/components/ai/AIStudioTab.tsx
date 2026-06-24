@@ -35,6 +35,7 @@ import { useClientOffers } from "@/hooks/useClientOffers";
 import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
 import { VideoStylesPopover, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
 import { ImageStylesPopover, useImageStyles, buildImageStyleBlock } from "./ImageStylesManager";
+import { BatchScriptsDialog } from "./BatchScriptsDialog";
 
 interface Props {
   clientId: string;
@@ -826,6 +827,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [canvasView, setCanvasView] = useState<{ zoom: number; panX: number; panY: number } | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [batchScriptsOpen, setBatchScriptsOpen] = useState(false);
   const [caretPos, setCaretPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents" | "avatars">("chat");
@@ -1403,6 +1405,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (evt.verified === false) {
               toast.warning(`Clip ${evt.clip_index}/${evt.clip_count} did not reuse the selected avatar image (${evt.source})`);
             }
+          } else if (evt.type === "model_rerouted") {
+            // Server auto-routed a Seedance request to Veo because an avatar
+            // is selected (Seedance rejects synthetic faces). Surface once
+            // per reroute so the user understands the model change.
+            // eslint-disable-next-line no-console
+            console.log(`[model-route] ${evt.requested_model} → ${evt.effective_model} (${evt.reason})`);
+            toast.info(evt.message || `Routed to ${evt.effective_model} for avatar compatibility`);
+          } else if (evt.type === "script_group") {
+            // Multi-script batch: one group per script. Log so user can audit.
+            // eslint-disable-next-line no-console
+            console.log(
+              `[script-batch] script#${evt.script_index} "${evt.script_title}" → ${evt.clip_count} clip(s) on ${evt.model}${evt.rerouted ? " (rerouted)" : ""}`,
+              { group_id: evt.group_id, has_avatar: evt.has_avatar }
+            );
           } else if (evt.type === "error") {
             updateAssistant(m => ({ ...m, content: (m.content || "") + `\n\n⚠️ ${evt.message}` }));
             toast.error(evt.message);
@@ -2330,6 +2346,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </button>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setBatchScriptsOpen(true)}
+                  title="Render multiple video scripts in parallel — each auto-splits to fit the model's per-clip cap."
+                  className="h-7 px-2 rounded-lg text-[10px] inline-flex items-center gap-1 border border-border/60 bg-muted/40 hover:bg-muted hover:border-primary/40 transition text-muted-foreground hover:text-foreground"
+                >
+                  <Film className="h-3 w-3" />
+                  Batch scripts
+                </button>
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
                   {/* Send is always available so the user can queue new prompts while
@@ -2544,6 +2569,44 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           autoCaptions={editVideo.autoCaptions}
         />
       )}
+      <BatchScriptsDialog
+        open={batchScriptsOpen}
+        onOpenChange={setBatchScriptsOpen}
+        hasAvatar={!!selectedAvatar}
+        avatarName={selectedAvatar?.name || null}
+        defaultModel={videoModel || "bytedance/seedance-2.0"}
+        onSubmit={(payload) => {
+          // Build a chat message that nudges the LLM to call generate_script_batch.
+          // Server-side handler validates and dispatches; results stream as
+          // script_group + canvas_placeholder events.
+          const lines: string[] = [];
+          lines.push(`Render this batch of ${payload.scripts.length} video script${payload.scripts.length === 1 ? "" : "s"} now using the generate_script_batch tool.`);
+          lines.push(`Pass model="${payload.model}", aspect_ratio="${payload.aspect_ratio}", resolution="${payload.resolution}".`);
+          if (payload.use_avatar) {
+            lines.push(`Use the selected avatar for every script (set use_avatar=true on each).`);
+            if (payload.force_seedance) lines.push(`Set force_model=true on every script (user explicitly opted out of Veo auto-routing).`);
+          } else {
+            lines.push(`Do NOT use the avatar (set use_avatar=false on each).`);
+          }
+          lines.push("");
+          lines.push("```json");
+          lines.push(JSON.stringify({
+            scripts: payload.scripts.map(s => ({
+              title: s.title || undefined,
+              voiceover: s.voiceover,
+              environment: s.environment || undefined,
+              target_duration_s: s.target_duration_s,
+              use_avatar: payload.use_avatar,
+              force_model: payload.force_seedance,
+            })),
+            model: payload.model,
+            aspect_ratio: payload.aspect_ratio,
+            resolution: payload.resolution,
+          }, null, 2));
+          lines.push("```");
+          send(lines.join("\n"));
+        }}
+      />
     </div>
   );
 }

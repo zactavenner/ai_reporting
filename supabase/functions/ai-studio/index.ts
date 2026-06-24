@@ -1453,6 +1453,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          force_model: { type: "boolean", description: "If true, do NOT auto-route Seedance → Veo when an avatar is selected. Only set when the user explicitly says 'use Seedance anyway' or 'force Seedance with my avatar'. Default false (avatar clips auto-route to Veo)." },
         },
         required: ["prompt"],
       },
@@ -1515,6 +1516,39 @@ const tools = [
           resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' Seedance Pro only." },
         },
         required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_script_batch",
+      description: "MULTI-SCRIPT BATCH (preferred when the user pastes 2+ video scripts in one message, e.g. '1. Script A ... 2. Script B ...'): take an array of scripts and render each as a fully-cut video. Per script the server auto-splits the voiceover into clips that fit the model's per-clip cap (Seedance 15s, Veo 8s), reuses the same avatar image_url across every clip in that script for identity lock, and runs all scripts × clips in parallel. Avatar scripts auto-route to Veo unless force_model=true. Returns one grouped canvas card per script. Use this INSTEAD of emitting N individual generate_seedance_video calls when the user gave you a numbered list of scripts.",
+      parameters: {
+        type: "object",
+        properties: {
+          scripts: {
+            type: "array",
+            minItems: 1,
+            maxItems: 12,
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Short label for this script (e.g. 'AI-Proof Real Estate')." },
+                voiceover: { type: "string", description: "The spoken VO / on-camera dialogue, exactly as written. The server splits this into clips." },
+                environment: { type: "string", description: "One-line scene description applied to every clip in this script (e.g. 'Walking through a luxury RV resort')." },
+                target_duration_s: { type: "integer", minimum: 4, maximum: 120, description: "Total length in seconds. If omitted, inferred from word count (~2.4 wps)." },
+                use_avatar: { type: "boolean", description: "If true and an avatar is selected on the conversation, use that avatar for every clip in this script. Default true when an avatar is selected." },
+                force_model: { type: "boolean", description: "If true, do NOT auto-route Seedance → Veo for avatar scripts. Default false." },
+              },
+              required: ["voiceover"],
+            },
+          },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Model to use for non-avatar scripts. Avatar scripts auto-route to Veo." },
+          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
+          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. 4K only on Seedance Pro." },
+        },
+        required: ["scripts"],
       },
     },
   },
@@ -1590,6 +1624,28 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
 };
+
+// Models known to RELIABLY render synthetic / AI-generated human avatars.
+// Seedance's content filter rejects most photoreal AI avatars as "real people";
+// Veo and Kling handle them. When an avatar is selected we auto-route to a
+// compatible model unless the caller passes forceModel=true (explicit override).
+const AVATAR_SAFE_MODELS = new Set<string>([
+  "google/veo-3.1-fast",
+  "kwaivgi/kling-v3.0-std",
+  "kwaivgi/kling-v2.1-master",
+]);
+const AVATAR_FALLBACK_MODEL = "google/veo-3.1-fast";
+
+export function resolveModelForAvatar(
+  requestedModel: string,
+  hasAvatar: boolean,
+  forceModel = false,
+): { model: string; rerouted: boolean; reason: "user_choice" | "auto_veo_for_avatar" | "force_override" } {
+  if (!hasAvatar) return { model: requestedModel, rerouted: false, reason: "user_choice" };
+  if (forceModel) return { model: requestedModel, rerouted: false, reason: "force_override" };
+  if (AVATAR_SAFE_MODELS.has(requestedModel)) return { model: requestedModel, rerouted: false, reason: "user_choice" };
+  return { model: AVATAR_FALLBACK_MODEL, rerouted: true, reason: "auto_veo_for_avatar" };
+}
 
 function inferVideoDurationSeconds(text: string, fallback = 15): number {
   const t = text || "";
@@ -1680,6 +1736,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- VIDEO / REEL / SCENE WORKFLOW (storyboard review gate):",
   "- SEEDANCE 2.0 (single-clip video, OpenRouter):",
   "  • Use generate_seedance_video when the user wants ONE standalone clip (3–15s, up to 1080p): a single hero shot, animated still, product loop, short reel, or 'turn this image into a video'.",
+  "- MULTI-SCRIPT BATCH (CRITICAL): If the user pastes 2+ video scripts in one message (numbered list '1. ... 2. ...', or visibly distinct script blocks with their own Avatar/Environment headers, or a 'Batch scripts' payload with a JSON `scripts` array), call generate_script_batch ONCE with the full scripts array — do NOT emit N separate generate_seedance_video calls. The server auto-splits each script into per-clip segments, locks the avatar across clips, and renders all scripts × clips in parallel. Avatar scripts auto-route to Veo unless the user said 'use Seedance anyway'.",
   "  • Text-to-video: just pass `prompt` (+ aspect_ratio, duration, resolution).",
   "  • Image-to-video: pass `image_url` (a canvas keyframe / static ad URL) — Seedance preserves character, style, and brand from the reference. Optionally pass `last_frame_url` for precise motion endpoints.",
   "  • Default to duration=15, resolution=1080p, aspect_ratio=9:16 unless the user says otherwise. Use fast=true only when the user explicitly asks for a quick/cheap draft.",
@@ -1755,7 +1812,8 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ctx.avatar.elevenlabs_voice_id ? `- voice_id: ${ctx.avatar.elevenlabs_voice_id}` : "",
         "RULES:",
         "- For ANY video the user asks for (single-clip or multi-clip), pass image_url = the avatar image_url to generate_seedance_video so the avatar is preserved across frames. The user does NOT need to re-state the avatar in their message.",
-        "- If the script is longer than the model's per-clip max, split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url so the avatar's face and outfit stay consistent across segments.",
+        "- AVATAR MODEL ROUTING (CRITICAL): Seedance's content filter REJECTS photoreal AI avatars as 'real people'. The server auto-routes avatar clips to Veo 3.1 Fast (≤8s per clip) regardless of what model you pass. You should still pass model='google/veo-3.1-fast' explicitly for avatar work and split the script into 8-second segments. Only set force_model=true if the user EXPLICITLY says 'use Seedance anyway with my avatar'.",
+        "- If the script is longer than the model's per-clip max (Veo 8s, Seedance 15s), split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url so the avatar's face and outfit stay consistent across segments. Example: 30s avatar VSL → 4 generate_seedance_video calls of 8s each, all with model='google/veo-3.1-fast' and the same image_url.",
         "- In the video prompt, briefly describe the avatar performing the scripted action (e.g. 'Sarah, 28, casual blazer, smiling to camera, holding phone vertically — speaks the hook directly into the lens'). Don't change the avatar's identity, ethnicity, or core look.",
         "- The user can override the avatar for a specific request by saying 'no avatar' or supplying a different image — respect that.",
       ].filter(Boolean).join("\n")
@@ -2535,16 +2593,38 @@ Deno.serve(async (req) => {
           const modelsToRun = (selectedVideoModels.length ? selectedVideoModels : [selectedVideoModel])
             .filter((m, i, arr) => arr.indexOf(m) === i);
           const jobs = modelsToRun.flatMap((model) => {
-            const cap = VIDEO_MODEL_CAPS[model]?.maxDuration || 15;
-            return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({ model, cap, segment }));
+            // Auto-route to an avatar-safe model (Veo) when an avatar is
+            // selected and the user picked Seedance — Seedance's filter
+            // rejects photoreal AI avatars. Force-override isn't exposed
+            // on the direct-video path yet, so always honor the reroute.
+            const routed = resolveModelForAvatar(model, !!selectedAvatar, false);
+            const effectiveModel = routed.model;
+            const cap = VIDEO_MODEL_CAPS[effectiveModel]?.maxDuration || 15;
+            return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({
+              model: effectiveModel,
+              cap,
+              segment,
+              routing: { requested_model: model, rerouted: routed.rerouted, reason: routed.reason },
+            }));
           });
 
           // Fan ALL selected models × clips out in parallel so compare-x N works the same
           // as a single model and slow clips never block fast ones.
-          await Promise.all(jobs.map(async ({ model, segment }) => {
+          await Promise.all(jobs.map(async ({ model, segment, routing }) => {
             if (aborted.v) return;
             const toolId = `direct-video-${crypto.randomUUID()}`;
             const placeholderId = crypto.randomUUID();
+            if (routing.rerouted) {
+              send({
+                type: "model_rerouted",
+                placeholder_id: placeholderId,
+                requested_model: routing.requested_model,
+                effective_model: model,
+                reason: routing.reason,
+                message: `Avatar locked to ${VIDEO_MODEL_CAPS[model]?.label || model} — Seedance rejects synthetic faces.`,
+              });
+              console.log(`[avatar-route] ${routing.requested_model} → ${model} (avatar=${selectedAvatar?.id})`);
+            }
             const imageUrl = segment.index === 0
               ? (videoFrames?.firstFrameUrl || selectedAvatar?.image_url || videoFrames?.ingredientUrl || null)
               : (selectedAvatar?.image_url || null);
@@ -2643,7 +2723,7 @@ Deno.serve(async (req) => {
             "generate_ad_variations", "generate_scene_image", "explode_ad_variants",
           ]);
           const VIDEO_TOOL_NAMES = new Set([
-            "generate_seedance_video", "generate_scene_video", "plan_storyboard",
+            "generate_seedance_video", "generate_scene_video", "plan_storyboard", "generate_script_batch",
           ]);
           const hasImage = selectedImageModels.length > 0;
           const hasVideo = selectedVideoModels.length > 0 || !!selectedVideoModel;
@@ -3159,9 +3239,35 @@ Deno.serve(async (req) => {
                 // tool call out across every selected model in parallel — same prompt/frames/dims,
                 // one canvas card per model — so compare always works even if the LLM emitted only one call.
                 const explicitModel = (typeof args.model === "string" && args.model) ? args.model : null;
-                const fanModels = (selectedVideoModels.length > 1 && !explicitModel)
+                const forceModel = !!args.force_model;
+                const rawFanModels = (selectedVideoModels.length > 1 && !explicitModel)
                   ? selectedVideoModels.slice()
                   : [explicitModel || selectedVideoModel];
+                // Avatar routing: when an avatar is selected, swap Seedance → Veo
+                // unless the LLM explicitly passed force_model=true. Dedupe so we
+                // don't render Veo twice if it was already in the list.
+                const fanRoutings = rawFanModels.map((m) => ({
+                  requested: m,
+                  ...resolveModelForAvatar(m, !!selectedAvatar, forceModel),
+                }));
+                const seenModels = new Set<string>();
+                const fanModels: string[] = [];
+                for (const r of fanRoutings) {
+                  if (seenModels.has(r.model)) continue;
+                  seenModels.add(r.model);
+                  fanModels.push(r.model);
+                  if (r.rerouted) {
+                    console.log(`[avatar-route][tool] ${r.requested} → ${r.model} (avatar=${selectedAvatar?.id}, force=${forceModel})`);
+                    send({
+                      type: "model_rerouted",
+                      placeholder_id: canvasPlaceholderId,
+                      requested_model: r.requested,
+                      effective_model: r.model,
+                      reason: r.reason,
+                      message: `Avatar locked to ${VIDEO_MODEL_CAPS[r.model]?.label || r.model} — Seedance rejects synthetic faces.`,
+                    });
+                  }
+                }
                 const baseDuration = typeof args.duration === "number" ? args.duration : 15;
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
                 const argRes = (args.resolution === "720p" || args.resolution === "1080p" || args.resolution === "4k") ? args.resolution : null;
@@ -3424,6 +3530,157 @@ Deno.serve(async (req) => {
                   });
                   if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
                   result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution: r.resolution, aspect_ratio: aspect };
+                }
+              } else if (name === "generate_script_batch") {
+                // Multi-script batch renderer. Each script gets its own grouped
+                // canvas card; clips within a script run in parallel and reuse
+                // the same avatar image for identity lock.
+                const rawScripts = Array.isArray(args.scripts) ? args.scripts : [];
+                if (!rawScripts.length) {
+                  result = { error: "generate_script_batch requires scripts[] with at least one script." };
+                } else {
+                  const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
+                  const requestedRes = (args.resolution === "720p" || args.resolution === "4k") ? args.resolution : "1080p";
+                  const requestedModel = typeof args.model === "string" && args.model ? args.model : selectedVideoModel;
+                  const groupId = crypto.randomUUID();
+                  const scriptResults: any[] = [];
+
+                  await Promise.all(rawScripts.slice(0, 12).map(async (s: any, scriptIdx: number) => {
+                    const voiceover = String(s?.voiceover || "").trim();
+                    if (!voiceover) {
+                      scriptResults.push({ script_index: scriptIdx, error: "Missing voiceover" });
+                      return;
+                    }
+                    const title = String(s?.title || `Script ${scriptIdx + 1}`).slice(0, 200);
+                    const environment = String(s?.environment || "").trim();
+                    const useAvatar = (s?.use_avatar !== false) && !!selectedAvatar;
+                    const forceModel = !!s?.force_model;
+                    // Estimate duration from word count if not given (~2.4 wps spoken pace).
+                    const wordCount = voiceover.split(/\s+/).filter(Boolean).length;
+                    const targetDuration = typeof s?.target_duration_s === "number"
+                      ? Math.max(4, Math.min(120, Math.round(s.target_duration_s)))
+                      : Math.max(8, Math.min(120, Math.ceil(wordCount / 2.4)));
+                    // Route per-script: avatar scripts auto-route to Veo unless force_model.
+                    const routed = resolveModelForAvatar(requestedModel, useAvatar, forceModel);
+                    const mdl = routed.model;
+                    const cap = VIDEO_MODEL_CAPS[mdl]?.maxDuration || 15;
+                    const segs = splitVideoPromptForModel(
+                      environment ? `${voiceover}\n\nSCENE / ENVIRONMENT (every clip): ${environment}` : voiceover,
+                      targetDuration,
+                      cap,
+                    );
+                    const avatarImg = useAvatar ? selectedAvatar?.image_url : null;
+                    // Emit a script_group event so the UI can group these clips.
+                    send({
+                      type: "script_group",
+                      group_id: groupId,
+                      script_index: scriptIdx,
+                      script_title: title,
+                      clip_count: segs.length,
+                      model: mdl,
+                      requested_model: requestedModel,
+                      rerouted: routed.rerouted,
+                      routing_reason: routed.reason,
+                      has_avatar: useAvatar,
+                      avatar_id: useAvatar ? selectedAvatar?.id : null,
+                    });
+                    if (routed.rerouted) {
+                      console.log(`[script-batch][avatar-route] script#${scriptIdx} ${routed.reason}: ${requestedModel} → ${mdl}`);
+                    }
+
+                    // Per-clip placeholders + parallel dispatch.
+                    const placeholderIds = segs.map(() => crypto.randomUUID());
+                    segs.forEach((seg, i) => {
+                      send({
+                        type: "canvas_placeholder",
+                        placeholder_id: placeholderIds[i],
+                        kind: "image",
+                        prompt: `${title} • Clip ${seg.index + 1}/${seg.count} • ${VIDEO_MODEL_CAPS[mdl]?.label || mdl}`,
+                        aspect_ratio: aspect,
+                        quality: "video",
+                        script_group_id: groupId,
+                        script_index: scriptIdx,
+                      });
+                    });
+
+                    const clipSettled = await Promise.allSettled(segs.map(async (seg, i) => {
+                      const segRes = clampResForModel(mdl) === "720p"
+                        ? "720p"
+                        : (requestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : requestedRes);
+                      // One retry on transient failure.
+                      let lastErr: any = null;
+                      for (let attempt = 0; attempt < 2; attempt++) {
+                        try {
+                          const r = await generateSeedanceVideo({
+                            prompt: seg.prompt,
+                            aspectRatio: aspect,
+                            duration: seg.duration,
+                            resolution: segRes,
+                            imageUrl: avatarImg,
+                            lastFrameUrl: null,
+                            ingredientUrl: avatarImg,
+                            model: mdl,
+                            clientId: clientId || null,
+                            conversationId,
+                            userId: userId!,
+                            onProgress: (p) => send({ type: "canvas_placeholder_progress", placeholder_id: placeholderIds[i], ...p }),
+                          });
+                          if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: placeholderIds[i] });
+                          return {
+                            ok: true,
+                            clip_index: seg.index + 1,
+                            clip_count: seg.count,
+                            video_url: r.video_url,
+                            model: r.model,
+                            avatar_id: useAvatar ? selectedAvatar?.id : null,
+                            routing_reason: routed.reason,
+                          };
+                        } catch (e: any) {
+                          lastErr = e;
+                          if (attempt === 0) {
+                            console.warn(`[script-batch] script#${scriptIdx} clip ${seg.index + 1}/${seg.count} attempt 1 failed, retrying:`, e?.message || e);
+                            await new Promise(res => setTimeout(res, 1500));
+                          }
+                        }
+                      }
+                      send({ type: "canvas_placeholder_failed", placeholder_id: placeholderIds[i], error: String(lastErr?.message || lastErr || "failed") });
+                      return {
+                        ok: false,
+                        clip_index: seg.index + 1,
+                        clip_count: seg.count,
+                        error: String(lastErr?.message || lastErr || "failed"),
+                        model: mdl,
+                      };
+                    }));
+                    const clips = clipSettled.map((c) => c.status === "fulfilled" ? c.value : { ok: false, error: String((c as any).reason) });
+                    const okClips = clips.filter((c: any) => c.ok).length;
+                    scriptResults.push({
+                      script_index: scriptIdx,
+                      title,
+                      model_used: mdl,
+                      requested_model: requestedModel,
+                      routing_reason: routed.reason,
+                      rerouted: routed.rerouted,
+                      has_avatar: useAvatar,
+                      avatar_id: useAvatar ? selectedAvatar?.id : null,
+                      target_duration_s: targetDuration,
+                      clip_count: segs.length,
+                      ok_clips: okClips,
+                      clips,
+                    });
+                  }));
+
+                  const totalClips = scriptResults.reduce((n, s) => n + (s.clip_count || 0), 0);
+                  const okTotal = scriptResults.reduce((n, s) => n + (s.ok_clips || 0), 0);
+                  result = {
+                    ok: okTotal > 0,
+                    group_id: groupId,
+                    script_count: scriptResults.length,
+                    total_clips: totalClips,
+                    ok_clips: okTotal,
+                    failed_clips: totalClips - okTotal,
+                    scripts: scriptResults,
+                  };
                 }
               } else if (name === "create_text_artifact") {
                 const title = String(args.title || "Untitled").slice(0, 200);
