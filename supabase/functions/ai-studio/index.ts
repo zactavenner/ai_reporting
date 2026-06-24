@@ -2483,6 +2483,12 @@ Deno.serve(async (req) => {
 
       let finalAssistantText = "";
       const finalToolEvents: any[] = [];
+      const compareModelsToRun = Array.isArray(compareModels)
+        ? compareModels.filter((model) => typeof model === "string" && model && model !== CHAT_MODEL).slice(0, 6)
+        : [];
+      const comparePromise = compareModelsToRun.length
+        ? compareChatModelsInBackground({ prompt: persistedUserText, models: compareModelsToRun, system: brandSummary })
+        : null;
 
       try {
         if (shouldDirectGenerateVideoPrompt(userText || "")) {
@@ -3322,6 +3328,17 @@ Deno.serve(async (req) => {
       } finally {
         // Persist final assistant message
         const cleaned = sanitizeAssistantText(finalAssistantText);
+        if (comparePromise) {
+          try {
+            const results = await comparePromise;
+            finalToolEvents.push({ name: "compare_chat_models", args: { models: compareModelsToRun }, result: { results } });
+            send({ type: "compare_results", results });
+          } catch (e: any) {
+            const result = { error: e?.message || String(e), results: [] };
+            finalToolEvents.push({ name: "compare_chat_models", args: { models: compareModelsToRun }, result });
+            send({ type: "compare_results", results: [], error: result.error });
+          }
+        }
         try {
           await supa.from("ai_studio_messages").insert({
             conversation_id: conversationId,
