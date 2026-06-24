@@ -784,6 +784,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [videoModels]);
   // first selection drives single-clip default model passed to the server
   const videoModel = videoModels[0] || undefined;
+  // Resolution selection for video generation. Persisted per browser.
+  // Validated against the active video model's supported resolutions on render.
+  const [videoResolution, setVideoResolution] = useState<"720p" | "1080p" | "4k">(() => {
+    try {
+      const v = localStorage.getItem("ai-studio:video-resolution");
+      if (v === "720p" || v === "1080p" || v === "4k") return v;
+    } catch {}
+    return "1080p";
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-resolution", videoResolution); } catch {}
+  }, [videoResolution]);
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
