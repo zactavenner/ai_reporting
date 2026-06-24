@@ -74,10 +74,10 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // UI shows the total cost of generating a clip at maxSeconds so buyers
 // can compare apples-to-apples without doing math in their head.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts",                 maxSeconds: 15, pricePerSecond: 0.0538 },
-  { value: "bytedance/seedance-2.0-pro",  label: "Seedance Pro",   hint: "Highest-quality Seedance, 1080p",         maxSeconds: 15, pricePerSecond: 0.15 },
-  { value: "kwaivgi/kling-v3.0-std",       label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion",   maxSeconds: 15, pricePerSecond: 0.126 },
-  { value: "google/veo-3.1-fast",          label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast",       maxSeconds: 8,  pricePerSecond: 0.10 },
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts (≤15s, 720p)",    maxSeconds: 15, pricePerSecond: 0.0538 },
+  { value: "bytedance/seedance-2.0-pro",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, 1080p)", maxSeconds: 15, pricePerSecond: 0.15 },
+  { value: "kwaivgi/kling-v3.0-std",      label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion (≤10s)", maxSeconds: 10, pricePerSecond: 0.126 },
+  { value: "google/veo-3.1-fast",         label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast (8s)",  maxSeconds: 8,  pricePerSecond: 0.10 },
 ];
 function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): string {
   const total = m.maxSeconds * m.pricePerSecond;
@@ -1922,8 +1922,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 rows={1}
               />
               </div>
-              <div className="flex items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
-                <div className="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
+              <div className="flex flex-col md:flex-row md:items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
+                <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible -mx-1 px-1 pb-1 md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0 [&>button]:shrink-0">
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
                   <Select value={adFormat} onValueChange={setAdFormat}>
@@ -2260,7 +2260,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   )}
                 </div>
                 </div>
-                <div className="shrink-0">
+                <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
                 {loading ? (
                   <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
                     <Square className="h-4 w-4" />
