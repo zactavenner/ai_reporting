@@ -1630,29 +1630,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       {/* LEFT — Chat */}
       {showChat && (
       <Card className={`${showCanvas && mobileView !== "chat" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden border-border/60 shadow-sm min-h-0 ${chatFsClass}`}>
-        <div className="px-5 pt-4 pb-3 border-b border-border/60">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+        <div className="px-3 sm:px-5 pt-3 sm:pt-4 pb-2 sm:pb-3 border-b border-border/60 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-sm leading-tight truncate">AI Studio</h3>
               <p className="text-[11px] text-muted-foreground truncate">{clientName}</p>
             </div>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setShowThreads(v => !v)} title={showThreads ? "Hide threads" : "Show threads"}>
+            <Button variant="ghost" size="sm" className="h-10 w-10 sm:h-8 sm:w-8 p-0 hidden lg:inline-flex shrink-0" onClick={() => setShowThreads(v => !v)} title={showThreads ? "Hide threads" : "Show threads"}>
               <History className="h-3.5 w-3.5" />
             </Button>
-            <AgentFolderInline clientId={clientId} clientName={clientName} compact />
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
+            <div className="hidden md:flex shrink-0">
+              <AgentFolderInline clientId={clientId} clientName={clientName} compact />
+            </div>
+            <Button variant="ghost" size="sm" className="h-10 w-10 sm:h-8 sm:w-8 p-0 shrink-0 hidden lg:inline-flex" onClick={() => setShowCanvas(v => !v)} title={showCanvas ? "Hide canvas" : "Show canvas"}>
               {showCanvas ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hidden lg:inline-flex" onClick={() => setWideChat(v => !v)} title={wideChat ? "Comfortable width" : "Expand chat width"}>
+            <Button variant="ghost" size="sm" className="h-10 w-10 sm:h-8 sm:w-8 p-0 hidden lg:inline-flex shrink-0" onClick={() => setWideChat(v => !v)} title={wideChat ? "Comfortable width" : "Expand chat width"}>
               {wideChat ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setFullscreen(f => f === "chat" ? "none" : "chat")} title={fullscreen === "chat" ? "Exit fullscreen" : "Fullscreen chat"}>
+            <Button variant="ghost" size="sm" className="h-10 w-10 sm:h-8 sm:w-8 p-0 shrink-0" onClick={() => setFullscreen(f => f === "chat" ? "none" : "chat")} title={fullscreen === "chat" ? "Exit fullscreen" : "Fullscreen chat"}>
               {fullscreen === "chat" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={clearConversation} title="Clear conversation">
+            <Button variant="ghost" size="sm" className="h-10 w-10 sm:h-8 sm:w-8 p-0 shrink-0" onClick={clearConversation} title="Clear conversation">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -1750,7 +1752,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </div>
         </ScrollArea>
 
-        <div className="px-4 sm:px-6 pb-4 pt-2">
+        <div className="px-3 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           <div className={`mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
             {/* Context usage + auto doc toggle */}
             {(() => {
@@ -2261,28 +2263,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
-                {loading ? (
-                  <Button onClick={stop} size="icon" variant="destructive" className="h-9 w-9 rounded-xl" title="Stop">
-                    <Square className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      onClick={isRecording ? stopRecording : startRecording}
-                      size="icon"
-                      variant={isRecording ? "destructive" : "ghost"}
-                      className="h-9 w-9 rounded-xl"
-                      title={isRecording ? "Stop recording" : "Record voice"}
-                      disabled={isTranscribing}
-                    >
-                      {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                    </Button>
-                    <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-9 w-9 rounded-xl">
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+                 {loading ? (
+                   <Button onClick={stop} size="icon" variant="destructive" className="h-11 w-11 md:h-9 md:w-9 rounded-xl" title="Stop">
+                     <Square className="h-4 w-4" />
+                   </Button>
+                 ) : (
+                   <div className="flex items-center gap-1.5">
+                     <Button
+                       type="button"
+                       onClick={isRecording ? stopRecording : startRecording}
+                       size="icon"
+                       variant={isRecording ? "destructive" : "ghost"}
+                       className="h-11 w-11 md:h-9 md:w-9 rounded-xl"
+                       title={isRecording ? "Stop recording" : "Record voice"}
+                       disabled={isTranscribing}
+                     >
+                       {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                     </Button>
+                     <Button onClick={() => send(input)} disabled={!input.trim()} size="icon" className="h-11 w-11 md:h-9 md:w-9 rounded-xl shadow-sm">
+                       <Send className="h-4 w-4" />
+                     </Button>
+                   </div>
+                 )}
                 </div>
               </div>
             </div>
