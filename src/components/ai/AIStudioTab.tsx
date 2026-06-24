@@ -827,6 +827,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [canvasView, setCanvasView] = useState<{ zoom: number; panX: number; panY: number } | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [batchScriptsOpen, setBatchScriptsOpen] = useState(false);
   const [caretPos, setCaretPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents" | "avatars">("chat");
