@@ -1274,7 +1274,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         })(),
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
-        ...(videoModel ? { videoModel, videoModels, videoFrames } : {}),
+        ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution } : {}),
         avatarId: selectedAvatarId,
         adFormat: adFormat === "none" ? undefined : adFormat,
         offerContext: (() => {
