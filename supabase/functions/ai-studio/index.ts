@@ -2557,16 +2557,38 @@ Deno.serve(async (req) => {
           const modelsToRun = (selectedVideoModels.length ? selectedVideoModels : [selectedVideoModel])
             .filter((m, i, arr) => arr.indexOf(m) === i);
           const jobs = modelsToRun.flatMap((model) => {
-            const cap = VIDEO_MODEL_CAPS[model]?.maxDuration || 15;
-            return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({ model, cap, segment }));
+            // Auto-route to an avatar-safe model (Veo) when an avatar is
+            // selected and the user picked Seedance — Seedance's filter
+            // rejects photoreal AI avatars. Force-override isn't exposed
+            // on the direct-video path yet, so always honor the reroute.
+            const routed = resolveModelForAvatar(model, !!selectedAvatar, false);
+            const effectiveModel = routed.model;
+            const cap = VIDEO_MODEL_CAPS[effectiveModel]?.maxDuration || 15;
+            return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({
+              model: effectiveModel,
+              cap,
+              segment,
+              routing: { requested_model: model, rerouted: routed.rerouted, reason: routed.reason },
+            }));
           });
 
           // Fan ALL selected models × clips out in parallel so compare-x N works the same
           // as a single model and slow clips never block fast ones.
-          await Promise.all(jobs.map(async ({ model, segment }) => {
+          await Promise.all(jobs.map(async ({ model, segment, routing }) => {
             if (aborted.v) return;
             const toolId = `direct-video-${crypto.randomUUID()}`;
             const placeholderId = crypto.randomUUID();
+            if (routing.rerouted) {
+              send({
+                type: "model_rerouted",
+                placeholder_id: placeholderId,
+                requested_model: routing.requested_model,
+                effective_model: model,
+                reason: routing.reason,
+                message: `Avatar locked to ${VIDEO_MODEL_CAPS[model]?.label || model} — Seedance rejects synthetic faces.`,
+              });
+              console.log(`[avatar-route] ${routing.requested_model} → ${model} (avatar=${selectedAvatar?.id})`);
+            }
             const imageUrl = segment.index === 0
               ? (videoFrames?.firstFrameUrl || selectedAvatar?.image_url || videoFrames?.ingredientUrl || null)
               : (selectedAvatar?.image_url || null);
