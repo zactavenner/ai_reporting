@@ -15,13 +15,14 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
 
-const MODEL_CAPS: Record<string, { durations: number[]; defaultDuration: number; maxRes: "720p" | "1080p" }> = {
+const MODEL_CAPS: Record<string, { durations: number[]; defaultDuration: number; maxRes: "720p" | "1080p" | "4k" }> = {
   "bytedance/seedance-2.0-fast":  { durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "720p" },
-  "bytedance/seedance-2.0":   { durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "1080p" },
+  "bytedance/seedance-2.0":       { durations: [4, 5, 8, 10, 12, 15], defaultDuration: 15, maxRes: "4k"   },
   "kwaivgi/kling-v3.0-std":       { durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" },
   "kwaivgi/kling-v2.1-master":    { durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" },
   "google/veo-3.1-fast":          { durations: [4, 6, 8],              defaultDuration: 8,  maxRes: "1080p" },
 };
+const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "4k": 3 };
 
 function estimateScriptSeconds(text: string): number {
   // ~2.5 words/sec speech default; respect explicit "(30s)" / "30 seconds" hints.
@@ -165,7 +166,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: `Unsupported model: ${model}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const sceneDuration = caps.durations.includes(Number(duration)) ? Number(duration) : caps.defaultDuration;
-    const effectiveRes = (resolution === "720p" || resolution === "1080p") ? resolution : caps.maxRes;
+    const reqRes = (resolution === "720p" || resolution === "1080p" || resolution === "4k") ? resolution : caps.maxRes;
+    const effectiveRes = RES_RANK[reqRes] <= RES_RANK[caps.maxRes] ? reqRes : caps.maxRes;
 
     // 1. Create the batch row first (so we have an id for everything).
     const { data: batchRow, error: batchErr } = await supa
