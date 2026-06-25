@@ -5,7 +5,7 @@ import { DailyMetric } from './useMetrics';
 
 const DASHBOARD_QUERY_TIMEOUT_MS = 12000;
 
-async function withTimeout<T>(promise: Promise<T>, label: string, ms = DASHBOARD_QUERY_TIMEOUT_MS): Promise<T> {
+async function withTimeout<T>(promise: PromiseLike<T>, label: string, ms = DASHBOARD_QUERY_TIMEOUT_MS): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
@@ -49,8 +49,8 @@ export function useClientSourceMetrics(startDate?: string, endDate?: string) {
       };
 
       try {
-        const { data, error } = await withTimeout(
-          supabase.rpc('get_client_source_metrics', params),
+        const { data, error } = await withTimeout<{ data: unknown; error: unknown }>(
+          supabase.rpc('get_client_source_metrics', params) as PromiseLike<{ data: unknown; error: unknown }>,
           'Client source metrics'
         );
         if (error) throw error;
