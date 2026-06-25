@@ -1379,7 +1379,24 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
-          return masterBlock + masterAgentBlock + agentBlock + iStyleBlock + vStyleBlock + text;
+          // Hard-lock block — forces the LLM to call generators with the exact
+          // model / resolution / frames the user pre-selected in the composer.
+          const lockLines: string[] = [];
+          if (videoModel) {
+            lockLines.push(
+              `🔒 VIDEO HARD-LOCK: model="${videoModel}", resolution="${videoResolution}", duration=15s. Pass these EXACT values to generate_seedance_video. Do NOT substitute models or resolutions.`,
+            );
+            if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
+            if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
+            if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
+          }
+          if (imageModels.length === 1) {
+            lockLines.push(`🔒 IMAGE HARD-LOCK: model="${imageModels[0]}". Pass this EXACT value to generate_static_ad / edit_static_ad.`);
+          } else if (imageModels.length > 1) {
+            lockLines.push(`🔒 IMAGE HARD-LOCK: compare models [${imageModels.map(m => `"${m}"`).join(", ")}] via compare_image_models.`);
+          }
+          const lockBlock = lockLines.length ? lockLines.join("\n") + "\n\n" : "";
+          return masterBlock + masterAgentBlock + agentBlock + iStyleBlock + vStyleBlock + lockBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
