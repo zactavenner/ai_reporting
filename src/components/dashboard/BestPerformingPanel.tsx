@@ -51,10 +51,10 @@ export function BestPerformingPanel({ clientIds }: { clientIds?: string[] }) {
     (async () => {
       setLoading(true);
       try {
-        const { data, error } = await withTimeout<{ data: unknown; error: unknown }>(
+        const { data, error } = await withTimeout<{ data: TopRow[] | null; error: unknown }>(
           supabase.rpc('get_top_performers', {
             p_client_ids: clientIds && clientIds.length ? clientIds : null,
-          }) as PromiseLike<{ data: unknown; error: unknown }>,
+          }) as PromiseLike<{ data: TopRow[] | null; error: unknown }>,
           'Top performers'
         );
         if (cancelled) return;
