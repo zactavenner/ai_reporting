@@ -4362,6 +4362,12 @@ Deno.serve(async (req) => {
                   : uniqueSelectedVideoModels.length === 1
                     ? uniqueSelectedVideoModels[0]
                     : selectedVideoModel;
+                // Clamp to the chosen reel model's resolution cap. UI's
+                // `requestedRes` (4K when Seedance Pro is selected) wins over
+                // the LLM's args.resolution unless the model can't support it.
+                const resolution: "720p" | "1080p" | "4k" = reelVideoModel
+                  ? clampResForModel(reelVideoModel)
+                  : (args.resolution === "720p" ? "720p" : (args.resolution === "4k" ? "4k" : "1080p"));
                 await recordVideoModelDecision(supa, "image_to_reel.model_source", {
                   conversation_id: conversationId,
                   client_id: clientId || null,
