@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { Clapperboard, Plus, Trash2, Save, ChevronDown } from "lucide-react";
+import { Clapperboard, Plus, Trash2, Save, ChevronDown, Settings2, Sparkles, FileAudio, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { StyleReferencesEditor, buildReferencesPromptLines, type StyleReference } from "./StyleReferencesEditor";
+import { supabase } from "@/integrations/supabase/client";
+import { Link } from "react-router-dom";
 
 export type VideoStyle = {
   id: string;
@@ -23,6 +25,12 @@ export type VideoStyle = {
   /** Prompt template injected before the user's text when this style is active. */
   prompt: string;
   builtIn?: boolean;
+  /** Stable key for built-in presets so cloud rows can be matched/upserted. */
+  builtinKey?: string;
+  /** Cloud DB row id (when persisted). */
+  cloudId?: string;
+  /** Snapshot of the last AI-trained prompt — lets user "Reset to AI-trained". */
+  aiTrainedPrompt?: string;
   references?: StyleReference[];
 };
 
