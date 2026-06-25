@@ -3543,6 +3543,38 @@ Deno.serve(async (req) => {
       try { req.signal.addEventListener("abort", () => { disconnected = true; }); } catch {}
 
       send({ type: "conversation", conversationId });
+      // STALE PROCESSING SWEEP: any prior "processing" canvas video card for
+      // this user that's been queued for longer than the worst-case
+      // HappyHorse poll budget (25 min) is definitely dead — either the
+      // function instance was recycled mid-poll or the legacy
+      // generate-video-from-image function inserted a row that never got
+      // updated. Mark those failed so the canvas stops showing ghost
+      // "Seedance timed out after 5 minutes" cards from old runs, while
+      // preserving the originally requested model in the payload so the
+      // chosen model (HappyHorse vs Seedance) is never silently relabeled.
+      try {
+        const staleCutoff = new Date(Date.now() - 25 * 60 * 1000).toISOString();
+        const { data: stale } = await supa
+          .from("ai_studio_canvas_items")
+          .select("id, payload")
+          .eq("user_id", userId)
+          .eq("kind", "scene_video")
+          .lte("created_at", staleCutoff)
+          .limit(50);
+        for (const row of stale || []) {
+          const p: any = row.payload || {};
+          if (p?.status !== "processing" || p?.video_url) continue;
+          await supa.from("ai_studio_canvas_items").update({
+            payload: {
+              ...p,
+              status: "failed",
+              error: `${p.requested_model || p.model || "Video"} render did not complete in time (stale background job auto-cleared). Re-submit to retry.`,
+              failed_at: new Date().toISOString(),
+              stale_cleanup: true,
+            },
+          }).eq("id", row.id);
+        }
+      } catch (e) { console.warn("stale processing sweep failed (non-fatal)", e); }
       // Tell the client roughly how much context is being shipped so it can
       // render a usage meter. ~4 chars ≈ 1 token (rough heuristic).
       const ctxChars = convo.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
