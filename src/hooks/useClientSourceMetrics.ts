@@ -49,8 +49,8 @@ export function useClientSourceMetrics(startDate?: string, endDate?: string) {
       };
 
       try {
-        const { data, error } = await withTimeout<{ data: unknown; error: unknown }>(
-          supabase.rpc('get_client_source_metrics', params) as PromiseLike<{ data: unknown; error: unknown }>,
+        const { data, error } = await withTimeout<{ data: ClientSourceMetricsRow[] | null; error: unknown }>(
+          supabase.rpc('get_client_source_metrics', params) as PromiseLike<{ data: ClientSourceMetricsRow[] | null; error: unknown }>,
           'Client source metrics'
         );
         if (error) throw error;
