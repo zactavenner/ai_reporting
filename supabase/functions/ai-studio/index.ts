@@ -2787,7 +2787,21 @@ Deno.serve(async (req) => {
                 userId: userId!,
                 onProgress: (p) => send({ type: "canvas_placeholder_progress", placeholder_id: placeholderId, ...p }),
               });
-              result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: aspect, duration: segment.duration, resolution: r.resolution, clip_index: segment.index + 1, clip_count: segment.count, avatar_mapping: avatarMapping };
+              result = {
+                ok: true,
+                video_url: r.video_url,
+                model: r.model,
+                aspect_ratio: aspect,
+                duration: segment.duration,
+                resolution: r.resolution,
+                actual_resolution: (r as any).actual_resolution || null,
+                actual_width: (r as any).actual_width || null,
+                actual_height: (r as any).actual_height || null,
+                resolution_match: (r as any).resolution_match ?? null,
+                clip_index: segment.index + 1,
+                clip_count: segment.count,
+                avatar_mapping: avatarMapping,
+              };
               if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: placeholderId });
             } catch (e: any) {
               result = { error: e?.message || String(e), model, clip_index: segment.index + 1, clip_count: segment.count, avatar_mapping: avatarMapping };
