@@ -2671,7 +2671,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: selectedVideoModels, videoResolution: requestedRes, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: uniqueSelectedVideoModels, videoResolution: requestedRes, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
@@ -2774,7 +2774,7 @@ Deno.serve(async (req) => {
           const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
-          const modelsToRun = (selectedVideoModels.length ? selectedVideoModels : [promptRequestedVideoModel || selectedVideoModel])
+          const modelsToRun = (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [promptRequestedVideoModel || selectedVideoModel])
             .filter((m, i, arr) => arr.indexOf(m) === i);
           const jobs = modelsToRun.flatMap((model) => {
             // Auto-route to an avatar-safe model (Veo) when an avatar is
@@ -2924,7 +2924,7 @@ Deno.serve(async (req) => {
             "generate_seedance_video", "generate_scene_video", "plan_storyboard", "generate_script_batch",
           ]);
           const hasImage = selectedImageModels.length > 0;
-          const hasVideo = selectedVideoModels.length > 0 || !!selectedVideoModel;
+          const hasVideo = uniqueSelectedVideoModels.length > 0 || !!selectedVideoModel;
           const gatedTools = (tools as any[]).filter((t: any) => {
             const n = t?.function?.name || t?.name;
             if (!n) return true;
@@ -3441,8 +3441,8 @@ Deno.serve(async (req) => {
                 // - Only fall back to the LLM's explicit args.model when the user made no selection.
                 const explicitModel = (typeof args.model === "string" && args.model) ? args.model : null;
                 const forceModel = !!args.force_model;
-                const rawFanModels = selectedVideoModels.length > 0
-                  ? selectedVideoModels.slice()
+                const rawFanModels = uniqueSelectedVideoModels.length > 0
+                  ? uniqueSelectedVideoModels.slice()
                   : [explicitModel || selectedVideoModel];
                 // Avatar routing: when an avatar is selected, swap Seedance → Veo
                 // unless the LLM explicitly passed force_model=true. Dedupe so we
@@ -3680,8 +3680,8 @@ Deno.serve(async (req) => {
                 const aspect = args.aspect_ratio || "9:16";
                 const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
                 const resolution = args.resolution === "720p" ? "720p" : "1080p";
-                const reelVideoModel = selectedVideoModels.length === 1
-                  ? selectedVideoModels[0]
+                const reelVideoModel = uniqueSelectedVideoModels.length === 1
+                  ? uniqueSelectedVideoModels[0]
                   : (/\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : selectedVideoModel);
                 const selectedVideoLabel = VIDEO_MODEL_CAPS[reelVideoModel]?.label?.split(" (")?.[0] || "video render";
                 let imageUrl: string | null = args.image_url || null;
