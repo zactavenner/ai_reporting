@@ -1789,6 +1789,43 @@ async function generateSeedanceVideo(opts: {
     throw new Error(`${modelLabel} rehost failed: ${msg}`);
   }
   emit({ stage: "completed", label: "Reel ready", job_id: jobId, model, percent: 100, elapsed_s: (Date.now() - t0) / 1000 });
+  // Snapshot of the exact OpenRouter request body we sent. Persisted alongside the
+  // generation record so users (and us, when debugging) can audit what HappyHorse /
+  // Seedance / Kling received — model id, aspect_ratio, resolution, size, duration,
+  // and the first_frame / last_frame / reference_image URLs that were actually wired.
+  const firstFrameUrl = (() => {
+    const f = (body.frame_images as any[] | undefined)?.find((x) => x?.frame_type === "first_frame");
+    return f?.image_url?.url || (body.image_url as string | undefined) || null;
+  })();
+  const lastFrameUrl = (() => {
+    const f = (body.frame_images as any[] | undefined)?.find((x) => x?.frame_type === "last_frame");
+    return f?.image_url?.url || (body.tail_image_url as string | undefined) || null;
+  })();
+  const referenceImageUrl = (body.reference_images as any[] | undefined)?.[0]?.image_url?.url || null;
+  const openrouterRequest = {
+    endpoint: "https://openrouter.ai/api/v1/videos",
+    method: "POST",
+    model: body.model,
+    prompt_chars: (opts.prompt || "").length,
+    aspect_ratio: body.aspect_ratio || null,
+    resolution: body.resolution || null,
+    size: body.size || null,
+    duration: body.duration || null,
+    first_frame_url: firstFrameUrl,
+    last_frame_url: lastFrameUrl,
+    reference_image_url: referenceImageUrl,
+    frame_count: Array.isArray(body.frame_images) ? (body.frame_images as any[]).length : 0,
+    job_id: jobId,
+    ui_selection: {
+      model: opts.model || null,
+      resolution: opts.resolution || null,
+      duration: opts.duration || null,
+      aspect_ratio: opts.aspectRatio || null,
+      image_url: opts.imageUrl || null,
+      last_frame_url: opts.lastFrameUrl || null,
+      ingredient_url: opts.ingredientUrl || null,
+    },
+  };
   await recordVideoModelDecision(supa, "generateSeedanceVideo.completed", {
     conversation_id: opts.conversationId,
     client_id: opts.clientId,
@@ -1806,6 +1843,7 @@ async function generateSeedanceVideo(opts: {
     effective_resolution: effectiveResolution,
     wire_resolution: body.resolution || null,
     wire_size: body.size || null,
+    openrouter_request: openrouterRequest,
   });
 
   // Resolution verification: parse the downloaded MP4 to confirm actual rendered output
@@ -1865,6 +1903,7 @@ async function generateSeedanceVideo(opts: {
       actual_height: actualHeight,
       actual_resolution: actualResolution,
       resolution_match: resolutionMatch,
+      openrouter_request: openrouterRequest,
     },
   }).select("id, kind, payload, created_at").single();
 
@@ -1890,6 +1929,7 @@ async function generateSeedanceVideo(opts: {
         wire_size: body.size || null,
         actual_width: actualWidth, actual_height: actualHeight,
         actual_resolution: actualResolution, resolution_match: resolutionMatch,
+        openrouter_request: openrouterRequest,
       },
     });
     // Mirror into client_videos (per-client persistent library).
@@ -1927,6 +1967,7 @@ async function generateSeedanceVideo(opts: {
           actual_height: actualHeight,
           actual_resolution: actualResolution,
           resolution_match: resolutionMatch,
+          openrouter_request: openrouterRequest,
         },
         created_by: opts.userId || null,
       });
