@@ -3399,12 +3399,15 @@ Deno.serve(async (req) => {
                 result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
                 if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
               } else if (name === "generate_seedance_video") {
-                // COMPARE GUARANTEE: when the user selected MULTIPLE video models, fan a single
-                // tool call out across every selected model in parallel — same prompt/frames/dims,
-                // one canvas card per model — so compare always works even if the LLM emitted only one call.
+                // MODEL SELECTION GUARANTEE: the user's UI selection is the source of truth.
+                // - If they picked 1 model (e.g. only HappyHorse), render with EXACTLY that model
+                //   and ignore any model the LLM tried to pass (tool name says "seedance" which
+                //   biases the LLM toward Seedance even when the user opted out).
+                // - If they picked 2+ models, fan out across all of them for true compare.
+                // - Only fall back to the LLM's explicit args.model when the user made no selection.
                 const explicitModel = (typeof args.model === "string" && args.model) ? args.model : null;
                 const forceModel = !!args.force_model;
-                const rawFanModels = (selectedVideoModels.length > 1 && !explicitModel)
+                const rawFanModels = selectedVideoModels.length > 0
                   ? selectedVideoModels.slice()
                   : [explicitModel || selectedVideoModel];
                 // Avatar routing: when an avatar is selected, swap Seedance → Veo
