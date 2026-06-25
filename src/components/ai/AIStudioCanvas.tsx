@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3, Grid3x3, RefreshCw, GraduationCap } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3, Grid3x3, RefreshCw, GraduationCap, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,7 +53,7 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, onEditVideo, onAddCaptions, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
+  entries, onEditImage, onInlineEdit, onEditVideo, onAddCaptions, onDeleteItem, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
@@ -61,6 +61,8 @@ export function AIStudioCanvas({
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   onEditVideo?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
   onAddCaptions?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
+  /** Delete a canvas card (removes the row from ai_studio_canvas_items). */
+  onDeleteItem?: (itemId: string) => void | Promise<void>;
   clientId?: string;
   onCanvasItemUpdated?: (item: CanvasItem) => void;
   onSendMessage?: (text: string) => void;
@@ -446,6 +448,16 @@ export function AIStudioCanvas({
                 {p.parent_image_url && (
                   <Badge variant="outline" className="text-[10px] ml-auto">revision</Badge>
                 )}
+                {onDeleteItem && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete from canvas"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      if (!confirm("Delete this creative from the canvas? This cannot be undone.")) return;
+                      onDeleteItem(e.id);
+                    }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </Card>
           );
@@ -519,6 +531,12 @@ export function AIStudioCanvas({
                 <Badge variant="secondary" className="text-[10px]">{p.aspect_ratio}</Badge>
                 {p.model && <Badge variant="secondary" className="text-[10px]" title={p.model}>{modelLabel(p.model)}</Badge>}
                 <span className="text-xs text-muted-foreground ml-auto">keyframe</span>
+                {onDeleteItem && (
+                  <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete from canvas"
+                    onClick={(ev) => { ev.stopPropagation(); if (!confirm("Delete this keyframe from the canvas?")) return; onDeleteItem(e.id); }}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
               {p.image_url && (
                 <a href={p.image_url} target="_blank" rel="noopener noreferrer">
@@ -678,6 +696,12 @@ export function AIStudioCanvas({
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                   </>
+                )}
+                {onDeleteItem && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete this video from the canvas"
+                    onClick={() => { if (!confirm("Delete this video from the canvas? This cannot be undone.")) return; onDeleteItem(e.id); }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 )}
               </div>
             </Card>

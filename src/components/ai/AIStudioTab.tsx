@@ -2634,6 +2634,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               }}
               onEditVideo={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio })}
               onAddCaptions={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio, autoCaptions: true })}
+              onDeleteItem={async (itemId) => {
+                // Optimistic remove; realtime DELETE event will also reconcile.
+                setCanvas(curr => curr.filter(c => ("__placeholder" in c) || (c as any).id !== itemId));
+                const { error } = await supabase.from("ai_studio_canvas_items").delete().eq("id", itemId);
+                if (error) {
+                  toast.error("Couldn't delete — refreshing");
+                  loadHistory();
+                } else {
+                  toast.success("Deleted from canvas");
+                }
+              }}
               initialView={canvasView}
               focusedItemId={focusedItemId}
               onViewChange={(v) => {
