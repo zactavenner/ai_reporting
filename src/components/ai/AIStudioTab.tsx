@@ -2205,7 +2205,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{imageModels.length}</Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                <div className="flex flex-wrap items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
                   {VIDEO_MODELS.map((m) => {
                     const active = videoModels.includes(m.value);
