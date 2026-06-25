@@ -4352,7 +4352,9 @@ Deno.serve(async (req) => {
               } else if (name === "image_to_reel") {
                 const aspect = args.aspect_ratio || "9:16";
                 const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
-                const resolution = args.resolution === "720p" ? "720p" : "1080p";
+                // UI resolution wins over any LLM-suggested arg. Clamp to the
+                // selected (or to-be-selected) reel model's cap so Seedance Pro
+                // 4K stays 4K end-to-end and HappyHorse stays 1080p.
                 const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
                 const promptAskedReelCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
                 const reelVideoModel = promptRequestedReelModel && !promptAskedReelCompare
