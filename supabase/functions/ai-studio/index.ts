@@ -1598,6 +1598,12 @@ async function generateSeedanceVideo(opts: {
       fallback_attempt: attempt + 1,
       fallback_chain: "seedance_to_happyhorse_to_veo",
     });
+    // Outer call is being superseded by the fallback recursion — drop the outer
+    // pending canvas row so we don't leave a stale "processing" card behind.
+    if (pendingCanvasItemId) {
+      try { await supa.from("ai_studio_canvas_items").delete().eq("id", pendingCanvasItemId); } catch {}
+      pendingCanvasItemId = null;
+    }
     return await generateSeedanceVideo({
       ...opts,
       model: fallbackModel,
