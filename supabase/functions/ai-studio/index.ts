@@ -945,6 +945,7 @@ async function generateSeedanceVideo(opts: {
     "kwaivgi/kling-v3.0-std",
     "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
+    "alibaba/happyhorse-1.1",
   ];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
@@ -963,6 +964,7 @@ async function generateSeedanceVideo(opts: {
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const isSeedance = model.startsWith("bytedance/seedance");
   const isKling = model.startsWith("kwaivgi/kling");
+  const isHappyHorse = model.startsWith("alibaba/happyhorse");
   // Clamp to the model's max resolution. Only Seedance Pro supports 4K; Fast caps at 720p.
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
@@ -973,7 +975,7 @@ async function generateSeedanceVideo(opts: {
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
-    : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
+    : Math.max(isHappyHorse ? 3 : 4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
   // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
   if (isVeo) {
