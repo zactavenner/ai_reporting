@@ -1494,8 +1494,14 @@ async function generateSeedanceVideo(opts: {
     // and can cause the job to be rejected. `size` is interchangeable with
     // resolution+aspect_ratio in OpenRouter's video API, but sending both makes
     // the requested 1080p tier explicit for providers that otherwise downscale.
-    body.resolution = "1080p";
+    // OpenRouter/Alibaba HappyHorse rejects requests when both `aspect_ratio`
+    // and `size` (or `resolution`) are supplied. Send `size` only — that
+    // encodes both the 1080p tier and the requested aspect ratio (9:16,
+    // 16:9, or 1:1) deterministically, so all aspect ratios work the same
+    // way without the provider silently falling back to a default.
     body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
+    delete (body as any).aspect_ratio;
+    delete (body as any).resolution;
     const frames: any[] = [];
     // HappyHorse only supports a single first_frame keyframe. The avatar (or any
     // selected "ingredient" reference image) must be promoted into that slot so
