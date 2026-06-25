@@ -2302,6 +2302,21 @@ function splitVideoPromptForModel(prompt: string, totalDuration: number, maxDura
 const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
+  (() => {
+    const hasImage = !!(ctx.imageModels && ctx.imageModels.length > 0);
+    const hasVideo = !!(ctx.videoModel || (ctx.videoModels && ctx.videoModels.length > 0));
+    if (hasImage && hasVideo) {
+      return "MODE: IMAGE + VIDEO generation enabled. You MAY call image and video tools when the request calls for visual output. For pure questions / analysis / chat, just reply in chat without generating.";
+    }
+    if (hasImage) {
+      return "MODE: IMAGE generation enabled (no video model selected). You MAY call image-generation tools (generate_static_ad, edit_static_ad, compare_image_models, generate_ad_variations, explode_ad_variants) when the user asks for visual output. You MUST NOT call any video-generation tool — they are disabled this turn. For pure questions / analysis / chat, just reply in chat.";
+    }
+    if (hasVideo) {
+      return "MODE: VIDEO generation enabled (no image model selected). You MAY call video-generation tools (generate_seedance_video, generate_script_batch, plan_storyboard, generate_scene_video) when the user asks for a video. You MUST NOT call any image-generation tool — they are disabled this turn. For pure questions / analysis / chat, just reply in chat.";
+    }
+    return "MODE: CHAT ONLY. The user has NOT selected any image or video model in the composer, so image and video generation tools are DISABLED this turn. Reply conversationally in chat. You MAY still use non-generative tools (web_search, read/append doc, read sheet, check_lead_quality, create_text_artifact for long-form writing). DO NOT tell the user to select a model — just answer the question. If they explicitly ask for an image or video, briefly tell them to enable an image/video model in the composer below and then re-ask.";
+  })(),
+  "",
   "OUTPUT RULES (CRITICAL):",
   "- Your chat reply is for the human only. NEVER embed images, markdown image syntax (![...](...)), HTML <img> tags, or raw image URLs in your reply.",
   "- Generated images appear automatically on the right-side Canvas. Just describe what you built in 1–2 short sentences.",
