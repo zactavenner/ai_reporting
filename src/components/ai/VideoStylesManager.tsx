@@ -244,7 +244,7 @@ async function seedBuiltins(userId: string): Promise<void> {
   // upsert by (user_id, builtin_key)
   const { error } = await supabase
     .from("video_style_presets")
-    .upsert(rows, { onConflict: "user_id,builtin_key", ignoreDuplicates: true });
+    .upsert(rows as never, { onConflict: "user_id,builtin_key", ignoreDuplicates: true });
   if (error) throw error;
 }
 
