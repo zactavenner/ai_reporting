@@ -1627,9 +1627,13 @@ async function generateSeedanceVideo(opts: {
   }
   emit({ stage: "queued", label: "Queued — waiting for GPU…", job_id: jobId, model, percent: 8 });
 
-  // Poll up to ~10 minutes; 5 minutes was too short for GPU queues and caused false timeouts.
+  // Poll budget per model. HappyHorse 1.1 routinely takes 8–15 min for 15s/1080p
+  // on OpenRouter (GPU queue + Alibaba backend). Seedance is much faster.
+  // Veo Fast falls back through the avatar chain so we keep its budget tight.
   let videoUrl: string | null = null;
-  const MAX = 120;
+  const MAX = isHappyHorse ? 240 // 20 min
+    : isSeedance ? 144           // 12 min
+    : 120;                       // 10 min default
   for (let i = 0; i < MAX; i++) {
     await new Promise(r => setTimeout(r, 5000));
     const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
