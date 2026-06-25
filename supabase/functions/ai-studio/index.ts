@@ -2116,11 +2116,30 @@ Deno.serve(async (req) => {
     "google/veo-3.1-fast",
     "alibaba/happyhorse-1.1",
   ];
+  const VIDEO_MODEL_ALIASES: Record<string, string> = {
+    "seedance-pro": "bytedance/seedance-2.0",
+    "seedance-2.0-pro": "bytedance/seedance-2.0",
+    "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
+    "seedance-fast": "bytedance/seedance-2.0-fast",
+    "seedance-2.0-fast": "bytedance/seedance-2.0-fast",
+    "happyhorse": "alibaba/happyhorse-1.1",
+    "happy-horse": "alibaba/happyhorse-1.1",
+    "happy horse": "alibaba/happyhorse-1.1",
+    "happyhorse-1.1": "alibaba/happyhorse-1.1",
+    "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
+  };
+  const normalizeVideoModel = (m: unknown): string | null => {
+    if (typeof m !== "string") return null;
+    const raw = m.trim();
+    const normalized = VIDEO_MODEL_ALIASES[raw.toLowerCase()] || VIDEO_MODEL_ALIASES[raw] || raw;
+    return ALLOWED_VIDEO_MODELS.includes(normalized) ? normalized : null;
+  };
   const selectedVideoModels: string[] = Array.isArray(videoModels)
-    ? videoModels.filter((m) => typeof m === "string" && ALLOWED_VIDEO_MODELS.includes(m))
+    ? videoModels.map(normalizeVideoModel).filter((m): m is string => !!m)
     : [];
-  const selectedVideoModel = (typeof videoModel === "string" && ALLOWED_VIDEO_MODELS.includes(videoModel))
-    ? videoModel
+  const normalizedVideoModel = normalizeVideoModel(videoModel);
+  const selectedVideoModel = normalizedVideoModel
+    ? normalizedVideoModel
     : (selectedVideoModels[0] || "bytedance/seedance-2.0-fast");
 
   // Resolution clamping per model. Only Seedance Pro supports 4K.
