@@ -1522,30 +1522,27 @@ async function generateSeedanceVideo(opts: {
       body.reference_images = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
   } else if (isHappyHorse) {
-    // HappyHorse 1.1 on OpenRouter: hard-force lowercase "1080p",
-    // exact 1080p pixel size, and ONLY first_frame keyframes. Do not send
-    // `image_url` or `reference_images`: those are unsupported by HappyHorse
-    // and can cause the job to be rejected. `size` is interchangeable with
-    // resolution+aspect_ratio in OpenRouter's video API, but sending both makes
-    // the requested 1080p tier explicit for providers that otherwise downscale.
-    // OpenRouter/Alibaba HappyHorse rejects requests when both `aspect_ratio`
-    // and `size` (or `resolution`) are supplied. Send `size` only — that
-    // encodes both the 1080p tier and the requested aspect ratio (9:16,
-    // 16:9, or 1:1) deterministically, so all aspect ratios work the same
-    // way without the provider silently falling back to a default.
+    // HappyHorse 1.1 on OpenRouter — follow the documented video API contract:
+    //   { model, prompt, size: "1080x1920" | "1920x1080" | "1080x1080",
+    //     seconds: 3..15 integer,
+    //     first_frame: "<url>" (optional, image-driven / avatar lip-sync),
+    //     reference_images: ["<url>", ...] (optional extra refs) }
+    // Do NOT send aspect_ratio, resolution, duration, frame_images,
+    // frame_type, or image_url — those keys are not part of the spec and
+    // can cause the job to be rejected or silently downscaled.
     body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
+    body.seconds = Math.max(3, Math.min(15, Number(effectiveDuration) || 15));
     delete (body as any).aspect_ratio;
     delete (body as any).resolution;
-    const frames: any[] = [];
-    // HappyHorse only supports a single first_frame keyframe. The avatar (or any
-    // selected "ingredient" reference image) must be promoted into that slot so
-    // the same identity is locked across the 15s clip — HappyHorse rejects
-    // `reference_images`, so we cannot also send the ingredient separately.
+    delete (body as any).duration;
+    // Avatar / first-frame identity lock for lip-sync renders.
     const happyHorseFirstFrame = providerImageUrl || providerIngredientUrl || null;
-    if (happyHorseFirstFrame) {
-      frames.push({ type: "image_url", image_url: { url: happyHorseFirstFrame }, frame_type: "first_frame" });
-    }
-    if (frames.length) body.frame_images = frames;
+    if (happyHorseFirstFrame) body.first_frame = happyHorseFirstFrame;
+    // Extra reference images (only when we also have a distinct first frame).
+    const extraRefs: string[] = [];
+    if (providerIngredientUrl && providerIngredientUrl !== happyHorseFirstFrame) extraRefs.push(providerIngredientUrl);
+    if (providerLastFrameUrl && providerLastFrameUrl !== happyHorseFirstFrame) extraRefs.push(providerLastFrameUrl);
+    if (extraRefs.length) body.reference_images = extraRefs;
   } else if (isKling) {
     // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
     // start frame (image-to-video). It does NOT accept `resolution`, `frame_images`,
@@ -1723,6 +1720,7 @@ async function generateSeedanceVideo(opts: {
     throw new Error(`${modelLabel} submit [${submit.status}]: ${t.slice(0, 400)}`);
   }
   const sj = await submit.json();
+  console.log(`[openrouter:/videos][submit-response] model=${body.model} keys=${Object.keys(sj).join(",")} raw=${JSON.stringify(sj).slice(0, 800)}`);
   const pollingUrl: string | undefined = sj.polling_url;
   const jobId: string = sj.id || crypto.randomUUID();
   console.log(`[openrouter:/videos][queued] model=${body.model} provider_model=${extractProviderModel(sj) || "-"} job_id=${jobId} polling_url=${pollingUrl ? "yes" : "no"} response=${JSON.stringify(sj).slice(0, 400)}`);
@@ -1782,6 +1780,7 @@ async function generateSeedanceVideo(opts: {
       continue;
     }
     const pj = await p.json();
+    console.log(`[openrouter:/videos][poll ${i + 1}/${MAX}] model=${body.model} job=${jobId} http=${p.status} status=${pj?.status || "-"} keys=${Object.keys(pj || {}).join(",")} unsigned_urls=${Array.isArray(pj?.unsigned_urls) ? pj.unsigned_urls.length : 0}`);
     const polledProviderModel = extractProviderModel(pj);
     if (polledProviderModel) {
       downstreamModelSeen = polledProviderModel;
