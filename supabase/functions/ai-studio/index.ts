@@ -4352,7 +4352,9 @@ Deno.serve(async (req) => {
               } else if (name === "image_to_reel") {
                 const aspect = args.aspect_ratio || "9:16";
                 const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
-                const resolution = args.resolution === "720p" ? "720p" : "1080p";
+                // UI resolution wins over any LLM-suggested arg. Clamp to the
+                // selected (or to-be-selected) reel model's cap so Seedance Pro
+                // 4K stays 4K end-to-end and HappyHorse stays 1080p.
                 const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
                 const promptAskedReelCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
                 const reelVideoModel = promptRequestedReelModel && !promptAskedReelCompare
@@ -4360,6 +4362,12 @@ Deno.serve(async (req) => {
                   : uniqueSelectedVideoModels.length === 1
                     ? uniqueSelectedVideoModels[0]
                     : selectedVideoModel;
+                // Clamp to the chosen reel model's resolution cap. UI's
+                // `requestedRes` (4K when Seedance Pro is selected) wins over
+                // the LLM's args.resolution unless the model can't support it.
+                const resolution: "720p" | "1080p" | "4k" = reelVideoModel
+                  ? clampResForModel(reelVideoModel)
+                  : (args.resolution === "720p" ? "720p" : (args.resolution === "4k" ? "4k" : "1080p"));
                 await recordVideoModelDecision(supa, "image_to_reel.model_source", {
                   conversation_id: conversationId,
                   client_id: clientId || null,
@@ -4450,9 +4458,15 @@ Deno.serve(async (req) => {
                   result = { error: "generate_script_batch requires scripts[] with at least one script." };
                 } else {
                   const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
-                  const requestedRes = (args.resolution === "720p" || args.resolution === "4k") ? args.resolution : "1080p";
                   // UI selection wins over the LLM's args.model — the tool name biases the LLM toward Seedance.
                   const requestedModel = selectedVideoModel || normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : null);
+                  // UI resolution wins over the LLM's args.resolution. Shadow
+                  // the outer `requestedRes` (intentional) but clamp to the
+                  // chosen model's cap so each script respects e.g. Seedance
+                  // Pro 4K or HappyHorse 1080p.
+                  const batchRequestedRes: "720p" | "1080p" | "4k" = requestedModel
+                    ? clampResForModel(requestedModel)
+                    : requestedRes;
                   const groupId = crypto.randomUUID();
                   const scriptResults: any[] = [];
 
@@ -4488,7 +4502,7 @@ Deno.serve(async (req) => {
                       use_avatar: useAvatar,
                       avatar_id: useAvatar ? selectedAvatar?.id || null : null,
                       requested_duration: targetDuration,
-                      requested_resolution: requestedRes,
+                      requested_resolution: batchRequestedRes,
                       aspect_ratio: aspect,
                     });
                     const cap = VIDEO_MODEL_CAPS[mdl]?.maxDuration || 15;
@@ -4534,7 +4548,7 @@ Deno.serve(async (req) => {
                     const clipSettled = await Promise.allSettled(segs.map(async (seg, i) => {
                       const segRes = clampResForModel(mdl) === "720p"
                         ? "720p"
-                        : (requestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : requestedRes);
+                        : (batchRequestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : batchRequestedRes);
                       await recordVideoModelDecision(supa, "script_batch.clip_dispatch", {
                         conversation_id: conversationId,
                         client_id: clientId || null,
@@ -4546,7 +4560,7 @@ Deno.serve(async (req) => {
                         chosen_model: mdl,
                         requested_duration: targetDuration,
                         clip_duration: seg.duration,
-                        requested_resolution: requestedRes,
+                        requested_resolution: batchRequestedRes,
                         effective_resolution: segRes,
                         has_avatar_image: !!avatarImg,
                       });
