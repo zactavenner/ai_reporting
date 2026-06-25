@@ -189,7 +189,7 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
       const { data: existing } = await supabase
         .from('client_settings').select('id, metrics_sheet_mapping').eq('client_id', clientId).maybeSingle();
       const prevMapping: any = (existing as any)?.metrics_sheet_mapping || {};
-      const nextMapping = { ...prevMapping, tabs: tabMap };
+      const nextMapping = { ...prevMapping, tabs: tabMap, columns: colMap };
       const payload: any = {
         client_id: clientId,
         metrics_sheet_id: sheetId,
