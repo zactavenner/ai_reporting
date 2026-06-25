@@ -743,7 +743,7 @@ export function VideoStylesPopover({ styles, setStyles, selectedId, setSelectedI
               );
             })}
           </div>
-          <div className="pt-2 border-t border-border/60 mt-2">
+          <div className="pt-2 border-t border-border/60 mt-2 space-y-1">
             <Button
               type="button"
               variant="outline"
@@ -753,6 +753,13 @@ export function VideoStylesPopover({ styles, setStyles, selectedId, setSelectedI
             >
               <Plus className="h-3 w-3 mr-1" /> New Style
             </Button>
+            <Link
+              to="/ai-studio/styles"
+              onClick={() => setOpen(false)}
+              className="h-7 px-2 text-[10px] w-full inline-flex items-center justify-center rounded-md border border-border/60 hover:bg-muted transition"
+            >
+              <Settings2 className="h-3 w-3 mr-1" /> Open full style manager
+            </Link>
           </div>
         </PopoverContent>
       </Popover>
