@@ -4049,9 +4049,10 @@ Deno.serve(async (req) => {
                 // - Only fall back to the LLM's explicit args.model when the user made no selection.
                 const explicitModel = normalizeVideoModel(args.model) || ((typeof args.model === "string" && args.model) ? args.model : null);
                 const forceModel = !!args.force_model;
-                const rawFanModels = uniqueSelectedVideoModels.length > 0
+                const rawFanModels = (uniqueSelectedVideoModels.length > 0
                   ? uniqueSelectedVideoModels.slice()
-                  : [explicitModel || selectedVideoModel];
+                  : [explicitModel || selectedVideoModel])
+                  .filter((m): m is string => typeof m === "string" && !!m);
                 await recordVideoModelDecision(supa, "tool_video.model_source", {
                   conversation_id: conversationId,
                   client_id: clientId || null,
