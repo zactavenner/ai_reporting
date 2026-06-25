@@ -21,6 +21,7 @@ const MODEL_CAPS: Record<string, { durations: number[]; defaultDuration: number;
   "kwaivgi/kling-v3.0-std":       { durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" },
   "kwaivgi/kling-v2.1-master":    { durations: [5, 10],                defaultDuration: 10, maxRes: "1080p" },
   "google/veo-3.1-fast":          { durations: [4, 6, 8],              defaultDuration: 8,  maxRes: "1080p" },
+  "alibaba/happyhorse-1.1":       { durations: [3,4,5,6,7,8,9,10,11,12,13,14,15], defaultDuration: 15, maxRes: "1080p" },
 };
 const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "4k": 3 };
 
@@ -63,6 +64,10 @@ async function submitOpenRouterVideo(opts: {
   if (isSeedance) {
     // OpenRouter's Seedance expects "4K" (uppercase) per /videos/models supported_resolutions.
     body.resolution = opts.resolution === "4k" ? "4K" : opts.resolution;
+  }
+  if (opts.model.startsWith("alibaba/happyhorse")) {
+    // HappyHorse uses lowercase resolution per /videos/models.
+    body.resolution = opts.resolution;
   }
   // Kling rejects extra params; only prompt/aspect/duration.
   if (!isSeedance && !isKling) {
