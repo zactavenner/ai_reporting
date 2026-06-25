@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ScrapingScheduleSection } from '@/components/ad-scraping/ScrapingScheduleSection';
 import { ApifySettings } from '@/components/instagram/ApifySettings';
 import { VoiceManagementSection } from '@/components/settings/VoiceManagementSection';
+import { ClientReportsTab } from '@/components/settings/ClientReportsTab';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ import {
   Globe,
   Plug,
   ListChecks,
+  Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -434,6 +436,10 @@ export default function SettingsPage() {
               <ListChecks className="h-4 w-4" />
               Onboarding Templates
             </TabsTrigger>
+            <TabsTrigger value="client-reports" className="gap-2">
+              <Mail className="h-4 w-4" />
+              Client Reports
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="api-keys" className="space-y-4">
@@ -681,6 +687,9 @@ export default function SettingsPage() {
           </TabsContent>
           <TabsContent value="onboarding-templates" className="space-y-4">
             <OnboardingTemplatesSection />
+          </TabsContent>
+          <TabsContent value="client-reports" className="space-y-4">
+            <ClientReportsTab />
           </TabsContent>
         </Tabs>
       </div>
