@@ -203,7 +203,15 @@ export default function ClientDetail() {
   // Sheet-backed metrics (Blue Capital + any client with a configured sheet)
   const sheetId = (settings as any)?.metrics_sheet_id as string | undefined;
   const sheetGid = (settings as any)?.metrics_sheet_gid as string | undefined;
-  const sheetMapping = (settings as any)?.metrics_sheet_mapping as Record<string, string> | undefined;
+  const sheetMappingRaw = (settings as any)?.metrics_sheet_mapping as Record<string, any> | undefined;
+  // New shape: { tabs: {...}, columns: { field -> header } }. Legacy shape was
+  // a flat field->header map. Honor both so CPL/calls/funded/ad-perf metrics
+  // route to the configured columns either way.
+  const sheetMapping: Record<string, string> | undefined = sheetMappingRaw?.columns && typeof sheetMappingRaw.columns === 'object'
+    ? (sheetMappingRaw.columns as Record<string, string>)
+    : (sheetMappingRaw && !('tabs' in sheetMappingRaw) && !('columns' in sheetMappingRaw)
+      ? (sheetMappingRaw as Record<string, string>)
+      : undefined);
   const sheetDefault = ((settings as any)?.metrics_source_default as 'sheet' | 'database') || 'database';
   const hasSheet = !!sheetId;
   const { source: metricsSource, setSource: setMetricsSource } = useMetricsSourcePreference(
