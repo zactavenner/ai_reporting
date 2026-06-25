@@ -2087,7 +2087,7 @@ const tools = [
     type: "function",
     function: {
       name: "plan_storyboard",
-      description: "Manus-style: break a video brief into N scenes (3–8). Returns a structured storyboard with per-scene image prompt and video animation prompt. ALWAYS call this FIRST when the user asks for a video, ad video, reel, scene set, or storyboard.",
+      description: "OPT-IN ONLY. Break a video brief into N scenes (3–8) with per-scene keyframe + animation prompts. DO NOT call this unless the user literally typed the word 'storyboard' (or 'storyboarding'). For every other video request — 'make a 30s reel', 'video ad', 'animate this image', multi-scene scripts — use generate_seedance_video instead and let the server auto-split clips.",
       parameters: {
         type: "object",
         properties: {
