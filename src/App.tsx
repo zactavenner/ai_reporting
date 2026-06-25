@@ -40,6 +40,7 @@ const OfferDetailPage = lazyRetry(() => import("./pages/OfferDetailPage"));
   const DailyReportThankYouPage = lazyRetry(() => import("./pages/DailyReportThankYouPage"));
 const WhatsAppPage = lazyRetry(() => import("./pages/WhatsAppPage"));
 const AIStudioStylesPage = lazyRetry(() => import("./pages/AIStudioStylesPage"));
+const UnsubscribePage = lazyRetry(() => import("./pages/UnsubscribePage"));
 
 function PageLoader() {
   return (
@@ -90,6 +91,7 @@ const App = () => (
             <Route path="/public/:token" element={<PublicReport />} />
             <Route path="/public/:token/creatives" element={<PublicCreatives />} />
             <Route path="/taskurl" element={<PublicTaskUrl />} />
+            <Route path="/unsubscribe" element={<UnsubscribePage />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
