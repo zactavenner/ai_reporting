@@ -4463,7 +4463,8 @@ Deno.serve(async (req) => {
                 } else {
                   const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
                   const requestedRes = (args.resolution === "720p" || args.resolution === "4k") ? args.resolution : "1080p";
-                  const requestedModel = normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : selectedVideoModel);
+                  // UI selection wins over the LLM's args.model — the tool name biases the LLM toward Seedance.
+                  const requestedModel = selectedVideoModel || normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : null);
                   const groupId = crypto.randomUUID();
                   const scriptResults: any[] = [];
 
