@@ -3660,6 +3660,10 @@ Deno.serve(async (req) => {
                 const aspect = args.aspect_ratio || "9:16";
                 const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
                 const resolution = args.resolution === "720p" ? "720p" : "1080p";
+                const reelVideoModel = selectedVideoModels.length === 1
+                  ? selectedVideoModels[0]
+                  : (/\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : selectedVideoModel);
+                const selectedVideoLabel = VIDEO_MODEL_CAPS[reelVideoModel]?.label?.split(" (")?.[0] || "video render";
                 let imageUrl: string | null = args.image_url || null;
                 let staticImg: any = null;
                 if (!imageUrl) {
@@ -3677,7 +3681,6 @@ Deno.serve(async (req) => {
                       model: "openai",
                     });
                     imageUrl = staticImg.url;
-                    const selectedVideoLabel = VIDEO_MODEL_CAPS[selectedVideoModel]?.label?.split(" (")?.[0] || "video render";
                     if (canvasPlaceholderId) send({ type: "canvas_placeholder_progress", placeholder_id: canvasPlaceholderId, stage: "queued", label: `Keyframe ready — starting ${selectedVideoLabel}…`, percent: 15, phase: "keyframe" });
                     const ciStatic = await supa.from("ai_studio_canvas_items").insert({
                       conversation_id: conversationId, user_id: userId, kind: "image",
@@ -3702,7 +3705,7 @@ Deno.serve(async (req) => {
                     lastFrameUrl: videoFrames?.lastFrameUrl || null,
                     ingredientUrl: videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl ? videoFrames.ingredientUrl : null,
                     fast: !!args.fast,
-                    model: selectedVideoModel,
+                    model: reelVideoModel,
                     clientId: clientId || null,
                     conversationId,
                     userId: userId!,
