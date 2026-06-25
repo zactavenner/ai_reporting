@@ -6226,8 +6226,12 @@ export type Database = {
           seedance_prompt: string | null
           updated_at: string
           user_id: string
+          video_model: string | null
+          video_model_alt: string | null
           video_status: string | null
+          video_status_alt: string | null
           video_url: string | null
+          video_url_alt: string | null
         }
         Insert: {
           ad_title?: string | null
@@ -6251,8 +6255,12 @@ export type Database = {
           seedance_prompt?: string | null
           updated_at?: string
           user_id: string
+          video_model?: string | null
+          video_model_alt?: string | null
           video_status?: string | null
+          video_status_alt?: string | null
           video_url?: string | null
+          video_url_alt?: string | null
         }
         Update: {
           ad_title?: string | null
@@ -6276,8 +6284,12 @@ export type Database = {
           seedance_prompt?: string | null
           updated_at?: string
           user_id?: string
+          video_model?: string | null
+          video_model_alt?: string | null
           video_status?: string | null
+          video_status_alt?: string | null
           video_url?: string | null
+          video_url_alt?: string | null
         }
         Relationships: []
       }
