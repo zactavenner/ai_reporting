@@ -1227,6 +1227,44 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   useEffect(() => { loadHistory(); loadThreads(); }, [loadHistory, loadThreads]);
 
+  // Realtime: keep the canvas in sync with background video jobs that finish
+  // after the user leaves the page or after the SSE stream drops. The edge
+  // function inserts a "processing" canvas row at submit time and updates it
+  // to "completed" / "failed" when the job resolves — we mirror those events
+  // into local state here so multiple concurrent renders all light up live.
+  useEffect(() => {
+    if (!conversationId) return;
+    const channel = supabase
+      .channel(`ai-studio-canvas-${conversationId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "ai_studio_canvas_items", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const row = payload.new as CanvasItem;
+          setCanvas(curr => curr.some(c => !("__placeholder" in c) && (c as any).id === row.id) ? curr : [...curr, row]);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "ai_studio_canvas_items", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const row = payload.new as CanvasItem;
+          setCanvas(curr => curr.map(c => (!("__placeholder" in c) && (c as any).id === row.id) ? row : c));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "ai_studio_canvas_items", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const oldId = (payload.old as any)?.id;
+          if (!oldId) return;
+          setCanvas(curr => curr.filter(c => ("__placeholder" in c) || (c as any).id !== oldId));
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [conversationId]);
+
   // Thread actions
   const newThread = useCallback(async () => {
     const res = await studioFetch({ action: "new_thread", clientId, threadTitle: "New chat", quality, chatModel });
