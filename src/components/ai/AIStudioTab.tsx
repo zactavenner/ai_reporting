@@ -232,6 +232,10 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
       model: t.result.model,
       duration: t.args?.duration || t.result.duration,
       resolution: t.args?.resolution || t.result.resolution,
+      actual_resolution: t.result.actual_resolution ?? null,
+      actual_width: t.result.actual_width ?? null,
+      actual_height: t.result.actual_height ?? null,
+      resolution_match: t.result.resolution_match ?? null,
     });
   }
   return (
