@@ -2761,6 +2761,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           autoCaptions={editVideo.autoCaptions}
         />
       )}
+      {captionsVideo && (
+        <SimpleCaptionsDialog
+          open={!!captionsVideo}
+          onOpenChange={(o) => !o && setCaptionsVideo(null)}
+          videoUrl={captionsVideo.url}
+          clientId={clientId}
+          conversationId={conversationId}
+        />
+      )}
       <BatchScriptsDialog
         open={batchScriptsOpen}
         onOpenChange={setBatchScriptsOpen}
