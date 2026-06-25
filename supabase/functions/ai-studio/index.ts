@@ -913,6 +913,38 @@ async function generateSceneVideo(opts: {
 }
 
 // ---------- Seedance 2.0 (OpenRouter) — 15s 1080p text-to-video / image-to-video ----------
+// Parse an MP4 file's first non-zero tkhd box to recover the actual rendered
+// width/height. Used to verify the upstream model honored the requested resolution
+// (e.g. confirm Seedance Pro 4K really produced ~2160px output, not a 1080p downscale).
+function parseMp4Dimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  try {
+    const end = Math.min(bytes.length - 8, 8 * 1024 * 1024); // search first ~8MB
+    for (let i = 0; i < end; i++) {
+      if (bytes[i] === 0x74 && bytes[i + 1] === 0x6b && bytes[i + 2] === 0x68 && bytes[i + 3] === 0x64) {
+        const dataStart = i + 4; // after 'tkhd'
+        const version = bytes[dataStart];
+        let offset = dataStart + 4; // skip version+flags
+        const sizes = version === 1 ? [8, 8, 4, 4, 8] : [4, 4, 4, 4, 4];
+        for (const s of sizes) offset += s;
+        offset += 8 + 2 + 2 + 2 + 2 + 36; // reserved+layer+altGroup+volume+reserved+matrix
+        if (offset + 8 > bytes.length) continue;
+        const dv = new DataView(bytes.buffer, bytes.byteOffset + offset, 8);
+        const w = dv.getUint32(0) / 65536;
+        const h = dv.getUint32(4) / 65536;
+        if (w > 0 && h > 0 && w < 10000 && h < 10000) {
+          return { width: Math.round(w), height: Math.round(h) };
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+function classifyResolution(width: number, height: number): "720p" | "1080p" | "4k" {
+  const longSide = Math.max(width, height);
+  if (longSide >= 3000) return "4k";
+  if (longSide >= 1500) return "1080p";
+  return "720p";
+}
 async function generateSeedanceVideo(opts: {
   prompt: string;
   aspectRatio: string;         // "16:9" | "9:16" | "1:1"
@@ -1206,6 +1238,32 @@ async function generateSeedanceVideo(opts: {
   }
   emit({ stage: "completed", label: "Reel ready", job_id: jobId, model, percent: 100, elapsed_s: (Date.now() - t0) / 1000 });
 
+  // Resolution verification: parse the downloaded MP4 to confirm actual rendered output
+  // matches what the UI requested (especially important for Seedance Pro 4K, which can
+  // silently downscale to 1080p when the model is overloaded or the prompt is rejected).
+  let actualWidth: number | null = null;
+  let actualHeight: number | null = null;
+  let actualResolution: "720p" | "1080p" | "4k" | null = null;
+  let resolutionMatch = true;
+  try {
+    const dl2 = await fetch(storedUrl as string);
+    if (dl2.ok) {
+      const verifyBytes = new Uint8Array(await dl2.arrayBuffer());
+      const dims = parseMp4Dimensions(verifyBytes);
+      if (dims) {
+        actualWidth = dims.width;
+        actualHeight = dims.height;
+        actualResolution = classifyResolution(dims.width, dims.height);
+        resolutionMatch = actualResolution === effectiveResolution;
+        if (!resolutionMatch) {
+          console.warn(`Seedance resolution mismatch: requested ${effectiveResolution}, got ${actualResolution} (${dims.width}x${dims.height})`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("resolution verify failed (non-fatal)", e);
+  }
+
   const ci = await supa.from("ai_studio_canvas_items").insert({
     conversation_id: opts.conversationId,
     user_id: opts.userId,
@@ -1223,6 +1281,10 @@ async function generateSeedanceVideo(opts: {
       scene_order: 1,
       mode: opts.imageUrl ? "image_to_video" : "text_to_video",
       job_id: jobId,
+      actual_width: actualWidth,
+      actual_height: actualHeight,
+      actual_resolution: actualResolution,
+      resolution_match: resolutionMatch,
     },
   }).select("id, kind, payload, created_at").single();
 
@@ -1236,6 +1298,8 @@ async function generateSeedanceVideo(opts: {
         video_url: storedUrl, storage_path: storagePath, keyframe_url: opts.imageUrl || null,
         aspect_ratio: opts.aspectRatio, prompt: opts.prompt, source: "ai_studio", model,
         duration: body.duration, resolution: effectiveResolution,
+        actual_width: actualWidth, actual_height: actualHeight,
+        actual_resolution: actualResolution, resolution_match: resolutionMatch,
       },
     });
     // Mirror into client_videos (per-client persistent library).
@@ -1256,7 +1320,14 @@ async function generateSeedanceVideo(opts: {
         duration_seconds: body.duration,
         resolution: effectiveResolution,
         status: "completed",
-        metadata: { job_id: jobId, mode: opts.imageUrl ? "image_to_video" : "text_to_video" },
+        metadata: {
+          job_id: jobId,
+          mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+          actual_width: actualWidth,
+          actual_height: actualHeight,
+          actual_resolution: actualResolution,
+          resolution_match: resolutionMatch,
+        },
         created_by: opts.userId || null,
       });
     } catch (e) {
@@ -1302,7 +1373,16 @@ async function generateSeedanceVideo(opts: {
     }
   }
 
-  return { item: ci.data, video_url: storedUrl, model, resolution: effectiveResolution };
+  return {
+    item: ci.data,
+    video_url: storedUrl,
+    model,
+    resolution: effectiveResolution,
+    actual_resolution: actualResolution,
+    actual_width: actualWidth,
+    actual_height: actualHeight,
+    resolution_match: resolutionMatch,
+  };
 }
 
 // ---------- Tool schema ----------
@@ -2707,7 +2787,21 @@ Deno.serve(async (req) => {
                 userId: userId!,
                 onProgress: (p) => send({ type: "canvas_placeholder_progress", placeholder_id: placeholderId, ...p }),
               });
-              result = { ok: true, video_url: r.video_url, model: r.model, aspect_ratio: aspect, duration: segment.duration, resolution: r.resolution, clip_index: segment.index + 1, clip_count: segment.count, avatar_mapping: avatarMapping };
+              result = {
+                ok: true,
+                video_url: r.video_url,
+                model: r.model,
+                aspect_ratio: aspect,
+                duration: segment.duration,
+                resolution: r.resolution,
+                actual_resolution: (r as any).actual_resolution || null,
+                actual_width: (r as any).actual_width || null,
+                actual_height: (r as any).actual_height || null,
+                resolution_match: (r as any).resolution_match ?? null,
+                clip_index: segment.index + 1,
+                clip_count: segment.count,
+                avatar_mapping: avatarMapping,
+              };
               if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: placeholderId });
             } catch (e: any) {
               result = { error: e?.message || String(e), model, clip_index: segment.index + 1, clip_count: segment.count, avatar_mapping: avatarMapping };
@@ -3545,7 +3639,19 @@ Deno.serve(async (req) => {
                     },
                   });
                   if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
-                  result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution: r.resolution, aspect_ratio: aspect };
+                  result = {
+                    ok: true,
+                    keyframe_url_internal: imageUrl,
+                    video_url_internal: r.video_url,
+                    model: r.model,
+                    duration,
+                    resolution: r.resolution,
+                    actual_resolution: (r as any).actual_resolution || null,
+                    actual_width: (r as any).actual_width || null,
+                    actual_height: (r as any).actual_height || null,
+                    resolution_match: (r as any).resolution_match ?? null,
+                    aspect_ratio: aspect,
+                  };
                 }
               } else if (name === "generate_script_batch") {
                 // Multi-script batch renderer. Each script gets its own grouped

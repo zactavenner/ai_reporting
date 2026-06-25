@@ -45,7 +45,7 @@ interface Props {
 type CompareResult = { model: string; label: string; output?: string; error?: string; ms?: number; usage?: any };
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean; streaming?: boolean };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
-type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string };
+type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string; actual_resolution?: string | null; actual_width?: number | null; actual_height?: number | null; resolution_match?: boolean | null };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
 
 const CHAT_MODELS = [
@@ -232,6 +232,10 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
       model: t.result.model,
       duration: t.args?.duration || t.result.duration,
       resolution: t.args?.resolution || t.result.resolution,
+      actual_resolution: t.result.actual_resolution ?? null,
+      actual_width: t.result.actual_width ?? null,
+      actual_height: t.result.actual_height ?? null,
+      resolution_match: t.result.resolution_match ?? null,
     });
   }
   return (
@@ -660,6 +664,24 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
           <Badge variant="secondary" className="text-[9px] h-4 px-1.5" title={video.model}>{modelLabel(video.model)}</Badge>
           {video.aspect_ratio && <span className="text-[9px] text-muted-foreground">{video.aspect_ratio}</span>}
           {video.resolution && <span className="text-[9px] text-muted-foreground">· {video.resolution}</span>}
+          {video.actual_resolution && (
+            video.resolution_match === false ? (
+              <span
+                className="text-[9px] font-medium text-amber-600 dark:text-amber-400"
+                title={`Requested ${video.resolution || "?"} but actual output is ${video.actual_resolution} (${video.actual_width}×${video.actual_height}). The model may have downscaled.`}
+              >
+                ⚠ actual {video.actual_resolution}
+                {video.actual_width && video.actual_height ? ` (${video.actual_width}×${video.actual_height})` : ""}
+              </span>
+            ) : (
+              <span
+                className="text-[9px] text-emerald-600 dark:text-emerald-400"
+                title={`Verified ${video.actual_resolution} (${video.actual_width}×${video.actual_height})`}
+              >
+                ✓ verified
+              </span>
+            )
+          )}
         </div>
       )}
       <VideoPlayerCard
