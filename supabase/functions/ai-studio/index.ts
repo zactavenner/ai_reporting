@@ -3725,7 +3725,14 @@ Deno.serve(async (req) => {
             }
             if (name === "generate_seedance_video") {
               canvasPlaceholderId = crypto.randomUUID();
-              const placeholderModels = (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [normalizeVideoModel(args.model) || selectedVideoModel]).filter(Boolean);
+              // MODEL SELECTION GUARANTEE (placeholder): mirror the dispatch logic in
+              // generate_seedance_video. The user's UI selection wins over whatever
+              // model the LLM tries to pass (the tool name biases it toward Seedance
+              // even when the user explicitly picked HappyHorse).
+              const placeholderModels = (uniqueSelectedVideoModels.length
+                ? uniqueSelectedVideoModels
+                : (selectedVideoModel ? [selectedVideoModel] : [normalizeVideoModel(args.model)])
+              ).filter((m): m is string => typeof m === "string" && !!m);
               const placeholderLabel = placeholderModels.length > 1
                 ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
                 : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
