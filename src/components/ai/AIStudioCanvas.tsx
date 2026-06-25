@@ -18,6 +18,7 @@ export function modelLabel(model?: string): string {
   if (m.includes("kling") && m.includes("pro")) return "Kling 3.0 Pro";
   if (m.includes("kling")) return "Kling 3.0 Fast";
   if (m.includes("veo")) return "Veo 3.1 Fast";
+  if (m.includes("happyhorse") || m.includes("happy-horse")) return "HappyHorse 1.1";
   if (m.includes("riverflow")) return "Riverflow v2 Pro";
   if (m.includes("gpt-image") || m === "openai") return "GPT Image 2";
   if (m.includes("gemini-3") && m.includes("pro")) return "Gemini 3 Pro";
