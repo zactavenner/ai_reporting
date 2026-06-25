@@ -549,7 +549,7 @@ export function VideoStylesBar({ styles, setStyles, selectedId, setSelectedId }:
   );
 }
 
-function StyleEditor({
+export function VideoStyleEditor({
   style,
   onChange,
   onTranscribeReference,
