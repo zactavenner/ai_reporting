@@ -2635,7 +2635,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 }
               }}
               onEditVideo={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio })}
-              onAddCaptions={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio, autoCaptions: true })}
+              onAddCaptions={(url) => setCaptionsVideo({ url })}
               onDeleteItem={async (itemId) => {
                 // Optimistic remove; realtime DELETE event will also reconcile.
                 setCanvas(curr => curr.filter(c => ("__placeholder" in c) || (c as any).id !== itemId));
