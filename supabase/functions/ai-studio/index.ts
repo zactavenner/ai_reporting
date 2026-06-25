@@ -3732,7 +3732,10 @@ Deno.serve(async (req) => {
                 ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
                 : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
               const placeholderDuration = placeholderModels[0] === "alibaba/happyhorse-1.1" ? 15 : (args.duration || 15);
-              const placeholderResolution = placeholderModels[0] === "alibaba/happyhorse-1.1" ? "1080p" : (args.resolution || requestedRes || "1080p");
+              // UI resolution wins; clamp to the model's max (Seedance Pro → 4K, others → 1080p/720p).
+              const placeholderResolution = placeholderModels[0]
+                ? clampResForModel(placeholderModels[0])
+                : (requestedRes || "1080p");
               send({
                 type: "canvas_placeholder",
                 placeholder_id: canvasPlaceholderId,
