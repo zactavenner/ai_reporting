@@ -1087,6 +1087,16 @@ async function generateSeedanceVideo(opts: {
     if (opts.ingredientUrl) {
       body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
     }
+  } else if (isHappyHorse) {
+    // HappyHorse 1.1 on OpenRouter: lowercase resolution ("720p"/"1080p"),
+    // supports first_frame keyframes and reference_images (per model spec).
+    body.resolution = effectiveResolution;
+    const frames: any[] = [];
+    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
+    if (frames.length) body.frame_images = frames;
+    if (opts.ingredientUrl) {
+      body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+    }
   } else if (isKling) {
     // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
     // start frame (image-to-video). It does NOT accept `resolution`, `frame_images`,
