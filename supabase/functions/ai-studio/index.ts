@@ -1494,8 +1494,14 @@ async function generateSeedanceVideo(opts: {
     // and can cause the job to be rejected. `size` is interchangeable with
     // resolution+aspect_ratio in OpenRouter's video API, but sending both makes
     // the requested 1080p tier explicit for providers that otherwise downscale.
-    body.resolution = "1080p";
+    // OpenRouter/Alibaba HappyHorse rejects requests when both `aspect_ratio`
+    // and `size` (or `resolution`) are supplied. Send `size` only — that
+    // encodes both the 1080p tier and the requested aspect ratio (9:16,
+    // 16:9, or 1:1) deterministically, so all aspect ratios work the same
+    // way without the provider silently falling back to a default.
     body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
+    delete (body as any).aspect_ratio;
+    delete (body as any).resolution;
     const frames: any[] = [];
     // HappyHorse only supports a single first_frame keyframe. The avatar (or any
     // selected "ingredient" reference image) must be promoted into that slot so
@@ -1827,6 +1833,27 @@ async function generateSeedanceVideo(opts: {
             }
           }
         } catch { /* ignore — surfaced below */ }
+      }
+      if (!videoUrl) {
+        // Last-ditch: recursively walk the entire poll payload (and the
+        // /content payload if we fetched one) looking for ANY string that
+        // looks like a downloadable MP4. OpenRouter's HappyHorse response
+        // shape has changed across releases (sometimes `result.video.url`,
+        // sometimes `assets[0].download_url`, sometimes nested inside
+        // `output.choices[0]`), so a generic crawl is the safest fallback
+        // before we give up and mark the run failed.
+        const found: string[] = [];
+        const walk = (node: any, depth: number) => {
+          if (!node || depth > 6) return;
+          if (typeof node === "string") {
+            if (/^https?:\/\/\S+\.(mp4|mov|webm)(\?|$)/i.test(node)) found.push(node);
+            return;
+          }
+          if (Array.isArray(node)) { for (const x of node) walk(x, depth + 1); return; }
+          if (typeof node === "object") { for (const k of Object.keys(node)) walk((node as any)[k], depth + 1); }
+        };
+        walk(pj, 0);
+        videoUrl = found[0] || null;
       }
       if (!videoUrl) {
         await recordVideoModelDecision(supa, "generateSeedanceVideo.failed", {
@@ -3553,7 +3580,11 @@ Deno.serve(async (req) => {
       // preserving the originally requested model in the payload so the
       // chosen model (HappyHorse vs Seedance) is never silently relabeled.
       try {
-        const staleCutoff = new Date(Date.now() - 25 * 60 * 1000).toISOString();
+        // 60 min: HappyHorse can legitimately poll for ~20 min, and a
+        // background EdgeRuntime.waitUntil worker may continue past the
+        // SSE turn. Only sweep cards that are *definitely* dead so we
+        // never auto-fail a render that's still in flight.
+        const staleCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
         const { data: stale } = await supa
           .from("ai_studio_canvas_items")
           .select("id, payload")
