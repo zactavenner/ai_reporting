@@ -4502,7 +4502,7 @@ Deno.serve(async (req) => {
                       use_avatar: useAvatar,
                       avatar_id: useAvatar ? selectedAvatar?.id || null : null,
                       requested_duration: targetDuration,
-                      requested_resolution: requestedRes,
+                      requested_resolution: batchRequestedRes,
                       aspect_ratio: aspect,
                     });
                     const cap = VIDEO_MODEL_CAPS[mdl]?.maxDuration || 15;
@@ -4548,7 +4548,7 @@ Deno.serve(async (req) => {
                     const clipSettled = await Promise.allSettled(segs.map(async (seg, i) => {
                       const segRes = clampResForModel(mdl) === "720p"
                         ? "720p"
-                        : (requestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : requestedRes);
+                        : (batchRequestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : batchRequestedRes);
                       await recordVideoModelDecision(supa, "script_batch.clip_dispatch", {
                         conversation_id: conversationId,
                         client_id: clientId || null,
@@ -4560,7 +4560,7 @@ Deno.serve(async (req) => {
                         chosen_model: mdl,
                         requested_duration: targetDuration,
                         clip_duration: seg.duration,
-                        requested_resolution: requestedRes,
+                        requested_resolution: batchRequestedRes,
                         effective_resolution: segRes,
                         has_avatar_image: !!avatarImg,
                       });
