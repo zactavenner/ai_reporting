@@ -792,15 +792,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     try { localStorage.setItem("ai-studio:image-models", JSON.stringify(imageModels)); } catch {}
   }, [imageModels]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
+    const known = new Set(VIDEO_MODELS.map((m) => m.value));
+    const sanitize = (arr: any[]) =>
+      Array.from(new Set(arr.filter((v) => typeof v === "string" && known.has(v))));
     try {
       const raw = localStorage.getItem("ai-studio:video-models");
       if (raw) {
         const arr = JSON.parse(raw);
-        if (Array.isArray(arr) && arr.length) return arr.filter((v) => typeof v === "string");
+        if (Array.isArray(arr) && arr.length) return sanitize(arr);
       }
       // back-compat: migrate the old single-value key
       const legacy = localStorage.getItem("ai-studio:video-model");
-      if (legacy) return [legacy];
+      if (legacy && known.has(legacy)) return [legacy];
     } catch {}
     return [];
   });
@@ -2215,9 +2218,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         type="button"
                         onClick={() => {
                           setVideoModels((curr) => {
-                            const next = curr.includes(m.value)
-                              ? curr.filter((v) => v !== m.value)
-                              : [...curr, m.value];
+                            const known = new Set(VIDEO_MODELS.map((x) => x.value));
+                            const cleaned = Array.from(new Set(curr.filter((v) => known.has(v))));
+                            const next = cleaned.includes(m.value)
+                              ? cleaned.filter((v) => v !== m.value)
+                              : [...cleaned, m.value];
                             return next;
                           });
                         }}
