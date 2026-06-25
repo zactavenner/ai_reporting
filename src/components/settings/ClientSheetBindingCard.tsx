@@ -398,6 +398,86 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
         </div>
       )}
 
+      {bound.id && (
+        <div className="space-y-3 pt-3 border-t border-border">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <Label className="text-sm">Column mapping</Label>
+              <p className="text-xs text-muted-foreground">
+                Map each KPI (CPL, calls, funded, ad performance) to the exact header
+                in this client's sheet. Pick the sample tab whose headers we should
+                offer — usually the daily / raw data tab.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Select
+                value={colSampleGid ?? '__bound__'}
+                onValueChange={(v) => {
+                  const next = v === '__bound__' ? (bound.gid ?? undefined) : v;
+                  setColSampleGid(next);
+                  setHeaderOptions([]);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[200px] text-xs">
+                  <SelectValue placeholder="Sample tab" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="__bound__">Bound default tab</SelectItem>
+                  {allTabs.map((t) => (
+                    <SelectItem key={t.gid} value={t.gid}>{t.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={() => loadHeaders(colSampleGid || bound.gid || undefined)} disabled={loadingHeaders}>
+                {loadingHeaders ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                <span className="ml-1">Reload headers</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {KPI_COLUMNS.map((kpi) => {
+              const current = colMap[kpi.key];
+              const value = current ?? '__none__';
+              return (
+                <div key={kpi.key} className="space-y-1">
+                  <Label htmlFor={`col-${kpi.key}`} className="text-xs font-medium">{kpi.label}</Label>
+                  <Select
+                    value={value}
+                    onValueChange={(v) =>
+                      setColMap((prev) => {
+                        const next = { ...prev };
+                        if (v === '__none__') delete next[kpi.key];
+                        else next[kpi.key] = v;
+                        return next;
+                      })
+                    }
+                  >
+                    <SelectTrigger id={`col-${kpi.key}`} className="h-8 text-xs">
+                      <SelectValue placeholder={kpi.hint} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="__none__">— Auto-detect —</SelectItem>
+                      {headerOptions.map((h) => (
+                        <SelectItem key={h} value={h}>{h}</SelectItem>
+                      ))}
+                      {current && !headerOptions.includes(current) && (
+                        <SelectItem value={current}>{current} (not in sample tab)</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </div>
+          {headerOptions.length === 0 && !loadingHeaders && (
+            <p className="text-xs text-muted-foreground">
+              No headers loaded yet. Pick a sample tab and click "Reload headers".
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-between items-center pt-2 border-t border-border">
         <p className="text-xs text-muted-foreground">
           Share each sheet with the connector account so it has read access.
