@@ -2289,6 +2289,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
                   {VIDEO_MODELS.map((m) => {
                     const active = videoModels.includes(m.value);
+                    // Reflect resolution-based pricing (Seedance Pro 4K ≈ 2.5×, 720p ≈ 0.7×).
+                    const supportedRes = VIDEO_MODEL_RES[m.value] || ["1080p"];
+                    const effectiveRes: "720p" | "1080p" | "4k" = supportedRes.includes(videoResolution)
+                      ? videoResolution
+                      : supportedRes[supportedRes.length - 1];
+                    const mult = resolutionMultiplier(effectiveRes);
+                    const clipCost = m.maxSeconds * m.pricePerSecond * mult;
                     return (
                       <button
                         key={m.value}
@@ -2298,12 +2305,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                            // Video compare was removed — one model per request, batch generation later.
                            setVideoModels((curr) => (curr.length === 1 && curr[0] === m.value ? [] : [m.value]));
                          }}
-                         title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)`}
+                         title={`${m.label} — ${m.hint}\n${effectiveRes.toUpperCase()} · ${m.maxSeconds}s · ~$${clipCost.toFixed(2)} per clip\n(base rate: ~$${m.pricePerSecond.toFixed(3)}/sec${mult !== 1 ? ` · ${effectiveRes.toUpperCase()} ×${mult}` : ""})`}
                         className={`px-2 py-1 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
                         <span>{m.label}</span>
                         <span className={`text-[9px] ${active ? "text-primary-foreground/80" : "text-muted-foreground/70"}`}>
-                          {m.maxSeconds}s · ${ (m.maxSeconds * m.pricePerSecond).toFixed(2) }
+                          {m.maxSeconds}s · {effectiveRes === "4k" ? "4K" : effectiveRes} · ${clipCost.toFixed(2)}
                         </span>
                       </button>
                     );
