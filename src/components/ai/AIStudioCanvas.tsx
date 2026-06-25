@@ -531,19 +531,36 @@ export function AIStudioCanvas({
         }
         if (e.kind === "scene_video") {
           const p = e.payload || {};
-          const modelLabel = p.model?.includes("seedance")
-            ? (p.model.includes("fast") ? "Seedance 2.0 Fast" : "Seedance 2.0")
-            : (p.model?.includes("veo") ? "Veo 3.1" : (p.model || "Video"));
+          const displayModelLabel = modelLabel(p.effective_model || p.model);
           const showSceneBadge = typeof p.scene_order === "number" && !p.model?.includes("seedance");
+          const requestedModel = p.requested_model || p.model || "—";
+          const effectiveModel = p.effective_model || p.model || "—";
+          const effectiveDuration = p.effective_duration || p.duration || "—";
+          const effectiveResolution = p.effective_resolution || p.resolution || "—";
+          const wireResolution = p.wire_resolution || effectiveResolution;
+          const wireSize = p.wire_size || null;
+          const isHappyHorse = String(effectiveModel || p.model || "").toLowerCase().includes("happyhorse");
+          const happyHorseLocked = isHappyHorse && Number(effectiveDuration) === 15 && String(effectiveResolution).toLowerCase() === "1080p";
           return (
             <Card key={e.id} data-canvas-card className="p-3">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <Film className="h-4 w-4 text-primary" />
                 {showSceneBadge && <Badge variant="outline" className="text-[10px]">Scene {p.scene_order}</Badge>}
                 {p.mode && <Badge variant="outline" className="text-[10px] capitalize">{String(p.mode).replace(/_/g, "→")}</Badge>}
                 <Badge variant="secondary" className="text-[10px]">{p.aspect_ratio}</Badge>
-                <Badge variant="secondary" className="text-[10px]">{modelLabel}</Badge>
+                <Badge variant="secondary" className="text-[10px]" title={effectiveModel}>{displayModelLabel}</Badge>
                 {p.resolution && <Badge variant="secondary" className="text-[10px]">{p.resolution}</Badge>}
+                {p.actual_resolution && (
+                  p.resolution_match === false ? (
+                    <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400" title={`Requested ${p.resolution || "?"}, actual ${p.actual_resolution}${p.actual_width && p.actual_height ? ` (${p.actual_width}×${p.actual_height})` : ""}`}>
+                      ⚠ actual {p.actual_resolution}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-600 dark:text-emerald-400" title={`Verified ${p.actual_resolution}${p.actual_width && p.actual_height ? ` (${p.actual_width}×${p.actual_height})` : ""}`}>
+                      ✓ verified
+                    </Badge>
+                  )
+                )}
                 <span className="text-xs text-muted-foreground ml-auto">{p.duration || 5}s</span>
               </div>
               <VideoPlayerCard
@@ -554,6 +571,25 @@ export function AIStudioCanvas({
                 onEdit={p.video_url && onEditVideo ? (u) => onEditVideo(u, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio }) : undefined}
               />
               <p className="text-[10px] text-muted-foreground line-clamp-2 mt-2">{p.video_prompt}</p>
+              {isHappyHorse && (
+                <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 p-2 text-[10px]">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-semibold text-foreground">HappyHorse render debug</span>
+                    <Badge variant={happyHorseLocked ? "secondary" : "destructive"} className="h-5 text-[10px]">
+                      {happyHorseLocked ? "Locked 15s / 1080p" : "Check settings"}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-muted-foreground">
+                    <span>Exact model</span><span className="font-mono text-foreground truncate" title={effectiveModel}>{effectiveModel}</span>
+                    <span>Duration used</span><span className="font-mono text-foreground">{effectiveDuration}s</span>
+                    <span>Resolution used</span><span className="font-mono text-foreground">{effectiveResolution}</span>
+                    <span>OpenRouter sent</span><span className="font-mono text-foreground">{wireResolution}</span>
+                    {wireSize && <><span>Exact size sent</span><span className="font-mono text-foreground">{wireSize}</span></>}
+                    <span>Requested</span><span className="font-mono text-foreground truncate" title={`${requestedModel} • ${p.requested_duration ?? p.duration ?? "—"}s • ${p.requested_resolution ?? p.resolution ?? "—"}`}>{p.requested_duration ?? p.duration ?? "—"}s / {p.requested_resolution ?? p.resolution ?? "—"}</span>
+                    <span>Actual file</span><span className="font-mono text-foreground">{p.actual_width && p.actual_height ? `${p.actual_width}×${p.actual_height}` : p.actual_resolution || "pending"}</span>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center flex-wrap gap-1.5 mt-2">
                 {p.video_url && (
                   <>
