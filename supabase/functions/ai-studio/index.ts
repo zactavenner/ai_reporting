@@ -3574,11 +3574,17 @@ Deno.serve(async (req) => {
             }
             if (name === "generate_seedance_video") {
               canvasPlaceholderId = crypto.randomUUID();
+              const placeholderModels = (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [normalizeVideoModel(args.model) || selectedVideoModel]).filter(Boolean);
+              const placeholderLabel = placeholderModels.length > 1
+                ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
+                : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
+              const placeholderDuration = placeholderModels[0] === "alibaba/happyhorse-1.1" ? 15 : (args.duration || 15);
+              const placeholderResolution = placeholderModels[0] === "alibaba/happyhorse-1.1" ? "1080p" : (args.resolution || requestedRes || "1080p");
               send({
                 type: "canvas_placeholder",
                 placeholder_id: canvasPlaceholderId,
                 kind: "image",
-                prompt: `Seedance 2.0 ${args.image_url ? "image→video" : "text→video"} • ${args.duration || 15}s ${args.resolution || "1080p"}: ${String(args.prompt || "").slice(0, 120)}`,
+                prompt: `${placeholderLabel} ${args.image_url ? "image→video" : "text→video"} • ${placeholderDuration}s ${placeholderResolution}: ${String(args.prompt || "").slice(0, 120)}`,
                 aspect_ratio: args.aspect_ratio || "9:16",
                 quality: "seedance",
               });
