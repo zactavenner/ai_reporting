@@ -913,7 +913,19 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const videoStyles = useVideoStyles();
   const imageStyles = useImageStyles();
   const [adFormat, setAdFormat] = useState<string>(() => {
-    try { return localStorage.getItem("ai-studio:ad-format") || "none"; } catch { return "none"; }
+    try {
+      const stored = localStorage.getItem("ai-studio:ad-format") || "reel_9x16";
+      // Migrate legacy values from the old 6-option picker to the new 3-format set.
+      const legacy: Record<string, string> = {
+        none: "reel_9x16",
+        meta_feed_1x1: "static_1x1",
+        meta_reel_9x16: "reel_9x16",
+        story_9x16: "reel_9x16",
+        tiktok_9x16: "reel_9x16",
+        youtube_16x9: "video_16x9",
+      };
+      return legacy[stored] || stored;
+    } catch { return "reel_9x16"; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:ad-format", adFormat); } catch {} }, [adFormat]);
   const [hookFramework, setHookFramework] = useState<string>(() => {
