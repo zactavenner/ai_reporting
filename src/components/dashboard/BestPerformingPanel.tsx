@@ -3,6 +3,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Trophy, Target, Image as ImageIcon } from 'lucide-react';
 
+const TOP_PERFORMERS_TIMEOUT_MS = 10000;
+
+async function withTimeout<T>(promise: PromiseLike<T>, label: string, ms = TOP_PERFORMERS_TIMEOUT_MS): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 interface TopRow {
   scope: 'campaign' | 'adset' | 'ad';
   entity_id: string;
@@ -35,15 +50,24 @@ export function BestPerformingPanel({ clientIds }: { clientIds?: string[] }) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase.rpc('get_top_performers', {
-        p_client_ids: clientIds && clientIds.length ? clientIds : null,
-      });
-      if (cancelled) return;
-      if (error) {
-        console.error('get_top_performers error', error);
+      try {
+        const { data, error } = await withTimeout<{ data: TopRow[] | null; error: unknown }>(
+          supabase.rpc('get_top_performers', {
+            p_client_ids: clientIds && clientIds.length ? clientIds : null,
+          }) as PromiseLike<{ data: TopRow[] | null; error: unknown }>,
+          'Top performers'
+        );
+        if (cancelled) return;
+        if (error) {
+          console.error('get_top_performers error', error);
+          setRows([]);
+        } else {
+          setRows((data || []) as TopRow[]);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('get_top_performers unavailable', error);
         setRows([]);
-      } else {
-        setRows((data || []) as TopRow[]);
       }
       setLoading(false);
     })();

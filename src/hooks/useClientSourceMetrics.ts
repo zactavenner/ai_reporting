@@ -3,6 +3,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { SourceAggregatedMetrics } from './useSourceMetrics';
 import { DailyMetric } from './useMetrics';
 
+const DASHBOARD_QUERY_TIMEOUT_MS = 12000;
+
+async function withTimeout<T>(promise: PromiseLike<T>, label: string, ms = DASHBOARD_QUERY_TIMEOUT_MS): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 interface ClientSourceMetricsRow {
   client_id: string;
   total_leads: number;
@@ -33,10 +48,20 @@ export function useClientSourceMetrics(startDate?: string, endDate?: string) {
         p_end_date: endDate || null,
       };
 
-      const { data, error } = await supabase.rpc('get_client_source_metrics', params);
-      if (error) throw error;
-      return (data || []) as ClientSourceMetricsRow[];
+      try {
+        const { data, error } = await withTimeout<{ data: ClientSourceMetricsRow[] | null; error: unknown }>(
+          supabase.rpc('get_client_source_metrics', params) as PromiseLike<{ data: ClientSourceMetricsRow[] | null; error: unknown }>,
+          'Client source metrics'
+        );
+        if (error) throw error;
+        return (data || []) as ClientSourceMetricsRow[];
+      } catch (error) {
+        console.error('[dashboard] Client source metrics unavailable', error);
+        return [];
+      }
     },
+    retry: 0,
+    staleTime: 60 * 1000,
   });
 }
 

@@ -2,6 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
 
+const DASHBOARD_QUERY_TIMEOUT_MS = 12000;
+
+async function withTimeout<T>(promise: Promise<T>, label: string, ms = DASHBOARD_QUERY_TIMEOUT_MS): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export interface DailyMetric {
   id: string;
   client_id: string;
@@ -96,22 +111,29 @@ export function useAllDailyMetrics(startDate?: string, endDate?: string) {
   return useQuery({
     queryKey: ['all-daily-metrics', startDate, endDate],
     queryFn: async () => {
-      return await fetchAllRows<DailyMetric>((sb) => {
-        let query = sb
-          .from('daily_metrics')
-          .select('*')
-          .order('date', { ascending: false });
-        
-        if (startDate) {
-          query = query.gte('date', startDate);
-        }
-        if (endDate) {
-          query = query.lte('date', endDate);
-        }
-        
-        return query;
-      });
+      try {
+        return await withTimeout(fetchAllRows<DailyMetric>((sb) => {
+          let query = sb
+            .from('daily_metrics')
+            .select('*')
+            .order('date', { ascending: false });
+          
+          if (startDate) {
+            query = query.gte('date', startDate);
+          }
+          if (endDate) {
+            query = query.lte('date', endDate);
+          }
+          
+          return query;
+        }), 'Daily metrics');
+      } catch (error) {
+        console.error('[dashboard] Daily metrics unavailable', error);
+        return [];
+      }
     },
+    retry: 0,
+    staleTime: 60 * 1000,
   });
 }
 
