@@ -26,13 +26,18 @@ export function useSheetClientMetrics(
     .map((id) => {
       const url = (settings[id] as any)?.kpi_google_sheet_url as string | undefined;
       const parsed = parseSheetUrl(url);
-      return parsed ? { id, ...parsed } : null;
+      if (!parsed) return null;
+      const mappingRaw = (settings[id] as any)?.metrics_sheet_mapping as Record<string, any> | undefined;
+      const mapping: Record<string, string> | undefined = mappingRaw?.columns && typeof mappingRaw.columns === 'object'
+        ? (mappingRaw.columns as Record<string, string>)
+        : undefined;
+      return { id, ...parsed, mapping };
     })
-    .filter((t): t is { id: string; sheet_id: string; gid?: string } => !!t);
+    .filter((t): t is { id: string; sheet_id: string; gid?: string; mapping?: Record<string, string> } => !!t);
 
   const queries = useQueries({
     queries: targets.map((t) => ({
-      queryKey: ['sheet-client-metrics', t.id, t.sheet_id, t.gid, startDate, endDate],
+      queryKey: ['sheet-client-metrics', t.id, t.sheet_id, t.gid, startDate, endDate, t.mapping],
       queryFn: async () => {
         const { data, error } = await supabase.functions.invoke('fetch-sheet-metrics', {
           body: {
@@ -40,6 +45,7 @@ export function useSheetClientMetrics(
             gid: t.gid,
             start_date: startDate,
             end_date: endDate,
+            mapping: t.mapping,
           },
         });
         if (error) throw error;
