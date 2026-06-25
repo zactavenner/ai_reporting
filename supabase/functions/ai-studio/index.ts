@@ -4038,47 +4038,16 @@ Deno.serve(async (req) => {
                   },
                 }).select("id, payload, kind, created_at").single();
                 if (ci.data) send({ type: "canvas_item", item: ci.data, replace_placeholder_id: canvasPlaceholderId });
-              } else if (name === "plan_storyboard") {
-                const sb = await planStoryboard({
-                  brief: args.brief,
-                  sceneCount: Math.max(3, Math.min(8, args.scene_count || 4)),
-                  aspectRatio: args.aspect_ratio || "9:16",
-                  styleNotes: (args.style_notes || "") + videoRefStyleNotes,
-                  brandContext,
-                  conversationId,
-                  userId: userId!,
-                });
-                result = { ok: true, storyboard_id: sb.storyboardId, aspect_ratio: sb.aspect_ratio, style_anchor: sb.style_anchor, scenes: sb.scenes, note: "Pass the SAME `style_anchor` string to every generate_scene_image call so all keyframes share one visual identity." };
-                if (sb.storyboardItem) send({ type: "canvas_item", item: sb.storyboardItem });
-              } else if (name === "generate_scene_image") {
-                const r = await generateSceneImage({
-                  storyboardId: args.storyboard_id,
-                  sceneId: args.scene_id,
-                  sceneOrder: args.scene_order,
-                  prompt: args.prompt,
-                  aspectRatio: args.aspect_ratio,
-                  clientId: clientId || null,
-                  conversationId,
-                  userId: userId!,
-                  model: (args.model === "openai" || args.model === "nano-banana") ? args.model : null,
-                  styleAnchor: typeof args.style_anchor === "string" ? args.style_anchor : null,
-                });
-                result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, image_url: r.image_url, model: r.model };
-                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
-              } else if (name === "generate_scene_video") {
-                const r = await generateSceneVideo({
-                  storyboardId: args.storyboard_id,
-                  sceneId: args.scene_id,
-                  sceneOrder: args.scene_order,
-                  imageUrl: args.image_url,
-                  videoPrompt: args.video_prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
-                  aspectRatio: args.aspect_ratio,
-                  clientId: clientId || null,
-                  conversationId,
-                  userId: userId!,
-                });
-                result = { ok: true, scene_id: args.scene_id, scene_order: args.scene_order, video_url: r.video_url };
-                if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
+              } else if (name === "plan_storyboard" || name === "generate_scene_image" || name === "generate_scene_video") {
+                // Storyboarding is permanently disabled. If the model somehow
+                // still emits one of these tool calls (cached schema, prompt
+                // bleed, etc.), short-circuit with a redirect instead of
+                // executing the legacy multi-scene pipeline.
+                result = {
+                  ok: false,
+                  disabled: true,
+                  error: "Storyboarding is disabled. Use generate_seedance_video for any video request — the server auto-splits long durations into back-to-back clips.",
+                };
               } else if (name === "generate_seedance_video") {
                 // MODEL SELECTION GUARANTEE: the user's UI selection is the source of truth.
                 // - If they picked 1 model (e.g. only HappyHorse), render with EXACTLY that model
