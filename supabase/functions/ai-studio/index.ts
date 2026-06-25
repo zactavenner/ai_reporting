@@ -957,6 +957,7 @@ async function generateSeedanceVideo(opts: {
   clientId: string | null;
   conversationId: string;
   userId: string;
+  _avatarFallbackAttempt?: number; // internal: tracks Seedance→HappyHorse fallback recursion
   onProgress?: (p: {
     stage: "submitting" | "queued" | "polling" | "downloading" | "rehosting" | "completed" | "failed";
     label: string;
@@ -966,6 +967,9 @@ async function generateSeedanceVideo(opts: {
     percent?: number;
     job_id?: string;
     model?: string;
+    rerouted_from?: string;
+    rerouted_to?: string;
+    rerouted_reason?: string;
   }) => void;
 }) {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
