@@ -4072,7 +4072,7 @@ Deno.serve(async (req) => {
                 const forceModel = !!args.force_model;
                 const rawFanModels = (uniqueSelectedVideoModels.length > 0
                   ? uniqueSelectedVideoModels.slice()
-                  : [explicitModel || selectedVideoModel])
+                  : [selectedVideoModel || explicitModel])
                   .filter((m): m is string => typeof m === "string" && !!m);
                 await recordVideoModelDecision(supa, "tool_video.model_source", {
                   conversation_id: conversationId,
