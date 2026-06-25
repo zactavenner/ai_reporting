@@ -1687,13 +1687,65 @@ async function generateSeedanceVideo(opts: {
       percent: Math.min(85, 10 + (i + 1) * 1.2),
     });
     if (stat === "completed" || stat === "succeeded") {
-      const urls: string[] = pj.unsigned_urls
-        || pj.urls
-        || (pj.video?.url ? [pj.video.url] : [])
-        || (pj.output?.[0]?.url ? [pj.output[0].url] : [])
-        || (pj.url ? [pj.url] : [])
-        || (pj.videos?.[0]?.url ? [pj.videos[0].url] : []);
+      // Robust URL extraction. Note: `||` chains break here because `[]` is
+      // truthy in JS — empty `unsigned_urls` would shadow a `video.url` field.
+      // HappyHorse in particular sometimes returns the MP4 only under
+      // `video.url`, `output[*].url`, `result.video_url`, or `data[*].url`.
+      const pickUrls = (): string[] => {
+        const out: string[] = [];
+        const pushIf = (v: unknown) => { if (typeof v === "string" && v.startsWith("http")) out.push(v); };
+        const arr = (v: unknown) => Array.isArray(v) ? v : [];
+        for (const u of arr(pj.unsigned_urls)) pushIf(u);
+        for (const u of arr(pj.urls)) pushIf(u);
+        pushIf(pj.video?.url); pushIf(pj.video?.video_url); pushIf(pj.video_url);
+        for (const o of arr(pj.output)) { pushIf(o?.url); pushIf(o?.video_url); pushIf(o?.video?.url); }
+        for (const v of arr(pj.videos)) { pushIf(v?.url); pushIf(v?.video_url); }
+        for (const d of arr(pj.data)) { pushIf(d?.url); pushIf(d?.video_url); pushIf(d?.video?.url); }
+        pushIf(pj.result?.video_url); pushIf(pj.result?.url);
+        pushIf(pj.url);
+        return out;
+      };
+      const urls = pickUrls();
       videoUrl = urls[0] || null;
+      if (!videoUrl) {
+        // Try the documented /content fallback before giving up — some
+        // HappyHorse jobs publish the MP4 only via the content endpoint.
+        try {
+          const contentUrl = pollingUrl.replace(/\/+$/, "") + "/content";
+          const cr = await fetch(contentUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+          if (cr.ok) {
+            const cj = await cr.json().catch(() => null) as any;
+            if (cj) {
+              const cUrls: string[] = [];
+              const pushIf = (v: unknown) => { if (typeof v === "string" && v.startsWith("http")) cUrls.push(v); };
+              const arr = (v: unknown) => Array.isArray(v) ? v : [];
+              for (const u of arr(cj.unsigned_urls)) pushIf(u);
+              for (const u of arr(cj.urls)) pushIf(u);
+              pushIf(cj.url); pushIf(cj.video?.url); pushIf(cj.video_url);
+              videoUrl = cUrls[0] || null;
+            }
+          }
+        } catch { /* ignore — surfaced below */ }
+      }
+      if (!videoUrl) {
+        await recordVideoModelDecision(supa, "generateSeedanceVideo.failed", {
+          conversation_id: opts.conversationId,
+          client_id: opts.clientId,
+          user_id: opts.userId,
+          phase: "completed_without_url",
+          provider: "openrouter",
+          requested_model: opts.model || null,
+          chosen_model: model,
+          submitted_model: body.model,
+          downstream_model: downstreamModelSeen,
+          job_id: jobId,
+          status: pj.status,
+          error: "Completed poll returned no recognizable video URL",
+          poll_payload_keys: Object.keys(pj || {}).slice(0, 20),
+        });
+        emit({ stage: "failed", label: "Completed but no video URL returned", job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
+        throw new Error(`${modelLabel} completed but returned no video URL. Payload keys: ${Object.keys(pj || {}).join(",")}`);
+      }
       break;
     }
     if (stat === "failed" || stat === "error" || stat === "canceled" || stat === "cancelled") {
