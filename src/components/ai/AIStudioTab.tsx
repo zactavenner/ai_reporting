@@ -275,7 +275,7 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
             <div key={j} className="text-xs flex items-center gap-2 text-muted-foreground">
               <Badge variant="secondary" className="text-[10px] gap-1">
                 {t.name === "web_search" && <Globe className="h-2.5 w-2.5" />}
-                {t.name}
+                {toolDisplayName(t)}
               </Badge>
               {t.status === "running" ? (
                 <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
