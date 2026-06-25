@@ -549,7 +549,21 @@ export function VideoStylesBar({ styles, setStyles, selectedId, setSelectedId }:
   );
 }
 
-function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: VideoStyle) => void }) {
+function StyleEditor({
+  style,
+  onChange,
+  onTranscribeReference,
+  onTrain,
+}: {
+  style: VideoStyle;
+  onChange: (s: VideoStyle) => void;
+  onTranscribeReference?: (index: number) => Promise<void> | void;
+  onTrain?: () => Promise<void> | void;
+}) {
+  const [busyIdx, setBusyIdx] = useState<number | null>(null);
+  const [training, setTraining] = useState(false);
+  const refs = style.references || [];
+  const transcribedCount = refs.filter((r) => r.transcript && r.transcript.trim()).length;
   return (
     <div className="space-y-3">
       <div className="space-y-1">
@@ -564,6 +578,9 @@ function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: Vid
         <label className="text-xs text-muted-foreground flex items-center gap-2">
           Prompt instructions
           {style.builtIn && <Badge variant="secondary" className="text-[9px]">built-in</Badge>}
+          {style.aiTrainedPrompt && (
+            <Badge variant="outline" className="text-[9px]"><Sparkles className="h-2.5 w-2.5 mr-0.5" />AI-trained</Badge>
+          )}
         </label>
         <Textarea
           value={style.prompt}
@@ -578,6 +595,75 @@ function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: Vid
         value={style.references || []}
         onChange={(refs) => onChange({ ...style, references: refs })}
       />
+      {(onTranscribeReference || onTrain) && refs.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-2">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1">
+              <Sparkles className="h-3 w-3" /> Training data
+              <span className="ml-1 normal-case tracking-normal text-muted-foreground/70">
+                {transcribedCount}/{refs.length} transcribed
+              </span>
+            </div>
+            {onTrain && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2 text-[10px]"
+                disabled={training || transcribedCount === 0}
+                onClick={async () => {
+                  setTraining(true);
+                  try { await onTrain(); toast.success("Style retrained from references"); }
+                  catch (e) { toast.error(e instanceof Error ? e.message : "Training failed"); }
+                  finally { setTraining(false); }
+                }}
+                title={transcribedCount === 0 ? "Auto-transcribe at least one reference first" : "Have the AI rewrite this style's prompt from the transcribed references"}
+              >
+                {training ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                Train from references
+              </Button>
+            )}
+          </div>
+          <div className="grid gap-1.5 max-h-44 overflow-y-auto">
+            {refs.map((r, i) => (
+              <div key={`${r.url}-${i}`} className="flex items-start gap-2 text-[10px] rounded border border-border/40 bg-background/60 p-1.5">
+                <video src={r.url} className="w-14 h-14 object-cover rounded shrink-0 bg-muted" muted />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="truncate font-medium">{r.name || `Reference ${i + 1}`}</span>
+                    {r.transcript ? (
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" aria-label="Transcribed" />
+                    ) : null}
+                  </div>
+                  <div className="text-muted-foreground line-clamp-2">
+                    {r.transcript ? r.transcript : <span className="italic">No transcript yet.</span>}
+                  </div>
+                </div>
+                {onTranscribeReference && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-1.5 text-[9px] shrink-0"
+                    disabled={busyIdx === i}
+                    onClick={async () => {
+                      setBusyIdx(i);
+                      try { await onTranscribeReference(i); toast.success("Transcribed"); }
+                      catch (e) { toast.error(e instanceof Error ? e.message : "Transcription failed"); }
+                      finally { setBusyIdx(null); }
+                    }}
+                  >
+                    {busyIdx === i ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileAudio className="h-3 w-3" />}
+                    <span className="ml-1">{r.transcript ? "Re-transcribe" : "Transcribe"}</span>
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] text-muted-foreground/80">
+            Upload example clips above, transcribe each, then click <span className="font-medium">Train from references</span> to have the AI rewrite this style's prompt to match the examples.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
