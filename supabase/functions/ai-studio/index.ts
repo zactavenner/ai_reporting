@@ -981,8 +981,6 @@ async function ensureProviderAccessibleImageUrl(opts: {
 }): Promise<string> {
   const input = String(opts.url || "").trim();
   if (!input) return input;
-  // Public creatives URLs are already the permanent, provider-readable target.
-  if (input.includes("/storage/v1/object/public/creatives/")) return input;
 
   let bytes: Uint8Array | null = null;
   let mime = "image/png";
@@ -999,7 +997,16 @@ async function ensureProviderAccessibleImageUrl(opts: {
 
   const gptPath = storageObjectPathFromUrl(input, "gpt-files");
   const creativePath = storageObjectPathFromUrl(input, "creatives");
-  if (gptPath) {
+  if (input.includes("/storage/v1/object/public/creatives/") && creativePath) {
+    // A stale public URL can still look valid but OpenRouter/Alibaba will reject
+    // it as `content[1].image_url ... resource not found`. Verify the object is
+    // actually readable before passing it downstream; if it is not, let the
+    // caller drop the frame (HappyHorse) instead of surfacing a Seedance-looking
+    // provider error.
+    const r = await fetch(input, { method: "GET" });
+    if (r.ok) return input;
+    await downloadFromBucket("creatives", creativePath);
+  } else if (gptPath) {
     await downloadFromBucket("gpt-files", gptPath);
   } else if (creativePath) {
     // Signed/private creatives URL: re-publish to a clean public object URL.
@@ -3723,7 +3730,7 @@ Deno.serve(async (req) => {
                 kind: "image",
                 prompt: `${placeholderLabel} ${args.image_url ? "image→video" : "text→video"} • ${placeholderDuration}s ${placeholderResolution}: ${String(args.prompt || "").slice(0, 120)}`,
                 aspect_ratio: args.aspect_ratio || "9:16",
-                quality: "seedance",
+                quality: "video",
               });
             }
             if (name === "image_to_reel") {
@@ -4182,7 +4189,7 @@ Deno.serve(async (req) => {
                       kind: "image",
                       prompt: `Clip ${seg.index + 1}/${seg.count} • ${VIDEO_MODEL_CAPS[mdl]?.label || mdl}: ${String(args.prompt || "").slice(0, 100)}`,
                       aspect_ratio: baseAspect,
-                      quality: "seedance",
+                      quality: "video",
                     });
                   });
                   // Avatar verification: confirm each split clip reuses the SAME avatar image.
