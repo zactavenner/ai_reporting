@@ -33,7 +33,7 @@ export function useSheetClientMetrics(
         : undefined;
       return { id, sheet_id: parsed.sheet_id, gid: parsed.gid, mapping };
     })
-    .filter((t): t is { id: string; sheet_id: string; gid?: string; mapping?: Record<string, string> } => !!t);
+    .filter((t) => !!t) as { id: string; sheet_id: string; gid?: string; mapping?: Record<string, string> }[];
 
   const queries = useQueries({
     queries: targets.map((t) => ({
