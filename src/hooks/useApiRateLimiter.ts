@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-export type ServiceType = 'veo3' | 'gemini';
+export type ServiceType = 'veo3' | 'gemini' | 'haiper';
 export type ApiKeyTier = 'free' | 'payg' | 'scale';
 
 export const TIER_CONFIGS: Record<ApiKeyTier, { label: string; perMinute: number; perDay: number; description: string }> = {
@@ -26,9 +26,10 @@ interface UsageStats {
   dailyCount: number;
 }
 
-const STORAGE_KEYS = {
+const STORAGE_KEYS: Record<ServiceType, string> = {
   veo3: 'api_keys_veo3',
   gemini: 'api_keys_gemini',
+  haiper: 'api_keys_haiper',
 };
 
 const DEFAULT_LABELS = ['Key 1', 'Key 2', 'Key 3', 'Key 4', 'Key 5'];

@@ -33,7 +33,7 @@ function getApiKeyForService(service: 'gemini' | 'veo3'): string | undefined {
 
 // Helper to generate video via the appropriate model (Veo3 or Grok)
 async function generateVideoForModel(
-  model: 'veo3' | 'grok' | undefined,
+  model: 'veo3' | 'grok' | 'haiper-1.1' | undefined,
   body: { prompt: string; imageUrl?: string; aspectRatio: string; duration: number; apiKey?: string }
 ): Promise<{ operationId?: string; videoUrl?: string; status: string; error?: string }> {
   if (model === 'grok') {
@@ -50,6 +50,19 @@ async function generateVideoForModel(
     if (data.error) throw new Error(data.message || data.error);
     return data;
   }
+  if (model === 'haiper-1.1') {
+    const { data, error } = await supabase.functions.invoke('generate-video-haiper', {
+      body: {
+        prompt: body.prompt,
+        imageUrl: body.imageUrl,
+        aspectRatio: body.aspectRatio,
+        duration: body.duration,
+      },
+    });
+    if (error) throw error;
+    if (data.error) throw new Error(data.message || data.error);
+    return data;
+  }
   // Default: Veo3
   const fnName = body.imageUrl ? 'generate-video-from-image' : 'generate-broll';
   const { data, error } = await supabase.functions.invoke(fnName, { body });
@@ -60,7 +73,7 @@ async function generateVideoForModel(
 
 // Helper to poll video status for the appropriate model
 async function pollVideoForModel(
-  model: 'veo3' | 'grok' | undefined,
+  model: 'veo3' | 'grok' | 'haiper-1.1' | undefined,
   operationId: string,
   apiKey: string | undefined,
   nodeId: string,

@@ -64,6 +64,10 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showXaiKey, setShowXaiKey] = useState(false);
 
+  // OpenRouter API Key
+  const [openrouterKey, setOpenrouterKey] = useState('');
+  const [showOpenrouterKey, setShowOpenrouterKey] = useState(false);
+
   // Model selections
   const [selectedOpenaiModel, setSelectedOpenaiModel] = useState('gpt-5');
   const [selectedGeminiModel, setSelectedGeminiModel] = useState('gemini-2.5-pro');
@@ -83,6 +87,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
       setOpenaiKey(settings.openai_api_key || '');
       setGeminiKey(settings.gemini_api_key || '');
       setXaiKey((settings as any).xai_api_key || '');
+      setOpenrouterKey((settings as any).openrouter_api_key || '');
       setApiUsageLimit(String(settings.api_usage_limit || 100));
       setMeetgeekApiKey((settings as any).meetgeek_api_key || '');
       setSelectedOpenaiModel((settings as any).selected_openai_model || 'gpt-5');
@@ -100,6 +105,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         openai_api_key: openaiKey || null,
         gemini_api_key: geminiKey || null,
         xai_api_key: xaiKey || null,
+        openrouter_api_key: openrouterKey || null,
         api_usage_limit: parseFloat(apiUsageLimit) || 100,
         meetgeek_api_key: meetgeekApiKey || null,
         selected_openai_model: selectedOpenaiModel,
@@ -375,6 +381,41 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
                     onClick={() => setShowXaiKey(!showXaiKey)}
                   >
                     {showXaiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* OpenRouter API Key */}
+            <div className="border-2 border-border p-4 space-y-4">
+              <div>
+                <h4 className="font-medium mb-1 flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  OpenRouter API Key (Happy Horse 1.1)
+                </h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Your OpenRouter API key for Haiper video generation. Get one at{' '}
+                  <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer" className="text-primary underline">
+                    openrouter.ai
+                  </a>
+                </p>
+                <div className="relative">
+                  <Input
+                    id="openrouterKey"
+                    type={showOpenrouterKey ? 'text' : 'password'}
+                    value={openrouterKey}
+                    onChange={(e) => setOpenrouterKey(e.target.value)}
+                    placeholder="sk-or-..."
+                    className="font-mono pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowOpenrouterKey(!showOpenrouterKey)}
+                  >
+                    {showOpenrouterKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>

@@ -7,7 +7,7 @@ export type VideoPlatform = 'tiktok-reels' | 'youtube' | 'square';
 export type VoiceTone = 'professional' | 'casual' | 'energetic' | 'calm';
 export type BackgroundStyle = 'animated-gradient' | 'office-studio' | 'outdoor' | 'abstract-motion' | 'brand-colors';
 export type VisualQuality = 'standard' | 'hyper-realistic';
-export type VideoModel = 'nano-banana-pro' | 'veo3';
+export type VideoModel = 'nano-banana-pro' | 'veo3' | 'haiper-1.1';
 export type ExportFormat = 'mp4-1080p' | 'mp4-4k' | 'mov';
 
 export interface ScriptSegment {

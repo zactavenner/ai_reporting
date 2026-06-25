@@ -11,12 +11,15 @@ interface GenerationResult {
   progress?: number;
 }
 
+type VideoModelOption = 'veo3' | 'haiper-1.1' | 'nano-banana-pro';
+
 interface ImageToVideoParams {
   sceneId: string;
   imageUrl: string;
   prompt: string;
   aspectRatio: '16:9' | '9:16';
   duration?: number;
+  videoModel?: VideoModelOption;
   onStatusUpdate: (sceneId: string, result: GenerationResult) => void;
 }
 
@@ -39,6 +42,7 @@ export function useImageToVideoGeneration() {
     prompt,
     aspectRatio,
     duration = 8,
+    videoModel = 'veo3',
     onStatusUpdate,
   }: ImageToVideoParams) => {
     // Validate image URL
@@ -48,30 +52,34 @@ export function useImageToVideoGeneration() {
       return null;
     }
 
-    // Try localStorage key; if none, edge function uses server env vars
-    const available = getAvailableKey();
-    
     let apiKey: string | undefined;
     let keyIndex = 0;
-    
-    if ('rateLimited' in available) {
-      toast.error('Rate limited', { description: available.message });
-      onStatusUpdate(sceneId, { status: 'failed', error: available.message });
-      return null;
+
+    if (videoModel === 'haiper-1.1') {
+      // Haiper uses OpenRouter key from agency settings, not localStorage key pool
+      apiKey = undefined;
+    } else {
+      const available = getAvailableKey();
+      if ('rateLimited' in available) {
+        toast.error('Rate limited', { description: available.message });
+        onStatusUpdate(sceneId, { status: 'failed', error: available.message });
+        return null;
+      }
+      apiKey = available.key || undefined;
+      keyIndex = available.keyIndex;
     }
-    
-    apiKey = available.key || undefined;
-    keyIndex = available.keyIndex;
 
     setGeneratingSceneId(sceneId);
     onStatusUpdate(sceneId, { status: 'processing' });
 
     try {
-      console.log(`🎬 Starting image-to-video for scene ${sceneId}`);
+      console.log(`🎬 Starting image-to-video for scene ${sceneId} (model: ${videoModel})`);
       console.log(`📷 Image URL: ${imageUrl.substring(0, 80)}...`);
       console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
 
-      const { data, error } = await supabase.functions.invoke('generate-video-from-image', {
+      const edgeFunction = videoModel === 'haiper-1.1' ? 'generate-video-haiper' : 'generate-video-from-image';
+
+      const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: {
           prompt,
           imageUrl,
