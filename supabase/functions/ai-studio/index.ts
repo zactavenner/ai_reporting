@@ -1437,7 +1437,14 @@ async function generateSeedanceVideo(opts: {
     body.resolution = "1080p";
     body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
     const frames: any[] = [];
-    if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
+    // HappyHorse only supports a single first_frame keyframe. The avatar (or any
+    // selected "ingredient" reference image) must be promoted into that slot so
+    // the same identity is locked across the 15s clip — HappyHorse rejects
+    // `reference_images`, so we cannot also send the ingredient separately.
+    const happyHorseFirstFrame = providerImageUrl || providerIngredientUrl || null;
+    if (happyHorseFirstFrame) {
+      frames.push({ type: "image_url", image_url: { url: happyHorseFirstFrame }, frame_type: "first_frame" });
+    }
     if (frames.length) body.frame_images = frames;
   } else if (isKling) {
     // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
