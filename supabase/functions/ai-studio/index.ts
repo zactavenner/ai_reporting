@@ -996,6 +996,7 @@ async function generateSeedanceVideo(opts: {
     "happyhorse": "alibaba/happyhorse-1.1",
     "happy-horse": "alibaba/happyhorse-1.1",
     "happy horse": "alibaba/happyhorse-1.1",
+    "horse": "alibaba/happyhorse-1.1",
     "happyhorse-1.1": "alibaba/happyhorse-1.1",
     "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
   };
@@ -2130,6 +2131,7 @@ Deno.serve(async (req) => {
     "happyhorse": "alibaba/happyhorse-1.1",
     "happy-horse": "alibaba/happyhorse-1.1",
     "happy horse": "alibaba/happyhorse-1.1",
+    "horse": "alibaba/happyhorse-1.1",
     "happyhorse-1.1": "alibaba/happyhorse-1.1",
     "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
   };
@@ -2776,7 +2778,7 @@ Deno.serve(async (req) => {
         if (shouldDirectGenerateVideoPrompt(userText || "")) {
           const totalDuration = inferVideoDurationSeconds(userText || "", 15);
           const aspect = inferVideoAspectRatio(userText || "");
-          const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "")
+          const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
           const promptAskedCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
@@ -3689,7 +3691,7 @@ Deno.serve(async (req) => {
                 const aspect = args.aspect_ratio || "9:16";
                 const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
                 const resolution = args.resolution === "720p" ? "720p" : "1080p";
-                const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
+                const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
                 const reelVideoModel = promptRequestedReelModel && uniqueSelectedVideoModels.length <= 1
                   ? promptRequestedReelModel
                   : uniqueSelectedVideoModels.length === 1
