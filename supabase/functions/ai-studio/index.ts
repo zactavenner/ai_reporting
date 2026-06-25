@@ -1200,6 +1200,10 @@ async function generateSeedanceVideo(opts: {
   });
   if (!submit.ok) {
     const t = await submit.text();
+    if (isAvatarRejection(t)) {
+      const fb = await tryAvatarFallback(`Seedance submit ${submit.status}: ${t.slice(0, 120)}`);
+      if (fb) return fb;
+    }
     emit({ stage: "failed", label: `Submit failed (${submit.status})`, model, elapsed_s: (Date.now() - t0) / 1000 });
     throw new Error(`Seedance submit [${submit.status}]: ${t.slice(0, 400)}`);
   }
@@ -1235,6 +1239,11 @@ async function generateSeedanceVideo(opts: {
       break;
     }
     if (pj.status === "failed") {
+      const errStr = typeof pj.error === "string" ? pj.error : JSON.stringify(pj.error || {});
+      if (isAvatarRejection(errStr)) {
+        const fb = await tryAvatarFallback(`Seedance render failed: ${errStr.slice(0, 120)}`);
+        if (fb) return fb;
+      }
       emit({ stage: "failed", label: `Generation failed: ${String(pj.error || "unknown").slice(0, 140)}`, job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
       throw new Error(`Seedance failed: ${pj.error || "unknown"}`);
     }
