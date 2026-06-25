@@ -1835,6 +1835,27 @@ async function generateSeedanceVideo(opts: {
         } catch { /* ignore — surfaced below */ }
       }
       if (!videoUrl) {
+        // Last-ditch: recursively walk the entire poll payload (and the
+        // /content payload if we fetched one) looking for ANY string that
+        // looks like a downloadable MP4. OpenRouter's HappyHorse response
+        // shape has changed across releases (sometimes `result.video.url`,
+        // sometimes `assets[0].download_url`, sometimes nested inside
+        // `output.choices[0]`), so a generic crawl is the safest fallback
+        // before we give up and mark the run failed.
+        const found: string[] = [];
+        const walk = (node: any, depth: number) => {
+          if (!node || depth > 6) return;
+          if (typeof node === "string") {
+            if (/^https?:\/\/\S+\.(mp4|mov|webm)(\?|$)/i.test(node)) found.push(node);
+            return;
+          }
+          if (Array.isArray(node)) { for (const x of node) walk(x, depth + 1); return; }
+          if (typeof node === "object") { for (const k of Object.keys(node)) walk((node as any)[k], depth + 1); }
+        };
+        walk(pj, 0);
+        videoUrl = found[0] || null;
+      }
+      if (!videoUrl) {
         await recordVideoModelDecision(supa, "generateSeedanceVideo.failed", {
           conversation_id: opts.conversationId,
           client_id: opts.clientId,
