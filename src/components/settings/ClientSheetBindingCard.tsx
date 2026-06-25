@@ -127,6 +127,32 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bound.id]);
 
+  async function loadHeaders(gidArg?: string) {
+    if (!bound.id) return;
+    setLoadingHeaders(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-sheet-metrics', {
+        body: { sheet_id: bound.id, gid: gidArg || colSampleGid || bound.gid || undefined, action: 'raw_grid' },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const hdrs: string[] = (((data as any)?.headers || []) as any[])
+        .map((h) => String(h ?? '').trim())
+        .filter((h) => h.length > 0);
+      setHeaderOptions(hdrs);
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Could not load column headers', description: e?.message ?? 'Unknown error' });
+    } finally {
+      setLoadingHeaders(false);
+    }
+  }
+
+  // Auto-load headers when a sample tab is chosen / sheet is bound
+  useEffect(() => {
+    if (bound.id && headerOptions.length === 0) loadHeaders(colSampleGid || bound.gid || undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bound.id, colSampleGid]);
+
   async function handleTest() {
     setError(null);
     setTabs(null);
