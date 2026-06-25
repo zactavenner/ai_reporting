@@ -840,7 +840,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [docUrl, setDocUrl] = useState<string>("");
   const [sheetUrl, setSheetUrl] = useState<string>("");
   const [quality, setQuality] = useState<"pro" | "fast">("pro");
-  const [chatModel, setChatModel] = useState<string>("openrouter/owl-alpha");
+  const [chatModel, setChatModel] = useState<string>(() => {
+    try {
+      const v = localStorage.getItem("ai-studio:chat-model");
+      if (v && typeof v === "string") return v;
+    } catch {}
+    return "openrouter/owl-alpha";
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:chat-model", chatModel); } catch {}
+  }, [chatModel]);
   // Extra models for inline side-by-side comparison (besides chatModel).
   const [compareModels, setCompareModels] = useState<string[]>([]);
   const [imageModels, setImageModels] = useState<Array<"nano-banana" | "openai" | "riverflow">>(() => {
@@ -858,8 +867,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [imageModels]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
     const known = new Set(VIDEO_MODELS.map((m) => m.value));
-    const sanitize = (arr: any[]) =>
-      Array.from(new Set(arr.filter((v) => typeof v === "string" && known.has(v))));
+    // Single-model only (video compare was removed). Keep at most the first valid pick.
+    const sanitize = (arr: any[]) => {
+      const cleaned = Array.from(new Set(arr.filter((v) => typeof v === "string" && known.has(v))));
+      return cleaned.slice(0, 1);
+    };
     try {
       const raw = localStorage.getItem("ai-studio:video-models");
       if (raw) {
@@ -2281,17 +2293,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       <button
                         key={m.value}
                         type="button"
-                        onClick={() => {
-                          setVideoModels((curr) => {
-                            const known = new Set(VIDEO_MODELS.map((x) => x.value));
-                            const cleaned = Array.from(new Set(curr.filter((v) => known.has(v))));
-                            const next = cleaned.includes(m.value)
-                              ? cleaned.filter((v) => v !== m.value)
-                              : [...cleaned, m.value];
-                            return next;
-                          });
-                        }}
-                        title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)${active && videoModels.length > 1 ? "\n(in comparison)" : ""}`}
+                         onClick={() => {
+                           // Single-select: tap to pick this model, tap again to turn video off.
+                           // Video compare was removed — one model per request, batch generation later.
+                           setVideoModels((curr) => (curr.length === 1 && curr[0] === m.value ? [] : [m.value]));
+                         }}
+                         title={`${m.label} — ${m.hint}\n${videoMaxCostLabel(m)}\n(rate: ~$${m.pricePerSecond.toFixed(3)}/sec)`}
                         className={`px-2 py-1 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
                         <span>{m.label}</span>
@@ -2301,9 +2308,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       </button>
                     );
                   })}
-                  {videoModels.length > 1 && (
-                    <Badge variant="secondary" className="text-[9px] h-5">compare ×{videoModels.length}</Badge>
-                  )}
                 </div>
                 {videoModels.length > 0 && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
