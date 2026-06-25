@@ -24,6 +24,28 @@ const KPI_TABS: { key: string; label: string; hint: string }[] = [
   { key: 'ad_spend', label: 'Ad Spend / Daily', hint: 'e.g. Ads or Daily Spend' },
 ];
 
+// KPI field → sheet column header override.
+// Stored under client_settings.metrics_sheet_mapping.columns and passed into
+// fetch-sheet-metrics as the `mapping` arg so CPL/leads/calls/funded/ad-perf
+// metrics are read from the correct columns even when the client's sheet uses
+// non-standard header names.
+const KPI_COLUMNS: { key: string; label: string; hint: string }[] = [
+  { key: 'date', label: 'Date', hint: 'e.g. Date, Day' },
+  { key: 'ad_spend', label: 'Ad Spend', hint: 'e.g. Spend, Amount Spent' },
+  { key: 'impressions', label: 'Impressions', hint: 'e.g. Impressions' },
+  { key: 'clicks', label: 'Clicks', hint: 'e.g. Link Clicks' },
+  { key: 'leads', label: 'Leads', hint: 'e.g. Leads' },
+  { key: 'spam_leads', label: 'Spam / Bad Leads', hint: 'e.g. Spam' },
+  { key: 'calls', label: 'Calls Booked', hint: 'e.g. Booked Calls' },
+  { key: 'showed_calls', label: 'Calls Showed', hint: 'e.g. Showed' },
+  { key: 'reconnect_calls', label: 'Reconnect Calls', hint: 'e.g. Reconnects' },
+  { key: 'reconnect_showed', label: 'Reconnect Showed', hint: 'e.g. Reconnect Showed' },
+  { key: 'commitments', label: 'Commitments (#)', hint: 'e.g. Committed' },
+  { key: 'commitment_dollars', label: 'Commitment $', hint: 'e.g. Committed $' },
+  { key: 'funded_investors', label: 'Funded Investors (#)', hint: 'e.g. Funded' },
+  { key: 'funded_dollars', label: 'Funded $', hint: 'e.g. Capital Raised' },
+];
+
 interface Props {
   clientId: string;
   clientName?: string;
