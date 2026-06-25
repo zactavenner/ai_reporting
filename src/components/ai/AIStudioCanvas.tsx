@@ -448,6 +448,16 @@ export function AIStudioCanvas({
                 {p.parent_image_url && (
                   <Badge variant="outline" className="text-[10px] ml-auto">revision</Badge>
                 )}
+                {onDeleteItem && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete from canvas"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      if (!confirm("Delete this creative from the canvas? This cannot be undone.")) return;
+                      onDeleteItem(e.id);
+                    }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </Card>
           );
@@ -521,6 +531,12 @@ export function AIStudioCanvas({
                 <Badge variant="secondary" className="text-[10px]">{p.aspect_ratio}</Badge>
                 {p.model && <Badge variant="secondary" className="text-[10px]" title={p.model}>{modelLabel(p.model)}</Badge>}
                 <span className="text-xs text-muted-foreground ml-auto">keyframe</span>
+                {onDeleteItem && (
+                  <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete from canvas"
+                    onClick={(ev) => { ev.stopPropagation(); if (!confirm("Delete this keyframe from the canvas?")) return; onDeleteItem(e.id); }}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
               {p.image_url && (
                 <a href={p.image_url} target="_blank" rel="noopener noreferrer">
