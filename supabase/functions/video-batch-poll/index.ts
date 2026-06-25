@@ -15,7 +15,40 @@ const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
 
 const MAX_POLL_ATTEMPTS = 90; // ~45 min at 30s cadence
 
-async function pollOnce(pollingUrl: string, isOpenRouter: boolean): Promise<{ status: "processing" | "succeeded" | "failed"; videoUrl?: string; error?: string }> {
+function extractProviderModel(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p: any = payload;
+  const candidates = [p.model, p.model_id, p.provider_model, p.downstream_model, p.request?.model, p.video?.model, p.output?.model, p.data?.model, p.data?.model_id, p.result?.model, p.result?.model_id, p.provider?.model, p.provider?.model_id];
+  for (const v of candidates) if (typeof v === "string" && v.trim()) return v.trim();
+  return null;
+}
+
+function logVideoModelDecision(event: string, details: Record<string, unknown>) {
+  try { console.log(`[video-model-decision] ${JSON.stringify({ event, ts: new Date().toISOString(), ...details })}`); }
+  catch { console.log(`[video-model-decision] ${event}`, details); }
+}
+
+async function recordVideoModelDecision(supa: any, event: string, details: Record<string, unknown>) {
+  logVideoModelDecision(event, details);
+  try {
+    const asText = (v: unknown): string | null => typeof v === "string" && v.trim() ? v.trim() : null;
+    await supa.from("ai_studio_video_model_decision_logs").insert({
+      event,
+      conversation_id: null,
+      client_id: asText(details.client_id),
+      user_id: asText(details.user_id),
+      requested_model: asText(details.requested_model) || asText(details.raw_model) || asText(details.from_model),
+      chosen_model: asText(details.chosen_model) || asText(details.effective_model) || asText(details.to_model),
+      downstream_model: asText(details.downstream_model) || asText(details.provider_model),
+      override_reason: asText(details.model_override_reason) || asText(details.routing_reason) || asText(details.reason),
+      details,
+    });
+  } catch (e) {
+    console.warn("[video-model-decision] persistent insert failed", e);
+  }
+}
+
+async function pollOnce(pollingUrl: string, isOpenRouter: boolean): Promise<{ status: "processing" | "succeeded" | "failed"; videoUrl?: string; error?: string; providerModel?: string | null }> {
   const headers: Record<string, string> = {};
   if (isOpenRouter) headers.Authorization = `Bearer ${OPENROUTER_API_KEY}`;
   const res = await fetch(pollingUrl, { headers });
@@ -24,6 +57,7 @@ async function pollOnce(pollingUrl: string, isOpenRouter: boolean): Promise<{ st
     return { status: "processing" }; // transient
   }
   const j = await res.json();
+  const providerModel = extractProviderModel(j);
   if (isOpenRouter) {
     const status = String(j.status || "").toLowerCase();
     if (status === "succeeded" || status === "completed") {
@@ -33,17 +67,17 @@ async function pollOnce(pollingUrl: string, isOpenRouter: boolean): Promise<{ st
         || (Array.isArray(j.unsigned_urls) ? j.unsigned_urls[0] : null)
         || (Array.isArray(j.urls) ? j.urls[0] : null)
         || (Array.isArray(j.videos) ? j.videos[0]?.url : null);
-      if (videoUrl) return { status: "succeeded", videoUrl };
-      return { status: "failed", error: `succeeded with no video url: ${JSON.stringify(j).slice(0, 200)}` };
+      if (videoUrl) return { status: "succeeded", videoUrl, providerModel };
+      return { status: "failed", error: `succeeded with no video url: ${JSON.stringify(j).slice(0, 200)}`, providerModel };
     }
     if (status === "failed" || status === "error" || status === "canceled") {
-      return { status: "failed", error: j.error?.message || j.error || "upstream failed" };
+      return { status: "failed", error: j.error?.message || j.error || "upstream failed", providerModel };
     }
-    return { status: "processing" };
+    return { status: "processing", providerModel };
   }
   // Veo (Gemini long-running operation)
   if (j.done === true) {
-    if (j.error) return { status: "failed", error: j.error.message || JSON.stringify(j.error).slice(0, 200) };
+    if (j.error) return { status: "failed", error: j.error.message || JSON.stringify(j.error).slice(0, 200), providerModel: "veo-3.1-fast-generate-preview" };
     const fileUri = j.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri
       || j.response?.videos?.[0]?.video?.uri
       || j.response?.predictions?.[0]?.videoUri;
@@ -51,11 +85,11 @@ async function pollOnce(pollingUrl: string, isOpenRouter: boolean): Promise<{ st
       // Gemini file URIs need the API key appended.
       const key = Deno.env.get("GEMINI_API_KEY") || "";
       const url = fileUri.includes("?") ? `${fileUri}&key=${key}` : `${fileUri}?key=${key}`;
-      return { status: "succeeded", videoUrl: url };
+      return { status: "succeeded", videoUrl: url, providerModel: "veo-3.1-fast-generate-preview" };
     }
-    return { status: "failed", error: "Veo done with no video uri" };
+    return { status: "failed", error: "Veo done with no video uri", providerModel: "veo-3.1-fast-generate-preview" };
   }
-  return { status: "processing" };
+  return { status: "processing", providerModel: isOpenRouter ? providerModel : "veo-3.1-fast-generate-preview" };
 }
 
 Deno.serve(async (req) => {
@@ -78,6 +112,8 @@ Deno.serve(async (req) => {
       if (!sc.polling_url) continue;
       processed++;
       const isOpenRouter = sc.polling_url.includes("openrouter.ai");
+      const { data: batchData } = await supa
+        .from("video_batch_jobs").select("client_id, model, aspect_ratio").eq("id", sc.batch_id).single();
       let result;
       try {
         result = await pollOnce(sc.polling_url, isOpenRouter);
@@ -85,6 +121,28 @@ Deno.serve(async (req) => {
         result = { status: "processing" as const };
       }
       const nextAttempts = (sc.poll_attempts || 0) + 1;
+      if (result.providerModel && batchData?.model && result.providerModel !== batchData.model) {
+        await recordVideoModelDecision(supa, "video_batch_poll.downstream_override", {
+          user_id: sc.user_id,
+          client_id: batchData.client_id || null,
+          batch_id: sc.batch_id,
+          scene_id: sc.id,
+          phase: "polling",
+          provider: isOpenRouter ? "openrouter" : "google",
+          chosen_model: batchData.model,
+          downstream_model: result.providerModel,
+          model_override_reason: "provider_returned_different_model_while_polling",
+          poll_attempts: nextAttempts,
+        });
+        if (String(batchData.model).startsWith("alibaba/happyhorse") && /seedance/i.test(result.providerModel)) {
+          await supa.from("video_batch_scenes").update({
+            status: "failed", error: `HappyHorse downstream override blocked: provider returned ${result.providerModel}`, poll_attempts: nextAttempts,
+          }).eq("id", sc.id);
+          failed++;
+          batchTouched.add(sc.batch_id);
+          continue;
+        }
+      }
 
       if (result.status === "processing") {
         if (nextAttempts >= MAX_POLL_ATTEMPTS) {
@@ -119,10 +177,6 @@ Deno.serve(async (req) => {
         });
         if (up.error) throw up.error;
         const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
-
-        // Pull client_id from parent batch
-        const { data: batchData } = await supa
-          .from("video_batch_jobs").select("client_id, model, aspect_ratio").eq("id", sc.batch_id).single();
 
         // Register in client_assets (best-effort)
         let assetId: string | null = null;

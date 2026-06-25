@@ -960,6 +960,79 @@ function exactVideoSize(aspectRatio: string, resolution: string): string | null 
   }
   return null;
 }
+
+function logVideoModelDecision(event: string, details: Record<string, unknown>) {
+  try {
+    console.log(`[video-model-decision] ${JSON.stringify({
+      event,
+      ts: new Date().toISOString(),
+      ...details,
+    })}`);
+  } catch (e) {
+    console.log(`[video-model-decision] ${event}`, details);
+  }
+}
+
+function extractProviderModel(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p: any = payload;
+  const candidates = [
+    p.model,
+    p.model_id,
+    p.provider_model,
+    p.downstream_model,
+    p.request?.model,
+    p.video?.model,
+    p.output?.model,
+    p.data?.model,
+    p.data?.model_id,
+    p.result?.model,
+    p.result?.model_id,
+    p.provider?.model,
+    p.provider?.model_id,
+  ];
+  for (const v of candidates) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+async function recordVideoModelDecision(supa: any, event: string, details: Record<string, unknown>) {
+  logVideoModelDecision(event, details);
+  try {
+    const asText = (v: unknown): string | null => {
+      if (typeof v === "string" && v.trim()) return v.trim();
+      return null;
+    };
+    const requestedModel = asText(details.requested_model)
+      || asText(details.raw_model)
+      || asText(details.from_model);
+    const chosenModel = asText(details.chosen_model)
+      || asText(details.effective_model)
+      || asText(details.to_model);
+    const downstreamModel = asText(details.downstream_model)
+      || asText(details.provider_model);
+    const overrideReason = asText(details.model_override_reason)
+      || asText(details.routing_reason)
+      || asText(details.rerouted_reason)
+      || asText(details.reason);
+    await supa.from("ai_studio_video_model_decision_logs").insert({
+      event,
+      conversation_id: asText(details.conversation_id),
+      client_id: asText(details.client_id),
+      user_id: asText(details.user_id),
+      requested_model: requestedModel,
+      chosen_model: chosenModel,
+      downstream_model: downstreamModel,
+      override_reason: overrideReason,
+      details,
+    });
+  } catch (e) {
+    // Never fail a render because logging storage is unavailable/migration is pending.
+    console.warn("[video-model-decision] persistent insert failed", e);
+  }
+}
+
 async function generateSeedanceVideo(opts: {
   prompt: string;
   aspectRatio: string;         // "16:9" | "9:16" | "1:1"
@@ -1011,12 +1084,23 @@ async function generateSeedanceVideo(opts: {
     "happyhorse": "alibaba/happyhorse-1.1",
     "happy-horse": "alibaba/happyhorse-1.1",
     "happy horse": "alibaba/happyhorse-1.1",
+    "happyhourse": "alibaba/happyhorse-1.1",
+    "happy-hourse": "alibaba/happyhorse-1.1",
+    "happy hourse": "alibaba/happyhorse-1.1",
     "horse": "alibaba/happyhorse-1.1",
+    "hourse": "alibaba/happyhorse-1.1",
     "happyhorse-1.1": "alibaba/happyhorse-1.1",
     "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
   const model = ALLOWED.includes(normalized) ? normalized : "bytedance/seedance-2.0-fast";
+  const modelOverrideReason = rawModel && normalized !== rawModel
+    ? "alias_normalized"
+    : rawModel && normalized && !ALLOWED.includes(normalized)
+      ? "unsupported_defaulted"
+      : !rawModel
+        ? "empty_defaulted"
+        : "none";
   const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const isSeedance = model.startsWith("bytedance/seedance");
@@ -1048,12 +1132,51 @@ async function generateSeedanceVideo(opts: {
       ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
       : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
+  await recordVideoModelDecision(supa, "generateSeedanceVideo.resolved", {
+    conversation_id: opts.conversationId,
+    client_id: opts.clientId,
+    user_id: opts.userId,
+    requested_model: opts.model || null,
+    raw_model: rawModel || null,
+    normalized_model: normalized || null,
+    chosen_model: model,
+    model_override_reason: modelOverrideReason,
+    requested_duration: opts.duration,
+    effective_duration: effectiveDuration,
+    requested_resolution: opts.resolution,
+    effective_resolution: effectiveResolution,
+    wire_resolution: wireResolution,
+    aspect_ratio: opts.aspectRatio,
+    has_image_url: !!opts.imageUrl,
+    has_last_frame_url: !!opts.lastFrameUrl,
+    has_ingredient_url: !!opts.ingredientUrl,
+    happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: "1080p" } : null,
+    fallback_attempt: opts._avatarFallbackAttempt || 0,
+  });
+
   // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
   if (isVeo) {
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY required for Veo model");
     const t0v = Date.now();
     const emitV = opts.onProgress || (() => {});
     emitV({ stage: "submitting", label: "Submitting to Veo 3.1 Fast…", model, percent: 2 });
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.submit", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      provider: "google",
+      requested_model: opts.model || null,
+      chosen_model: model,
+      downstream_model: "veo-3.1-fast-generate-preview",
+      requested_duration: opts.duration,
+      effective_duration: effectiveDuration,
+      requested_resolution: opts.resolution,
+      effective_resolution: effectiveResolution,
+      wire_resolution: effectiveResolution,
+      wire_size: null,
+      aspect_ratio: opts.aspectRatio,
+      payload_overrides: { provider_route: "google_predictLongRunning" },
+    });
     // Optional first-frame image
     let imagePart: any = null;
     if (opts.imageUrl) {
@@ -1084,7 +1207,7 @@ async function generateSeedanceVideo(opts: {
     if (!opName) throw new Error("Veo did not return operation name");
     emitV({ stage: "queued", label: "Queued — waiting for Veo GPU…", model, percent: 8 });
     let veoUri: string | null = null;
-    const MAX_V = 60;
+    const MAX_V = 120;
     for (let i = 0; i < MAX_V; i++) {
       await new Promise(r => setTimeout(r, 5000));
       const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${opName}?key=${GEMINI_API_KEY}`);
@@ -1098,7 +1221,7 @@ async function generateSeedanceVideo(opts: {
         throw new Error("Veo finished with no video");
       }
     }
-    if (!veoUri) throw new Error("Veo timed out after 5 minutes");
+    if (!veoUri) throw new Error("Veo timed out after 10 minutes");
     emitV({ stage: "downloading", label: "Downloading reel…", model, percent: 92, elapsed_s: (Date.now() - t0v) / 1000 });
     const sep = veoUri.includes("?") ? "&" : "?";
     const dl = await fetch(`${veoUri}${sep}key=${GEMINI_API_KEY}`);
@@ -1110,6 +1233,20 @@ async function generateSeedanceVideo(opts: {
     if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
     const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
     const storedUrlV = pub.publicUrl;
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.completed", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      provider: "google",
+      requested_model: opts.model || null,
+      chosen_model: model,
+      downstream_model: "veo-3.1-fast-generate-preview",
+      downstream_model_override: false,
+      effective_duration: effectiveDuration,
+      effective_resolution: effectiveResolution,
+      wire_resolution: effectiveResolution,
+      storage_path: path,
+    });
     const ciV = await supa.from("ai_studio_canvas_items").insert({
       conversation_id: opts.conversationId,
       user_id: opts.userId,
@@ -1212,6 +1349,33 @@ async function generateSeedanceVideo(opts: {
     if (opts.lastFrameUrl) body.tail_image_url = opts.lastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
   }
 
+  await recordVideoModelDecision(supa, "generateSeedanceVideo.submit", {
+    conversation_id: opts.conversationId,
+    client_id: opts.clientId,
+    user_id: opts.userId,
+    provider: "openrouter",
+    requested_model: opts.model || null,
+    raw_model: rawModel || null,
+    normalized_model: normalized || null,
+    chosen_model: model,
+    downstream_model: body.model,
+    model_override_reason: modelOverrideReason,
+    requested_duration: opts.duration,
+    effective_duration: body.duration,
+    requested_resolution: opts.resolution,
+    effective_resolution: effectiveResolution,
+    wire_resolution: body.resolution || null,
+    wire_size: body.size || null,
+    aspect_ratio: body.aspect_ratio,
+    payload_overrides: {
+      happyhorse_duration_lock: isHappyHorse ? "15s" : null,
+      happyhorse_resolution_lock: isHappyHorse ? "1080p" : null,
+      happyhorse_exact_size: isHappyHorse ? body.size || null : null,
+      seedance_4k_case_normalized: isSeedance && effectiveResolution === "4k" ? "4K" : null,
+      seedance_fast_resolution_clamped: isSeedanceFast && opts.resolution !== effectiveResolution,
+    },
+  });
+
   // Avatar-rejection fallback: Seedance (and similarly strict moderation models) sometimes
   // refuse an AI avatar as a "real person". When that happens on an image-to-video run with
   // an avatar keyframe, retry once on HappyHorse 1.1 (same 15s cap, lighter identity gate).
@@ -1228,21 +1392,43 @@ async function generateSeedanceVideo(opts: {
   };
   const tryAvatarFallback = async (reason: string) => {
     const attempt = opts._avatarFallbackAttempt || 0;
-    if (attempt >= 1) return null; // only one hop: Seedance → HappyHorse
     if (!opts.imageUrl) return null; // fallback only meaningful for avatar/image-to-video
-    if (!isSeedance) return null;    // only re-route away from Seedance
-    const fallbackModel = "alibaba/happyhorse-1.1";
-    // HappyHorse caps at 15s and 1080p — clamp accordingly.
-    const fallbackDuration = 15;
+    let fallbackModel: string | null = null;
+    let fallbackLabel = "";
+    if (isSeedance && attempt < 1) {
+      fallbackModel = "alibaba/happyhorse-1.1";
+      fallbackLabel = "HappyHorse 1.1";
+    } else if (isHappyHorse && attempt < 2) {
+      fallbackModel = "google/veo-3.1-fast";
+      fallbackLabel = "Veo 3.1 Fast";
+    }
+    if (!fallbackModel) return null;
+    const fallbackDuration = fallbackModel === "alibaba/happyhorse-1.1"
+      ? 15
+      : Math.max(4, Math.min(8, Math.round(opts.duration || 8)));
     const fallbackResolution = "1080p";
     emit({
       stage: "submitting",
-      label: `Avatar rejected by Seedance — retrying on HappyHorse 1.1…`,
+      label: `${modelLabel} failed for avatar — retrying on ${fallbackLabel}…`,
       model: fallbackModel,
       percent: 4,
       rerouted_from: model,
       rerouted_to: fallbackModel,
       rerouted_reason: reason.slice(0, 160),
+    });
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.fallback", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      from_model: model,
+      to_model: fallbackModel,
+      reason: reason.slice(0, 240),
+      requested_duration: opts.duration,
+      fallback_duration: fallbackDuration,
+      requested_resolution: opts.resolution,
+      fallback_resolution: fallbackResolution,
+      fallback_attempt: attempt + 1,
+      fallback_chain: "seedance_to_happyhorse_to_veo",
     });
     return await generateSeedanceVideo({
       ...opts,
@@ -1269,10 +1455,23 @@ async function generateSeedanceVideo(opts: {
   });
   if (!submit.ok) {
     const t = await submit.text();
-    if (isAvatarRejection(t)) {
+    if (isAvatarRejection(t) || (isHappyHorse && opts.imageUrl)) {
       const fb = await tryAvatarFallback(`${modelLabel} submit ${submit.status}: ${t.slice(0, 120)}`);
       if (fb) return fb;
     }
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.failed", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      phase: "submit",
+      provider: "openrouter",
+      requested_model: opts.model || null,
+      chosen_model: model,
+      submitted_model: body.model,
+      downstream_model: body.model,
+      status: submit.status,
+      error: t.slice(0, 500),
+    });
     emit({ stage: "failed", label: `Submit failed (${submit.status})`, model, elapsed_s: (Date.now() - t0) / 1000 });
     throw new Error(`${modelLabel} submit [${submit.status}]: ${t.slice(0, 400)}`);
   }
@@ -1280,11 +1479,49 @@ async function generateSeedanceVideo(opts: {
   const pollingUrl: string | undefined = sj.polling_url;
   const jobId: string = sj.id || crypto.randomUUID();
   if (!pollingUrl) throw new Error(`${modelLabel} returned no polling_url: ${JSON.stringify(sj).slice(0, 300)}`);
+  const queuedProviderModel = extractProviderModel(sj);
+  let downstreamModelSeen = queuedProviderModel || String(body.model || model);
+  const queuedDownstreamOverride = !!queuedProviderModel && queuedProviderModel !== body.model;
+  await recordVideoModelDecision(supa, "generateSeedanceVideo.queued", {
+    conversation_id: opts.conversationId,
+    client_id: opts.clientId,
+    user_id: opts.userId,
+    provider: "openrouter",
+    requested_model: opts.model || null,
+    chosen_model: model,
+    submitted_model: body.model,
+    downstream_model: downstreamModelSeen,
+    downstream_model_override: queuedDownstreamOverride,
+    provider_response_model: queuedProviderModel,
+    job_id: jobId,
+    polling_url_present: !!pollingUrl,
+  });
+  if (queuedDownstreamOverride) {
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.downstream_override", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      phase: "queued",
+      provider: "openrouter",
+      requested_model: opts.model || null,
+      chosen_model: model,
+      submitted_model: body.model,
+      downstream_model: downstreamModelSeen,
+      model_override_reason: "provider_returned_different_model_on_queue",
+      job_id: jobId,
+    });
+    if (isHappyHorse && /seedance/i.test(downstreamModelSeen)) {
+      const fb = await tryAvatarFallback(`Provider attempted to replace HappyHorse with ${downstreamModelSeen}`);
+      if (fb) return fb;
+      emit({ stage: "failed", label: "Provider tried to replace HappyHorse with Seedance", job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
+      throw new Error(`HappyHorse downstream override blocked: provider returned ${downstreamModelSeen}`);
+    }
+  }
   emit({ stage: "queued", label: "Queued — waiting for GPU…", job_id: jobId, model, percent: 8 });
 
-  // Poll up to ~5 minutes
+  // Poll up to ~10 minutes; 5 minutes was too short for GPU queues and caused false timeouts.
   let videoUrl: string | null = null;
-  const MAX = 60;
+  const MAX = 120;
   for (let i = 0; i < MAX; i++) {
     await new Promise(r => setTimeout(r, 5000));
     const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
@@ -1293,7 +1530,46 @@ async function generateSeedanceVideo(opts: {
       continue;
     }
     const pj = await p.json();
-    const stat = String(pj.status || "");
+    const polledProviderModel = extractProviderModel(pj);
+    if (polledProviderModel) {
+      downstreamModelSeen = polledProviderModel;
+      if (polledProviderModel !== body.model) {
+        await recordVideoModelDecision(supa, "generateSeedanceVideo.downstream_override", {
+          conversation_id: opts.conversationId,
+          client_id: opts.clientId,
+          user_id: opts.userId,
+          phase: "polling",
+          provider: "openrouter",
+          requested_model: opts.model || null,
+          chosen_model: model,
+          submitted_model: body.model,
+          downstream_model: downstreamModelSeen,
+          model_override_reason: "provider_returned_different_model_while_polling",
+          job_id: jobId,
+          poll_status: pj.status || null,
+        });
+        if (isHappyHorse && /seedance/i.test(downstreamModelSeen)) {
+          await recordVideoModelDecision(supa, "generateSeedanceVideo.failed", {
+            conversation_id: opts.conversationId,
+            client_id: opts.clientId,
+            user_id: opts.userId,
+            phase: "downstream_override_blocked",
+            provider: "openrouter",
+            requested_model: opts.model || null,
+            chosen_model: model,
+            submitted_model: body.model,
+            downstream_model: downstreamModelSeen,
+            job_id: jobId,
+            error: "Provider attempted to replace HappyHorse with Seedance",
+          });
+          const fb = await tryAvatarFallback(`Provider attempted to replace HappyHorse with ${downstreamModelSeen}`);
+          if (fb) return fb;
+          emit({ stage: "failed", label: "Provider tried to replace HappyHorse with Seedance", job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
+          throw new Error(`HappyHorse downstream override blocked: provider returned ${downstreamModelSeen}`);
+        }
+      }
+    }
+    const stat = String(pj.status || "").toLowerCase();
     emit({
       stage: "polling",
       label: stat === "processing" ? `Rendering (${i + 1}/${MAX})…` : `${stat || "polling"} (${i + 1}/${MAX})…`,
@@ -1302,24 +1578,68 @@ async function generateSeedanceVideo(opts: {
       job_id: jobId, model,
       percent: Math.min(85, 10 + (i + 1) * 1.2),
     });
-    if (pj.status === "completed") {
-      const urls: string[] = pj.unsigned_urls || pj.urls || (pj.video?.url ? [pj.video.url] : []);
+    if (stat === "completed" || stat === "succeeded") {
+      const urls: string[] = pj.unsigned_urls
+        || pj.urls
+        || (pj.video?.url ? [pj.video.url] : [])
+        || (pj.output?.[0]?.url ? [pj.output[0].url] : [])
+        || (pj.url ? [pj.url] : [])
+        || (pj.videos?.[0]?.url ? [pj.videos[0].url] : []);
       videoUrl = urls[0] || null;
       break;
     }
-    if (pj.status === "failed") {
+    if (stat === "failed" || stat === "error" || stat === "canceled" || stat === "cancelled") {
       const errStr = typeof pj.error === "string" ? pj.error : JSON.stringify(pj.error || {});
-      if (isAvatarRejection(errStr)) {
+      if (isAvatarRejection(errStr) || (isHappyHorse && opts.imageUrl)) {
         const fb = await tryAvatarFallback(`${modelLabel} render failed: ${errStr.slice(0, 120)}`);
         if (fb) return fb;
       }
+      await recordVideoModelDecision(supa, "generateSeedanceVideo.failed", {
+        conversation_id: opts.conversationId,
+        client_id: opts.clientId,
+        user_id: opts.userId,
+        phase: "polling_failed",
+        provider: "openrouter",
+        requested_model: opts.model || null,
+        chosen_model: model,
+        submitted_model: body.model,
+        downstream_model: downstreamModelSeen,
+        downstream_model_override: downstreamModelSeen !== body.model,
+        provider_response_model: polledProviderModel,
+        job_id: jobId,
+        status: pj.status,
+        error: errStr.slice(0, 500),
+      });
       emit({ stage: "failed", label: `Generation failed: ${String(pj.error || "unknown").slice(0, 140)}`, job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
       throw new Error(`${modelLabel} failed: ${pj.error || "unknown"}`);
     }
   }
   if (!videoUrl) {
-    emit({ stage: "failed", label: "Timed out after 5 min", job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
-    throw new Error(`${modelLabel} timed out after 5 minutes`);
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.timeout", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      phase: "polling_timeout",
+      provider: "openrouter",
+      requested_model: opts.model || null,
+      chosen_model: model,
+      submitted_model: body.model,
+      downstream_model: downstreamModelSeen,
+      downstream_model_override: downstreamModelSeen !== body.model,
+      job_id: jobId,
+      max_attempts: MAX,
+      elapsed_s: (Date.now() - t0) / 1000,
+      effective_duration: body.duration,
+      effective_resolution: effectiveResolution,
+      wire_resolution: body.resolution || null,
+      wire_size: body.size || null,
+    });
+    if ((isSeedance || isHappyHorse) && opts.imageUrl) {
+      const fb = await tryAvatarFallback(`${modelLabel} timed out after ${Math.round((MAX * 5) / 60)} minutes`);
+      if (fb) return fb;
+    }
+    emit({ stage: "failed", label: `Timed out after ${Math.round((MAX * 5) / 60)} min`, job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
+    throw new Error(`${modelLabel} timed out after ${Math.round((MAX * 5) / 60)} minutes`);
   }
   emit({ stage: "downloading", label: "Downloading reel…", job_id: jobId, model, percent: 90, elapsed_s: (Date.now() - t0) / 1000 });
 
@@ -1361,6 +1681,24 @@ async function generateSeedanceVideo(opts: {
     throw new Error(`${modelLabel} rehost failed: ${msg}`);
   }
   emit({ stage: "completed", label: "Reel ready", job_id: jobId, model, percent: 100, elapsed_s: (Date.now() - t0) / 1000 });
+  await recordVideoModelDecision(supa, "generateSeedanceVideo.completed", {
+    conversation_id: opts.conversationId,
+    client_id: opts.clientId,
+    user_id: opts.userId,
+    provider: "openrouter",
+    requested_model: opts.model || null,
+    chosen_model: model,
+    submitted_model: body.model,
+    downstream_model: downstreamModelSeen,
+    downstream_model_override: downstreamModelSeen !== body.model,
+    job_id: jobId,
+    storage_path: storagePath,
+    stored_url_present: !!storedUrl,
+    effective_duration: body.duration,
+    effective_resolution: effectiveResolution,
+    wire_resolution: body.resolution || null,
+    wire_size: body.size || null,
+  });
 
   // Resolution verification: parse the downloaded MP4 to confirm actual rendered output
   // matches what the UI requested (especially important for Seedance Pro 4K, which can
@@ -1399,6 +1737,8 @@ async function generateSeedanceVideo(opts: {
       aspect_ratio: opts.aspectRatio,
       video_prompt: opts.prompt,
       model,
+      downstream_model: downstreamModelSeen,
+      downstream_model_override: downstreamModelSeen !== body.model,
       provider: "openrouter",
       duration: body.duration,
       resolution: effectiveResolution,
@@ -1429,6 +1769,8 @@ async function generateSeedanceVideo(opts: {
       content: {
         video_url: storedUrl, storage_path: storagePath, keyframe_url: opts.imageUrl || null,
         aspect_ratio: opts.aspectRatio, prompt: opts.prompt, source: "ai_studio", model,
+        downstream_model: downstreamModelSeen,
+        downstream_model_override: downstreamModelSeen !== body.model,
         duration: body.duration, resolution: effectiveResolution,
         requested_model: opts.model || null,
         requested_duration: opts.duration,
@@ -1467,6 +1809,8 @@ async function generateSeedanceVideo(opts: {
           requested_duration: opts.duration,
           requested_resolution: opts.resolution,
           effective_model: model,
+          downstream_model: downstreamModelSeen,
+          downstream_model_override: downstreamModelSeen !== body.model,
           effective_duration: body.duration,
           effective_resolution: effectiveResolution,
           wire_resolution: body.resolution || null,
@@ -1927,7 +2271,7 @@ function shouldDirectGenerateVideoPrompt(text: string): boolean {
   const lower = t.toLowerCase();
   const hasVideoLanguage = /\b(video|reel|clip|shorts?|tiktok|instagram reels?|meta ad|youtube shorts?|vertical social ad)\b/.test(lower);
   const mentionsSeconds = /\b\d{1,3}\s*(?:seconds?|secs?|s)\b/i.test(t);
-  const explicitlyRequestsHappyHorse = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(t) && /\b(make|create|generate|render|produce|use|test|work)\b/i.test(t);
+  const explicitlyRequestsHappyHorse = /\b(?:happy\s*-?\s*hou?rse|happyhou?rse|hou?rse)\b/i.test(t) && /\b(make|create|generate|render|produce|use|test|work)\b/i.test(t);
   if (explicitlyRequestsHappyHorse && (hasVideoLanguage || mentionsSeconds)) return true;
   if (t.length < 80) return false;
   const looksLikePrompt = /\b(format|length|duration|style|talent|location|creative direction|spoken script|production notes|compliance disclaimer)\s*[:\n]/i.test(t) || /\b0:00\s*[–-]\s*0:\d{2}\b/.test(t);
@@ -2222,7 +2566,11 @@ Deno.serve(async (req) => {
     "happyhorse": "alibaba/happyhorse-1.1",
     "happy-horse": "alibaba/happyhorse-1.1",
     "happy horse": "alibaba/happyhorse-1.1",
+    "happyhourse": "alibaba/happyhorse-1.1",
+    "happy-hourse": "alibaba/happyhorse-1.1",
+    "happy hourse": "alibaba/happyhorse-1.1",
     "horse": "alibaba/happyhorse-1.1",
+    "hourse": "alibaba/happyhorse-1.1",
     "happyhorse-1.1": "alibaba/happyhorse-1.1",
     "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
   };
@@ -2878,21 +3226,48 @@ Deno.serve(async (req) => {
             : (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel]);
           const modelsToRun = modelSource
             .filter((m, i, arr) => arr.indexOf(m) === i);
-          const jobs = modelsToRun.flatMap((model) => {
+          await recordVideoModelDecision(supa, "direct_video.model_source", {
+            conversation_id: conversationId,
+            client_id: clientId || null,
+            user_id: userId,
+            user_requested_happyhorse: !!promptRequestedVideoModel,
+            compare_requested: promptAskedCompare,
+            ui_video_model: selectedVideoModel,
+            ui_video_models: uniqueSelectedVideoModels,
+            model_source: modelSource,
+            models_to_run: modelsToRun,
+            requested_duration: totalDuration,
+            requested_resolution: requestedRes,
+            aspect_ratio: aspect,
+            has_avatar: !!selectedAvatar,
+          });
+          const jobs: any[] = [];
+          for (const model of modelsToRun) {
             // Auto-route to an avatar-safe model (Veo) when an avatar is
             // selected and the user picked Seedance — Seedance's filter
             // rejects photoreal AI avatars. Force-override isn't exposed
             // on the direct-video path yet, so always honor the reroute.
             const routed = resolveModelForAvatar(model, !!selectedAvatar, false);
             const effectiveModel = routed.model;
+            await recordVideoModelDecision(supa, "direct_video.route", {
+              conversation_id: conversationId,
+              client_id: clientId || null,
+              user_id: userId,
+              requested_model: model,
+              chosen_model: effectiveModel,
+              rerouted: routed.rerouted,
+              routing_reason: routed.reason,
+              has_avatar: !!selectedAvatar,
+              avatar_id: selectedAvatar?.id || null,
+            });
             const cap = VIDEO_MODEL_CAPS[effectiveModel]?.maxDuration || 15;
-            return splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({
+            jobs.push(...splitVideoPromptForModel(userText || "", totalDuration, cap).map((segment) => ({
               model: effectiveModel,
               cap,
               segment,
               routing: { requested_model: model, rerouted: routed.rerouted, reason: routed.reason },
-            }));
-          });
+            })));
+          }
 
           // Fan ALL selected models × clips out in parallel so compare-x N works the same
           // as a single model and slow clips never block fast ones.
@@ -3219,11 +3594,17 @@ Deno.serve(async (req) => {
             }
             if (name === "generate_seedance_video") {
               canvasPlaceholderId = crypto.randomUUID();
+              const placeholderModels = (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [normalizeVideoModel(args.model) || selectedVideoModel]).filter(Boolean);
+              const placeholderLabel = placeholderModels.length > 1
+                ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
+                : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
+              const placeholderDuration = placeholderModels[0] === "alibaba/happyhorse-1.1" ? 15 : (args.duration || 15);
+              const placeholderResolution = placeholderModels[0] === "alibaba/happyhorse-1.1" ? "1080p" : (args.resolution || requestedRes || "1080p");
               send({
                 type: "canvas_placeholder",
                 placeholder_id: canvasPlaceholderId,
                 kind: "image",
-                prompt: `Seedance 2.0 ${args.image_url ? "image→video" : "text→video"} • ${args.duration || 15}s ${args.resolution || "1080p"}: ${String(args.prompt || "").slice(0, 120)}`,
+                prompt: `${placeholderLabel} ${args.image_url ? "image→video" : "text→video"} • ${placeholderDuration}s ${placeholderResolution}: ${String(args.prompt || "").slice(0, 120)}`,
                 aspect_ratio: args.aspect_ratio || "9:16",
                 quality: "seedance",
               });
@@ -3549,11 +3930,26 @@ Deno.serve(async (req) => {
                 //   biases the LLM toward Seedance even when the user opted out).
                 // - If they picked 2+ models, fan out across all of them for true compare.
                 // - Only fall back to the LLM's explicit args.model when the user made no selection.
-                const explicitModel = (typeof args.model === "string" && args.model) ? args.model : null;
+                const explicitModel = normalizeVideoModel(args.model) || ((typeof args.model === "string" && args.model) ? args.model : null);
                 const forceModel = !!args.force_model;
                 const rawFanModels = uniqueSelectedVideoModels.length > 0
                   ? uniqueSelectedVideoModels.slice()
                   : [explicitModel || selectedVideoModel];
+                await recordVideoModelDecision(supa, "tool_video.model_source", {
+                  conversation_id: conversationId,
+                  client_id: clientId || null,
+                  user_id: userId,
+                  tool_name: name,
+                  tool_arg_model: args.model || null,
+                  normalized_arg_model: explicitModel,
+                  force_model: forceModel,
+                  ui_video_model: selectedVideoModel,
+                  ui_video_models: uniqueSelectedVideoModels,
+                  raw_fan_models: rawFanModels,
+                  requested_duration: args.duration ?? null,
+                  requested_resolution: args.resolution || requestedRes,
+                  has_avatar: !!selectedAvatar,
+                });
                 // Avatar routing: when an avatar is selected, swap Seedance → Veo
                 // unless the LLM explicitly passed force_model=true. Dedupe so we
                 // don't render Veo twice if it was already in the list.
@@ -3567,6 +3963,18 @@ Deno.serve(async (req) => {
                   if (seenModels.has(r.model)) continue;
                   seenModels.add(r.model);
                   fanModels.push(r.model);
+                  await recordVideoModelDecision(supa, "tool_video.route", {
+                    conversation_id: conversationId,
+                    client_id: clientId || null,
+                    user_id: userId,
+                    requested_model: r.requested,
+                    chosen_model: r.model,
+                    rerouted: r.rerouted,
+                    routing_reason: r.reason,
+                    force_model: forceModel,
+                    has_avatar: !!selectedAvatar,
+                    avatar_id: selectedAvatar?.id || null,
+                  });
                   if (r.rerouted) {
                     console.log(`[avatar-route][tool] ${r.requested} → ${r.model} (avatar=${selectedAvatar?.id}, force=${forceModel})`);
                     send({
@@ -3591,6 +3999,22 @@ Deno.serve(async (req) => {
                   const segRes = argRes
                     ? (RES_RANK[argRes] <= RES_RANK[MODEL_MAX_RES[mdl] || "1080p"] ? argRes : (MODEL_MAX_RES[mdl] || "1080p"))
                     : clampResForModel(mdl);
+                  await recordVideoModelDecision(supa, "tool_video.clip_dispatch", {
+                    conversation_id: conversationId,
+                    client_id: clientId || null,
+                    user_id: userId,
+                    requested_model: explicitModel || selectedVideoModel,
+                    chosen_model: mdl,
+                    placeholder_id: pid,
+                    requested_duration: baseDuration,
+                    clip_duration: segDuration,
+                    requested_resolution: argRes || requestedRes,
+                    effective_resolution: segRes,
+                    aspect_ratio: baseAspect,
+                    has_image_url: !!segImageUrl,
+                    has_last_frame_url: !!segLastFrame,
+                    has_ingredient_url: !!baseIngredient,
+                  });
                   return generateSeedanceVideo({
                     prompt: segPrompt,
                     aspectRatio: baseAspect,
@@ -3809,6 +4233,22 @@ Deno.serve(async (req) => {
                   : uniqueSelectedVideoModels.length === 1
                     ? uniqueSelectedVideoModels[0]
                     : selectedVideoModel;
+                await recordVideoModelDecision(supa, "image_to_reel.model_source", {
+                  conversation_id: conversationId,
+                  client_id: clientId || null,
+                  user_id: userId,
+                  tool_arg_model: args.model || null,
+                  prompt_requested_happyhorse: !!promptRequestedReelModel,
+                  compare_requested: promptAskedReelCompare,
+                  ui_video_model: selectedVideoModel,
+                  ui_video_models: uniqueSelectedVideoModels,
+                  chosen_model: reelVideoModel,
+                  requested_duration: args.duration ?? null,
+                  effective_duration: duration,
+                  requested_resolution: args.resolution || null,
+                  effective_resolution: resolution,
+                  aspect_ratio: aspect,
+                });
                 const selectedVideoLabel = VIDEO_MODEL_CAPS[reelVideoModel]?.label?.split(" (")?.[0] || "video render";
                 let imageUrl: string | null = args.image_url || null;
                 let staticImg: any = null;
@@ -3884,7 +4324,7 @@ Deno.serve(async (req) => {
                 } else {
                   const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
                   const requestedRes = (args.resolution === "720p" || args.resolution === "4k") ? args.resolution : "1080p";
-                  const requestedModel = typeof args.model === "string" && args.model ? args.model : selectedVideoModel;
+                  const requestedModel = normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : selectedVideoModel);
                   const groupId = crypto.randomUUID();
                   const scriptResults: any[] = [];
 
@@ -3906,6 +4346,23 @@ Deno.serve(async (req) => {
                     // Route per-script: avatar scripts auto-route to Veo unless force_model.
                     const routed = resolveModelForAvatar(requestedModel, useAvatar, forceModel);
                     const mdl = routed.model;
+                    await recordVideoModelDecision(supa, "script_batch.route", {
+                      conversation_id: conversationId,
+                      client_id: clientId || null,
+                      user_id: userId,
+                      script_index: scriptIdx,
+                      tool_arg_model: args.model || null,
+                      requested_model: requestedModel,
+                      chosen_model: mdl,
+                      rerouted: routed.rerouted,
+                      routing_reason: routed.reason,
+                      force_model: forceModel,
+                      use_avatar: useAvatar,
+                      avatar_id: useAvatar ? selectedAvatar?.id || null : null,
+                      requested_duration: targetDuration,
+                      requested_resolution: requestedRes,
+                      aspect_ratio: aspect,
+                    });
                     const cap = VIDEO_MODEL_CAPS[mdl]?.maxDuration || 15;
                     const segs = splitVideoPromptForModel(
                       environment ? `${voiceover}\n\nSCENE / ENVIRONMENT (every clip): ${environment}` : voiceover,
@@ -3950,6 +4407,21 @@ Deno.serve(async (req) => {
                       const segRes = clampResForModel(mdl) === "720p"
                         ? "720p"
                         : (requestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : requestedRes);
+                      await recordVideoModelDecision(supa, "script_batch.clip_dispatch", {
+                        conversation_id: conversationId,
+                        client_id: clientId || null,
+                        user_id: userId,
+                        script_index: scriptIdx,
+                        clip_index: seg.index + 1,
+                        clip_count: seg.count,
+                        requested_model: requestedModel,
+                        chosen_model: mdl,
+                        requested_duration: targetDuration,
+                        clip_duration: seg.duration,
+                        requested_resolution: requestedRes,
+                        effective_resolution: segRes,
+                        has_avatar_image: !!avatarImg,
+                      });
                       // One retry on transient failure.
                       let lastErr: any = null;
                       for (let attempt = 0; attempt < 2; attempt++) {

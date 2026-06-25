@@ -25,6 +25,55 @@ const MODEL_CAPS: Record<string, { durations: number[]; defaultDuration: number;
 };
 const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "4k": 3 };
 
+function exactVideoSize(aspectRatio: string, resolution: string): string | null {
+  const ar = aspectRatio || "9:16";
+  const res = String(resolution || "").toLowerCase();
+  if (res === "1080p") {
+    if (ar === "16:9") return "1920x1080";
+    if (ar === "1:1") return "1080x1080";
+    return "1080x1920";
+  }
+  if (res === "720p") {
+    if (ar === "16:9") return "1280x720";
+    if (ar === "1:1") return "720x720";
+    return "720x1280";
+  }
+  return null;
+}
+
+function extractProviderModel(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p: any = payload;
+  const candidates = [p.model, p.model_id, p.provider_model, p.downstream_model, p.request?.model, p.video?.model, p.output?.model, p.data?.model, p.data?.model_id, p.result?.model, p.result?.model_id, p.provider?.model, p.provider?.model_id];
+  for (const v of candidates) if (typeof v === "string" && v.trim()) return v.trim();
+  return null;
+}
+
+function logVideoModelDecision(event: string, details: Record<string, unknown>) {
+  try { console.log(`[video-model-decision] ${JSON.stringify({ event, ts: new Date().toISOString(), ...details })}`); }
+  catch { console.log(`[video-model-decision] ${event}`, details); }
+}
+
+async function recordVideoModelDecision(supa: any, event: string, details: Record<string, unknown>) {
+  logVideoModelDecision(event, details);
+  try {
+    const asText = (v: unknown): string | null => typeof v === "string" && v.trim() ? v.trim() : null;
+    await supa.from("ai_studio_video_model_decision_logs").insert({
+      event,
+      conversation_id: null,
+      client_id: asText(details.client_id),
+      user_id: asText(details.user_id),
+      requested_model: asText(details.requested_model) || asText(details.raw_model) || asText(details.from_model),
+      chosen_model: asText(details.chosen_model) || asText(details.effective_model) || asText(details.to_model),
+      downstream_model: asText(details.downstream_model) || asText(details.provider_model),
+      override_reason: asText(details.model_override_reason) || asText(details.routing_reason) || asText(details.reason),
+      details,
+    });
+  } catch (e) {
+    console.warn("[video-model-decision] persistent insert failed", e);
+  }
+}
+
 function estimateScriptSeconds(text: string): number {
   // ~2.5 words/sec speech default; respect explicit "(30s)" / "30 seconds" hints.
   const m = text.match(/(\d{1,3})\s*(?:s|sec|secs|seconds)\b/i);
@@ -52,22 +101,24 @@ async function submitOpenRouterVideo(opts: {
   aspect: string;
   duration: number;
   resolution: string;
-}): Promise<{ pollingUrl: string; jobId: string }> {
+}): Promise<{ pollingUrl: string; jobId: string; submittedModel: string; downstreamModel: string; downstreamOverride: boolean }> {
   const isSeedance = opts.model.startsWith("bytedance/seedance");
   const isKling = opts.model.startsWith("kwaivgi/kling");
+  const isHappyHorse = opts.model.startsWith("alibaba/happyhorse");
   const body: Record<string, unknown> = {
     model: opts.model,
     prompt: opts.prompt,
     aspect_ratio: opts.aspect,
-    duration: opts.duration,
+    duration: isHappyHorse ? 15 : opts.duration,
   };
   if (isSeedance) {
     // OpenRouter's Seedance expects "4K" (uppercase) per /videos/models supported_resolutions.
     body.resolution = opts.resolution === "4k" ? "4K" : opts.resolution;
   }
-  if (opts.model.startsWith("alibaba/happyhorse")) {
+  if (isHappyHorse) {
     // HappyHorse uses lowercase resolution per /videos/models.
-    body.resolution = opts.resolution;
+    body.resolution = "1080p";
+    body.size = exactVideoSize(opts.aspect, "1080p") || "1080x1920";
   }
   // Kling rejects extra params; only prompt/aspect/duration.
   if (!isSeedance && !isKling) {
@@ -89,10 +140,18 @@ async function submitOpenRouterVideo(opts: {
   }
   const j = await res.json();
   if (!j.polling_url) throw new Error(`No polling_url: ${JSON.stringify(j).slice(0, 200)}`);
-  return { pollingUrl: j.polling_url as string, jobId: (j.id as string) || crypto.randomUUID() };
+  const providerModel = extractProviderModel(j);
+  const downstreamModel = providerModel || String(body.model || opts.model);
+  return {
+    pollingUrl: j.polling_url as string,
+    jobId: (j.id as string) || crypto.randomUUID(),
+    submittedModel: String(body.model || opts.model),
+    downstreamModel,
+    downstreamOverride: !!providerModel && providerModel !== body.model,
+  };
 }
 
-async function submitVeoVideo(opts: { prompt: string; aspect: string; duration: number }): Promise<{ pollingUrl: string; jobId: string }> {
+async function submitVeoVideo(opts: { prompt: string; aspect: string; duration: number }): Promise<{ pollingUrl: string; jobId: string; submittedModel: string; downstreamModel: string; downstreamOverride: boolean }> {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY required for Veo");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-fast-generate-preview:predictLongRunning?key=${GEMINI_API_KEY}`;
   const res = await fetch(url, {
@@ -110,7 +169,7 @@ async function submitVeoVideo(opts: { prompt: string; aspect: string; duration: 
   const j = await res.json();
   const opName: string = j.name;
   if (!opName) throw new Error(`Veo returned no operation name: ${JSON.stringify(j).slice(0, 200)}`);
-  return { pollingUrl: `https://generativelanguage.googleapis.com/v1beta/${opName}?key=${GEMINI_API_KEY}`, jobId: opName };
+  return { pollingUrl: `https://generativelanguage.googleapis.com/v1beta/${opName}?key=${GEMINI_API_KEY}`, jobId: opName, submittedModel: "veo-3.1-fast-generate-preview", downstreamModel: "veo-3.1-fast-generate-preview", downstreamOverride: false };
 }
 
 async function pMap<T, R>(items: T[], cap: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -163,6 +222,10 @@ Deno.serve(async (req) => {
       "happyhorse": "alibaba/happyhorse-1.1",
       "happy-horse": "alibaba/happyhorse-1.1",
       "happy horse": "alibaba/happyhorse-1.1",
+      "happyhourse": "alibaba/happyhorse-1.1",
+      "happy-hourse": "alibaba/happyhorse-1.1",
+      "happy hourse": "alibaba/happyhorse-1.1",
+      "hourse": "alibaba/happyhorse-1.1",
       "happyhorse-1.1": "alibaba/happyhorse-1.1",
       "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
     };
@@ -179,9 +242,22 @@ Deno.serve(async (req) => {
     if (!caps) {
       return new Response(JSON.stringify({ error: `Unsupported model: ${model}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const sceneDuration = caps.durations.includes(Number(duration)) ? Number(duration) : caps.defaultDuration;
+    const isHappyHorse = model.startsWith("alibaba/happyhorse");
+    const sceneDuration = isHappyHorse ? 15 : (caps.durations.includes(Number(duration)) ? Number(duration) : caps.defaultDuration);
     const reqRes = (resolution === "720p" || resolution === "1080p" || resolution === "4k") ? resolution : caps.maxRes;
-    const effectiveRes = RES_RANK[reqRes] <= RES_RANK[caps.maxRes] ? reqRes : caps.maxRes;
+    const effectiveRes = isHappyHorse ? "1080p" : (RES_RANK[reqRes] <= RES_RANK[caps.maxRes] ? reqRes : caps.maxRes);
+    await recordVideoModelDecision(supa, "video_batch_dispatch.resolved", {
+      user_id: userId,
+      client_id: clientId || null,
+      requested_model: rawModelKey || null,
+      chosen_model: model,
+      requested_duration: duration ?? null,
+      effective_duration: sceneDuration,
+      requested_resolution: resolution || null,
+      effective_resolution: effectiveRes,
+      happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: "1080p" } : null,
+      aspect_ratio: aspectRatio,
+    });
 
     // 1. Create the batch row first (so we have an id for everything).
     const { data: batchRow, error: batchErr } = await supa
@@ -267,9 +343,38 @@ Deno.serve(async (req) => {
           provider_job_id: submit.jobId,
           polling_url: submit.pollingUrl,
         }).eq("id", task.sceneRowId);
+        await recordVideoModelDecision(supa, "video_batch_dispatch.queued", {
+          user_id: userId,
+          client_id: clientId || null,
+          batch_id: batchId,
+          scene_id: task.sceneRowId,
+          provider: isVeo ? "google" : "openrouter",
+          requested_model: rawModelKey || null,
+          chosen_model: model,
+          submitted_model: isVeo ? "veo-3.1-fast-generate-preview" : submit.submittedModel,
+          downstream_model: isVeo ? "veo-3.1-fast-generate-preview" : submit.downstreamModel,
+          downstream_model_override: isVeo ? false : submit.downstreamOverride,
+          model_override_reason: !isVeo && submit.downstreamOverride ? "provider_returned_different_model_on_queue" : null,
+          job_id: submit.jobId,
+          effective_duration: task.duration,
+          effective_resolution: effectiveRes,
+        });
+        if (!isVeo && isHappyHorse && submit.downstreamOverride && /seedance/i.test(submit.downstreamModel)) {
+          throw new Error(`HappyHorse downstream override blocked: provider returned ${submit.downstreamModel}`);
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         await supa.from("video_batch_scenes").update({ status: "failed", error: msg }).eq("id", task.sceneRowId);
+        await recordVideoModelDecision(supa, "video_batch_dispatch.failed", {
+          user_id: userId,
+          client_id: clientId || null,
+          batch_id: batchId,
+          scene_id: task.sceneRowId,
+          requested_model: rawModelKey || null,
+          chosen_model: model,
+          phase: "submit",
+          error: msg.slice(0, 500),
+        });
       }
     });
 
