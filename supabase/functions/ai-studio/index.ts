@@ -1988,40 +1988,48 @@ async function generateSeedanceVideo(opts: {
     console.warn("resolution verify failed (non-fatal)", e);
   }
 
-  const ci = await supa.from("ai_studio_canvas_items").insert({
-    conversation_id: opts.conversationId,
-    user_id: opts.userId,
-    kind: "scene_video",
-    payload: {
-      video_url: storedUrl,
-      storage_path: storagePath,
-      keyframe_url: opts.imageUrl || null,
-      aspect_ratio: opts.aspectRatio,
-      video_prompt: opts.prompt,
-      model,
-      downstream_model: downstreamModelSeen,
-      downstream_model_override: downstreamModelSeen !== body.model,
-      provider: "openrouter",
-      duration: body.duration,
-      resolution: effectiveResolution,
-        requested_model: opts.model || null,
-        requested_duration: opts.duration,
-        requested_resolution: opts.resolution,
-        effective_model: model,
-        effective_duration: body.duration,
-        effective_resolution: effectiveResolution,
-        wire_resolution: body.resolution || null,
-        wire_size: body.size || null,
-      scene_order: 1,
-      mode: opts.imageUrl ? "image_to_video" : "text_to_video",
-      job_id: jobId,
-      actual_width: actualWidth,
-      actual_height: actualHeight,
-      actual_resolution: actualResolution,
-      resolution_match: resolutionMatch,
-      openrouter_request: openrouterRequest,
-    },
-  }).select("id, kind, payload, created_at").single();
+  const completedPayload = {
+    status: "completed",
+    video_url: storedUrl,
+    storage_path: storagePath,
+    keyframe_url: opts.imageUrl || null,
+    aspect_ratio: opts.aspectRatio,
+    video_prompt: opts.prompt,
+    model,
+    downstream_model: downstreamModelSeen,
+    downstream_model_override: downstreamModelSeen !== body.model,
+    provider: "openrouter",
+    duration: body.duration,
+    resolution: effectiveResolution,
+    requested_model: opts.model || null,
+    requested_duration: opts.duration,
+    requested_resolution: opts.resolution,
+    effective_model: model,
+    effective_duration: body.duration,
+    effective_resolution: effectiveResolution,
+    wire_resolution: body.resolution || null,
+    wire_size: body.size || null,
+    scene_order: 1,
+    mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+    job_id: jobId,
+    actual_width: actualWidth,
+    actual_height: actualHeight,
+    actual_resolution: actualResolution,
+    resolution_match: resolutionMatch,
+    openrouter_request: openrouterRequest,
+    completed_at: new Date().toISOString(),
+  };
+  const ci = pendingCanvasItemId
+    ? await supa.from("ai_studio_canvas_items")
+        .update({ payload: completedPayload })
+        .eq("id", pendingCanvasItemId)
+        .select("id, kind, payload, created_at").single()
+    : await supa.from("ai_studio_canvas_items").insert({
+        conversation_id: opts.conversationId,
+        user_id: opts.userId,
+        kind: "scene_video",
+        payload: completedPayload,
+      }).select("id, kind, payload, created_at").single();
 
   if (opts.clientId) {
     await supa.from("client_assets").insert({
