@@ -492,6 +492,45 @@ function Section({ title, children, onCopy }: any) {
   );
 }
 
+function VideoSlot({
+  label,
+  status,
+  url,
+  captions,
+}: {
+  label: string;
+  status: string | null;
+  url: string | null;
+  captions: any[];
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground text-center font-medium">
+        {label}
+      </div>
+      {url ? (
+        <CaptionedVideo
+          src={url}
+          captions={captions}
+          className="w-full aspect-[9/16] rounded-md bg-black overflow-hidden"
+        />
+      ) : (
+        <div className="w-full aspect-[9/16] rounded-md bg-muted grid place-items-center text-[10px] text-muted-foreground text-center px-2">
+          {status === "generating" ? (
+            <span className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" /> Rendering…
+            </span>
+          ) : status === "failed" ? (
+            "Failed"
+          ) : (
+            "No video"
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CaptionedVideo({
   src,
   captions,
