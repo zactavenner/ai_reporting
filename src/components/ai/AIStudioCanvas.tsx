@@ -566,7 +566,7 @@ export function AIStudioCanvas({
               <VideoPlayerCard
                 src={p.video_url}
                 aspect={p.aspect_ratio === "16:9" ? "16/9" : p.aspect_ratio === "1:1" ? "1/1" : "9/16"}
-                status={p.video_url ? "ready" : p.status === "processing" ? "processing" : "failed"}
+                status={p.video_url ? "ready" : p.status === "processing" ? "generating" : "failed"}
                 errorMessage={!p.video_url ? (p.status === "processing" ? "Rendering in background — this card will update automatically when the video is ready." : (p.error || "Generation failed.")) : undefined}
                 onEdit={p.video_url && onEditVideo ? (u) => onEditVideo(u, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio }) : undefined}
               />
