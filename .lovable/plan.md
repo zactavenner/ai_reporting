@@ -1,53 +1,65 @@
-# Trainable Video Style Studio
 
-Today video styles live in `localStorage` with a hand-written `prompt` per style. You can attach reference videos but nothing happens with them — they're just URLs. This plan turns each style into a trainable preset: upload example clips, auto-transcribe + analyze them, and let the AI re-write the style's prompt so future generations match the examples.
+# Weekly & Monthly Client Reports (Email + SMS via GHL)
 
-## What you get
+## Goal
+Auto-send a branded performance recap to each active client every **Monday 9am client TZ** (weekly) and on the **1st of each month** (monthly), with the same content delivered to **multiple stakeholders per client** over **email and SMS through your agency GHL account**. The SMS contains a short headline + a link to the existing public client report (the "scorecard"). The email contains the full branded recap.
 
-**6 built-in presets** (all editable, all trainable):
+## On the "Executive Scorecard" question
+There is no dedicated Executive Scorecard feature today — the source of truth for client-facing numbers is the **existing public client report** at `/public/:token`. We will keep that as the scorecard and have every email/SMS deep-link to it. Google Sheets is already connected (used by `fetch-sheet-metrics`), so we can optionally write the same weekly/monthly snapshot to a per-client tab later — flagged as out-of-scope for v1 unless you want it.
 
-1. **Podcast** — two-host studio Q&A, quick cuts (already exists, refined)
-2. **Street Interview** — handheld man-on-the-street, mic in frame, candid reactions
-3. **Cartoon** — 2D animated explainer (renamed from "Animated Cartoon")
-4. **Mini VSL** — 30–60s sales letter, b-roll + voiceover, problem→agitate→solve→CTA
-5. **Capital Raising** — investor-grade tone, SEC-safe language ("targeted returns" not "guaranteed"), professional B-roll
-6. **Low Ticket Offer** — direct-response punchy hook, $7–$97 mindset, urgency CTAs
+## What the report contains
+Headline KPIs (current period vs prior, color-coded deltas):
+1. **Spend, Leads, CPL**
+2. **Calls booked, Calls showed, Show rate**
+3. **Funded $ and CoC%** (cost of capital = spend ÷ funded $)
+4. **Top performing ad** — thumbnail + name + CPL + funded $ (uses existing `get_top_performers` RPC)
 
-**Per-style training workflow:**
-- Upload up to 10 reference videos (drag-drop or paste URL)
-- Hit **"Auto-transcribe & analyze"** → backend pulls audio, transcribes via Lovable AI, runs vision analysis for camera/pacing/composition notes
-- Hit **"Train style from references"** → AI reads every transcript + analysis and rewrites the style's master prompt to match the patterns it sees
-- Manual prompt editing still available; "Reset to AI-trained" and "Reset to built-in" both one click
+Plus: client logo header, period label, "View full report" CTA → public link, compliance footer ("targeted returns", SEC/FINRA disclaimer), unsubscribe link.
 
-**New dedicated Styles page** at `/ai-studio/styles` — full-screen manager replacing the cramped popover for editing, with side-by-side reference gallery, transcript viewer, and prompt diff before/after training.
+## Recipients (multi-stakeholder)
+New table `client_report_recipients` so each client can have several people:
+- `id`, `client_id`, `name`, `role` (CEO/CMO/Ops/Other), `email`, `phone_e164`, `channels text[]` (`email`, `sms`, or both), `cadences text[]` (`weekly`, `monthly`), `active`, `unsubscribed_at`, timestamps.
+- Seeded on creation from the existing `clients.notification_email` / `notification_phone`.
+- Managed in **Client Settings → Reporting Recipients** (add/edit/remove, toggle channel + cadence).
 
-The existing compact pill picker in the composer keeps working — just gains a "Manage…" link.
+## Delivery via GHL (agency account)
+Secrets already present: `AGENCY_GHL_API_KEY`, `AGENCY_GHL_LOCATION_ID`, `AGENCY_GHL_PIT_TOKEN`. New edge function `send-ghl-message` wraps two GHL endpoints:
+- **Email**: `POST /conversations/messages` with `type: "Email"`, branded HTML body.
+- **SMS**: `POST /conversations/messages` with `type: "SMS"`, ≤300-char headline + report link.
+- Requires a GHL contact; function upserts contact by email/phone before sending.
+- Logs every send to a new `client_report_sends` table (`recipient_id`, `cadence`, `channel`, `period_start`, `period_end`, `status`, `ghl_message_id`, `error`, `sent_at`).
+- Idempotency key = `${client_id}:${cadence}:${period_start}:${recipient_id}:${channel}` to prevent double-sends on retry.
 
-## How it works (technical)
+## Report generation
+New edge function `generate-client-report`:
+- Input: `client_id`, `cadence` (`weekly` | `monthly`).
+- Computes current-period and prior-period windows in the client's TZ.
+- Pulls metrics via existing `get_client_source_metrics` RPC + `get_top_performers` + `daily_metrics` for spend.
+- Returns `{ kpis, deltas, topPerformer, publicReportUrl }` plus pre-rendered branded HTML (inline-styled, Apple/Capital-Creative aesthetic: Deep Green `#0B2B26`, Gold `#C5A55A`, Playfair Display headings) and a ≤300-char SMS string.
 
-### Data model
-- New table `public.video_style_presets` (cloud-synced, replaces localStorage as source of truth; localStorage becomes cache).
-  - `id`, `user_id`, `name`, `slug`, `prompt`, `builtin_key` (nullable), `ai_trained_prompt` (nullable), `created_at`, `updated_at`
-  - RLS: user can only see/edit their own; built-ins seeded per-user on first load.
-- New table `public.video_style_references`
-  - `id`, `style_id` (FK), `user_id`, `video_url`, `name`, `transcript`, `analysis_json` (camera/pacing/audio notes), `transcribed_at`, `created_at`
-- Both tables: standard `GRANT` block + RLS scoped to `auth.uid()`.
+## Orchestrator + schedule
+New edge function `dispatch-client-reports`:
+- For each active client, calls `generate-client-report`, then for each active recipient matching the cadence, calls `send-ghl-message` per channel, logging results.
+- pg_cron jobs:
+  - `weekly-client-reports` — Mondays 14:00 UTC (covers 9am ET; function re-checks client TZ).
+  - `monthly-client-reports` — 1st of month 14:00 UTC.
+- Both POST to the dispatcher with the right cadence.
 
-### Edge functions
-1. **`style-transcribe-reference`** — takes `{ reference_id }`. Reads the row, calls `https://ai.gateway.lovable.dev/v1/audio/transcriptions` with `openai/gpt-4o-mini-transcribe` (streams, then buffered to text), then calls `/v1/chat/completions` with `google/gemini-3-flash-preview` passing the video URL for vision analysis (camera moves, cuts/sec, on-screen text, lighting, audio bed). Writes `transcript` + `analysis_json` back.
-2. **`style-train-from-references`** — takes `{ style_id }`. Loads every reference's transcript + analysis, calls `openrouter/owl-alpha` with a synthesis prompt: "Here are N example videos in this style. Write a STYLE/RULES prompt block that, when prepended to a video generation request, will make the output match these examples." Writes result to `ai_trained_prompt` and sets `prompt = ai_trained_prompt` (user can still edit).
+## Admin UI
+- **Settings → Client Reports** page:
+  - List clients × recipients with channel/cadence chips.
+  - "Send test now" button (uses a `?test=true` flag, only goes to one chosen recipient).
+  - Recent send log with status + GHL message ID.
+- **Per-client Settings → Reporting tab**: recipient editor + last-sent timestamps.
 
-### UI changes
-- `src/pages/AIStudioStylesPage.tsx` (new) — full manager.
-- `src/components/ai/VideoStylesManager.tsx` — add new presets, add training buttons in `StyleEditor`, swap localStorage hook for a cloud-sync hook `useVideoStyles()` backed by the new tables (keeps localStorage as offline cache).
-- `src/components/ai/AIStudioTab.tsx` — popover gains "Open full manager →" link to the new page; no other changes (style block injection unchanged).
-- `src/App.tsx` — register `/ai-studio/styles` route.
+## Out of scope (v1)
+- Writing snapshots to Google Sheets (can be added later — Sheets connector is wired).
+- WhatsApp delivery (existing `send-whatsapp-report` stays untouched).
+- Building a separate in-app scorecard page (we reuse the existing public report).
 
-### Migration safety
-- Seeder runs once per user on first style fetch: inserts the 6 built-ins with stable `builtin_key`s. Subsequent loads merge new built-ins by `builtin_key` without overwriting user edits.
-- Existing localStorage styles auto-migrate into the new table on first cloud load.
-
-## Out of scope (call out if you want them next)
-- LoRA/fine-tuning the actual video models (Seedance/HappyHorse don't expose that). "Training" here means prompt synthesis from your examples — which is what actually moves the needle on these models.
-- Sharing styles across teammates (per-user only for now).
-- Bulk reference upload via folder import.
+## Technical details
+- Migration: `client_report_recipients`, `client_report_sends` with RLS (`authenticated` read/write scoped via `agency_members`, `service_role` full).
+- Edge functions: `generate-client-report`, `send-ghl-message`, `dispatch-client-reports` (all `verify_jwt = false`, internal `HPA1234$` body password per project convention).
+- Compliance: HTML/SMS strings go through the existing `complianceLint` pattern (no "guaranteed"; auto-append risk disclaimer to email footer).
+- Unsubscribe: per-recipient one-click link → public page sets `unsubscribed_at`; dispatcher skips unsubscribed rows.
+- Branding tokens read from the project memory (Capital Creative: `#0B2B26` / `#C5A55A`, Playfair Display + Inter) — no hardcoded colors outside the email HTML template.
