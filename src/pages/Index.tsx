@@ -50,8 +50,8 @@ import { OnboardingTab } from '@/components/dashboard/OnboardingTab';
 
 import { AccountManagerPage } from '@/pages/AccountManagerPage';
 import { useClients, Client } from '@/hooks/useClients';
-import { useAllDailyMetrics, useFundedInvestors, AggregatedMetrics } from '@/hooks/useMetrics';
-import { aggregateFromSourceData, SourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
+import { useAllDailyMetrics, AggregatedMetrics } from '@/hooks/useMetrics';
+import { SourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
 import { useClientSourceMetrics, buildClientMetricsFromRPC } from '@/hooks/useClientSourceMetrics';
 import { useAllClientSettings, useAllClientFullSettings } from '@/hooks/useAllClientSettings';
 import { useSheetClientMetrics } from '@/hooks/useSheetClientMetrics';
@@ -60,8 +60,6 @@ import { useMeetings, usePendingMeetingTasks, useSyncMeetings } from '@/hooks/us
 import { useApiConnectionTest } from '@/hooks/useApiConnectionTest';
 import { useAllCreatives } from '@/hooks/useAllCreatives';
 import { useDateFilter } from '@/contexts/DateFilterContext';
-import { useSourceFilteredMetrics } from '@/hooks/useSourceFilteredMetrics';
-import { useLeads, useCalls } from '@/hooks/useLeadsAndCalls';
 import { exportToCSV } from '@/lib/exportUtils';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUpdateClientOrder } from '@/hooks/useClientOrder';
@@ -141,10 +139,7 @@ const Index = () => {
   const { data: allClients = [], isLoading: clientsLoading } = useClients();
   const clients = useMemo(() => allClients.filter(c => c.status === 'active' || c.status === 'onboarding' || c.status === 'paused' || c.status === 'cc_error'), [allClients]);
   const { data: dailyMetrics = [], isLoading: metricsLoading } = useAllDailyMetrics(startDate, endDate);
-  const { data: fundedInvestors = [] } = useFundedInvestors(undefined, startDate, endDate);
-  const { data: allLeads = [] } = useLeads(undefined, startDate, endDate);
-  const { data: allCalls = [] } = useCalls(undefined, false, startDate, endDate);
-  const { data: rpcMetrics = [] } = useClientSourceMetrics(startDate, endDate);
+  const { data: rpcMetrics = [], isLoading: sourceMetricsLoading } = useClientSourceMetrics(startDate, endDate);
   
   const clientIds = useMemo(() => clients.map(c => c.id), [clients]);
   const { data: clientThresholds = {} } = useAllClientSettings(clientIds);
@@ -168,8 +163,6 @@ const Index = () => {
   const { data: allCreatives = [] } = useAllCreatives();
   const pendingCreatives = allCreatives.filter(c => c.status === 'pending');
 
-  const { filteredLeads, filteredCalls, filteredFundedInvestors, isFiltered: hasSourceFilter } = useSourceFilteredMetrics(allLeads, allCalls, fundedInvestors, true);
-
   const clientMetrics = useMemo(() => {
     return buildClientMetricsFromRPC(rpcMetrics, dailyMetrics, clientFullSettings);
   }, [rpcMetrics, dailyMetrics, clientFullSettings]);
@@ -177,7 +170,44 @@ const Index = () => {
   const aggregatedMetrics = useMemo(() => {
     const allClientMetrics = Object.values(clientMetrics);
     if (allClientMetrics.length === 0) {
-      return aggregateFromSourceData(allLeads, allCalls, fundedInvestors, dailyMetrics);
+      const dailyTotals = dailyMetrics.reduce(
+        (acc, day) => ({
+          totalAdSpend: acc.totalAdSpend + Number(day.ad_spend || 0),
+          totalClicks: acc.totalClicks + (day.clicks || 0),
+          totalImpressions: acc.totalImpressions + (day.impressions || 0),
+          totalCommitments: acc.totalCommitments + (day.commitments || 0),
+          commitmentDollars: acc.commitmentDollars + Number(day.commitment_dollars || 0),
+        }),
+        { totalAdSpend: 0, totalClicks: 0, totalImpressions: 0, totalCommitments: 0, commitmentDollars: 0 }
+      );
+
+      return {
+        totalAdSpend: dailyTotals.totalAdSpend,
+        totalLeads: 0,
+        spamLeads: 0,
+        totalCalls: 0,
+        showedCalls: 0,
+        reconnectCalls: 0,
+        reconnectShowed: 0,
+        fundedInvestors: 0,
+        fundedDollars: 0,
+        totalCommitments: dailyTotals.totalCommitments,
+        commitmentDollars: dailyTotals.commitmentDollars,
+        pipelineValue: 0,
+        ctr: dailyTotals.totalImpressions > 0 ? (dailyTotals.totalClicks / dailyTotals.totalImpressions) * 100 : 0,
+        costPerLead: 0,
+        costPerCall: 0,
+        showedPercent: 0,
+        costPerShow: 0,
+        costPerInvestor: 0,
+        costOfCapital: 0,
+        avgTimeToFund: 0,
+        avgCallsToFund: 0,
+        leadToBookedPercent: 0,
+        closeRate: 0,
+        costPerReconnectCall: 0,
+        costPerReconnectShowed: 0,
+      } as SourceAggregatedMetrics;
     }
     
     const totals = allClientMetrics.reduce(
@@ -227,7 +257,12 @@ const Index = () => {
       costPerReconnectCall: totals.reconnectCalls > 0 ? totals.totalAdSpend / totals.reconnectCalls : 0,
       costPerReconnectShowed: totals.reconnectShowed > 0 ? totals.totalAdSpend / totals.reconnectShowed : 0,
     } as SourceAggregatedMetrics;
-  }, [clientMetrics, dailyMetrics, allLeads, allCalls, fundedInvestors]);
+  }, [clientMetrics, dailyMetrics]);
+
+  const tableMetrics = useMemo(() => ({
+    ...clientMetrics,
+    ...sheetClientMetrics,
+  }), [clientMetrics, sheetClientMetrics]);
 
   const clientAdSpends = useMemo(() => {
     const spends: Record<string, number> = {};
@@ -291,7 +326,7 @@ const Index = () => {
     );
   };
 
-  const isLoading = clientsLoading || metricsLoading;
+  const dashboardMetricsLoading = metricsLoading || sourceMetricsLoading;
 
   return (
     <SidebarProvider>
@@ -411,7 +446,7 @@ const Index = () => {
                         </Button>
                       </div>
                     </div>
-                    {isLoading ? (
+                    {clientsLoading ? (
                       <div className="text-center py-8 text-muted-foreground">Loading clients...</div>
                     ) : clients.length === 0 ? (
                       <div className="border-2 border-border bg-card p-8 text-center">
@@ -429,7 +464,7 @@ const Index = () => {
                         />
                         <DraggableClientTable
                           clients={clients}
-                          metrics={sheetClientMetrics}
+                          metrics={tableMetrics}
                           thresholds={clientThresholds}
                           fullSettings={clientFullSettings}
                           onOpenSettings={handleOpenSettings}
@@ -456,7 +491,7 @@ const Index = () => {
                         Customize
                       </Button>
                     </div>
-                    {isLoading ? (
+                    {dashboardMetricsLoading ? (
                       <div className="text-center py-8 text-muted-foreground">Loading metrics...</div>
                     ) : (
                       <KPIGrid
