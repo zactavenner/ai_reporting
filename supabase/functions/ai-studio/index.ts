@@ -4129,10 +4129,11 @@ Deno.serve(async (req) => {
                 const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
                 const promptText = String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : "");
-                const runOne = async (mdl: string, pid: string | null, segPrompt: string, segDuration: number, segImageUrl: string | null, segLastFrame: string | null) => {
-                  const segRes = argRes
-                    ? (RES_RANK[argRes] <= RES_RANK[MODEL_MAX_RES[mdl] || "1080p"] ? argRes : (MODEL_MAX_RES[mdl] || "1080p"))
-                    : clampResForModel(mdl);
+                 const runOne = async (mdl: string, pid: string | null, segPrompt: string, segDuration: number, segImageUrl: string | null, segLastFrame: string | null) => {
+                   // UI-selected resolution wins. Only honor the LLM's args.resolution when the
+                   // user made NO selection (rawVideoResolution unset). This keeps Seedance Pro
+                   // at 4K when the user explicitly picked 4K, and keeps HappyHorse at 1080p.
+                   const segRes = clampResForModel(mdl);
                   await recordVideoModelDecision(supa, "tool_video.clip_dispatch", {
                     conversation_id: conversationId,
                     client_id: clientId || null,
