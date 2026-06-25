@@ -1207,7 +1207,7 @@ async function generateSeedanceVideo(opts: {
     if (!opName) throw new Error("Veo did not return operation name");
     emitV({ stage: "queued", label: "Queued — waiting for Veo GPU…", model, percent: 8 });
     let veoUri: string | null = null;
-    const MAX_V = 60;
+    const MAX_V = 120;
     for (let i = 0; i < MAX_V; i++) {
       await new Promise(r => setTimeout(r, 5000));
       const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${opName}?key=${GEMINI_API_KEY}`);
@@ -1221,7 +1221,7 @@ async function generateSeedanceVideo(opts: {
         throw new Error("Veo finished with no video");
       }
     }
-    if (!veoUri) throw new Error("Veo timed out after 5 minutes");
+    if (!veoUri) throw new Error("Veo timed out after 10 minutes");
     emitV({ stage: "downloading", label: "Downloading reel…", model, percent: 92, elapsed_s: (Date.now() - t0v) / 1000 });
     const sep = veoUri.includes("?") ? "&" : "?";
     const dl = await fetch(`${veoUri}${sep}key=${GEMINI_API_KEY}`);
