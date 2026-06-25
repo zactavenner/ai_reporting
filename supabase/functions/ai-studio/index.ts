@@ -1720,6 +1720,7 @@ async function generateSeedanceVideo(opts: {
     throw new Error(`${modelLabel} submit [${submit.status}]: ${t.slice(0, 400)}`);
   }
   const sj = await submit.json();
+  console.log(`[openrouter:/videos][submit-response] model=${body.model} keys=${Object.keys(sj).join(",")} raw=${JSON.stringify(sj).slice(0, 800)}`);
   const pollingUrl: string | undefined = sj.polling_url;
   const jobId: string = sj.id || crypto.randomUUID();
   console.log(`[openrouter:/videos][queued] model=${body.model} provider_model=${extractProviderModel(sj) || "-"} job_id=${jobId} polling_url=${pollingUrl ? "yes" : "no"} response=${JSON.stringify(sj).slice(0, 400)}`);
