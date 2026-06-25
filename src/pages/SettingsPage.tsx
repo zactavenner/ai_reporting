@@ -688,6 +688,9 @@ export default function SettingsPage() {
           <TabsContent value="onboarding-templates" className="space-y-4">
             <OnboardingTemplatesSection />
           </TabsContent>
+          <TabsContent value="client-reports" className="space-y-4">
+            <ClientReportsTab />
+          </TabsContent>
         </Tabs>
       </div>
     </AppLayout>
