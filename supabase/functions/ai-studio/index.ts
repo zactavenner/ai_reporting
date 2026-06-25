@@ -2705,7 +2705,6 @@ Deno.serve(async (req) => {
     ? normalizedVideoModel
     : (uniqueSelectedVideoModels[0] || null);
   const hasSelectedVideoModel = !!selectedVideoModel || uniqueSelectedVideoModels.length > 0;
-  const DEFAULT_VIDEO_MODEL = "bytedance/seedance-2.0-fast";
 
   // Resolution clamping per model. Only Seedance Pro supports 4K.
   const MODEL_MAX_RES: Record<string, "720p" | "1080p" | "4k"> = {
