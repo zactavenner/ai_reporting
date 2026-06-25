@@ -73,6 +73,8 @@ const App = () => (
           <Routes>
             {/* Protected routes - require password */}
             <Route path="/" element={<PasswordGate><Index /></PasswordGate>} />
+            <Route path="/index" element={<PasswordGate><Index /></PasswordGate>} />
+            <Route path="/dashboard" element={<PasswordGate><Index /></PasswordGate>} />
             <Route path="/client/:clientId" element={<PasswordGate><ClientDetail /></PasswordGate>} />
             <Route path="/client/:clientId/records" element={<PasswordGate><ClientRecords /></PasswordGate>} />
             <Route path="/client/:clientId/offer/:offerId" element={<PasswordGate><OfferDetailPage /></PasswordGate>} />
