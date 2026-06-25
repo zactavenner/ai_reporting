@@ -2343,11 +2343,15 @@ async function callMetaMcpTool(name: string, args: Record<string, any>): Promise
 }
 
 const AD_FORMAT_RULES: Record<string, string> = {
-  meta_feed_1x1: "AD FORMAT: Meta Feed 1:1 (1080×1080). Headline in the top third, single CTA pill bottom-center, generous safe padding (~80px) on all sides. Sound-off-friendly — use bold on-image text. Aspect ratio MUST be '1:1'.",
-  meta_reel_9x16: "AD FORMAT: Meta Reel 9:16 (1080×1920). Keep ALL text/logos in the middle 60% safe zone — top ~250px is covered by the profile UI, bottom ~400px by caption + CTA. Lead with a 1-second pattern-interrupt hook in the first frame. Aspect ratio MUST be '9:16'.",
-  story_9x16: "AD FORMAT: Story 9:16 (1080×1920). Top 250px and bottom 250px are RESERVED for platform UI — keep them clean. Vertical center stack: hook → visual → CTA. Aspect ratio MUST be '9:16'.",
-  youtube_16x9: "AD FORMAT: YouTube 16:9 (1920×1080). Cinematic framing, headline as left-aligned lower-third, brand mark top-right. Aspect ratio MUST be '16:9'.",
-  tiktok_9x16: "AD FORMAT: TikTok 9:16 (1080×1920). UGC / native look — handheld feel, no agency polish, baked-in captions. Hook in first 0.8s. Aspect ratio MUST be '9:16'.",
+  reel_9x16: "AD FORMAT: Reel 9:16 (1080×1920). Vertical video for Reels / Shorts / TikTok / Stories. Keep ALL text/logos in the middle 60% safe zone — top ~250px is covered by the platform UI, bottom ~400px by caption + CTA. Lead with a 1-second pattern-interrupt hook in the first frame. Aspect ratio MUST be '9:16'.",
+  video_16x9: "AD FORMAT: Video 16:9 (1920×1080). Horizontal video for YouTube / web / landscape placements. Cinematic framing, headline as left-aligned lower-third, brand mark top-right. Aspect ratio MUST be '16:9'.",
+  static_1x1: "AD FORMAT: Static 1:1 (1080×1080). STATIC IMAGE ONLY — do NOT generate video for this format; if a video is requested, switch to a 9:16 or 16:9 video format. Headline in the top third, single CTA pill bottom-center, generous safe padding (~80px) on all sides. Aspect ratio MUST be '1:1'.",
+  // Legacy values still tolerated server-side so old conversations keep working.
+  meta_feed_1x1: "AD FORMAT: Static 1:1 (1080×1080). STATIC IMAGE ONLY — do NOT generate video for this format. Headline top third, single CTA bottom-center, ~80px safe padding. Aspect ratio MUST be '1:1'.",
+  meta_reel_9x16: "AD FORMAT: Reel 9:16 (1080×1920). Vertical video. Keep text in middle 60% safe zone. Aspect ratio MUST be '9:16'.",
+  story_9x16: "AD FORMAT: Reel 9:16 (1080×1920). Vertical video. Aspect ratio MUST be '9:16'.",
+  tiktok_9x16: "AD FORMAT: Reel 9:16 (1080×1920). Vertical video, UGC feel, baked-in captions. Aspect ratio MUST be '9:16'.",
+  youtube_16x9: "AD FORMAT: Video 16:9 (1920×1080). Horizontal video. Aspect ratio MUST be '16:9'.",
 };
 
 const HOOK_FRAMEWORK_RULES: Record<string, string> = {
