@@ -29,6 +29,7 @@ import { AIStudioAvatarsTab } from "./AIStudioAvatarsTab";
 import { useAvatars } from "@/hooks/useAvatars";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
+import { SimpleCaptionsDialog } from "./SimpleCaptionsDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useClientOffers } from "@/hooks/useClientOffers";
@@ -966,6 +967,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const { data: studioAvatars = [] } = useAvatars(clientId);
   const selectedAvatar = studioAvatars.find(a => a.id === selectedAvatarId) || null;
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
+  const [captionsVideo, setCaptionsVideo] = useState<{ url: string } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
   // Counter of in-flight `send()` calls. Treated as boolean (0 = idle, >0 = running)
