@@ -957,6 +957,7 @@ async function generateSeedanceVideo(opts: {
   clientId: string | null;
   conversationId: string;
   userId: string;
+  _avatarFallbackAttempt?: number; // internal: tracks Seedance→HappyHorse fallback recursion
   onProgress?: (p: {
     stage: "submitting" | "queued" | "polling" | "downloading" | "rehosting" | "completed" | "failed";
     label: string;
@@ -966,6 +967,9 @@ async function generateSeedanceVideo(opts: {
     percent?: number;
     job_id?: string;
     model?: string;
+    rerouted_from?: string;
+    rerouted_to?: string;
+    rerouted_reason?: string;
   }) => void;
 }) {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
@@ -1139,6 +1143,47 @@ async function generateSeedanceVideo(opts: {
     if (opts.lastFrameUrl) body.tail_image_url = opts.lastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
   }
 
+  // Avatar-rejection fallback: Seedance (and similarly strict moderation models) sometimes
+  // refuse an AI avatar as a "real person". When that happens on an image-to-video run with
+  // an avatar keyframe, retry once on HappyHorse 1.1 (same 15s cap, lighter identity gate).
+  const isAvatarRejection = (errText: string): boolean => {
+    const s = (errText || "").toLowerCase();
+    return (
+      s.includes("real person") || s.includes("real people") ||
+      s.includes("identity") || s.includes("face") ||
+      s.includes("celebrity") || s.includes("public figure") ||
+      s.includes("policy") || s.includes("moderation") ||
+      s.includes("not allowed") || s.includes("rejected") ||
+      s.includes("content_policy") || s.includes("content policy")
+    );
+  };
+  const tryAvatarFallback = async (reason: string) => {
+    const attempt = opts._avatarFallbackAttempt || 0;
+    if (attempt >= 1) return null; // only one hop: Seedance → HappyHorse
+    if (!opts.imageUrl) return null; // fallback only meaningful for avatar/image-to-video
+    if (!isSeedance) return null;    // only re-route away from Seedance
+    const fallbackModel = "alibaba/happyhorse-1.1";
+    // HappyHorse caps at 15s and 1080p — clamp accordingly.
+    const fallbackDuration = Math.max(3, Math.min(15, Math.round(opts.duration || 15)));
+    const fallbackResolution = effectiveResolution === "4k" ? "1080p" : effectiveResolution;
+    emit({
+      stage: "submitting",
+      label: `Avatar rejected by Seedance — retrying on HappyHorse 1.1…`,
+      model: fallbackModel,
+      percent: 4,
+      rerouted_from: model,
+      rerouted_to: fallbackModel,
+      rerouted_reason: reason.slice(0, 160),
+    });
+    return await generateSeedanceVideo({
+      ...opts,
+      model: fallbackModel,
+      duration: fallbackDuration,
+      resolution: fallbackResolution,
+      _avatarFallbackAttempt: attempt + 1,
+    });
+  };
+
   const t0 = Date.now();
   const emit = opts.onProgress || (() => {});
   emit({ stage: "submitting", label: "Submitting to Seedance…", model, percent: 2 });
@@ -1155,6 +1200,10 @@ async function generateSeedanceVideo(opts: {
   });
   if (!submit.ok) {
     const t = await submit.text();
+    if (isAvatarRejection(t)) {
+      const fb = await tryAvatarFallback(`Seedance submit ${submit.status}: ${t.slice(0, 120)}`);
+      if (fb) return fb;
+    }
     emit({ stage: "failed", label: `Submit failed (${submit.status})`, model, elapsed_s: (Date.now() - t0) / 1000 });
     throw new Error(`Seedance submit [${submit.status}]: ${t.slice(0, 400)}`);
   }
@@ -1190,6 +1239,11 @@ async function generateSeedanceVideo(opts: {
       break;
     }
     if (pj.status === "failed") {
+      const errStr = typeof pj.error === "string" ? pj.error : JSON.stringify(pj.error || {});
+      if (isAvatarRejection(errStr)) {
+        const fb = await tryAvatarFallback(`Seedance render failed: ${errStr.slice(0, 120)}`);
+        if (fb) return fb;
+      }
       emit({ stage: "failed", label: `Generation failed: ${String(pj.error || "unknown").slice(0, 140)}`, job_id: jobId, model, elapsed_s: (Date.now() - t0) / 1000 });
       throw new Error(`Seedance failed: ${pj.error || "unknown"}`);
     }
