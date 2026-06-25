@@ -126,6 +126,10 @@ const AD_FORMATS: { value: string; label: string; aspect: "1:1" | "9:16" | "16:9
   { value: "video_16x9", label: "Video 16:9", aspect: "16:9", hint: "1920×1080 · horizontal video (YouTube / web / landscape)" },
   { value: "static_1x1", label: "Static 1:1", aspect: "1:1", hint: "1080×1080 · static image only (Feed posts)" },
 ];
+const aspectForAdFormat = (format: string): "9:16" | "16:9" | "1:1" =>
+  AD_FORMATS.find((f) => f.value === format)?.aspect || "9:16";
+const videoAspectForAdFormat = (format: string): "9:16" | "16:9" =>
+  aspectForAdFormat(format) === "16:9" ? "16:9" : "9:16";
 
 // Proven direct-response copy frameworks. The picker tells the AI which
 // structure to use for both on-image text and any scripts it writes.
@@ -929,6 +933,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     } catch { return "reel_9x16"; }
   });
   useEffect(() => { try { localStorage.setItem("ai-studio:ad-format", adFormat); } catch {} }, [adFormat]);
+  useEffect(() => {
+    // Video generation has exactly two formats: 9:16 Reel and 16:9 Video.
+    // If a browser had the static 1:1 option persisted, switch it off as soon
+    // as a video model is selected so HappyHorse/Seedance never receive 1:1.
+    if (videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1") {
+      setAdFormat("reel_9x16");
+    }
+  }, [adFormat, videoModels.length]);
   const [hookFramework, setHookFramework] = useState<string>(() => {
     try { return localStorage.getItem("ai-studio:hook-framework") || "auto"; } catch { return "auto"; }
   });
@@ -1431,8 +1443,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           // model / resolution / frames the user pre-selected in the composer.
           const lockLines: string[] = [];
           if (videoModel) {
+            const lockedAspect = videoAspectForAdFormat(adFormat);
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${videoModel}", resolution="${videoResolution}", duration=15s. Pass these EXACT values to generate_seedance_video. Do NOT substitute models or resolutions.`,
+              `🔒 VIDEO HARD-LOCK: model="${videoModel}", resolution="${videoResolution}", duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
@@ -2160,12 +2173,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible -mx-1 px-1 pb-1 md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0 [&>button]:shrink-0">
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
-                  <Select value={adFormat} onValueChange={setAdFormat}>
+                  <Select value={videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
+                    if (videoModels.length > 0 && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
+                    else setAdFormat(v);
+                  }}>
                     <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {AD_FORMATS.map(f => (
+                      {(videoModels.length > 0 ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
                         <SelectItem key={f.value} value={f.value} className="text-xs">
                           {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
                         </SelectItem>

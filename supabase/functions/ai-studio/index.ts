@@ -2554,6 +2554,15 @@ function inferVideoAspectRatio(text: string): "9:16" | "16:9" | "1:1" {
   return "9:16";
 }
 
+function videoAspectFromAdFormat(format: unknown): "9:16" | "16:9" {
+  const f = typeof format === "string" ? format : "";
+  // Video generation intentionally exposes only two formats. Static 1:1 is for
+  // image generation only; if a stale client sends it with a selected video
+  // model, default safely to Reel 9:16 instead of passing 1:1 to OpenRouter.
+  if (f === "video_16x9" || f === "youtube_16x9") return "16:9";
+  return "9:16";
+}
+
 function shouldDirectGenerateVideoPrompt(text: string, hasSelectedVideoModel = false): boolean {
   const t = (text || "").trim();
   const lower = t.toLowerCase();
@@ -2594,7 +2603,7 @@ function splitVideoPromptForModel(prompt: string, totalDuration: number, maxDura
   });
 }
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoAspect?: "9:16" | "16:9"; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   (() => {
@@ -2672,7 +2681,10 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
   ctx.videoResolution
-    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. NOTE: "4k" is only supported by bytedance/seedance-2.0 (Seedance Pro); for any other model, the server will clamp to that model's max automatically — still pass the user's preference.`
+    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. 4K is not exposed in the UI; HappyHorse is hard-locked server-side to 1080p.`
+    : null,
+  ctx.videoAspect
+    ? `VIDEO FORMAT PREFERENCE: The user selected video aspect_ratio "${ctx.videoAspect}". Video generation supports ONLY 9:16 Reel and 16:9 Video. NEVER pass 1:1 to a video tool; 1:1 is for static images only.`
     : null,
   // Per-model duration caps + automatic multi-clip splitting
   (() => {
@@ -2717,7 +2729,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ctx.avatar.elevenlabs_voice_id ? `- voice_id: ${ctx.avatar.elevenlabs_voice_id}` : "",
         "RULES:",
         "- For ANY video the user asks for (single-clip or multi-clip), pass image_url = the avatar image_url to generate_seedance_video so the avatar is preserved across frames. The user does NOT need to re-state the avatar in their message.",
-        "- AVATAR MODEL ROUTING (CRITICAL): Seedance's content filter REJECTS photoreal AI avatars as 'real people'. The server auto-routes avatar clips to Veo 3.1 Fast (≤8s per clip) regardless of what model you pass. You should still pass model='google/veo-3.1-fast' explicitly for avatar work and split the script into 8-second segments. Only set force_model=true if the user EXPLICITLY says 'use Seedance anyway with my avatar'.",
+        "- AVATAR MODEL ROUTING (CRITICAL): Seedance's content filter can reject photoreal AI avatars as 'real people', so the server may auto-route Seedance avatar clips to an avatar-safe model. HappyHorse 1.1 is avatar-safe and must stay HappyHorse when selected. Only set force_model=true if the user EXPLICITLY says to override safety routing.",
         "- If the script is longer than the model's per-clip max (Veo 8s, Seedance 15s), split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url so the avatar's face and outfit stay consistent across segments. Example: 30s avatar VSL → 4 generate_seedance_video calls of 8s each, all with model='google/veo-3.1-fast' and the same image_url.",
         "- In the video prompt, briefly describe the avatar performing the scripted action (e.g. 'Sarah, 28, casual blazer, smiling to camera, holding phone vertically — speaks the hook directly into the lens'). Don't change the avatar's identity, ethnicity, or core look.",
         "- The user can override the avatar for a specific request by saying 'no avatar' or supplying a different image — respect that.",
