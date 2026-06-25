@@ -121,12 +121,9 @@ function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): s
 // AI Studio system prompt so the model picks the right dims, safe zones,
 // text-overlay placement, and platform-native look automatically.
 const AD_FORMATS: { value: string; label: string; aspect: "1:1" | "9:16" | "16:9"; hint: string }[] = [
-  { value: "none", label: "Auto", aspect: "1:1", hint: "Let the AI choose" },
-  { value: "meta_feed_1x1", label: "Meta Feed 1:1", aspect: "1:1", hint: "1080×1080 · headline top, CTA bottom" },
-  { value: "meta_reel_9x16", label: "Meta Reel 9:16", aspect: "9:16", hint: "1080×1920 · keep text in middle 60% safe-zone" },
-  { value: "story_9x16", label: "Story 9:16", aspect: "9:16", hint: "1080×1920 · top 250px / bottom 250px reserved for UI" },
-  { value: "youtube_16x9", label: "YouTube 16:9", aspect: "16:9", hint: "1920×1080 · cinematic hook" },
-  { value: "tiktok_9x16", label: "TikTok 9:16", aspect: "9:16", hint: "1080×1920 · UGC, native, captions baked in" },
+  { value: "reel_9x16", label: "Reel 9:16", aspect: "9:16", hint: "1080×1920 · vertical video (Reels / Shorts / TikTok / Stories)" },
+  { value: "video_16x9", label: "Video 16:9", aspect: "16:9", hint: "1920×1080 · horizontal video (YouTube / web / landscape)" },
+  { value: "static_1x1", label: "Static 1:1", aspect: "1:1", hint: "1080×1080 · static image only (Feed posts)" },
 ];
 
 // Proven direct-response copy frameworks. The picker tells the AI which
