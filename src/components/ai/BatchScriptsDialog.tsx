@@ -31,11 +31,12 @@ interface Props {
   }) => void;
 }
 
-const MODEL_OPTIONS: { id: string; label: string; perClipCap: number; avatarSafe: boolean }[] = [
-  { id: "google/veo-3.1-fast",        label: "Veo 3.1 Fast — 8s/clip (avatar-safe)", perClipCap: 8,  avatarSafe: true },
-  { id: "bytedance/seedance-2.0",     label: "Seedance 2.0 Pro — 15s/clip, 4K",       perClipCap: 15, avatarSafe: false },
-  { id: "bytedance/seedance-2.0-fast",label: "Seedance Fast — 15s/clip, 720p",        perClipCap: 15, avatarSafe: false },
-  { id: "kwaivgi/kling-v3.0-std",     label: "Kling 3.0 — 10s/clip",                   perClipCap: 10, avatarSafe: true },
+const MODEL_OPTIONS: { id: string; label: string; perClipCap: number; avatarSafe: boolean; resolutions: ("720p" | "1080p" | "4k")[] }[] = [
+  { id: "google/veo-3.1-fast",        label: "Veo 3.1 Fast — 8s/clip (avatar-safe)",   perClipCap: 8,  avatarSafe: true,  resolutions: ["1080p"] },
+  { id: "bytedance/seedance-2.0",     label: "Seedance 2.0 Pro — 15s/clip, 4K",         perClipCap: 15, avatarSafe: false, resolutions: ["720p", "1080p", "4k"] },
+  { id: "bytedance/seedance-2.0-fast",label: "Seedance Fast — 15s/clip, 720p",          perClipCap: 15, avatarSafe: false, resolutions: ["720p"] },
+  { id: "kwaivgi/kling-v3.0-std",     label: "Kling 3.0 — 10s/clip",                     perClipCap: 10, avatarSafe: true,  resolutions: ["1080p"] },
+  { id: "alibaba/happyhorse-1.1",     label: "HappyHorse 1.1 — 15s/clip, 1080p (avatar-safe)", perClipCap: 15, avatarSafe: true,  resolutions: ["720p", "1080p"] },
 ];
 
 export function BatchScriptsDialog({ open, onOpenChange, hasAvatar, avatarName, defaultModel, onSubmit }: Props) {
@@ -57,6 +58,11 @@ export function BatchScriptsDialog({ open, onOpenChange, hasAvatar, avatarName, 
     ? "google/veo-3.1-fast"
     : model;
   const effectiveCap = MODEL_OPTIONS.find(m => m.id === effectiveModelForAvatar)?.perClipCap || 15;
+  const allowedResolutions = modelMeta?.resolutions ?? ["1080p"];
+  // Auto-correct resolution if user switches to a model that doesn't support it.
+  if (!allowedResolutions.includes(resolution)) {
+    setTimeout(() => setResolution(allowedResolutions[allowedResolutions.length - 1]), 0);
+  }
 
   const handleSubmit = () => {
     const cleaned = scripts.filter(s => s.voiceover.trim().length > 0);
@@ -111,9 +117,9 @@ export function BatchScriptsDialog({ open, onOpenChange, hasAvatar, avatarName, 
             <Select value={resolution} onValueChange={(v) => setResolution(v as any)}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="720p">720p</SelectItem>
-                <SelectItem value="1080p">1080p</SelectItem>
-                <SelectItem value="4k">4K (Seedance Pro only)</SelectItem>
+                {allowedResolutions.includes("720p") && <SelectItem value="720p">720p</SelectItem>}
+                {allowedResolutions.includes("1080p") && <SelectItem value="1080p">1080p</SelectItem>}
+                {allowedResolutions.includes("4k") && <SelectItem value="4k">4K (Seedance Pro only)</SelectItem>}
               </SelectContent>
             </Select>
           </div>
