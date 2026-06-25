@@ -3518,6 +3518,159 @@ export type Database = {
           },
         ]
       }
+      client_report_recipients: {
+        Row: {
+          active: boolean
+          cadences: string[]
+          channels: string[]
+          client_id: string
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone_e164: string | null
+          role: string | null
+          unsubscribe_token: string
+          unsubscribed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          cadences?: string[]
+          channels?: string[]
+          client_id: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone_e164?: string | null
+          role?: string | null
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          cadences?: string[]
+          channels?: string[]
+          client_id?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone_e164?: string | null
+          role?: string | null
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_report_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_report_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_report_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      client_report_sends: {
+        Row: {
+          cadence: string
+          channel: string
+          client_id: string
+          created_at: string
+          error: string | null
+          ghl_contact_id: string | null
+          ghl_message_id: string | null
+          id: string
+          idempotency_key: string
+          payload: Json | null
+          period_end: string
+          period_start: string
+          recipient_id: string | null
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          cadence: string
+          channel: string
+          client_id: string
+          created_at?: string
+          error?: string | null
+          ghl_contact_id?: string | null
+          ghl_message_id?: string | null
+          id?: string
+          idempotency_key: string
+          payload?: Json | null
+          period_end: string
+          period_start: string
+          recipient_id?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          cadence?: string
+          channel?: string
+          client_id?: string
+          created_at?: string
+          error?: string | null
+          ghl_contact_id?: string | null
+          ghl_message_id?: string | null
+          id?: string
+          idempotency_key?: string
+          payload?: Json | null
+          period_end?: string
+          period_start?: string
+          recipient_id?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_report_sends_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_report_sends_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_report_sends_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_report_sends_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "client_report_recipients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_settings: {
         Row: {
           ad_spend_fee_percent: number | null
