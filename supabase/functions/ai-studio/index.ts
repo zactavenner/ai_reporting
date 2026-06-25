@@ -2782,7 +2782,7 @@ Deno.serve(async (req) => {
             ? "alibaba/happyhorse-1.1"
             : null;
           const promptAskedCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
-          const modelSource = promptRequestedVideoModel && uniqueSelectedVideoModels.length <= 1 && !promptAskedCompare
+          const modelSource = promptRequestedVideoModel && !promptAskedCompare
             ? [promptRequestedVideoModel]
             : (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel]);
           const modelsToRun = modelSource
@@ -3692,7 +3692,8 @@ Deno.serve(async (req) => {
                 const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
                 const resolution = args.resolution === "720p" ? "720p" : "1080p";
                 const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
-                const reelVideoModel = promptRequestedReelModel && uniqueSelectedVideoModels.length <= 1
+                const promptAskedReelCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
+                const reelVideoModel = promptRequestedReelModel && !promptAskedReelCompare
                   ? promptRequestedReelModel
                   : uniqueSelectedVideoModels.length === 1
                     ? uniqueSelectedVideoModels[0]
