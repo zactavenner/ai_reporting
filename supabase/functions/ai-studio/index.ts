@@ -4458,9 +4458,15 @@ Deno.serve(async (req) => {
                   result = { error: "generate_script_batch requires scripts[] with at least one script." };
                 } else {
                   const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
-                  const requestedRes = (args.resolution === "720p" || args.resolution === "4k") ? args.resolution : "1080p";
                   // UI selection wins over the LLM's args.model — the tool name biases the LLM toward Seedance.
                   const requestedModel = selectedVideoModel || normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : null);
+                  // UI resolution wins over the LLM's args.resolution. Shadow
+                  // the outer `requestedRes` (intentional) but clamp to the
+                  // chosen model's cap so each script respects e.g. Seedance
+                  // Pro 4K or HappyHorse 1080p.
+                  const batchRequestedRes: "720p" | "1080p" | "4k" = requestedModel
+                    ? clampResForModel(requestedModel)
+                    : requestedRes;
                   const groupId = crypto.randomUUID();
                   const scriptResults: any[] = [];
 
