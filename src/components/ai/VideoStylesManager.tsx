@@ -321,19 +321,20 @@ export function useVideoStyles() {
               .update({
                 name: s.name,
                 prompt: s.prompt,
-                references: s.references || [],
+                references: (s.references || []) as unknown as never,
               })
               .eq("id", s.cloudId);
           } else {
+            const insertRow = {
+              user_id: userId,
+              name: s.name,
+              prompt: s.prompt,
+              builtin_key: s.builtinKey || null,
+              references: (s.references || []) as unknown,
+            } as never;
             const { data: ins } = await supabase
               .from("video_style_presets")
-              .insert({
-                user_id: userId,
-                name: s.name,
-                prompt: s.prompt,
-                builtin_key: s.builtinKey || null,
-                references: s.references || [],
-              })
+              .insert(insertRow)
               .select("id")
               .single();
             if (ins?.id) {
