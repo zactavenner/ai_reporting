@@ -95,21 +95,20 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // `maxSeconds` = longest single clip supported. `pricePerSecond` = USD/sec from OpenRouter.
 // UI shows the total cost of generating a clip at maxSeconds so buyers
 // can compare apples-to-apples without doing math in their head.
+// Pricing base is 1080p USD/sec (from OpenRouter). 720p applies a multiplier.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts (≤15s, 720p)",    maxSeconds: 15, pricePerSecond: 0.0538 },
-  { value: "bytedance/seedance-2.0",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, up to 4K)", maxSeconds: 15, pricePerSecond: 0.15 },
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts (≤15s, up to 1080p)", maxSeconds: 15, pricePerSecond: 0.272 },
+  { value: "bytedance/seedance-2.0",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, up to 1080p)", maxSeconds: 15, pricePerSecond: 0.34 },
   { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s default, 1080p, first-frame image-to-video", maxSeconds: 15, pricePerSecond: 0.1278 },
 ];
-// Resolution caps per model. 4K is currently Seedance Pro only.
+// Resolution caps per model. 4K has been removed from the UI.
 const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
-  "bytedance/seedance-2.0-fast": ["720p"],
-  "bytedance/seedance-2.0":      ["720p", "1080p", "4k"],
+  "bytedance/seedance-2.0-fast": ["720p", "1080p"],
+  "bytedance/seedance-2.0":      ["720p", "1080p"],
   "alibaba/happyhorse-1.1":      ["1080p"],
 };
-// 4K is ~2.5× the rendering cost on Seedance Pro; surface that in the UI.
 function resolutionMultiplier(res: "720p" | "1080p" | "4k"): number {
-  if (res === "4k") return 2.5;
-  if (res === "720p") return 0.7;
+  if (res === "720p") return 0.445;
   return 1;
 }
 function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): string {
