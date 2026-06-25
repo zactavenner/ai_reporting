@@ -2774,7 +2774,11 @@ Deno.serve(async (req) => {
           const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
-          const modelsToRun = (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [promptRequestedVideoModel || selectedVideoModel])
+          const promptAskedCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
+          const modelSource = promptRequestedVideoModel && uniqueSelectedVideoModels.length <= 1 && !promptAskedCompare
+            ? [promptRequestedVideoModel]
+            : (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel]);
+          const modelsToRun = modelSource
             .filter((m, i, arr) => arr.indexOf(m) === i);
           const jobs = modelsToRun.flatMap((model) => {
             // Auto-route to an avatar-safe model (Veo) when an avatar is
@@ -3680,9 +3684,12 @@ Deno.serve(async (req) => {
                 const aspect = args.aspect_ratio || "9:16";
                 const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
                 const resolution = args.resolution === "720p" ? "720p" : "1080p";
-                const reelVideoModel = uniqueSelectedVideoModels.length === 1
-                  ? uniqueSelectedVideoModels[0]
-                  : (/\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : selectedVideoModel);
+                const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
+                const reelVideoModel = promptRequestedReelModel && uniqueSelectedVideoModels.length <= 1
+                  ? promptRequestedReelModel
+                  : uniqueSelectedVideoModels.length === 1
+                    ? uniqueSelectedVideoModels[0]
+                    : selectedVideoModel;
                 const selectedVideoLabel = VIDEO_MODEL_CAPS[reelVideoModel]?.label?.split(" (")?.[0] || "video render";
                 let imageUrl: string | null = args.image_url || null;
                 let staticImg: any = null;
