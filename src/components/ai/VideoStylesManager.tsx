@@ -166,17 +166,23 @@ RULES:
   },
 ];
 
-function loadStyles(): VideoStyle[] {
+const CACHE_KEY = "ai-studio:video-styles:v2-cache";
+
+function loadStylesFromCache(): VideoStyle[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(CACHE_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr) && arr.length) {
         // Merge with built-ins so new built-ins always show up, but user edits/extras win.
-        const userById = new Map(arr.map((s: VideoStyle) => [s.id, s]));
-        const merged: VideoStyle[] = DEFAULT_VIDEO_STYLES.map((d) => userById.get(d.id) || d);
+        const userByKey = new Map(
+          arr.filter((s: VideoStyle) => s.builtinKey).map((s: VideoStyle) => [s.builtinKey!, s]),
+        );
+        const merged: VideoStyle[] = DEFAULT_VIDEO_STYLES.map(
+          (d) => (d.builtinKey && userByKey.get(d.builtinKey)) || d,
+        );
         for (const s of arr as VideoStyle[]) {
-          if (!merged.find((m) => m.id === s.id)) merged.push(s);
+          if (!s.builtinKey && !merged.find((m) => m.id === s.id)) merged.push(s);
         }
         return merged;
       }
@@ -185,17 +191,172 @@ function loadStyles(): VideoStyle[] {
   return DEFAULT_VIDEO_STYLES;
 }
 
-function saveStyles(styles: VideoStyle[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(styles)); } catch {}
+function saveCache(styles: VideoStyle[]) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(styles)); } catch {}
+}
+
+type DbRow = {
+  id: string;
+  name: string;
+  prompt: string;
+  builtin_key: string | null;
+  ai_trained_prompt: string | null;
+  references: StyleReference[] | null;
+};
+
+function rowToStyle(row: DbRow): VideoStyle {
+  const builtinKey = row.builtin_key ?? undefined;
+  const builtinDef = builtinKey ? DEFAULT_VIDEO_STYLES.find((d) => d.builtinKey === builtinKey) : undefined;
+  return {
+    id: builtinKey ?? row.id,
+    cloudId: row.id,
+    name: row.name,
+    prompt: row.prompt ?? "",
+    builtIn: !!builtinKey,
+    builtinKey,
+    aiTrainedPrompt: row.ai_trained_prompt ?? undefined,
+    references: Array.isArray(row.references) ? row.references : [],
+    // keep "none" placeholder behavior
+    ...(builtinDef ? {} : {}),
+  };
+}
+
+async function fetchCloudStyles(userId: string): Promise<VideoStyle[]> {
+  const { data, error } = await supabase
+    .from("video_style_presets")
+    .select("id, name, prompt, builtin_key, ai_trained_prompt, references")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data as DbRow[]).map(rowToStyle);
+}
+
+async function seedBuiltins(userId: string): Promise<void> {
+  const rows = DEFAULT_VIDEO_STYLES.filter((s) => s.builtinKey && s.builtinKey !== "none").map((s) => ({
+    user_id: userId,
+    name: s.name,
+    prompt: s.prompt,
+    builtin_key: s.builtinKey!,
+    references: [],
+  }));
+  if (!rows.length) return;
+  // upsert by (user_id, builtin_key)
+  const { error } = await supabase
+    .from("video_style_presets")
+    .upsert(rows, { onConflict: "user_id,builtin_key", ignoreDuplicates: true });
+  if (error) throw error;
 }
 
 export function useVideoStyles() {
-  const [styles, setStyles] = useState<VideoStyle[]>(() => loadStyles());
+  const [styles, setStylesState] = useState<VideoStyle[]>(() => loadStylesFromCache());
   const [selectedId, setSelectedId] = useState<string>(() => {
     try { return localStorage.getItem(SELECTED_KEY) || "ugc"; } catch { return "ugc"; }
   });
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { saveStyles(styles); }, [styles]);
+  // Always keep "No Style" available locally.
+  const withNone = useCallback((arr: VideoStyle[]) => {
+    if (arr.find((s) => s.id === "none")) return arr;
+    return [DEFAULT_VIDEO_STYLES[0], ...arr];
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const { data } = await supabase.auth.getUser();
+    const uid = data.user?.id ?? null;
+    setUserId(uid);
+    if (!uid) return;
+    setLoading(true);
+    try {
+      let cloud = await fetchCloudStyles(uid);
+      if (!cloud.length) {
+        await seedBuiltins(uid);
+        cloud = await fetchCloudStyles(uid);
+      } else {
+        // ensure any newly-added built-ins exist
+        const existing = new Set(cloud.map((s) => s.builtinKey).filter(Boolean));
+        const missing = DEFAULT_VIDEO_STYLES.filter(
+          (s) => s.builtinKey && s.builtinKey !== "none" && !existing.has(s.builtinKey),
+        );
+        if (missing.length) {
+          await seedBuiltins(uid);
+          cloud = await fetchCloudStyles(uid);
+        }
+      }
+      const next = withNone(cloud);
+      setStylesState(next);
+      saveCache(next);
+    } finally {
+      setLoading(false);
+    }
+  }, [withNone]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  // Save handler — pushes diff to cloud (if signed in), and caches.
+  const setStyles = useCallback((next: VideoStyle[]) => {
+    setStylesState(next);
+    saveCache(next);
+    if (!userId) return;
+    // Identify deletes vs upserts vs creates.
+    const prevById = new Map(styles.map((s) => [s.cloudId || s.id, s]));
+    const nextIds = new Set<string>();
+    void (async () => {
+      try {
+        for (const s of next) {
+          if (s.id === "none") continue;
+          const key = s.cloudId || s.id;
+          nextIds.add(key);
+          const prev = prevById.get(key);
+          const changed =
+            !prev ||
+            prev.name !== s.name ||
+            prev.prompt !== s.prompt ||
+            JSON.stringify(prev.references || []) !== JSON.stringify(s.references || []);
+          if (!changed && s.cloudId) continue;
+          if (s.cloudId) {
+            await supabase
+              .from("video_style_presets")
+              .update({
+                name: s.name,
+                prompt: s.prompt,
+                references: s.references || [],
+              })
+              .eq("id", s.cloudId);
+          } else {
+            const { data: ins } = await supabase
+              .from("video_style_presets")
+              .insert({
+                user_id: userId,
+                name: s.name,
+                prompt: s.prompt,
+                builtin_key: s.builtinKey || null,
+                references: s.references || [],
+              })
+              .select("id")
+              .single();
+            if (ins?.id) {
+              s.cloudId = ins.id;
+            }
+          }
+        }
+        // Soft-archive removed ones (don't hard delete — keeps trained data recoverable).
+        for (const [key, prev] of prevById) {
+          if (prev.id === "none") continue;
+          if (!nextIds.has(key) && prev.cloudId) {
+            await supabase
+              .from("video_style_presets")
+              .update({ is_archived: true })
+              .eq("id", prev.cloudId);
+          }
+        }
+      } catch (e) {
+        console.warn("video styles cloud sync failed:", e);
+      }
+    })();
+  }, [styles, userId]);
+
   useEffect(() => {
     try { localStorage.setItem(SELECTED_KEY, selectedId); } catch {}
   }, [selectedId]);
@@ -205,7 +366,42 @@ export function useVideoStyles() {
     [styles, selectedId],
   );
 
-  return { styles, setStyles, selectedId, setSelectedId, selected };
+  // ---- Training helpers (call edge functions, then refresh cloud copy) ----
+  const transcribeReference = useCallback(
+    async (style: VideoStyle, referenceIndex: number) => {
+      if (!style.cloudId) {
+        toast.error("Sign in to train styles in the cloud.");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("style-transcribe-reference", {
+        body: { style_id: style.cloudId, reference_index: referenceIndex },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      await refresh();
+      return data as { ok: true; reference: StyleReference };
+    },
+    [refresh],
+  );
+
+  const trainStyle = useCallback(
+    async (style: VideoStyle) => {
+      if (!style.cloudId) {
+        toast.error("Sign in to train styles in the cloud.");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("style-train-from-references", {
+        body: { style_id: style.cloudId },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      await refresh();
+      return data as { ok: true; prompt: string; references_used: number };
+    },
+    [refresh],
+  );
+
+  return { styles, setStyles, selectedId, setSelectedId, selected, refresh, loading, transcribeReference, trainStyle };
 }
 
 /** Build the prompt block that gets prepended to the user's message when a style is active. */
