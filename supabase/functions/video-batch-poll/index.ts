@@ -27,7 +27,12 @@ async function pollOnce(pollingUrl: string, isOpenRouter: boolean): Promise<{ st
   if (isOpenRouter) {
     const status = String(j.status || "").toLowerCase();
     if (status === "succeeded" || status === "completed") {
-      const videoUrl = j.video?.url || j.output?.[0]?.url || j.url || (Array.isArray(j.videos) ? j.videos[0]?.url : null);
+      const videoUrl = j.video?.url
+        || j.output?.[0]?.url
+        || j.url
+        || (Array.isArray(j.unsigned_urls) ? j.unsigned_urls[0] : null)
+        || (Array.isArray(j.urls) ? j.urls[0] : null)
+        || (Array.isArray(j.videos) ? j.videos[0]?.url : null);
       if (videoUrl) return { status: "succeeded", videoUrl };
       return { status: "failed", error: `succeeded with no video url: ${JSON.stringify(j).slice(0, 200)}` };
     }
@@ -105,7 +110,7 @@ Deno.serve(async (req) => {
 
       // succeeded — download + rehost
       try {
-        const vr = await fetch(result.videoUrl!);
+        const vr = await fetch(result.videoUrl!, isOpenRouter ? { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } } : undefined);
         if (!vr.ok) throw new Error(`download ${vr.status}`);
         const bytes = new Uint8Array(await vr.arrayBuffer());
         const path = `ai-studio/batch/${sc.batch_id}/${sc.id}.mp4`;

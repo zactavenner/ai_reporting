@@ -32,7 +32,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const useHappyHorse = String(model).toLowerCase() === 'happyhorse';
+    const modelKey = String(model).toLowerCase();
+    const useHappyHorse = modelKey === 'happyhorse' || modelKey === 'happy-horse' || modelKey === 'alibaba/happyhorse-1.1';
     const statusCol = useHappyHorse ? 'video_status_alt' : 'video_status';
     const urlCol = useHappyHorse ? 'video_url_alt' : 'video_url';
     const modelCol = useHappyHorse ? 'video_model_alt' : 'video_model';
@@ -63,7 +64,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: orModel,
         prompt: creative.seedance_prompt,
-        resolution: effectiveResolution,
+        resolution: useHappyHorse
+          ? (String(effectiveResolution).toLowerCase() === '4k' ? '1080p' : String(effectiveResolution).toLowerCase())
+          : (String(effectiveResolution).toLowerCase() === '4k' ? '4K' : effectiveResolution),
         aspect_ratio: '9:16',
         duration: 15,
       }),
@@ -94,7 +97,7 @@ Deno.serve(async (req) => {
 
     let storedUrl = videoUrl;
     try {
-      const dl = await fetch(videoUrl);
+      const dl = await fetch(videoUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
       if (dl.ok) {
         const bytes = new Uint8Array(await dl.arrayBuffer());
         const path = `fundad/${user.id}/${useHappyHorse ? 'happyhorse' : 'seedance'}-${jobId}-${Date.now()}.mp4`;
@@ -124,7 +127,8 @@ Deno.serve(async (req) => {
     try {
       const { creativeId, model } = await req.clone().json().catch(() => ({}));
       if (creativeId) {
-        const useHH = String(model || '').toLowerCase() === 'happyhorse';
+        const key = String(model || '').toLowerCase();
+        const useHH = key === 'happyhorse' || key === 'happy-horse' || key === 'alibaba/happyhorse-1.1';
         const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         await supa
           .from('fundad_creatives')
