@@ -2157,6 +2157,11 @@ async function generateSeedanceVideo(opts: {
     actual_height: actualHeight,
     resolution_match: resolutionMatch,
   };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await markCanvasFailed(msg);
+    throw err;
+  }
 }
 
 // ---------- Tool schema ----------
