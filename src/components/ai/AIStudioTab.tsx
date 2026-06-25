@@ -280,7 +280,7 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
               {t.status === "running" ? (
                 <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
               ) : t.status === "error" || t.result?.error ? (
-                <span className="text-destructive truncate max-w-[260px]">{t.result?.error || "failed"}</span>
+                <span className="text-destructive truncate max-w-[260px]">{toolErrorText(t)}</span>
               ) : (
                 <span>✓</span>
               )}
