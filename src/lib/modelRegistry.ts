@@ -92,7 +92,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     defaultDuration: 15,
     maxRes: "1080p",
     aspectRatios: ["9:16", "1:1", "16:9"],
-    estCostPerSecondUsd: 0.128,
+    estCostPerSecondUsd: 0.0988,
     supportsRealisticAvatars: true,
   },
 ];
