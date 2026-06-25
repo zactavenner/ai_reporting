@@ -1810,7 +1810,9 @@ function inferVideoDurationSeconds(text: string, fallback = 15): number {
   const t = text || "";
   const explicit =
     t.match(/(?:length|duration|runtime)\s*[:=\-]?\s*(\d{1,3})\s*(?:seconds?|secs?|s)\b/i)?.[1] ||
-    t.match(/\b(\d{1,3})\s*(?:seconds?|secs?)\s+(?:video|reel|clip|ad)\b/i)?.[1];
+    t.match(/\b(\d{1,3})\s*(?:seconds?|secs?)\s+(?:video|reel|clip|ad)\b/i)?.[1] ||
+    t.match(/\b(?:for\s+)?(\d{1,3})\s*(?:seconds?|secs?|s)\b/i)?.[1] ||
+    t.match(/\b(\d{1,3})\s*[- ]?second\b/i)?.[1];
   if (explicit) return Math.max(4, Math.min(120, Number(explicit)));
   const stamps = [...t.matchAll(/\b(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})\b/g)];
   if (stamps.length) {
@@ -1830,9 +1832,11 @@ function inferVideoAspectRatio(text: string): "9:16" | "16:9" | "1:1" {
 
 function shouldDirectGenerateVideoPrompt(text: string): boolean {
   const t = (text || "").trim();
-  if (t.length < 80) return false;
   const lower = t.toLowerCase();
   const hasVideoLanguage = /\b(video|reel|clip|shorts?|tiktok|instagram reels?|meta ad|youtube shorts?|vertical social ad)\b/.test(lower);
+  const explicitlyRequestsHappyHorse = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(t) && /\b(make|create|generate|render|produce|use|test)\b/i.test(t);
+  if (explicitlyRequestsHappyHorse && hasVideoLanguage) return true;
+  if (t.length < 80) return false;
   const looksLikePrompt = /\b(format|length|duration|style|talent|location|creative direction|spoken script|production notes|compliance disclaimer)\s*[:\n]/i.test(t) || /\b0:00\s*[–-]\s*0:\d{2}\b/.test(t);
   const asksForReviewOnly = /\b(give me the script before producing|for review|review only|do not generate|don't generate|wait for approval|shall i proceed|should i proceed)\b/i.test(t);
   return hasVideoLanguage && looksLikePrompt && !asksForReviewOnly;
