@@ -961,6 +961,79 @@ function exactVideoSize(aspectRatio: string, resolution: string): string | null 
   return null;
 }
 
+function storageObjectPathFromUrl(url: string, bucket: string): string | null {
+  try {
+    const u = new URL(url);
+    const markers = [`/storage/v1/object/public/${bucket}/`, `/storage/v1/object/sign/${bucket}/`];
+    for (const marker of markers) {
+      const idx = u.pathname.indexOf(marker);
+      if (idx >= 0) return decodeURIComponent(u.pathname.slice(idx + marker.length));
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function ensureProviderAccessibleImageUrl(opts: {
+  url: string;
+  supa: any;
+  clientId: string | null;
+  purpose: "first-frame" | "last-frame" | "ingredient";
+}): Promise<string> {
+  const input = String(opts.url || "").trim();
+  if (!input) return input;
+
+  let bytes: Uint8Array | null = null;
+  let mime = "image/png";
+  let ext = "png";
+
+  const downloadFromBucket = async (bucket: string, path: string) => {
+    const { data, error } = await opts.supa.storage.from(bucket).download(path);
+    if (error) throw error;
+    const blob = data as Blob;
+    mime = blob.type || mime;
+    bytes = new Uint8Array(await blob.arrayBuffer());
+    ext = (path.split(".").pop() || mime.split("/")[1] || "png").split("?")[0].slice(0, 8);
+  };
+
+  const gptPath = storageObjectPathFromUrl(input, "gpt-files");
+  const creativePath = storageObjectPathFromUrl(input, "creatives");
+  if (input.includes("/storage/v1/object/public/creatives/") && creativePath) {
+    // A stale public URL can still look valid but OpenRouter/Alibaba will reject
+    // it as `content[1].image_url ... resource not found`. Verify the object is
+    // actually readable before passing it downstream; if it is not, let the
+    // caller drop the frame (HappyHorse) instead of surfacing a Seedance-looking
+    // provider error.
+    const r = await fetch(input, { method: "GET" });
+    if (r.ok) return input;
+    await downloadFromBucket("creatives", creativePath);
+  } else if (gptPath) {
+    await downloadFromBucket("gpt-files", gptPath);
+  } else if (creativePath) {
+    // Signed/private creatives URL: re-publish to a clean public object URL.
+    await downloadFromBucket("creatives", creativePath);
+  } else {
+    const r = await fetch(input);
+    if (!r.ok) throw new Error(`image fetch ${r.status}`);
+    mime = r.headers.get("content-type") || mime;
+    bytes = new Uint8Array(await r.arrayBuffer());
+    try {
+      const pathname = new URL(input).pathname;
+      ext = (pathname.split(".").pop() || mime.split("/")[1] || "png").split("?")[0].slice(0, 8);
+    } catch {
+      ext = (mime.split("/")[1] || "png").split("+")[0];
+    }
+  }
+
+  if (!bytes || bytes.byteLength < 32) throw new Error("image download returned no data");
+  if (!/^image\//i.test(mime)) mime = "image/png";
+  ext = ext.replace(/[^a-z0-9]/gi, "").toLowerCase() || (mime.split("/")[1] || "png").split("+")[0];
+  const path = `ai-studio/${opts.clientId || "shared"}/provider-frames/${opts.purpose}-${crypto.randomUUID()}.${ext}`;
+  const up = await opts.supa.storage.from("creatives").upload(path, bytes, { contentType: mime, upsert: false });
+  if (up.error) throw new Error(`frame rehost upload: ${up.error.message}`);
+  const { data: pub } = opts.supa.storage.from("creatives").getPublicUrl(path);
+  return pub.publicUrl;
+}
+
 function logVideoModelDecision(event: string, details: Record<string, unknown>) {
   try {
     console.log(`[video-model-decision] ${JSON.stringify({
@@ -1132,6 +1205,31 @@ async function generateSeedanceVideo(opts: {
       ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
       : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
+  let providerImageUrl = opts.imageUrl || null;
+  let providerLastFrameUrl = opts.lastFrameUrl || null;
+  let providerIngredientUrl = opts.ingredientUrl || null;
+  const frameRehostEvents: Record<string, unknown>[] = [];
+  const prepareFrame = async (url: string | null, purpose: "first-frame" | "last-frame" | "ingredient") => {
+    if (!url) return null;
+    try {
+      const prepared = await ensureProviderAccessibleImageUrl({ url, supa, clientId: opts.clientId, purpose });
+      if (prepared !== url) frameRehostEvents.push({ purpose, from: url, to: prepared });
+      return prepared;
+    } catch (e: any) {
+      frameRehostEvents.push({ purpose, from: url, error: e?.message || String(e) });
+      // HappyHorse should never hard-fail just because a UI frame URL is not
+      // provider-fetchable; omit the bad frame and run the selected model as
+      // text-to-video instead of leaking a Seedance-looking provider error.
+      if (isHappyHorse) return null;
+      return url;
+    }
+  };
+  if (!isVeo) {
+    providerImageUrl = await prepareFrame(providerImageUrl, "first-frame");
+    providerLastFrameUrl = await prepareFrame(providerLastFrameUrl, "last-frame");
+    providerIngredientUrl = await prepareFrame(providerIngredientUrl, "ingredient");
+  }
+
   await recordVideoModelDecision(supa, "generateSeedanceVideo.resolved", {
     conversation_id: opts.conversationId,
     client_id: opts.clientId,
@@ -1147,9 +1245,11 @@ async function generateSeedanceVideo(opts: {
     effective_resolution: effectiveResolution,
     wire_resolution: wireResolution,
     aspect_ratio: opts.aspectRatio,
-    has_image_url: !!opts.imageUrl,
-    has_last_frame_url: !!opts.lastFrameUrl,
-    has_ingredient_url: !!opts.ingredientUrl,
+    has_image_url: !!providerImageUrl,
+    has_last_frame_url: !!providerLastFrameUrl,
+    has_ingredient_url: !!providerIngredientUrl,
+    original_has_image_url: !!opts.imageUrl,
+    frame_rehost_events: frameRehostEvents,
     happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: "1080p" } : null,
     fallback_attempt: opts._avatarFallbackAttempt || 0,
   });
@@ -1321,11 +1421,11 @@ async function generateSeedanceVideo(opts: {
     // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
     body.resolution = wireResolution;
     const frames: any[] = [];
-    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
-    if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
+    if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
+    if (providerLastFrameUrl) frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
     if (frames.length) body.frame_images = frames;
-    if (opts.ingredientUrl) {
-      body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+    if (providerIngredientUrl) {
+      body.reference_images = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
   } else if (isHappyHorse) {
     // HappyHorse 1.1 on OpenRouter: hard-force lowercase "1080p",
@@ -1337,16 +1437,16 @@ async function generateSeedanceVideo(opts: {
     body.resolution = "1080p";
     body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
     const frames: any[] = [];
-    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
+    if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
     if (frames.length) body.frame_images = frames;
   } else if (isKling) {
     // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
     // start frame (image-to-video). It does NOT accept `resolution`, `frame_images`,
     // or `reference_images` — sending them returns a 400 and the run never starts.
     // For an "ingredient" with no first frame, fall back to using it as the start frame.
-    const startFrame = opts.imageUrl || opts.ingredientUrl;
+    const startFrame = providerImageUrl || providerIngredientUrl;
     if (startFrame) body.image_url = startFrame;
-    if (opts.lastFrameUrl) body.tail_image_url = opts.lastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
+    if (providerLastFrameUrl) body.tail_image_url = providerLastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
   }
 
   await recordVideoModelDecision(supa, "generateSeedanceVideo.submit", {
@@ -1373,6 +1473,7 @@ async function generateSeedanceVideo(opts: {
       happyhorse_exact_size: isHappyHorse ? body.size || null : null,
       seedance_4k_case_normalized: isSeedance && effectiveResolution === "4k" ? "4K" : null,
       seedance_fast_resolution_clamped: isSeedanceFast && opts.resolution !== effectiveResolution,
+      frame_rehost_events: frameRehostEvents,
     },
   });
 
@@ -2266,13 +2367,20 @@ function inferVideoAspectRatio(text: string): "9:16" | "16:9" | "1:1" {
   return "9:16";
 }
 
-function shouldDirectGenerateVideoPrompt(text: string): boolean {
+function shouldDirectGenerateVideoPrompt(text: string, hasSelectedVideoModel = false): boolean {
   const t = (text || "").trim();
   const lower = t.toLowerCase();
   const hasVideoLanguage = /\b(video|reel|clip|shorts?|tiktok|instagram reels?|meta ad|youtube shorts?|vertical social ad)\b/.test(lower);
   const mentionsSeconds = /\b\d{1,3}\s*(?:seconds?|secs?|s)\b/i.test(t);
-  const explicitlyRequestsHappyHorse = /\b(?:happy\s*-?\s*hou?rse|happyhou?rse|hou?rse)\b/i.test(t) && /\b(make|create|generate|render|produce|use|test|work)\b/i.test(t);
+  const generationAction = /\b(make|create|generate|render|produce|use|test|try|build|run|start|animate)\b/i.test(t);
+  const explicitlyRequestsHappyHorse = /\b(?:happy\s*-?\s*hou?rse|happyhou?rse|hou?rse)\b/i.test(t) && generationAction;
   if (explicitlyRequestsHappyHorse && (hasVideoLanguage || mentionsSeconds)) return true;
+  // When the composer has a video model selected, short commands like
+  // "try generating the 15s ad video again" should bypass the LLM planning loop
+  // and dispatch the selected model directly. This prevents the tool name
+  // `generate_seedance_video` from biasing the LLM into Seedance when the UI says
+  // HappyHorse (or another model).
+  if (hasSelectedVideoModel && generationAction && (hasVideoLanguage || mentionsSeconds)) return true;
   if (t.length < 80) return false;
   const looksLikePrompt = /\b(format|length|duration|style|talent|location|creative direction|spoken script|production notes|compliance disclaimer)\s*[:\n]/i.test(t) || /\b0:00\s*[–-]\s*0:\d{2}\b/.test(t);
   const asksForReviewOnly = /\b(give me the script before producing|for review|review only|do not generate|don't generate|wait for approval|shall i proceed|should i proceed)\b/i.test(t);
@@ -2600,9 +2708,10 @@ Deno.serve(async (req) => {
     : [];
   const uniqueSelectedVideoModels = selectedVideoModels.filter((m, i, arr) => arr.indexOf(m) === i);
   const normalizedVideoModel = normalizeVideoModel(videoModel);
-  const selectedVideoModel = normalizedVideoModel
+  const selectedVideoModel: string | null = normalizedVideoModel
     ? normalizedVideoModel
-    : (uniqueSelectedVideoModels[0] || "bytedance/seedance-2.0-fast");
+    : (uniqueSelectedVideoModels[0] || null);
+  const hasSelectedVideoModel = !!selectedVideoModel || uniqueSelectedVideoModels.length > 0;
 
   // Resolution clamping per model. Only Seedance Pro supports 4K.
   const MODEL_MAX_RES: Record<string, "720p" | "1080p" | "4k"> = {
@@ -3132,7 +3241,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel, videoModels: uniqueSelectedVideoModels, videoResolution: requestedRes, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel || undefined, videoModels: uniqueSelectedVideoModels, videoResolution: requestedRes, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
@@ -3229,24 +3338,24 @@ Deno.serve(async (req) => {
         : null;
 
       try {
-        if (shouldDirectGenerateVideoPrompt(userText || "")) {
+        if (hasSelectedVideoModel && shouldDirectGenerateVideoPrompt(userText || "", hasSelectedVideoModel)) {
           const totalDuration = inferVideoDurationSeconds(userText || "", 15);
           const aspect = inferVideoAspectRatio(userText || "");
           const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
-          const promptAskedCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
-          const modelSource = promptRequestedVideoModel && !promptAskedCompare
+          const modelSource = promptRequestedVideoModel
             ? [promptRequestedVideoModel]
             : (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel]);
           const modelsToRun = modelSource
+            .filter((m): m is string => !!m)
             .filter((m, i, arr) => arr.indexOf(m) === i);
           await recordVideoModelDecision(supa, "direct_video.model_source", {
             conversation_id: conversationId,
             client_id: clientId || null,
             user_id: userId,
             user_requested_happyhorse: !!promptRequestedVideoModel,
-            compare_requested: promptAskedCompare,
+            compare_requested: false,
             ui_video_model: selectedVideoModel,
             ui_video_models: uniqueSelectedVideoModels,
             model_source: modelSource,
@@ -3621,7 +3730,7 @@ Deno.serve(async (req) => {
                 kind: "image",
                 prompt: `${placeholderLabel} ${args.image_url ? "image→video" : "text→video"} • ${placeholderDuration}s ${placeholderResolution}: ${String(args.prompt || "").slice(0, 120)}`,
                 aspect_ratio: args.aspect_ratio || "9:16",
-                quality: "seedance",
+                quality: "video",
               });
             }
             if (name === "image_to_reel") {
@@ -3947,9 +4056,10 @@ Deno.serve(async (req) => {
                 // - Only fall back to the LLM's explicit args.model when the user made no selection.
                 const explicitModel = normalizeVideoModel(args.model) || ((typeof args.model === "string" && args.model) ? args.model : null);
                 const forceModel = !!args.force_model;
-                const rawFanModels = uniqueSelectedVideoModels.length > 0
+                const rawFanModels = (uniqueSelectedVideoModels.length > 0
                   ? uniqueSelectedVideoModels.slice()
-                  : [explicitModel || selectedVideoModel];
+                  : [explicitModel || selectedVideoModel])
+                  .filter((m): m is string => typeof m === "string" && !!m);
                 await recordVideoModelDecision(supa, "tool_video.model_source", {
                   conversation_id: conversationId,
                   client_id: clientId || null,
@@ -4079,7 +4189,7 @@ Deno.serve(async (req) => {
                       kind: "image",
                       prompt: `Clip ${seg.index + 1}/${seg.count} • ${VIDEO_MODEL_CAPS[mdl]?.label || mdl}: ${String(args.prompt || "").slice(0, 100)}`,
                       aspect_ratio: baseAspect,
-                      quality: "seedance",
+                      quality: "video",
                     });
                   });
                   // Avatar verification: confirm each split clip reuses the SAME avatar image.

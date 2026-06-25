@@ -275,12 +275,12 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
             <div key={j} className="text-xs flex items-center gap-2 text-muted-foreground">
               <Badge variant="secondary" className="text-[10px] gap-1">
                 {t.name === "web_search" && <Globe className="h-2.5 w-2.5" />}
-                {t.name}
+                {toolDisplayName(t)}
               </Badge>
               {t.status === "running" ? (
                 <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> running…</span>
               ) : t.status === "error" || t.result?.error ? (
-                <span className="text-destructive truncate max-w-[260px]">{t.result?.error || "failed"}</span>
+                <span className="text-destructive truncate max-w-[260px]">{toolErrorText(t)}</span>
               ) : (
                 <span>✓</span>
               )}
@@ -482,11 +482,26 @@ function buildRecreatePrompt(asset: { prompt?: string; toolName?: string; args?:
   if (asset.prompt) lines.push(`prompt: ${asset.prompt}`);
   lines.push(`type: ${kind}`);
   if (a.model) lines.push(`model: ${a.model}`);
-  if (asset.toolName === "generate_seedance_video") lines.push(`model: seedance-2.0-fast`);
   if (a.aspect_ratio) lines.push(`aspect_ratio: ${a.aspect_ratio}`);
   if (a.duration) lines.push(`duration: ${a.duration}s`);
   if (a.resolution) lines.push(`resolution: ${a.resolution}`);
   return lines.join("\n");
+}
+
+function toolDisplayName(t: any): string {
+  if (t?.name !== "generate_seedance_video") return t?.name || "tool";
+  const model = t?.result?.effective_model || t?.result?.model || t?.args?.model || "";
+  return `generate_video${model ? ` · ${modelLabel(model)}` : ""}`;
+}
+
+function toolErrorText(t: any): string {
+  const raw = String(t?.result?.error || "failed");
+  if (t?.name !== "generate_seedance_video") return raw;
+  const model = t?.result?.effective_model || t?.result?.model || t?.args?.model || "";
+  const label = modelLabel(model);
+  return raw
+    .replace(/generate_seedance_video/gi, "generate_video")
+    .replace(/Seedance(?: 2\.0)?(?: Fast| Pro)?/gi, label || "the selected video model");
 }
 
 function PreviewActionBar({

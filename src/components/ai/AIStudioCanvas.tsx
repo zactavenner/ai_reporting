@@ -401,12 +401,12 @@ export function AIStudioCanvas({
                   defaultPrompt={`Animate this image into a cinematic clip. Subject, brand colors, and composition stay consistent. Add subtle natural camera motion and lighting.`}
                   onSubmit={(instr) => {
                     const text =
-                      `Animate this image into a 15-second 1080p cinematic clip using Seedance 2.0 image-to-video. ` +
+                      `Animate this image into a 15-second 1080p cinematic clip using the selected video model. ` +
                       `${instr.trim()} ` +
                       `Keep the subject, brand colors, and composition consistent. ` +
                       `image_url: ${p.image_url} aspect_ratio: ${p.aspect_ratio || "1:1"}`;
                     onSendMessage(text);
-                    toast.success("Animating with Seedance 2.0…");
+                    toast.success("Animating with selected video model…");
                     setAnimatingId(null);
                   }}
                   onCancel={() => setAnimatingId(null)}
