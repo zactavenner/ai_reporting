@@ -1780,6 +1780,7 @@ async function generateSeedanceVideo(opts: {
       continue;
     }
     const pj = await p.json();
+    console.log(`[openrouter:/videos][poll ${i + 1}/${MAX}] model=${body.model} job=${jobId} http=${p.status} status=${pj?.status || "-"} keys=${Object.keys(pj || {}).join(",")} unsigned_urls=${Array.isArray(pj?.unsigned_urls) ? pj.unsigned_urls.length : 0}`);
     const polledProviderModel = extractProviderModel(pj);
     if (polledProviderModel) {
       downstreamModelSeen = polledProviderModel;
