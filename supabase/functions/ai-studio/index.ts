@@ -2300,7 +2300,7 @@ const tools = [
         properties: {
           brief: { type: "string", description: "What the video should communicate — offer, hook, mood, CTA." },
           scene_count: { type: "integer", minimum: 3, maximum: 8, description: "How many scenes. Default 4." },
-          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"], description: "Default 9:16 (reels)." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
           style_notes: { type: "string", description: "Optional cinematography / look notes." },
         },
         required: ["brief"],
@@ -2319,7 +2319,7 @@ const tools = [
           scene_id: { type: "string", description: "scene.id from the storyboard." },
           scene_order: { type: "integer" },
           prompt: { type: "string", description: "Scene image prompt." },
-          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"] },
           model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use for this keyframe. Default = nano-banana (fast). Use openai for highest quality." },
           style_anchor: { type: "string", description: "REQUIRED for cross-scene consistency. Pass the EXACT `style_anchor` string returned by plan_storyboard so every keyframe in this storyboard renders with the same visual DNA (palette, lighting, character look). Server prepends it to the prompt." },
         },
@@ -2340,7 +2340,7 @@ const tools = [
           scene_order: { type: "integer" },
           image_url: { type: "string", description: "Keyframe image URL from generate_scene_image." },
           video_prompt: { type: "string", description: "Animation/motion description for Veo." },
-          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"] },
         },
         required: ["storyboard_id", "scene_id", "scene_order", "image_url", "video_prompt", "aspect_ratio"],
       },
@@ -2419,8 +2419,8 @@ const tools = [
           brief: { type: "string", description: "What the reel should communicate. Required if no image_url is passed." },
           image_url: { type: "string", description: "Optional existing canvas keyframe / static ad URL. If provided, skips static generation." },
           motion_prompt: { type: "string", description: "Optional explicit camera/motion description for the video model. If omitted, one will be auto-derived from the brief." },
-          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
-          duration: { type: "integer", minimum: 5, maximum: 15, description: "Reel length in seconds. Default 15." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
+          duration: { type: "integer", enum: [15], description: "Only 15 seconds is supported." },
           resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' Seedance Pro only; HappyHorse caps at 1080p." },
         },
         required: [],
@@ -3570,9 +3570,9 @@ Deno.serve(async (req) => {
           const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
-          const modelSource = promptRequestedVideoModel
-            ? [promptRequestedVideoModel]
-            : (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel]);
+          // UI video buttons are authoritative. Mentions in the prompt are logged
+          // for audit only and must not switch Seedance ↔ HappyHorse.
+          const modelSource = uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel];
           const modelsToRun = modelSource
             .filter((m): m is string => !!m)
             .filter((m, i, arr) => arr.indexOf(m) === i);
@@ -4581,11 +4581,9 @@ Deno.serve(async (req) => {
                 // 4K stays 4K end-to-end and HappyHorse stays 1080p.
                 const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
                 const promptAskedReelCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
-                const reelVideoModel = promptRequestedReelModel && !promptAskedReelCompare
-                  ? promptRequestedReelModel
-                  : uniqueSelectedVideoModels.length === 1
-                    ? uniqueSelectedVideoModels[0]
-                    : selectedVideoModel;
+                const reelVideoModel = uniqueSelectedVideoModels.length === 1
+                  ? uniqueSelectedVideoModels[0]
+                  : selectedVideoModel;
                 // Clamp to the chosen reel model's resolution cap. UI's
                 // `requestedRes` (4K when Seedance Pro is selected) wins over
                 // the LLM's args.resolution unless the model can't support it.
