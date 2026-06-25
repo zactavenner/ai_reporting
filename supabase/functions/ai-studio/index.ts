@@ -1254,6 +1254,66 @@ async function generateSeedanceVideo(opts: {
     fallback_attempt: opts._avatarFallbackAttempt || 0,
   });
 
+  // Persist a "processing" canvas row immediately so the canvas/chat shows the
+  // in-progress video even if the SSE stream drops or the user leaves the page.
+  // Background polling (EdgeRuntime.waitUntil) continues and will update this row
+  // to "completed" or "failed" when the job finishes.
+  let pendingCanvasItemId: string | null = null;
+  try {
+    const pendingIns = await supa.from("ai_studio_canvas_items").insert({
+      conversation_id: opts.conversationId,
+      user_id: opts.userId,
+      kind: "scene_video",
+      payload: {
+        status: "processing",
+        aspect_ratio: opts.aspectRatio,
+        video_prompt: opts.prompt,
+        model,
+        requested_model: opts.model || null,
+        requested_duration: opts.duration,
+        requested_resolution: opts.resolution,
+        effective_model: model,
+        effective_duration: effectiveDuration,
+        effective_resolution: effectiveResolution,
+        duration: effectiveDuration,
+        resolution: effectiveResolution,
+        keyframe_url: opts.imageUrl || null,
+        mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+        provider: "openrouter",
+        scene_order: 1,
+        started_at: new Date().toISOString(),
+      },
+    }).select("id").single();
+    pendingCanvasItemId = pendingIns?.data?.id || null;
+  } catch (e) { console.warn("pending canvas insert failed (non-fatal)", e); }
+
+  const markCanvasFailed = async (errMsg: string) => {
+    if (!pendingCanvasItemId) return;
+    try {
+      await supa.from("ai_studio_canvas_items")
+        .update({
+          payload: {
+            status: "failed",
+            error: errMsg.slice(0, 500),
+            model,
+            aspect_ratio: opts.aspectRatio,
+            video_prompt: opts.prompt,
+            requested_model: opts.model || null,
+            requested_duration: opts.duration,
+            requested_resolution: opts.resolution,
+            effective_model: model,
+            effective_duration: effectiveDuration,
+            effective_resolution: effectiveResolution,
+            keyframe_url: opts.imageUrl || null,
+            failed_at: new Date().toISOString(),
+          },
+        })
+        .eq("id", pendingCanvasItemId);
+    } catch (e) { console.warn("mark canvas failed failed", e); }
+  };
+
+  try {
+
   // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
   if (isVeo) {
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY required for Veo model");
