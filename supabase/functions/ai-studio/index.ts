@@ -1834,8 +1834,9 @@ function shouldDirectGenerateVideoPrompt(text: string): boolean {
   const t = (text || "").trim();
   const lower = t.toLowerCase();
   const hasVideoLanguage = /\b(video|reel|clip|shorts?|tiktok|instagram reels?|meta ad|youtube shorts?|vertical social ad)\b/.test(lower);
-  const explicitlyRequestsHappyHorse = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(t) && /\b(make|create|generate|render|produce|use|test)\b/i.test(t);
-  if (explicitlyRequestsHappyHorse && hasVideoLanguage) return true;
+  const mentionsSeconds = /\b\d{1,3}\s*(?:seconds?|secs?|s)\b/i.test(t);
+  const explicitlyRequestsHappyHorse = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(t) && /\b(make|create|generate|render|produce|use|test|work)\b/i.test(t);
+  if (explicitlyRequestsHappyHorse && (hasVideoLanguage || mentionsSeconds)) return true;
   if (t.length < 80) return false;
   const looksLikePrompt = /\b(format|length|duration|style|talent|location|creative direction|spoken script|production notes|compliance disclaimer)\s*[:\n]/i.test(t) || /\b0:00\s*[–-]\s*0:\d{2}\b/.test(t);
   const asksForReviewOnly = /\b(give me the script before producing|for review|review only|do not generate|don't generate|wait for approval|shall i proceed|should i proceed)\b/i.test(t);
