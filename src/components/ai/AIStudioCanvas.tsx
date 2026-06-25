@@ -538,6 +538,7 @@ export function AIStudioCanvas({
           const effectiveDuration = p.effective_duration || p.duration || "—";
           const effectiveResolution = p.effective_resolution || p.resolution || "—";
           const wireResolution = p.wire_resolution || effectiveResolution;
+          const wireSize = p.wire_size || null;
           const isHappyHorse = String(effectiveModel || p.model || "").toLowerCase().includes("happyhorse");
           const happyHorseLocked = isHappyHorse && Number(effectiveDuration) === 15 && String(effectiveResolution).toLowerCase() === "1080p";
           return (
@@ -583,6 +584,7 @@ export function AIStudioCanvas({
                     <span>Duration used</span><span className="font-mono text-foreground">{effectiveDuration}s</span>
                     <span>Resolution used</span><span className="font-mono text-foreground">{effectiveResolution}</span>
                     <span>OpenRouter sent</span><span className="font-mono text-foreground">{wireResolution}</span>
+                    {wireSize && <><span>Exact size sent</span><span className="font-mono text-foreground">{wireSize}</span></>}
                     <span>Requested</span><span className="font-mono text-foreground truncate" title={`${requestedModel} • ${p.requested_duration ?? p.duration ?? "—"}s • ${p.requested_resolution ?? p.resolution ?? "—"}`}>{p.requested_duration ?? p.duration ?? "—"}s / {p.requested_resolution ?? p.resolution ?? "—"}</span>
                     <span>Actual file</span><span className="font-mono text-foreground">{p.actual_width && p.actual_height ? `${p.actual_width}×${p.actual_height}` : p.actual_resolution || "pending"}</span>
                   </div>
