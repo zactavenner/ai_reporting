@@ -160,8 +160,14 @@ Deno.serve(async (req) => {
       "seedance-2.0-pro": "bytedance/seedance-2.0",
       "seedance-fast": "bytedance/seedance-2.0-fast",
       "seedance-2.0-fast": "bytedance/seedance-2.0-fast",
+      "happyhorse": "alibaba/happyhorse-1.1",
+      "happy-horse": "alibaba/happyhorse-1.1",
+      "happy horse": "alibaba/happyhorse-1.1",
+      "happyhorse-1.1": "alibaba/happyhorse-1.1",
+      "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
     };
-    const model = MODEL_ALIASES[(rawModel || "").trim()] || rawModel;
+    const rawModelKey = (rawModel || "").trim();
+    const model = MODEL_ALIASES[rawModelKey.toLowerCase()] || MODEL_ALIASES[rawModelKey] || rawModelKey || "bytedance/seedance-2.0";
 
     if (!Array.isArray(scripts) || scripts.length === 0) {
       return new Response(JSON.stringify({ error: "scripts[] required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
