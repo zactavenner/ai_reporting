@@ -1,51 +1,53 @@
-## Goal
-Add a stable "Multi-Script Batch" capability to AI Studio so the user can paste 1–N scripts in one message, pick a model, and get back fully rendered videos that auto-split when a script exceeds the model's per-clip cap (Seedance ≤15s, Veo 3.1 ≤8s). Fix the Seedance-avatar rejection by routing avatar work to Veo and locking Seedance to non-human / b-roll-style clips when an avatar is selected.
+# Trainable Video Style Studio
 
-## Behavior
+Today video styles live in `localStorage` with a hand-written `prompt` per style. You can attach reference videos but nothing happens with them — they're just URLs. This plan turns each style into a trainable preset: upload example clips, auto-transcribe + analyze them, and let the AI re-write the style's prompt so future generations match the examples.
 
-1. **New chat tool `generate_script_batch`** (server-side, registered in `ai-studio/index.ts`):
-   - Input: `scripts: [{ title, voiceover, avatar_id?, environment?, target_duration_s? }]`, `model`, `aspect_ratio`, `resolution`, `client_id`.
-   - For each script:
-     - Estimate duration from word count (≈2.4 wps) if `target_duration_s` not given.
-     - Choose per-clip cap from model registry (Seedance Pro 15s, Veo 3.1 8s).
-     - Call existing `splitVideoPromptForModel` to break the VO into N segments preserving sentence boundaries; carry environment + avatar description into every segment's prompt.
-     - Dispatch all segments in parallel (existing `Promise.allSettled` path).
-     - After all segments succeed, persist a `script_group_id` so the canvas can show "Script 1 · Clip 1/2, Clip 2/2" grouped.
-   - Streams the same `tool_start` / `tool_progress` / `tool_end` / `clip_avatar_mapping` SSE events already used, plus a new `script_group` event so the UI can render grouped cards.
+## What you get
 
-2. **Avatar routing rule (fixes Seedance "real people" rejection)**:
-   - When `avatar_id` is set on a script (or globally on the conversation) the dispatcher forces `model = google/veo-3.1-fast` for that script regardless of the user-picked model, and shows a one-line toast/SSE notice: "Avatar locked to Veo 3.1 — Seedance rejects synthetic faces."
-   - Seedance stays available for: no-avatar scripts, b-roll, product, environment-only clips, and image-to-video where the source image is not a person.
-   - User can override with an explicit `force_model: "seedance"` flag (surfaced as a small "Use Seedance anyway" toggle on the avatar chip) — same call path, no auto-rerouting.
-   - Update the system prompt section that currently tells the LLM to "pass avatar image to Seedance" to instead route avatar clips through Veo and pass the avatar image as Veo's reference frame.
+**6 built-in presets** (all editable, all trainable):
 
-3. **Background persistence (already shipped earlier in this thread)**:
-   - The batch tool inherits the existing fire-and-forget pattern: tool runs server-side, writes results to `ai_studio_messages.tools`, client reconnects via realtime. Closing the tab does not cancel.
+1. **Podcast** — two-host studio Q&A, quick cuts (already exists, refined)
+2. **Street Interview** — handheld man-on-the-street, mic in frame, candid reactions
+3. **Cartoon** — 2D animated explainer (renamed from "Animated Cartoon")
+4. **Mini VSL** — 30–60s sales letter, b-roll + voiceover, problem→agitate→solve→CTA
+5. **Capital Raising** — investor-grade tone, SEC-safe language ("targeted returns" not "guaranteed"), professional B-roll
+6. **Low Ticket Offer** — direct-response punchy hook, $7–$97 mindset, urgency CTAs
 
-4. **UI in `AIStudioTab.tsx`**:
-   - Add a "Batch scripts" chip to the composer that opens a lightweight textarea-per-script editor (paste N scripts, optionally tag avatar + environment per script, pick model + resolution + aspect).
-   - On submit it sends a single user message containing all scripts as JSON in a fenced block, plus a short natural-language instruction, so the LLM emits one `generate_script_batch` tool call.
-   - Canvas grouping: when a `script_group` SSE event arrives, render the script's clips as a single grouped card (title + N clip thumbnails + "stitch" affordance — stitch itself is out of scope for this plan, just the grouping).
-   - Per-script status badges (queued / rendering 2 of 4 / done / failed).
+**Per-style training workflow:**
+- Upload up to 10 reference videos (drag-drop or paste URL)
+- Hit **"Auto-transcribe & analyze"** → backend pulls audio, transcribes via Lovable AI, runs vision analysis for camera/pacing/composition notes
+- Hit **"Train style from references"** → AI reads every transcript + analysis and rewrites the style's master prompt to match the patterns it sees
+- Manual prompt editing still available; "Reset to AI-trained" and "Reset to built-in" both one click
 
-5. **Verification + logging** (extends what's already there):
-   - Every clip logs `script_index`, `script_title`, `clip_index`, `clip_count`, `model_used`, `avatar_id`, `routing_reason` ("user_choice" | "auto_veo_for_avatar" | "force_override").
-   - Surfaces in the existing job-history side panel so we can audit which clips reused which avatar.
+**New dedicated Styles page** at `/ai-studio/styles` — full-screen manager replacing the cramped popover for editing, with side-by-side reference gallery, transcript viewer, and prompt diff before/after training.
 
-## Technical Notes
+The existing compact pill picker in the composer keeps working — just gains a "Manage…" link.
 
-- Files touched:
-  - `supabase/functions/ai-studio/index.ts` — register new `generate_script_batch` tool, add avatar→Veo routing helper, extend `splitVideoPromptForModel` only if we need word-count fallback (already supports duration splitting). Emit `script_group` SSE event.
-  - `src/components/ai/AIStudioTab.tsx` — composer chip + multi-script editor modal, SSE handler for `script_group`, grouped canvas card.
-  - `src/lib/modelRegistry.ts` — add `supportsRealisticAvatars: boolean` flag (true for Veo, false for Seedance) to drive routing.
-  - No DB migration required (results continue to live in `ai_studio_messages.tools`).
-- Veo 3.1's 8s cap means a 30s VO becomes 4 clips; Seedance Pro at 15s → 2 clips. Both paths reuse the existing per-segment `generate_seedance_video` / Veo dispatchers — no new renderers.
-- Stability levers:
-  - Per-segment retry (1 retry on 5xx / timeout) before marking the script failed.
-  - If any clip in a script fails after retry, the other clips still publish and the failed clip shows a "Retry clip 3" button (single-clip rerun reuses existing tool).
-  - 4K stays opt-in and only on Seedance Pro; avatar→Veo runs are capped at 1080p (Veo's max) with a UI note.
+## How it works (technical)
 
-## Out of Scope (call out if you want it added)
-- Automatic ffmpeg stitching of the N clips into one continuous mp4.
-- Voice synth / lip-sync over the rendered clips (separate ElevenLabs + lip-sync pass).
-- A dedicated `script_batches` table — current `ai_studio_messages.tools` JSON is sufficient for v1.
+### Data model
+- New table `public.video_style_presets` (cloud-synced, replaces localStorage as source of truth; localStorage becomes cache).
+  - `id`, `user_id`, `name`, `slug`, `prompt`, `builtin_key` (nullable), `ai_trained_prompt` (nullable), `created_at`, `updated_at`
+  - RLS: user can only see/edit their own; built-ins seeded per-user on first load.
+- New table `public.video_style_references`
+  - `id`, `style_id` (FK), `user_id`, `video_url`, `name`, `transcript`, `analysis_json` (camera/pacing/audio notes), `transcribed_at`, `created_at`
+- Both tables: standard `GRANT` block + RLS scoped to `auth.uid()`.
+
+### Edge functions
+1. **`style-transcribe-reference`** — takes `{ reference_id }`. Reads the row, calls `https://ai.gateway.lovable.dev/v1/audio/transcriptions` with `openai/gpt-4o-mini-transcribe` (streams, then buffered to text), then calls `/v1/chat/completions` with `google/gemini-3-flash-preview` passing the video URL for vision analysis (camera moves, cuts/sec, on-screen text, lighting, audio bed). Writes `transcript` + `analysis_json` back.
+2. **`style-train-from-references`** — takes `{ style_id }`. Loads every reference's transcript + analysis, calls `openrouter/owl-alpha` with a synthesis prompt: "Here are N example videos in this style. Write a STYLE/RULES prompt block that, when prepended to a video generation request, will make the output match these examples." Writes result to `ai_trained_prompt` and sets `prompt = ai_trained_prompt` (user can still edit).
+
+### UI changes
+- `src/pages/AIStudioStylesPage.tsx` (new) — full manager.
+- `src/components/ai/VideoStylesManager.tsx` — add new presets, add training buttons in `StyleEditor`, swap localStorage hook for a cloud-sync hook `useVideoStyles()` backed by the new tables (keeps localStorage as offline cache).
+- `src/components/ai/AIStudioTab.tsx` — popover gains "Open full manager →" link to the new page; no other changes (style block injection unchanged).
+- `src/App.tsx` — register `/ai-studio/styles` route.
+
+### Migration safety
+- Seeder runs once per user on first style fetch: inserts the 6 built-ins with stable `builtin_key`s. Subsequent loads merge new built-ins by `builtin_key` without overwriting user edits.
+- Existing localStorage styles auto-migrate into the new table on first cloud load.
+
+## Out of scope (call out if you want them next)
+- LoRA/fine-tuning the actual video models (Seedance/HappyHorse don't expose that). "Training" here means prompt synthesis from your examples — which is what actually moves the needle on these models.
+- Sharing styles across teammates (per-user only for now).
+- Bulk reference upload via folder import.
