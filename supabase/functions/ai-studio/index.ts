@@ -1173,14 +1173,37 @@ async function generateSeedanceVideo(opts: {
     "xai/grok-video-1.5": "x-ai/grok-video-1.5",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
-  const model = ALLOWED.includes(normalized) ? normalized : "bytedance/seedance-2.0-fast";
-  const modelOverrideReason = rawModel && normalized !== rawModel
-    ? "alias_normalized"
-    : rawModel && normalized && !ALLOWED.includes(normalized)
-      ? "unsupported_defaulted"
-      : !rawModel
-        ? "empty_defaulted"
-        : "none";
+  // HARD RULE: when the caller explicitly passed a model id, never silently
+  // substitute a different model. If we can't resolve it, throw a clear,
+  // surfaced error so the user sees exactly which selection was lost rather
+  // than discovering a Seedance render where HappyHorse was requested.
+  // Only when the caller passed NO model at all do we default to Seedance Fast.
+  let model: string;
+  let modelOverrideReason: string;
+  if (!rawModel) {
+    model = "bytedance/seedance-2.0-fast";
+    modelOverrideReason = "empty_defaulted";
+  } else if (ALLOWED.includes(normalized)) {
+    model = normalized;
+    modelOverrideReason = normalized !== rawModel ? "alias_normalized" : "none";
+  } else {
+    const isHappy = /happy.?hou?rse/i.test(rawModel) || /alibaba\/happyhorse/i.test(rawModel);
+    const label = isHappy ? "HappyHorse" : rawModel;
+    const msg = isHappy
+      ? `HappyHorse model id was lost before the OpenRouter request (received "${rawModel}", normalized "${normalized}"). Refusing to silently substitute Seedance.`
+      : `Video model "${rawModel}" is not in the supported list (${ALLOWED.join(", ")}). Refusing to silently substitute a different model.`;
+    console.error(`[generateSeedanceVideo] ${msg}`);
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.invalid_model", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      requested_model: opts.model || null,
+      raw_model: rawModel,
+      normalized_model: normalized || null,
+      error: msg,
+    });
+    throw new Error(msg);
+  }
   const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const isSeedance = model.startsWith("bytedance/seedance");
@@ -1675,8 +1698,10 @@ async function generateSeedanceVideo(opts: {
     },
     body: JSON.stringify(body),
   });
+  console.log(`[openrouter:/videos][submit] model=${body.model} status=${submit.status} size=${body.size || "-"} resolution=${body.resolution || "-"} aspect=${body.aspect_ratio || "-"} duration=${body.duration} has_frames=${!!(body as any).frame_images} has_image_url=${!!(body as any).image_url}`);
   if (!submit.ok) {
     const t = await submit.text();
+    console.error(`[openrouter:/videos][submit-failed] model=${body.model} status=${submit.status} body=${t.slice(0, 800)}`);
     if (isAvatarRejection(t) || (isHappyHorse && opts.imageUrl)) {
       const fb = await tryAvatarFallback(`${modelLabel} submit ${submit.status}: ${t.slice(0, 120)}`);
       if (fb) return fb;
