@@ -1560,57 +1560,88 @@ async function generateSeedanceVideo(opts: {
   };
   const tryAvatarFallback = async (reason: string) => {
     const attempt = opts._avatarFallbackAttempt || 0;
-    if (!opts.imageUrl) return null; // fallback only meaningful for avatar/image-to-video
-    let fallbackModel: string | null = null;
-    let fallbackLabel = "";
-    if (isSeedance && attempt < 1) {
-      fallbackModel = "alibaba/happyhorse-1.1";
-      fallbackLabel = "HappyHorse 1.1";
-    } else if (isHappyHorse && attempt < 2) {
-      fallbackModel = "google/veo-3.1-fast";
-      fallbackLabel = "Veo 3.1 Fast";
+    // HappyHorse must never fall through to Seedance/Veo when the user selected
+    // HappyHorse. If a provider rejects the selected first_frame/avatar, retry the
+    // SAME HappyHorse model once as text-to-video so the render can still complete
+    // while preserving the chosen model, duration, resolution, and aspect ratio.
+    if (isHappyHorse && (opts.imageUrl || opts.ingredientUrl || opts.lastFrameUrl) && attempt < 1) {
+      emit({
+        stage: "submitting",
+        label: "HappyHorse rejected/timed out with the selected frame — retrying HappyHorse text-to-video…",
+        model,
+        percent: 4,
+        rerouted_from: model,
+        rerouted_to: model,
+        rerouted_reason: reason.slice(0, 160),
+      });
+      await recordVideoModelDecision(supa, "generateSeedanceVideo.frame_retry", {
+        conversation_id: opts.conversationId,
+        client_id: opts.clientId,
+        user_id: opts.userId,
+        from_model: model,
+        to_model: model,
+        reason: reason.slice(0, 240),
+        requested_duration: opts.duration,
+        fallback_duration: 15,
+        requested_resolution: opts.resolution,
+        fallback_resolution: "1080p",
+        fallback_attempt: attempt + 1,
+        fallback_chain: "happyhorse_frame_to_happyhorse_text_only",
+      });
+      if (pendingCanvasItemId) {
+        try { await supa.from("ai_studio_canvas_items").delete().eq("id", pendingCanvasItemId); } catch {}
+        pendingCanvasItemId = null;
+      }
+      return await generateSeedanceVideo({
+        ...opts,
+        model,
+        duration: 15,
+        resolution: "1080p",
+        imageUrl: null,
+        lastFrameUrl: null,
+        ingredientUrl: null,
+        _avatarFallbackAttempt: attempt + 1,
+      });
     }
-    if (!fallbackModel) return null;
-    const fallbackDuration = fallbackModel === "alibaba/happyhorse-1.1"
-      ? 15
-      : Math.max(4, Math.min(8, Math.round(opts.duration || 8)));
-    const fallbackResolution = "1080p";
-    emit({
-      stage: "submitting",
-      label: `${modelLabel} failed for avatar — retrying on ${fallbackLabel}…`,
-      model: fallbackModel,
-      percent: 4,
-      rerouted_from: model,
-      rerouted_to: fallbackModel,
-      rerouted_reason: reason.slice(0, 160),
-    });
-    await recordVideoModelDecision(supa, "generateSeedanceVideo.fallback", {
-      conversation_id: opts.conversationId,
-      client_id: opts.clientId,
-      user_id: opts.userId,
-      from_model: model,
-      to_model: fallbackModel,
-      reason: reason.slice(0, 240),
-      requested_duration: opts.duration,
-      fallback_duration: fallbackDuration,
-      requested_resolution: opts.resolution,
-      fallback_resolution: fallbackResolution,
-      fallback_attempt: attempt + 1,
-      fallback_chain: "seedance_to_happyhorse_to_veo",
-    });
-    // Outer call is being superseded by the fallback recursion — drop the outer
-    // pending canvas row so we don't leave a stale "processing" card behind.
-    if (pendingCanvasItemId) {
-      try { await supa.from("ai_studio_canvas_items").delete().eq("id", pendingCanvasItemId); } catch {}
-      pendingCanvasItemId = null;
+    // For Seedance avatar moderation failures, retry once on HappyHorse (avatar-safe)
+    // rather than Veo, so OpenRouter video generations stay inside the approved model set.
+    if (isSeedance && opts.imageUrl && attempt < 1) {
+      emit({
+        stage: "submitting",
+        label: "Seedance rejected the avatar — retrying on HappyHorse 1.1…",
+        model: "alibaba/happyhorse-1.1",
+        percent: 4,
+        rerouted_from: model,
+        rerouted_to: "alibaba/happyhorse-1.1",
+        rerouted_reason: reason.slice(0, 160),
+      });
+      await recordVideoModelDecision(supa, "generateSeedanceVideo.fallback", {
+        conversation_id: opts.conversationId,
+        client_id: opts.clientId,
+        user_id: opts.userId,
+        from_model: model,
+        to_model: "alibaba/happyhorse-1.1",
+        reason: reason.slice(0, 240),
+        requested_duration: opts.duration,
+        fallback_duration: 15,
+        requested_resolution: opts.resolution,
+        fallback_resolution: "1080p",
+        fallback_attempt: attempt + 1,
+        fallback_chain: "seedance_to_happyhorse",
+      });
+      if (pendingCanvasItemId) {
+        try { await supa.from("ai_studio_canvas_items").delete().eq("id", pendingCanvasItemId); } catch {}
+        pendingCanvasItemId = null;
+      }
+      return await generateSeedanceVideo({
+        ...opts,
+        model: "alibaba/happyhorse-1.1",
+        duration: 15,
+        resolution: "1080p",
+        _avatarFallbackAttempt: attempt + 1,
+      });
     }
-    return await generateSeedanceVideo({
-      ...opts,
-      model: fallbackModel,
-      duration: fallbackDuration,
-      resolution: fallbackResolution,
-      _avatarFallbackAttempt: attempt + 1,
-    });
+    return null;
   };
 
   const t0 = Date.now();
@@ -2269,7 +2300,7 @@ const tools = [
         properties: {
           brief: { type: "string", description: "What the video should communicate — offer, hook, mood, CTA." },
           scene_count: { type: "integer", minimum: 3, maximum: 8, description: "How many scenes. Default 4." },
-          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"], description: "Default 9:16 (reels)." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
           style_notes: { type: "string", description: "Optional cinematography / look notes." },
         },
         required: ["brief"],
@@ -2288,7 +2319,7 @@ const tools = [
           scene_id: { type: "string", description: "scene.id from the storyboard." },
           scene_order: { type: "integer" },
           prompt: { type: "string", description: "Scene image prompt." },
-          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"] },
           model: { type: "string", enum: ["nano-banana", "openai"], description: "Which image model to use for this keyframe. Default = nano-banana (fast). Use openai for highest quality." },
           style_anchor: { type: "string", description: "REQUIRED for cross-scene consistency. Pass the EXACT `style_anchor` string returned by plan_storyboard so every keyframe in this storyboard renders with the same visual DNA (palette, lighting, character look). Server prepends it to the prompt." },
         },
@@ -2309,7 +2340,7 @@ const tools = [
           scene_order: { type: "integer" },
           image_url: { type: "string", description: "Keyframe image URL from generate_scene_image." },
           video_prompt: { type: "string", description: "Animation/motion description for Veo." },
-          aspect_ratio: { type: "string", enum: ["9:16", "16:9", "1:1"] },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"] },
         },
         required: ["storyboard_id", "scene_id", "scene_order", "image_url", "video_prompt", "aspect_ratio"],
       },
@@ -2319,14 +2350,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality short video clip (4–15s) using Seedance 2.0 (Fast/Pro), HappyHorse 1.1, Kling, or Veo. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url to animate a reference frame. HappyHorse 1.1 is hard-locked by the server to 15 seconds at lowercase 1080p; when model='alibaba/happyhorse-1.1', pass duration=15 and resolution='1080p'. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance Pro supports up to 4K and 15s; Seedance Fast supports up to 720p.",
+      description: "Generate a single high-quality 15-second video clip using Seedance 2.0 (Fast/Pro), HappyHorse 1.1, Kling, or Veo. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url to animate a reference frame. HappyHorse 1.1 is hard-locked by the server to 15 seconds at lowercase 1080p; when model='alibaba/happyhorse-1.1', pass duration=15 and resolution='1080p'. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance Pro/Fast support up to 1080p in this UI; HappyHorse is 1080p only.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
-          aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1"], description: "Default 9:16 for reels/stories." },
-          duration: { type: "integer", minimum: 4, maximum: 15, description: "Clip length in seconds. Default 15." },
-          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' is supported only by bytedance/seedance-2.0 (Seedance Pro). HappyHorse caps at 1080p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
+          aspect_ratio: { type: "string", enum: ["16:9", "9:16"], description: "Video format. Only 9:16 Reel and 16:9 Video are supported." },
+          duration: { type: "integer", enum: [15], description: "Clip length in seconds. Only 15 seconds is supported in AI Studio." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p. 4K is removed from AI Studio video generation. HappyHorse caps at 1080p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast", "alibaba/happyhorse-1.1"], description: "Explicit video model id. Seedance/Kling/HappyHorse route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
@@ -2388,8 +2419,8 @@ const tools = [
           brief: { type: "string", description: "What the reel should communicate. Required if no image_url is passed." },
           image_url: { type: "string", description: "Optional existing canvas keyframe / static ad URL. If provided, skips static generation." },
           motion_prompt: { type: "string", description: "Optional explicit camera/motion description for the video model. If omitted, one will be auto-derived from the brief." },
-          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
-          duration: { type: "integer", minimum: 5, maximum: 15, description: "Reel length in seconds. Default 15." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
+          duration: { type: "integer", enum: [15], description: "Only 15 seconds is supported." },
           resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' Seedance Pro only; HappyHorse caps at 1080p." },
         },
         required: [],
@@ -2422,8 +2453,8 @@ const tools = [
             },
           },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast", "alibaba/happyhorse-1.1"], description: "Model to use for non-avatar scripts. Avatar scripts auto-route to Veo." },
-          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
-          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. 4K only on Seedance Pro." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p. 4K is removed from AI Studio video generation." },
         },
         required: ["scripts"],
       },
@@ -2554,6 +2585,15 @@ function inferVideoAspectRatio(text: string): "9:16" | "16:9" | "1:1" {
   return "9:16";
 }
 
+function videoAspectFromAdFormat(format: unknown): "9:16" | "16:9" {
+  const f = typeof format === "string" ? format : "";
+  // Video generation intentionally exposes only two formats. Static 1:1 is for
+  // image generation only; if a stale client sends it with a selected video
+  // model, default safely to Reel 9:16 instead of passing 1:1 to OpenRouter.
+  if (f === "video_16x9" || f === "youtube_16x9") return "16:9";
+  return "9:16";
+}
+
 function shouldDirectGenerateVideoPrompt(text: string, hasSelectedVideoModel = false): boolean {
   const t = (text || "").trim();
   const lower = t.toLowerCase();
@@ -2594,7 +2634,7 @@ function splitVideoPromptForModel(prompt: string, totalDuration: number, maxDura
   });
 }
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoAspect?: "9:16" | "16:9"; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   (() => {
@@ -2647,11 +2687,11 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "  • DEFAULT for any video request → generate_seedance_video (single clip, or auto-split into N back-to-back clips when duration > model cap). Always use the user's UI-selected video model.",
   "  • Storyboarding tools (plan_storyboard / generate_scene_image / generate_scene_video) are DISABLED. Even if the user types the word 'storyboard', go straight to generate_seedance_video and let the server split clips. No keyframe-review gate, no scene-by-scene image step.",
   "- SEEDANCE / HAPPYHORSE / KLING / VEO (single-clip video):",
-  "  • Use generate_seedance_video for any standalone clip (3–15s). The `model` argument MUST match the UI-selected model (passed in VIDEO MODEL PREFERENCE).",
+  "  • Use generate_seedance_video for any standalone 15-second clip. The `model` argument MUST match the UI-selected model (passed in VIDEO MODEL PREFERENCE).",
   "- MULTI-SCRIPT BATCH (CRITICAL): If the user pastes 2+ video scripts in one message (numbered list '1. ... 2. ...', or visibly distinct script blocks with their own Avatar/Environment headers, or a 'Batch scripts' payload with a JSON `scripts` array), call generate_script_batch ONCE with the full scripts array — do NOT emit N separate generate_seedance_video calls. The server auto-splits each script into per-clip segments, locks the avatar across clips, and renders all scripts × clips in parallel. Avatar scripts auto-route to Veo unless the user said 'use Seedance anyway'.",
   "  • Text-to-video: just pass `prompt` (+ aspect_ratio, duration, resolution).",
   "  • Image-to-video: pass `image_url` (a canvas keyframe / static ad URL) — Seedance preserves character, style, and brand from the reference. Optionally pass `last_frame_url` for precise motion endpoints.",
-  "  • Default to duration=15, resolution = the UI-selected resolution (1080p or 4K if the user picked Seedance Pro 4K), aspect_ratio=9:16 unless the user says otherwise.",
+  "  • Always use duration=15, resolution = the UI-selected resolution, and the UI-selected video format (9:16 Reel or 16:9 Video).",
   "  • IMAGE→VIDEO SHORTCUT: If the user says 'animate this ad', 'turn this image into a video', 'make this move', or references a canvas image card, call generate_seedance_video with image_url = that card's image URL.",
   "  • Storyboard mode is OFF for every request — those tools are not available.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
@@ -2672,7 +2712,10 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
   ctx.videoResolution
-    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. NOTE: "4k" is only supported by bytedance/seedance-2.0 (Seedance Pro); for any other model, the server will clamp to that model's max automatically — still pass the user's preference.`
+    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. 4K is not exposed in the UI; HappyHorse is hard-locked server-side to 1080p.`
+    : null,
+  ctx.videoAspect
+    ? `VIDEO FORMAT PREFERENCE: The user selected video aspect_ratio "${ctx.videoAspect}". Video generation supports ONLY 9:16 Reel and 16:9 Video. NEVER pass 1:1 to a video tool; 1:1 is for static images only.`
     : null,
   // Per-model duration caps + automatic multi-clip splitting
   (() => {
@@ -2717,7 +2760,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ctx.avatar.elevenlabs_voice_id ? `- voice_id: ${ctx.avatar.elevenlabs_voice_id}` : "",
         "RULES:",
         "- For ANY video the user asks for (single-clip or multi-clip), pass image_url = the avatar image_url to generate_seedance_video so the avatar is preserved across frames. The user does NOT need to re-state the avatar in their message.",
-        "- AVATAR MODEL ROUTING (CRITICAL): Seedance's content filter REJECTS photoreal AI avatars as 'real people'. The server auto-routes avatar clips to Veo 3.1 Fast (≤8s per clip) regardless of what model you pass. You should still pass model='google/veo-3.1-fast' explicitly for avatar work and split the script into 8-second segments. Only set force_model=true if the user EXPLICITLY says 'use Seedance anyway with my avatar'.",
+        "- AVATAR MODEL ROUTING (CRITICAL): Seedance's content filter can reject photoreal AI avatars as 'real people', so the server may auto-route Seedance avatar clips to an avatar-safe model. HappyHorse 1.1 is avatar-safe and must stay HappyHorse when selected. Only set force_model=true if the user EXPLICITLY says to override safety routing.",
         "- If the script is longer than the model's per-clip max (Veo 8s, Seedance 15s), split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url so the avatar's face and outfit stay consistent across segments. Example: 30s avatar VSL → 4 generate_seedance_video calls of 8s each, all with model='google/veo-3.1-fast' and the same image_url.",
         "- In the video prompt, briefly describe the avatar performing the scripted action (e.g. 'Sarah, 28, casual blazer, smiling to camera, holding phone vertically — speaks the hook directly into the lens'). Don't change the avatar's identity, ethnicity, or core look.",
         "- The user can override the avatar for a specific request by saying 'no avatar' or supplying a different image — respect that.",
@@ -3423,7 +3466,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel || undefined, videoModels: uniqueSelectedVideoModels, videoResolution: requestedRes, videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel || undefined, videoModels: uniqueSelectedVideoModels, videoResolution: requestedRes, videoAspect: videoAspectFromAdFormat(adFormat), videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
@@ -3521,14 +3564,15 @@ Deno.serve(async (req) => {
 
       try {
         if (hasSelectedVideoModel && shouldDirectGenerateVideoPrompt(userText || "", hasSelectedVideoModel)) {
-          const totalDuration = inferVideoDurationSeconds(userText || "", 15);
-          const aspect = inferVideoAspectRatio(userText || "");
+          const totalDuration = 15;
+          // UI Format dropdown is authoritative for video: only Reel 9:16 or Video 16:9.
+          const aspect = videoAspectFromAdFormat(adFormat);
           const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
-          const modelSource = promptRequestedVideoModel
-            ? [promptRequestedVideoModel]
-            : (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel]);
+          // UI video buttons are authoritative. Mentions in the prompt are logged
+          // for audit only and must not switch Seedance ↔ HappyHorse.
+          const modelSource = uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel];
           const modelsToRun = modelSource
             .filter((m): m is string => !!m)
             .filter((m, i, arr) => arr.indexOf(m) === i);
@@ -3647,7 +3691,7 @@ Deno.serve(async (req) => {
               const r = await generateSeedanceVideo({
                 prompt: segment.prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
                 aspectRatio: aspect,
-                duration: segment.duration,
+                duration: 15,
                 resolution: segRes,
                 imageUrl,
                 lastFrameUrl,
@@ -4293,10 +4337,10 @@ Deno.serve(async (req) => {
                     });
                   }
                 }
-                const baseDuration = typeof args.duration === "number" ? args.duration : 15;
+                const baseDuration = 15;
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
                 const argRes = (args.resolution === "720p" || args.resolution === "1080p" || args.resolution === "4k") ? args.resolution : null;
-                const baseAspect = args.aspect_ratio || "9:16";
+                const baseAspect = videoAspectFromAdFormat(adFormat);
                 const baseImageUrl = args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null);
                 const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
@@ -4530,18 +4574,16 @@ Deno.serve(async (req) => {
                   result = { ok: true, generated: variants.length, failed: errors.length, errors: errors.slice(0, 5), aspect_ratio: aspect };
                 }
               } else if (name === "image_to_reel") {
-                const aspect = args.aspect_ratio || "9:16";
-                const duration = typeof args.duration === "number" ? Math.max(5, Math.min(15, args.duration)) : 15;
+                const aspect = videoAspectFromAdFormat(adFormat);
+                const duration = 15;
                 // UI resolution wins over any LLM-suggested arg. Clamp to the
                 // selected (or to-be-selected) reel model's cap so Seedance Pro
                 // 4K stays 4K end-to-end and HappyHorse stays 1080p.
                 const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
                 const promptAskedReelCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
-                const reelVideoModel = promptRequestedReelModel && !promptAskedReelCompare
-                  ? promptRequestedReelModel
-                  : uniqueSelectedVideoModels.length === 1
-                    ? uniqueSelectedVideoModels[0]
-                    : selectedVideoModel;
+                const reelVideoModel = uniqueSelectedVideoModels.length === 1
+                  ? uniqueSelectedVideoModels[0]
+                  : selectedVideoModel;
                 // Clamp to the chosen reel model's resolution cap. UI's
                 // `requestedRes` (4K when Seedance Pro is selected) wins over
                 // the LLM's args.resolution unless the model can't support it.
@@ -4637,7 +4679,7 @@ Deno.serve(async (req) => {
                 if (!rawScripts.length) {
                   result = { error: "generate_script_batch requires scripts[] with at least one script." };
                 } else {
-                  const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
+                  const aspect = videoAspectFromAdFormat(adFormat);
                   // UI selection wins over the LLM's args.model — the tool name biases the LLM toward Seedance.
                   const requestedModel = selectedVideoModel || normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : null);
                   // UI resolution wins over the LLM's args.resolution. Shadow
@@ -4662,9 +4704,7 @@ Deno.serve(async (req) => {
                     const forceModel = !!s?.force_model;
                     // Estimate duration from word count if not given (~2.4 wps spoken pace).
                     const wordCount = voiceover.split(/\s+/).filter(Boolean).length;
-                    const targetDuration = typeof s?.target_duration_s === "number"
-                      ? Math.max(4, Math.min(120, Math.round(s.target_duration_s)))
-                      : Math.max(8, Math.min(120, Math.ceil(wordCount / 2.4)));
+                    const targetDuration = 15;
                     // Route per-script: avatar scripts auto-route to Veo unless force_model.
                     const routed = resolveModelForAvatar(requestedModel, useAvatar, forceModel);
                     const mdl = routed.model;
