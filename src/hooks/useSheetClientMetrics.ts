@@ -31,7 +31,7 @@ export function useSheetClientMetrics(
       const mapping: Record<string, string> | undefined = mappingRaw?.columns && typeof mappingRaw.columns === 'object'
         ? (mappingRaw.columns as Record<string, string>)
         : undefined;
-      return { id, ...parsed, mapping };
+      return { id, sheet_id: parsed.sheet_id, gid: parsed.gid, mapping };
     })
     .filter((t): t is { id: string; sheet_id: string; gid?: string; mapping?: Record<string, string> } => !!t);
 
