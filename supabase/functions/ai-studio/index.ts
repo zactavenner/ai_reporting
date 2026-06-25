@@ -3580,7 +3580,11 @@ Deno.serve(async (req) => {
       // preserving the originally requested model in the payload so the
       // chosen model (HappyHorse vs Seedance) is never silently relabeled.
       try {
-        const staleCutoff = new Date(Date.now() - 25 * 60 * 1000).toISOString();
+        // 60 min: HappyHorse can legitimately poll for ~20 min, and a
+        // background EdgeRuntime.waitUntil worker may continue past the
+        // SSE turn. Only sweep cards that are *definitely* dead so we
+        // never auto-fail a render that's still in flight.
+        const staleCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
         const { data: stale } = await supa
           .from("ai_studio_canvas_items")
           .select("id, payload")
