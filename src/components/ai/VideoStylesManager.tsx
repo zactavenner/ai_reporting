@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { Clapperboard, Plus, Trash2, Save, ChevronDown } from "lucide-react";
+import { Clapperboard, Plus, Trash2, Save, ChevronDown, Settings2, Sparkles, FileAudio, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { StyleReferencesEditor, buildReferencesPromptLines, type StyleReference } from "./StyleReferencesEditor";
+import { supabase } from "@/integrations/supabase/client";
+import { Link } from "react-router-dom";
 
 export type VideoStyle = {
   id: string;
@@ -23,6 +25,12 @@ export type VideoStyle = {
   /** Prompt template injected before the user's text when this style is active. */
   prompt: string;
   builtIn?: boolean;
+  /** Stable key for built-in presets so cloud rows can be matched/upserted. */
+  builtinKey?: string;
+  /** Cloud DB row id (when persisted). */
+  cloudId?: string;
+  /** Snapshot of the last AI-trained prompt — lets user "Reset to AI-trained". */
+  aiTrainedPrompt?: string;
   references?: StyleReference[];
 };
 
@@ -35,11 +43,13 @@ export const DEFAULT_VIDEO_STYLES: VideoStyle[] = [
     name: "No Style",
     prompt: "",
     builtIn: true,
+    builtinKey: "none",
   },
   {
     id: "ugc",
     name: "UGC",
     builtIn: true,
+    builtinKey: "ugc",
     prompt: `STYLE: Authentic amateur-style UGC. Handheld phone feel with subtle micro-shake, natural smartphone-lens look, no cinematic grading. Soft natural daylight, clean realistic background relevant to the offer.
 
 RULES:
@@ -53,6 +63,7 @@ RULES:
     id: "podcast",
     name: "Podcast",
     builtIn: true,
+    builtinKey: "podcast",
     prompt: `STYLE: High-energy podcast clip with quick cuts between two hosts in a professional studio. Both wearing headsets and speaking into high-end podcast microphones. Cinematic lighting, 4k, photo-realistic. Shallow depth of field, warm color grade, subtle studio bokeh (acoustic panels, plants, neon accents allowed).
 
 RULES:
@@ -70,6 +81,7 @@ REFERENCE EXAMPLE (style + pacing to emulate, not script to copy verbatim):
     id: "broll-vo",
     name: "B-roll Voiceover",
     builtIn: true,
+    builtinKey: "broll-vo",
     prompt: `STYLE: Cinematic b-roll montage with voiceover. NO on-camera talent speaking — voice is off-screen narration.
 
 RULES:
@@ -79,9 +91,10 @@ RULES:
 - If a PDF/overview is attached, include one shot of the document/page being flipped through or laid on a desk with key phrases legible.`,
   },
   {
-    id: "animated-cartoon",
-    name: "Animated Cartoon",
+    id: "cartoon",
+    name: "Cartoon",
     builtIn: true,
+    builtinKey: "cartoon",
     prompt: `STYLE: 2D animated cartoon explainer, flat vector look with bold outlines, limited palette, smooth tween animation. Pixar-lite character design, expressive faces, clean motion-design typography for key stats.
 
 RULES:
@@ -90,19 +103,86 @@ RULES:
 - Light, friendly score is OK; voice remains the lead.
 - If an avatar reference is attached, stylize the character to resemble them (hair color, outfit color, vibe) but keep it clearly illustrated.`,
   },
+  {
+    id: "street-interview",
+    name: "Street Interview",
+    builtIn: true,
+    builtinKey: "street-interview",
+    prompt: `STYLE: Candid man-on-the-street interview. Handheld camera, urban daylight, real passers-by energy. Visible handheld microphone with branded foam windscreen in frame. Slight zoom-in on punchlines.
+
+RULES:
+- One off-camera interviewer holding a mic, one on-camera respondent reacting genuinely (surprise, laughter, "wait what?").
+- Background: real sidewalk / city block with foot traffic, traffic noise bleeding in.
+- Quick jump cuts on every beat. Punch-in zoom on the strongest 1–2 second reaction.
+- No music. Diegetic city ambience only. Voice peaks naturally, not studio-clean.
+- 12–15s. (0–2s) interviewer hook question off-camera. (2–8s) respondent reacts and answers with a memorable line. (8–12s) follow-up + bigger reaction. (12–15s) CTA pointing below the video.
+- If an avatar is attached, cast that person as the respondent.`,
+  },
+  {
+    id: "mini-vsl",
+    name: "Mini VSL",
+    builtIn: true,
+    builtinKey: "mini-vsl",
+    prompt: `STYLE: 30–60 second mini Video Sales Letter. Cinematic b-roll montage under a confident voiceover. Subtle motion graphics for key stats. No on-camera talking head.
+
+RULES:
+- Structure (Problem → Agitate → Solve → Proof → CTA): (0–4s) pattern-interrupt hook + the problem in one line. (4–12s) agitate the cost of not solving it. (12–25s) introduce the solution with 2–3 evocative b-roll shots. (25–45s) proof — number, screenshot, testimonial b-roll. (45–60s) CTA to the form / link below.
+- Warm authoritative narrator VO. No music until the proof beat, then subtle cinematic underscore.
+- Animate one or two key numbers as kinetic typography. Keep on-screen text minimal and high-contrast.
+- If a PDF/overview is attached, show one shot of it laid open with key phrases legible.`,
+  },
+  {
+    id: "capital-raising",
+    name: "Capital Raising",
+    builtIn: true,
+    builtinKey: "capital-raising",
+    prompt: `STYLE: Investor-grade short ad for accredited-investor capital raises. Cinematic, sober, premium. Muted color grade, slow camera moves, clean typography.
+
+RULES (COMPLIANCE — non-negotiable):
+- Use "targeted returns" or "projected returns", NEVER "guaranteed" / "guarantee" / "risk-free".
+- Include a brief on-screen risk disclaimer line in the final 2 seconds: "For accredited investors only. Past performance does not guarantee future results."
+- No specific yield/percentage claims unless they appear verbatim in the attached offer PDF.
+
+CREATIVE:
+- Professional setting: glass-walled office, downtown skyline, blueprints, asset b-roll relevant to the asset class.
+- Calm, credible voiceover (deep, measured pace). Subtle cinematic underscore at low level.
+- Optional: an older male or female principal on-camera in business attire delivering one trust-building line.
+- 15s. (0–3s) macro hook ("Most investors miss this asset class…"). (3–10s) the opportunity + one credibility proof point. (10–13s) CTA to qualify below. (13–15s) compliance disclaimer text overlay.
+- If an avatar is attached, cast as the principal. If a PDF is attached, ground claims in its language.`,
+  },
+  {
+    id: "low-ticket",
+    name: "Low Ticket Offer",
+    builtIn: true,
+    builtinKey: "low-ticket",
+    prompt: `STYLE: Direct-response punchy ad for low-ticket offers ($7–$97). High-energy UGC look, fast cuts, bold on-screen captions, urgency-driven CTA.
+
+RULES:
+- Open with a 1-second pattern interrupt (visual or stat) before the talent speaks.
+- Aggressive caption styling: white text, black stroke, key word colored, words pop one at a time.
+- Talent speaks fast and confident, real-person energy, never corporate. Music: punchy pop/lofi beat at moderate level.
+- Always name the price and the urgency lever (limited, today only, bonus expiring) at least once.
+- 12–15s. (0–1s) pattern interrupt. (1–4s) problem in one line + hook. (4–9s) the offer + price + what's inside. (9–13s) urgency + bonus. (13–15s) "Tap below to grab it" CTA pointing under the video.`,
+  },
 ];
 
-function loadStyles(): VideoStyle[] {
+const CACHE_KEY = "ai-studio:video-styles:v2-cache";
+
+function loadStylesFromCache(): VideoStyle[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(CACHE_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr) && arr.length) {
         // Merge with built-ins so new built-ins always show up, but user edits/extras win.
-        const userById = new Map(arr.map((s: VideoStyle) => [s.id, s]));
-        const merged: VideoStyle[] = DEFAULT_VIDEO_STYLES.map((d) => userById.get(d.id) || d);
+        const userByKey = new Map(
+          arr.filter((s: VideoStyle) => s.builtinKey).map((s: VideoStyle) => [s.builtinKey!, s]),
+        );
+        const merged: VideoStyle[] = DEFAULT_VIDEO_STYLES.map(
+          (d) => (d.builtinKey && userByKey.get(d.builtinKey)) || d,
+        );
         for (const s of arr as VideoStyle[]) {
-          if (!merged.find((m) => m.id === s.id)) merged.push(s);
+          if (!s.builtinKey && !merged.find((m) => m.id === s.id)) merged.push(s);
         }
         return merged;
       }
@@ -111,17 +191,173 @@ function loadStyles(): VideoStyle[] {
   return DEFAULT_VIDEO_STYLES;
 }
 
-function saveStyles(styles: VideoStyle[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(styles)); } catch {}
+function saveCache(styles: VideoStyle[]) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(styles)); } catch {}
+}
+
+type DbRow = {
+  id: string;
+  name: string;
+  prompt: string;
+  builtin_key: string | null;
+  ai_trained_prompt: string | null;
+  references: StyleReference[] | null;
+};
+
+function rowToStyle(row: DbRow): VideoStyle {
+  const builtinKey = row.builtin_key ?? undefined;
+  const builtinDef = builtinKey ? DEFAULT_VIDEO_STYLES.find((d) => d.builtinKey === builtinKey) : undefined;
+  return {
+    id: builtinKey ?? row.id,
+    cloudId: row.id,
+    name: row.name,
+    prompt: row.prompt ?? "",
+    builtIn: !!builtinKey,
+    builtinKey,
+    aiTrainedPrompt: row.ai_trained_prompt ?? undefined,
+    references: Array.isArray(row.references) ? row.references : [],
+    // keep "none" placeholder behavior
+    ...(builtinDef ? {} : {}),
+  };
+}
+
+async function fetchCloudStyles(userId: string): Promise<VideoStyle[]> {
+  const { data, error } = await supabase
+    .from("video_style_presets")
+    .select("id, name, prompt, builtin_key, ai_trained_prompt, references")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data as DbRow[]).map(rowToStyle);
+}
+
+async function seedBuiltins(userId: string): Promise<void> {
+  const rows = DEFAULT_VIDEO_STYLES.filter((s) => s.builtinKey && s.builtinKey !== "none").map((s) => ({
+    user_id: userId,
+    name: s.name,
+    prompt: s.prompt,
+    builtin_key: s.builtinKey!,
+    references: [],
+  }));
+  if (!rows.length) return;
+  // upsert by (user_id, builtin_key)
+  const { error } = await supabase
+    .from("video_style_presets")
+    .upsert(rows as never, { onConflict: "user_id,builtin_key", ignoreDuplicates: true });
+  if (error) throw error;
 }
 
 export function useVideoStyles() {
-  const [styles, setStyles] = useState<VideoStyle[]>(() => loadStyles());
+  const [styles, setStylesState] = useState<VideoStyle[]>(() => loadStylesFromCache());
   const [selectedId, setSelectedId] = useState<string>(() => {
     try { return localStorage.getItem(SELECTED_KEY) || "ugc"; } catch { return "ugc"; }
   });
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { saveStyles(styles); }, [styles]);
+  // Always keep "No Style" available locally.
+  const withNone = useCallback((arr: VideoStyle[]) => {
+    if (arr.find((s) => s.id === "none")) return arr;
+    return [DEFAULT_VIDEO_STYLES[0], ...arr];
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const { data } = await supabase.auth.getUser();
+    const uid = data.user?.id ?? null;
+    setUserId(uid);
+    if (!uid) return;
+    setLoading(true);
+    try {
+      let cloud = await fetchCloudStyles(uid);
+      if (!cloud.length) {
+        await seedBuiltins(uid);
+        cloud = await fetchCloudStyles(uid);
+      } else {
+        // ensure any newly-added built-ins exist
+        const existing = new Set(cloud.map((s) => s.builtinKey).filter(Boolean));
+        const missing = DEFAULT_VIDEO_STYLES.filter(
+          (s) => s.builtinKey && s.builtinKey !== "none" && !existing.has(s.builtinKey),
+        );
+        if (missing.length) {
+          await seedBuiltins(uid);
+          cloud = await fetchCloudStyles(uid);
+        }
+      }
+      const next = withNone(cloud);
+      setStylesState(next);
+      saveCache(next);
+    } finally {
+      setLoading(false);
+    }
+  }, [withNone]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  // Save handler — pushes diff to cloud (if signed in), and caches.
+  const setStyles = useCallback((next: VideoStyle[]) => {
+    setStylesState(next);
+    saveCache(next);
+    if (!userId) return;
+    // Identify deletes vs upserts vs creates.
+    const prevById = new Map(styles.map((s) => [s.cloudId || s.id, s]));
+    const nextIds = new Set<string>();
+    void (async () => {
+      try {
+        for (const s of next) {
+          if (s.id === "none") continue;
+          const key = s.cloudId || s.id;
+          nextIds.add(key);
+          const prev = prevById.get(key);
+          const changed =
+            !prev ||
+            prev.name !== s.name ||
+            prev.prompt !== s.prompt ||
+            JSON.stringify(prev.references || []) !== JSON.stringify(s.references || []);
+          if (!changed && s.cloudId) continue;
+          if (s.cloudId) {
+            await supabase
+              .from("video_style_presets")
+              .update({
+                name: s.name,
+                prompt: s.prompt,
+                references: (s.references || []) as unknown as never,
+              })
+              .eq("id", s.cloudId);
+          } else {
+            const insertRow = {
+              user_id: userId,
+              name: s.name,
+              prompt: s.prompt,
+              builtin_key: s.builtinKey || null,
+              references: (s.references || []) as unknown,
+            } as never;
+            const { data: ins } = await supabase
+              .from("video_style_presets")
+              .insert(insertRow)
+              .select("id")
+              .single();
+            if (ins?.id) {
+              s.cloudId = ins.id;
+            }
+          }
+        }
+        // Soft-archive removed ones (don't hard delete — keeps trained data recoverable).
+        for (const [key, prev] of prevById) {
+          if (prev.id === "none") continue;
+          if (!nextIds.has(key) && prev.cloudId) {
+            await supabase
+              .from("video_style_presets")
+              .update({ is_archived: true })
+              .eq("id", prev.cloudId);
+          }
+        }
+      } catch (e) {
+        console.warn("video styles cloud sync failed:", e);
+      }
+    })();
+  }, [styles, userId]);
+
   useEffect(() => {
     try { localStorage.setItem(SELECTED_KEY, selectedId); } catch {}
   }, [selectedId]);
@@ -131,7 +367,42 @@ export function useVideoStyles() {
     [styles, selectedId],
   );
 
-  return { styles, setStyles, selectedId, setSelectedId, selected };
+  // ---- Training helpers (call edge functions, then refresh cloud copy) ----
+  const transcribeReference = useCallback(
+    async (style: VideoStyle, referenceIndex: number) => {
+      if (!style.cloudId) {
+        toast.error("Sign in to train styles in the cloud.");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("style-transcribe-reference", {
+        body: { style_id: style.cloudId, reference_index: referenceIndex },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      await refresh();
+      return data as { ok: true; reference: StyleReference };
+    },
+    [refresh],
+  );
+
+  const trainStyle = useCallback(
+    async (style: VideoStyle) => {
+      if (!style.cloudId) {
+        toast.error("Sign in to train styles in the cloud.");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("style-train-from-references", {
+        body: { style_id: style.cloudId },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      await refresh();
+      return data as { ok: true; prompt: string; references_used: number };
+    },
+    [refresh],
+  );
+
+  return { styles, setStyles, selectedId, setSelectedId, selected, refresh, loading, transcribeReference, trainStyle };
 }
 
 /** Build the prompt block that gets prepended to the user's message when a style is active. */
@@ -229,7 +500,7 @@ export function VideoStylesBar({ styles, setStyles, selectedId, setSelectedId }:
               Name your style and write the prompt instructions the AI should follow when generating videos in this style.
             </DialogDescription>
           </DialogHeader>
-          <StyleEditor
+          <VideoStyleEditor
             style={editing && !styles.find((x) => x.id === editing.id) ? editing : { id: `style-${Date.now()}`, name: "", prompt: "" }}
             onChange={(s) => setEditing(s)}
           />
@@ -252,7 +523,7 @@ export function VideoStylesBar({ styles, setStyles, selectedId, setSelectedId }:
             </DialogDescription>
           </DialogHeader>
           {editing && (
-            <StyleEditor
+            <VideoStyleEditor
               style={editing}
               onChange={(s) => setEditing(s)}
             />
@@ -278,7 +549,21 @@ export function VideoStylesBar({ styles, setStyles, selectedId, setSelectedId }:
   );
 }
 
-function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: VideoStyle) => void }) {
+export function VideoStyleEditor({
+  style,
+  onChange,
+  onTranscribeReference,
+  onTrain,
+}: {
+  style: VideoStyle;
+  onChange: (s: VideoStyle) => void;
+  onTranscribeReference?: (index: number) => Promise<void> | void;
+  onTrain?: () => Promise<void> | void;
+}) {
+  const [busyIdx, setBusyIdx] = useState<number | null>(null);
+  const [training, setTraining] = useState(false);
+  const refs = style.references || [];
+  const transcribedCount = refs.filter((r) => r.transcript && r.transcript.trim()).length;
   return (
     <div className="space-y-3">
       <div className="space-y-1">
@@ -293,6 +578,9 @@ function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: Vid
         <label className="text-xs text-muted-foreground flex items-center gap-2">
           Prompt instructions
           {style.builtIn && <Badge variant="secondary" className="text-[9px]">built-in</Badge>}
+          {style.aiTrainedPrompt && (
+            <Badge variant="outline" className="text-[9px]"><Sparkles className="h-2.5 w-2.5 mr-0.5" />AI-trained</Badge>
+          )}
         </label>
         <Textarea
           value={style.prompt}
@@ -307,6 +595,75 @@ function StyleEditor({ style, onChange }: { style: VideoStyle; onChange: (s: Vid
         value={style.references || []}
         onChange={(refs) => onChange({ ...style, references: refs })}
       />
+      {(onTranscribeReference || onTrain) && refs.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-2">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1">
+              <Sparkles className="h-3 w-3" /> Training data
+              <span className="ml-1 normal-case tracking-normal text-muted-foreground/70">
+                {transcribedCount}/{refs.length} transcribed
+              </span>
+            </div>
+            {onTrain && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2 text-[10px]"
+                disabled={training || transcribedCount === 0}
+                onClick={async () => {
+                  setTraining(true);
+                  try { await onTrain(); toast.success("Style retrained from references"); }
+                  catch (e) { toast.error(e instanceof Error ? e.message : "Training failed"); }
+                  finally { setTraining(false); }
+                }}
+                title={transcribedCount === 0 ? "Auto-transcribe at least one reference first" : "Have the AI rewrite this style's prompt from the transcribed references"}
+              >
+                {training ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                Train from references
+              </Button>
+            )}
+          </div>
+          <div className="grid gap-1.5 max-h-44 overflow-y-auto">
+            {refs.map((r, i) => (
+              <div key={`${r.url}-${i}`} className="flex items-start gap-2 text-[10px] rounded border border-border/40 bg-background/60 p-1.5">
+                <video src={r.url} className="w-14 h-14 object-cover rounded shrink-0 bg-muted" muted />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="truncate font-medium">{r.name || `Reference ${i + 1}`}</span>
+                    {r.transcript ? (
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" aria-label="Transcribed" />
+                    ) : null}
+                  </div>
+                  <div className="text-muted-foreground line-clamp-2">
+                    {r.transcript ? r.transcript : <span className="italic">No transcript yet.</span>}
+                  </div>
+                </div>
+                {onTranscribeReference && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-1.5 text-[9px] shrink-0"
+                    disabled={busyIdx === i}
+                    onClick={async () => {
+                      setBusyIdx(i);
+                      try { await onTranscribeReference(i); toast.success("Transcribed"); }
+                      catch (e) { toast.error(e instanceof Error ? e.message : "Transcription failed"); }
+                      finally { setBusyIdx(null); }
+                    }}
+                  >
+                    {busyIdx === i ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileAudio className="h-3 w-3" />}
+                    <span className="ml-1">{r.transcript ? "Re-transcribe" : "Transcribe"}</span>
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] text-muted-foreground/80">
+            Upload example clips above, transcribe each, then click <span className="font-medium">Train from references</span> to have the AI rewrite this style's prompt to match the examples.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -386,7 +743,7 @@ export function VideoStylesPopover({ styles, setStyles, selectedId, setSelectedI
               );
             })}
           </div>
-          <div className="pt-2 border-t border-border/60 mt-2">
+          <div className="pt-2 border-t border-border/60 mt-2 space-y-1">
             <Button
               type="button"
               variant="outline"
@@ -396,6 +753,13 @@ export function VideoStylesPopover({ styles, setStyles, selectedId, setSelectedI
             >
               <Plus className="h-3 w-3 mr-1" /> New Style
             </Button>
+            <Link
+              to="/ai-studio/styles"
+              onClick={() => setOpen(false)}
+              className="h-7 px-2 text-[10px] w-full inline-flex items-center justify-center rounded-md border border-border/60 hover:bg-muted transition"
+            >
+              <Settings2 className="h-3 w-3 mr-1" /> Open full style manager
+            </Link>
           </div>
         </PopoverContent>
       </Popover>
@@ -409,7 +773,7 @@ export function VideoStylesPopover({ styles, setStyles, selectedId, setSelectedI
             </DialogDescription>
           </DialogHeader>
           {editing && (
-            <StyleEditor style={editing} onChange={(s) => setEditing(s)} />
+            <VideoStyleEditor style={editing} onChange={(s) => setEditing(s)} />
           )}
           <DialogFooter className="flex items-center justify-between sm:justify-between">
             <div>

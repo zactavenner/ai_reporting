@@ -12141,6 +12141,48 @@ export type Database = {
           },
         ]
       }
+      video_style_presets: {
+        Row: {
+          ai_trained_prompt: string | null
+          builtin_key: string | null
+          created_at: string
+          id: string
+          is_archived: boolean
+          name: string
+          prompt: string
+          references: Json
+          slug: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_trained_prompt?: string | null
+          builtin_key?: string | null
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          name: string
+          prompt?: string
+          references?: Json
+          slug?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_trained_prompt?: string | null
+          builtin_key?: string | null
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          name?: string
+          prompt?: string
+          references?: Json
+          slug?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       viral_tracking_targets: {
         Row: {
           client_id: string | null

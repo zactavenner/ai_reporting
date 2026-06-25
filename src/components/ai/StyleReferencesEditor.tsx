@@ -9,6 +9,12 @@ export type StyleReference = {
   url: string;
   name?: string;
   kind: "image" | "video";
+  /** Auto-transcribed spoken text, when this is a reference video used for style training. */
+  transcript?: string;
+  /** AI-generated style analysis (camera, pacing, audio, etc). */
+  analysis?: Record<string, unknown>;
+  /** ISO timestamp when transcript+analysis were last refreshed. */
+  transcribed_at?: string;
 };
 
 type Props = {
