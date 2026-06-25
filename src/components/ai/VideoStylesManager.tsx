@@ -43,11 +43,13 @@ export const DEFAULT_VIDEO_STYLES: VideoStyle[] = [
     name: "No Style",
     prompt: "",
     builtIn: true,
+    builtinKey: "none",
   },
   {
     id: "ugc",
     name: "UGC",
     builtIn: true,
+    builtinKey: "ugc",
     prompt: `STYLE: Authentic amateur-style UGC. Handheld phone feel with subtle micro-shake, natural smartphone-lens look, no cinematic grading. Soft natural daylight, clean realistic background relevant to the offer.
 
 RULES:
@@ -61,6 +63,7 @@ RULES:
     id: "podcast",
     name: "Podcast",
     builtIn: true,
+    builtinKey: "podcast",
     prompt: `STYLE: High-energy podcast clip with quick cuts between two hosts in a professional studio. Both wearing headsets and speaking into high-end podcast microphones. Cinematic lighting, 4k, photo-realistic. Shallow depth of field, warm color grade, subtle studio bokeh (acoustic panels, plants, neon accents allowed).
 
 RULES:
@@ -78,6 +81,7 @@ REFERENCE EXAMPLE (style + pacing to emulate, not script to copy verbatim):
     id: "broll-vo",
     name: "B-roll Voiceover",
     builtIn: true,
+    builtinKey: "broll-vo",
     prompt: `STYLE: Cinematic b-roll montage with voiceover. NO on-camera talent speaking — voice is off-screen narration.
 
 RULES:
@@ -87,9 +91,10 @@ RULES:
 - If a PDF/overview is attached, include one shot of the document/page being flipped through or laid on a desk with key phrases legible.`,
   },
   {
-    id: "animated-cartoon",
-    name: "Animated Cartoon",
+    id: "cartoon",
+    name: "Cartoon",
     builtIn: true,
+    builtinKey: "cartoon",
     prompt: `STYLE: 2D animated cartoon explainer, flat vector look with bold outlines, limited palette, smooth tween animation. Pixar-lite character design, expressive faces, clean motion-design typography for key stats.
 
 RULES:
@@ -97,6 +102,67 @@ RULES:
 - Animate key numbers / stats popping onto screen as kinetic typography.
 - Light, friendly score is OK; voice remains the lead.
 - If an avatar reference is attached, stylize the character to resemble them (hair color, outfit color, vibe) but keep it clearly illustrated.`,
+  },
+  {
+    id: "street-interview",
+    name: "Street Interview",
+    builtIn: true,
+    builtinKey: "street-interview",
+    prompt: `STYLE: Candid man-on-the-street interview. Handheld camera, urban daylight, real passers-by energy. Visible handheld microphone with branded foam windscreen in frame. Slight zoom-in on punchlines.
+
+RULES:
+- One off-camera interviewer holding a mic, one on-camera respondent reacting genuinely (surprise, laughter, "wait what?").
+- Background: real sidewalk / city block with foot traffic, traffic noise bleeding in.
+- Quick jump cuts on every beat. Punch-in zoom on the strongest 1–2 second reaction.
+- No music. Diegetic city ambience only. Voice peaks naturally, not studio-clean.
+- 12–15s. (0–2s) interviewer hook question off-camera. (2–8s) respondent reacts and answers with a memorable line. (8–12s) follow-up + bigger reaction. (12–15s) CTA pointing below the video.
+- If an avatar is attached, cast that person as the respondent.`,
+  },
+  {
+    id: "mini-vsl",
+    name: "Mini VSL",
+    builtIn: true,
+    builtinKey: "mini-vsl",
+    prompt: `STYLE: 30–60 second mini Video Sales Letter. Cinematic b-roll montage under a confident voiceover. Subtle motion graphics for key stats. No on-camera talking head.
+
+RULES:
+- Structure (Problem → Agitate → Solve → Proof → CTA): (0–4s) pattern-interrupt hook + the problem in one line. (4–12s) agitate the cost of not solving it. (12–25s) introduce the solution with 2–3 evocative b-roll shots. (25–45s) proof — number, screenshot, testimonial b-roll. (45–60s) CTA to the form / link below.
+- Warm authoritative narrator VO. No music until the proof beat, then subtle cinematic underscore.
+- Animate one or two key numbers as kinetic typography. Keep on-screen text minimal and high-contrast.
+- If a PDF/overview is attached, show one shot of it laid open with key phrases legible.`,
+  },
+  {
+    id: "capital-raising",
+    name: "Capital Raising",
+    builtIn: true,
+    builtinKey: "capital-raising",
+    prompt: `STYLE: Investor-grade short ad for accredited-investor capital raises. Cinematic, sober, premium. Muted color grade, slow camera moves, clean typography.
+
+RULES (COMPLIANCE — non-negotiable):
+- Use "targeted returns" or "projected returns", NEVER "guaranteed" / "guarantee" / "risk-free".
+- Include a brief on-screen risk disclaimer line in the final 2 seconds: "For accredited investors only. Past performance does not guarantee future results."
+- No specific yield/percentage claims unless they appear verbatim in the attached offer PDF.
+
+CREATIVE:
+- Professional setting: glass-walled office, downtown skyline, blueprints, asset b-roll relevant to the asset class.
+- Calm, credible voiceover (deep, measured pace). Subtle cinematic underscore at low level.
+- Optional: an older male or female principal on-camera in business attire delivering one trust-building line.
+- 15s. (0–3s) macro hook ("Most investors miss this asset class…"). (3–10s) the opportunity + one credibility proof point. (10–13s) CTA to qualify below. (13–15s) compliance disclaimer text overlay.
+- If an avatar is attached, cast as the principal. If a PDF is attached, ground claims in its language.`,
+  },
+  {
+    id: "low-ticket",
+    name: "Low Ticket Offer",
+    builtIn: true,
+    builtinKey: "low-ticket",
+    prompt: `STYLE: Direct-response punchy ad for low-ticket offers ($7–$97). High-energy UGC look, fast cuts, bold on-screen captions, urgency-driven CTA.
+
+RULES:
+- Open with a 1-second pattern interrupt (visual or stat) before the talent speaks.
+- Aggressive caption styling: white text, black stroke, key word colored, words pop one at a time.
+- Talent speaks fast and confident, real-person energy, never corporate. Music: punchy pop/lofi beat at moderate level.
+- Always name the price and the urgency lever (limited, today only, bonus expiring) at least once.
+- 12–15s. (0–1s) pattern interrupt. (1–4s) problem in one line + hook. (4–9s) the offer + price + what's inside. (9–13s) urgency + bonus. (13–15s) "Tap below to grab it" CTA pointing under the video.`,
   },
 ];
 
