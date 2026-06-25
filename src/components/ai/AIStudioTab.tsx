@@ -904,7 +904,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [videoResolution, setVideoResolution] = useState<"720p" | "1080p" | "4k">(() => {
     try {
       const v = localStorage.getItem("ai-studio:video-resolution");
-      if (v === "720p" || v === "1080p" || v === "4k") return v;
+      if (v === "720p" || v === "1080p") return v;
     } catch {}
     return "1080p";
   });
