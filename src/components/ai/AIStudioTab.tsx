@@ -79,6 +79,7 @@ const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: nu
   { value: "bytedance/seedance-2.0",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, up to 4K)", maxSeconds: 15, pricePerSecond: 0.15 },
   { value: "kwaivgi/kling-v3.0-std",      label: "Kling 3.0",      hint: "Newest fast Kling — realistic motion (≤10s)", maxSeconds: 10, pricePerSecond: 0.126 },
   { value: "google/veo-3.1-fast",         label: "Veo 3.1 Fast",   hint: "Google Veo via OpenRouter — fast (8s)",  maxSeconds: 8,  pricePerSecond: 0.10 },
+  { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 1080p, image+reference (≤15s)", maxSeconds: 15, pricePerSecond: 0.1278 },
 ];
 // Resolution caps per model. 4K is currently Seedance Pro only.
 const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
@@ -86,6 +87,7 @@ const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
   "bytedance/seedance-2.0":      ["720p", "1080p", "4k"],
   "kwaivgi/kling-v3.0-std":      ["1080p"],
   "google/veo-3.1-fast":         ["1080p"],
+  "alibaba/happyhorse-1.1":      ["720p", "1080p"],
 };
 // 4K is ~2.5× the rendering cost on Seedance Pro; surface that in the UI.
 function resolutionMultiplier(res: "720p" | "1080p" | "4k"): number {
