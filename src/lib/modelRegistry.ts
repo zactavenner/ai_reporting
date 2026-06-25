@@ -84,6 +84,17 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     estCostPerSecondUsd: 0.40,
     supportsRealisticAvatars: true,
   },
+  {
+    id: "alibaba/happyhorse-1.1",
+    label: "HappyHorse 1.1",
+    provider: "openrouter",
+    durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    defaultDuration: 15,
+    maxRes: "1080p",
+    aspectRatios: ["9:16", "1:1", "16:9"],
+    estCostPerSecondUsd: 0.128,
+    supportsRealisticAvatars: true,
+  },
 ];
 
 export const TEXT_MODELS: TextModelSpec[] = [

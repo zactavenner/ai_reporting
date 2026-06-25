@@ -945,6 +945,7 @@ async function generateSeedanceVideo(opts: {
     "kwaivgi/kling-v3.0-std",
     "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
+    "alibaba/happyhorse-1.1",
   ];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
@@ -963,6 +964,7 @@ async function generateSeedanceVideo(opts: {
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
   const isSeedance = model.startsWith("bytedance/seedance");
   const isKling = model.startsWith("kwaivgi/kling");
+  const isHappyHorse = model.startsWith("alibaba/happyhorse");
   // Clamp to the model's max resolution. Only Seedance Pro supports 4K; Fast caps at 720p.
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
@@ -973,7 +975,7 @@ async function generateSeedanceVideo(opts: {
   const veoMax = 8;
   const effectiveDuration = isVeo
     ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
-    : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
+    : Math.max(isHappyHorse ? 3 : 4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
   // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
   if (isVeo) {
@@ -1081,6 +1083,16 @@ async function generateSeedanceVideo(opts: {
     const frames: any[] = [];
     if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
     if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
+    if (frames.length) body.frame_images = frames;
+    if (opts.ingredientUrl) {
+      body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+    }
+  } else if (isHappyHorse) {
+    // HappyHorse 1.1 on OpenRouter: lowercase resolution ("720p"/"1080p"),
+    // supports first_frame keyframes and reference_images (per model spec).
+    body.resolution = effectiveResolution;
+    const frames: any[] = [];
+    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
     if (frames.length) body.frame_images = frames;
     if (opts.ingredientUrl) {
       body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
@@ -1452,7 +1464,7 @@ const tools = [
           resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' is supported only by bytedance/seedance-2.0 (Seedance Pro). Seedance Fast caps at 720p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Explicit video model id. Seedance/Kling route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast", "alibaba/happyhorse-1.1"], description: "Explicit video model id. Seedance/Kling/HappyHorse route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
           force_model: { type: "boolean", description: "If true, do NOT auto-route Seedance → Veo when an avatar is selected. Only set when the user explicitly says 'use Seedance anyway' or 'force Seedance with my avatar'. Default false (avatar clips auto-route to Veo)." },
         },
         required: ["prompt"],
@@ -1544,7 +1556,7 @@ const tools = [
               required: ["voiceover"],
             },
           },
-          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast"], description: "Model to use for non-avatar scripts. Avatar scripts auto-route to Veo." },
+          model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast", "alibaba/happyhorse-1.1"], description: "Model to use for non-avatar scripts. Avatar scripts auto-route to Veo." },
           aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
           resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. 4K only on Seedance Pro." },
         },
@@ -1623,6 +1635,7 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "kwaivgi/kling-v3.0-std":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
+  "alibaba/happyhorse-1.1":      { maxDuration: 15, label: "HappyHorse 1.1 (≤15s per clip, 1080p)" },
 };
 
 // Models known to RELIABLY render synthetic / AI-generated human avatars.
@@ -1633,6 +1646,7 @@ const AVATAR_SAFE_MODELS = new Set<string>([
   "google/veo-3.1-fast",
   "kwaivgi/kling-v3.0-std",
   "kwaivgi/kling-v2.1-master",
+  "alibaba/happyhorse-1.1",
 ]);
 const AVATAR_FALLBACK_MODEL = "google/veo-3.1-fast";
 
@@ -1955,6 +1969,7 @@ Deno.serve(async (req) => {
     "kwaivgi/kling-v3.0-std",
     "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
+    "alibaba/happyhorse-1.1",
   ];
   const selectedVideoModels: string[] = Array.isArray(videoModels)
     ? videoModels.filter((m) => typeof m === "string" && ALLOWED_VIDEO_MODELS.includes(m))
@@ -1970,6 +1985,7 @@ Deno.serve(async (req) => {
     "kwaivgi/kling-v3.0-std":      "1080p",
     "kwaivgi/kling-v2.1-master":   "1080p",
     "google/veo-3.1-fast":         "1080p",
+    "alibaba/happyhorse-1.1":      "1080p",
   };
   const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "4k": 3 };
   const requestedRes: "720p" | "1080p" | "4k" =
