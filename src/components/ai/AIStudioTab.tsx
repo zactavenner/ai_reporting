@@ -867,8 +867,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [imageModels]);
   const [videoModels, setVideoModels] = useState<string[]>(() => {
     const known = new Set(VIDEO_MODELS.map((m) => m.value));
-    const sanitize = (arr: any[]) =>
-      Array.from(new Set(arr.filter((v) => typeof v === "string" && known.has(v))));
+    // Single-model only (video compare was removed). Keep at most the first valid pick.
+    const sanitize = (arr: any[]) => {
+      const cleaned = Array.from(new Set(arr.filter((v) => typeof v === "string" && known.has(v))));
+      return cleaned.slice(0, 1);
+    };
     try {
       const raw = localStorage.getItem("ai-studio:video-models");
       if (raw) {
