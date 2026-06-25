@@ -1198,6 +1198,31 @@ async function generateSeedanceVideo(opts: {
       ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
       : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
+  let providerImageUrl = opts.imageUrl || null;
+  let providerLastFrameUrl = opts.lastFrameUrl || null;
+  let providerIngredientUrl = opts.ingredientUrl || null;
+  const frameRehostEvents: Record<string, unknown>[] = [];
+  const prepareFrame = async (url: string | null, purpose: "first-frame" | "last-frame" | "ingredient") => {
+    if (!url) return null;
+    try {
+      const prepared = await ensureProviderAccessibleImageUrl({ url, supa, clientId: opts.clientId, purpose });
+      if (prepared !== url) frameRehostEvents.push({ purpose, from: url, to: prepared });
+      return prepared;
+    } catch (e: any) {
+      frameRehostEvents.push({ purpose, from: url, error: e?.message || String(e) });
+      // HappyHorse should never hard-fail just because a UI frame URL is not
+      // provider-fetchable; omit the bad frame and run the selected model as
+      // text-to-video instead of leaking a Seedance-looking provider error.
+      if (isHappyHorse) return null;
+      return url;
+    }
+  };
+  if (!isVeo) {
+    providerImageUrl = await prepareFrame(providerImageUrl, "first-frame");
+    providerLastFrameUrl = await prepareFrame(providerLastFrameUrl, "last-frame");
+    providerIngredientUrl = await prepareFrame(providerIngredientUrl, "ingredient");
+  }
+
   await recordVideoModelDecision(supa, "generateSeedanceVideo.resolved", {
     conversation_id: opts.conversationId,
     client_id: opts.clientId,
@@ -1213,9 +1238,11 @@ async function generateSeedanceVideo(opts: {
     effective_resolution: effectiveResolution,
     wire_resolution: wireResolution,
     aspect_ratio: opts.aspectRatio,
-    has_image_url: !!opts.imageUrl,
-    has_last_frame_url: !!opts.lastFrameUrl,
-    has_ingredient_url: !!opts.ingredientUrl,
+    has_image_url: !!providerImageUrl,
+    has_last_frame_url: !!providerLastFrameUrl,
+    has_ingredient_url: !!providerIngredientUrl,
+    original_has_image_url: !!opts.imageUrl,
+    frame_rehost_events: frameRehostEvents,
     happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: "1080p" } : null,
     fallback_attempt: opts._avatarFallbackAttempt || 0,
   });
