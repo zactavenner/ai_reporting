@@ -3725,7 +3725,14 @@ Deno.serve(async (req) => {
             }
             if (name === "generate_seedance_video") {
               canvasPlaceholderId = crypto.randomUUID();
-              const placeholderModels = (uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [normalizeVideoModel(args.model) || selectedVideoModel]).filter(Boolean);
+              // MODEL SELECTION GUARANTEE (placeholder): mirror the dispatch logic in
+              // generate_seedance_video. The user's UI selection wins over whatever
+              // model the LLM tries to pass (the tool name biases it toward Seedance
+              // even when the user explicitly picked HappyHorse).
+              const placeholderModels = (uniqueSelectedVideoModels.length
+                ? uniqueSelectedVideoModels
+                : (selectedVideoModel ? [selectedVideoModel] : [normalizeVideoModel(args.model)])
+              ).filter((m): m is string => typeof m === "string" && !!m);
               const placeholderLabel = placeholderModels.length > 1
                 ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
                 : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
@@ -4065,7 +4072,7 @@ Deno.serve(async (req) => {
                 const forceModel = !!args.force_model;
                 const rawFanModels = (uniqueSelectedVideoModels.length > 0
                   ? uniqueSelectedVideoModels.slice()
-                  : [explicitModel || selectedVideoModel])
+                  : [selectedVideoModel || explicitModel])
                   .filter((m): m is string => typeof m === "string" && !!m);
                 await recordVideoModelDecision(supa, "tool_video.model_source", {
                   conversation_id: conversationId,
@@ -4456,7 +4463,8 @@ Deno.serve(async (req) => {
                 } else {
                   const aspect = (args.aspect_ratio === "16:9" || args.aspect_ratio === "1:1") ? args.aspect_ratio : "9:16";
                   const requestedRes = (args.resolution === "720p" || args.resolution === "4k") ? args.resolution : "1080p";
-                  const requestedModel = normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : selectedVideoModel);
+                  // UI selection wins over the LLM's args.model — the tool name biases the LLM toward Seedance.
+                  const requestedModel = selectedVideoModel || normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : null);
                   const groupId = crypto.randomUUID();
                   const scriptResults: any[] = [];
 
