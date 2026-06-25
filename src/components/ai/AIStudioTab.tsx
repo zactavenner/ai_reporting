@@ -482,11 +482,16 @@ function buildRecreatePrompt(asset: { prompt?: string; toolName?: string; args?:
   if (asset.prompt) lines.push(`prompt: ${asset.prompt}`);
   lines.push(`type: ${kind}`);
   if (a.model) lines.push(`model: ${a.model}`);
-  if (asset.toolName === "generate_seedance_video") lines.push(`model: seedance-2.0-fast`);
   if (a.aspect_ratio) lines.push(`aspect_ratio: ${a.aspect_ratio}`);
   if (a.duration) lines.push(`duration: ${a.duration}s`);
   if (a.resolution) lines.push(`resolution: ${a.resolution}`);
   return lines.join("\n");
+}
+
+function toolDisplayName(t: any): string {
+  if (t?.name !== "generate_seedance_video") return t?.name || "tool";
+  const model = t?.result?.effective_model || t?.result?.model || t?.args?.model || "";
+  return `generate_video${model ? ` · ${modelLabel(model)}` : ""}`;
 }
 
 function PreviewActionBar({
