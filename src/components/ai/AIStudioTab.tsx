@@ -45,7 +45,28 @@ interface Props {
 type CompareResult = { model: string; label: string; output?: string; error?: string; ms?: number; usage?: any };
 type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean; streaming?: boolean };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
-type ChatVideo = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string; duration?: number; resolution?: string; actual_resolution?: string | null; actual_width?: number | null; actual_height?: number | null; resolution_match?: boolean | null };
+type ChatVideo = {
+  url: string;
+  aspect_ratio?: string;
+  prompt?: string;
+  toolName?: string;
+  args?: any;
+  model?: string;
+  duration?: number;
+  resolution?: string;
+  requested_model?: string | null;
+  requested_duration?: number | null;
+  requested_resolution?: string | null;
+  effective_model?: string | null;
+  effective_duration?: number | null;
+  effective_resolution?: string | null;
+  wire_resolution?: string | null;
+  wire_size?: string | null;
+  actual_resolution?: string | null;
+  actual_width?: number | null;
+  actual_height?: number | null;
+  resolution_match?: boolean | null;
+};
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
 
 const CHAT_MODELS = [
@@ -230,8 +251,16 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
       toolName: t.name,
       args: t.args,
       model: t.result.model,
-      duration: t.args?.duration || t.result.duration,
-      resolution: t.args?.resolution || t.result.resolution,
+      duration: t.result.effective_duration || t.result.duration || t.args?.duration,
+      resolution: t.result.effective_resolution || t.result.resolution || t.args?.resolution,
+      requested_model: t.result.requested_model ?? t.args?.model ?? null,
+      requested_duration: t.result.requested_duration ?? t.args?.duration ?? null,
+      requested_resolution: t.result.requested_resolution ?? t.args?.resolution ?? null,
+      effective_model: t.result.effective_model ?? t.result.model ?? null,
+      effective_duration: t.result.effective_duration ?? t.result.duration ?? null,
+      effective_resolution: t.result.effective_resolution ?? t.result.resolution ?? null,
+      wire_resolution: t.result.wire_resolution ?? null,
+      wire_size: t.result.wire_size ?? null,
       actual_resolution: t.result.actual_resolution ?? null,
       actual_width: t.result.actual_width ?? null,
       actual_height: t.result.actual_height ?? null,
@@ -628,6 +657,11 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
   const filename = `aistudio-${Date.now()}.mp4`;
   const aspect = video.aspect_ratio === "16:9" ? "16/9" : video.aspect_ratio === "1:1" ? "1/1" : "9/16";
   const hasUrl = !!video.url;
+  const effectiveModel = video.effective_model || video.model || "";
+  const effectiveDuration = video.effective_duration || video.duration || null;
+  const effectiveResolution = video.effective_resolution || video.resolution || null;
+  const isHappyHorse = effectiveModel.toLowerCase().includes("happyhorse");
+  const happyHorseLocked = isHappyHorse && Number(effectiveDuration) === 15 && String(effectiveResolution || "").toLowerCase() === "1080p";
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const saveAsTraining = async () => {
@@ -696,6 +730,25 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
           }));
         } : undefined}
       />
+      {isHappyHorse && (
+        <div className="mx-2 mt-2 rounded-lg border border-primary/25 bg-primary/5 p-2 text-[9px]">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="font-semibold text-foreground">HappyHorse render debug</span>
+            <Badge variant={happyHorseLocked ? "secondary" : "destructive"} className="h-4 px-1 text-[9px]">
+              {happyHorseLocked ? "Locked 15s/1080p" : "Check"}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
+            <span>Exact model</span><span className="font-mono text-foreground truncate" title={effectiveModel}>{effectiveModel}</span>
+            <span>Duration used</span><span className="font-mono text-foreground">{effectiveDuration ?? "—"}s</span>
+            <span>Resolution used</span><span className="font-mono text-foreground">{effectiveResolution || "—"}</span>
+            <span>OpenRouter sent</span><span className="font-mono text-foreground">{video.wire_resolution || effectiveResolution || "—"}</span>
+            {video.wire_size && <><span>Exact size sent</span><span className="font-mono text-foreground">{video.wire_size}</span></>}
+            <span>Requested</span><span className="font-mono text-foreground truncate">{video.requested_duration ?? video.duration ?? "—"}s / {video.requested_resolution ?? video.resolution ?? "—"}</span>
+            <span>Actual file</span><span className="font-mono text-foreground">{video.actual_width && video.actual_height ? `${video.actual_width}×${video.actual_height}` : video.actual_resolution || "pending"}</span>
+          </div>
+        </div>
+      )}
       <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40">
         <PreviewActionBar
           url={video.url}
@@ -708,6 +761,18 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
             duration: video.duration || 15,
             resolution: video.resolution || "1080p",
             model: video.model || "seedance-2.0-fast",
+            requested_model: video.requested_model,
+            requested_duration: video.requested_duration,
+            requested_resolution: video.requested_resolution,
+            effective_model: video.effective_model,
+            effective_duration: video.effective_duration,
+            effective_resolution: video.effective_resolution,
+            wire_resolution: video.wire_resolution,
+            wire_size: video.wire_size,
+            actual_resolution: video.actual_resolution,
+            actual_width: video.actual_width,
+            actual_height: video.actual_height,
+            resolution_match: video.resolution_match,
             video_prompt: video.prompt,
             mode: video.args?.image_url ? "image_to_video" : "text_to_video",
             source: "chat_pin",

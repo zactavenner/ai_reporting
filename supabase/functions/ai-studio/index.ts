@@ -945,6 +945,21 @@ function classifyResolution(width: number, height: number): "720p" | "1080p" | "
   if (longSide >= 1500) return "1080p";
   return "720p";
 }
+function exactVideoSize(aspectRatio: string, resolution: string): string | null {
+  const ar = aspectRatio || "9:16";
+  const res = String(resolution || "").toLowerCase();
+  if (res === "1080p") {
+    if (ar === "16:9") return "1920x1080";
+    if (ar === "1:1") return "1080x1080";
+    return "1080x1920";
+  }
+  if (res === "720p") {
+    if (ar === "16:9") return "1280x720";
+    if (ar === "1:1") return "720x720";
+    return "720x1280";
+  }
+  return null;
+}
 async function generateSeedanceVideo(opts: {
   prompt: string;
   aspectRatio: string;         // "16:9" | "9:16" | "1:1"
@@ -1015,16 +1030,23 @@ async function generateSeedanceVideo(opts: {
         ? "Kling"
         : model;
   // Clamp to the model's max resolution. Only Seedance Pro supports 4K; Fast caps at 720p.
+  // HappyHorse is intentionally hard-locked to the known-good OpenRouter shape:
+  // 15 seconds + lowercase "1080p". This prevents UI/LLM selections (720p/4k/shorter
+  // durations) from accidentally making a HappyHorse render look like Seedance Fast
+  // or return a lower-res output when the user expects the 15s/1080p profile.
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
-  if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
+  if (isHappyHorse) effectiveResolution = "1080p";
+  else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
   const wireResolution = effectiveResolution === "4k" ? "4K" : effectiveResolution;
   const veoMax = 8;
-  const effectiveDuration = isVeo
-    ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
-    : Math.max(isHappyHorse ? 3 : 4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
+  const effectiveDuration = isHappyHorse
+    ? 15
+    : isVeo
+      ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
+      : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
   // Veo 3.1 Fast: route through Google Gemini predictLongRunning (OpenRouter /videos doesn't host Veo).
   if (isVeo) {
@@ -1095,8 +1117,16 @@ async function generateSeedanceVideo(opts: {
       payload: {
         video_url: storedUrlV, storage_path: path, keyframe_url: opts.imageUrl || null,
         aspect_ratio: opts.aspectRatio, video_prompt: opts.prompt, model, provider: "google",
-        duration: effectiveDuration, resolution: opts.resolution, scene_order: 1,
+        duration: effectiveDuration, resolution: effectiveResolution, scene_order: 1,
         mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+        requested_model: opts.model || null,
+        requested_duration: opts.duration,
+        requested_resolution: opts.resolution,
+        effective_model: model,
+        effective_duration: effectiveDuration,
+        effective_resolution: effectiveResolution,
+        wire_resolution: effectiveResolution,
+        wire_size: null,
       },
     }).select("id, kind, payload, created_at").single();
     if (opts.clientId) {
@@ -1111,13 +1141,37 @@ async function generateSeedanceVideo(opts: {
           conversation_id: opts.conversationId || null,
           canvas_item_id: ciV?.data?.id || null,
           model, aspect_ratio: opts.aspectRatio,
-          duration_seconds: effectiveDuration, resolution: opts.resolution,
+          duration_seconds: effectiveDuration, resolution: effectiveResolution,
           status: "completed", created_by: opts.userId || null,
+          metadata: {
+            requested_model: opts.model || null,
+            requested_duration: opts.duration,
+            requested_resolution: opts.resolution,
+            effective_model: model,
+            effective_duration: effectiveDuration,
+            effective_resolution: effectiveResolution,
+            wire_resolution: effectiveResolution,
+            wire_size: null,
+          },
         });
       } catch (e) { console.warn("client_videos insert (veo) failed", e); }
     }
     emitV({ stage: "completed", label: "Reel ready", model, percent: 100, elapsed_s: (Date.now() - t0v) / 1000 });
-    return { video_url: storedUrlV, model, resolution: opts.resolution, item: ciV?.data || null };
+    return {
+      video_url: storedUrlV,
+      model,
+      duration: effectiveDuration,
+      resolution: effectiveResolution,
+      requested_model: opts.model || null,
+      requested_duration: opts.duration,
+      requested_resolution: opts.resolution,
+      effective_model: model,
+      effective_duration: effectiveDuration,
+      effective_resolution: effectiveResolution,
+      wire_resolution: effectiveResolution,
+      wire_size: null,
+      item: ciV?.data || null,
+    };
   }
 
   const body: Record<string, unknown> = {
@@ -1137,10 +1191,14 @@ async function generateSeedanceVideo(opts: {
       body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
     }
   } else if (isHappyHorse) {
-    // HappyHorse 1.1 on OpenRouter: lowercase resolution ("720p"/"1080p"),
-    // and ONLY first_frame keyframes. Do not send `image_url` or `reference_images`:
-    // those are unsupported by HappyHorse and can cause the job to be rejected.
-    body.resolution = effectiveResolution;
+    // HappyHorse 1.1 on OpenRouter: hard-force lowercase "1080p",
+    // exact 1080p pixel size, and ONLY first_frame keyframes. Do not send
+    // `image_url` or `reference_images`: those are unsupported by HappyHorse
+    // and can cause the job to be rejected. `size` is interchangeable with
+    // resolution+aspect_ratio in OpenRouter's video API, but sending both makes
+    // the requested 1080p tier explicit for providers that otherwise downscale.
+    body.resolution = "1080p";
+    body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
     const frames: any[] = [];
     if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
     if (frames.length) body.frame_images = frames;
@@ -1175,8 +1233,8 @@ async function generateSeedanceVideo(opts: {
     if (!isSeedance) return null;    // only re-route away from Seedance
     const fallbackModel = "alibaba/happyhorse-1.1";
     // HappyHorse caps at 15s and 1080p — clamp accordingly.
-    const fallbackDuration = Math.max(3, Math.min(15, Math.round(opts.duration || 15)));
-    const fallbackResolution = effectiveResolution === "4k" ? "1080p" : effectiveResolution;
+    const fallbackDuration = 15;
+    const fallbackResolution = "1080p";
     emit({
       stage: "submitting",
       label: `Avatar rejected by Seedance — retrying on HappyHorse 1.1…`,
@@ -1344,6 +1402,14 @@ async function generateSeedanceVideo(opts: {
       provider: "openrouter",
       duration: body.duration,
       resolution: effectiveResolution,
+        requested_model: opts.model || null,
+        requested_duration: opts.duration,
+        requested_resolution: opts.resolution,
+        effective_model: model,
+        effective_duration: body.duration,
+        effective_resolution: effectiveResolution,
+        wire_resolution: body.resolution || null,
+        wire_size: body.size || null,
       scene_order: 1,
       mode: opts.imageUrl ? "image_to_video" : "text_to_video",
       job_id: jobId,
@@ -1364,6 +1430,14 @@ async function generateSeedanceVideo(opts: {
         video_url: storedUrl, storage_path: storagePath, keyframe_url: opts.imageUrl || null,
         aspect_ratio: opts.aspectRatio, prompt: opts.prompt, source: "ai_studio", model,
         duration: body.duration, resolution: effectiveResolution,
+        requested_model: opts.model || null,
+        requested_duration: opts.duration,
+        requested_resolution: opts.resolution,
+        effective_model: model,
+        effective_duration: body.duration,
+        effective_resolution: effectiveResolution,
+        wire_resolution: body.resolution || null,
+        wire_size: body.size || null,
         actual_width: actualWidth, actual_height: actualHeight,
         actual_resolution: actualResolution, resolution_match: resolutionMatch,
       },
@@ -1389,6 +1463,14 @@ async function generateSeedanceVideo(opts: {
         metadata: {
           job_id: jobId,
           mode: opts.imageUrl ? "image_to_video" : "text_to_video",
+          requested_model: opts.model || null,
+          requested_duration: opts.duration,
+          requested_resolution: opts.resolution,
+          effective_model: model,
+          effective_duration: body.duration,
+          effective_resolution: effectiveResolution,
+          wire_resolution: body.resolution || null,
+          wire_size: body.size || null,
           actual_width: actualWidth,
           actual_height: actualHeight,
           actual_resolution: actualResolution,
@@ -1443,7 +1525,16 @@ async function generateSeedanceVideo(opts: {
     item: ci.data,
     video_url: storedUrl,
     model,
+    duration: body.duration,
     resolution: effectiveResolution,
+    requested_model: opts.model || null,
+    requested_duration: opts.duration,
+    requested_resolution: opts.resolution,
+    effective_model: model,
+    effective_duration: body.duration,
+    effective_resolution: effectiveResolution,
+    wire_resolution: body.resolution || null,
+    wire_size: body.size || null,
     actual_resolution: actualResolution,
     actual_width: actualWidth,
     actual_height: actualHeight,
@@ -1600,7 +1691,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality short video clip (4–15s) using Seedance 2.0 (Fast/Pro), HappyHorse 1.1, Kling, or Veo. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url to animate a reference frame. HappyHorse 1.1 supports 3–15s at 720p/1080p and first-frame image-to-video via frame_images. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance Pro supports up to 4K and 15s; Seedance Fast supports up to 720p.",
+      description: "Generate a single high-quality short video clip (4–15s) using Seedance 2.0 (Fast/Pro), HappyHorse 1.1, Kling, or Veo. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url to animate a reference frame. HappyHorse 1.1 is hard-locked by the server to 15 seconds at lowercase 1080p; when model='alibaba/happyhorse-1.1', pass duration=15 and resolution='1080p'. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance Pro supports up to 4K and 15s; Seedance Fast supports up to 720p.",
       parameters: {
         type: "object",
         properties: {
@@ -2853,7 +2944,7 @@ Deno.serve(async (req) => {
             const args = {
               prompt: segment.prompt,
               aspect_ratio: aspect,
-              duration: segment.duration,
+              duration: model === "alibaba/happyhorse-1.1" ? 15 : segment.duration,
               resolution: segRes,
               image_url: imageUrl,
               last_frame_url: lastFrameUrl,
@@ -2891,8 +2982,16 @@ Deno.serve(async (req) => {
                 video_url: r.video_url,
                 model: r.model,
                 aspect_ratio: aspect,
-                duration: segment.duration,
+                duration: (r as any).duration || (r as any).effective_duration || segment.duration,
                 resolution: r.resolution,
+                requested_model: (r as any).requested_model || model,
+                requested_duration: (r as any).requested_duration ?? segment.duration,
+                requested_resolution: (r as any).requested_resolution ?? segRes,
+                effective_model: (r as any).effective_model || r.model,
+                effective_duration: (r as any).effective_duration || (r as any).duration || segment.duration,
+                effective_resolution: (r as any).effective_resolution || r.resolution,
+                wire_resolution: (r as any).wire_resolution || null,
+                wire_size: (r as any).wire_size || null,
                 actual_resolution: (r as any).actual_resolution || null,
                 actual_width: (r as any).actual_width || null,
                 actual_height: (r as any).actual_height || null,
@@ -3591,8 +3690,20 @@ Deno.serve(async (req) => {
                     video_url: firstOk?.video_url,
                     model: firstOk?.model || mdl,
                     aspect_ratio: baseAspect,
-                    duration: baseDuration,
-                    resolution: firstOk?.resolution,
+                    duration: firstOk?.effective_duration || firstOk?.duration || baseDuration,
+                    resolution: firstOk?.effective_resolution || firstOk?.resolution,
+                    requested_model: firstOk?.requested_model || mdl,
+                    requested_duration: firstOk?.requested_duration ?? baseDuration,
+                    requested_resolution: firstOk?.requested_resolution ?? argRes ?? requestedRes,
+                    effective_model: firstOk?.effective_model || firstOk?.model || mdl,
+                    effective_duration: firstOk?.effective_duration || firstOk?.duration || baseDuration,
+                    effective_resolution: firstOk?.effective_resolution || firstOk?.resolution,
+                    wire_resolution: firstOk?.wire_resolution || null,
+                    wire_size: firstOk?.wire_size || null,
+                    actual_resolution: firstOk?.actual_resolution || null,
+                    actual_width: firstOk?.actual_width || null,
+                    actual_height: firstOk?.actual_height || null,
+                    resolution_match: firstOk?.resolution_match ?? null,
                     clips: segs.length,
                     ok_clips: okCount,
                     mode: baseImageUrl ? "image_to_video" : "text_to_video",
@@ -3627,13 +3738,13 @@ Deno.serve(async (req) => {
                     if (s.status === "fulfilled") {
                       const r = s.value;
                       if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: pid });
-                      if (!firstOk) firstOk = { video_url: r.video_url, model: r.model, resolution: r.resolution };
+                      if (!firstOk) firstOk = r;
                     } else {
                       send({ type: "canvas_placeholder_failed", placeholder_id: pid, error: String((s as any).reason?.message || (s as any).reason || "failed") });
                     }
                   }
                   result = firstOk
-                    ? { ok: true, compared_models: fanModels, ...firstOk, aspect_ratio: baseAspect, duration: baseDuration, mode: baseImageUrl ? "image_to_video" : "text_to_video" }
+                    ? { ok: true, compared_models: fanModels, ...firstOk, aspect_ratio: baseAspect, duration: firstOk.effective_duration || firstOk.duration || baseDuration, mode: baseImageUrl ? "image_to_video" : "text_to_video" }
                     : { error: "All compared video models failed", compared_models: fanModels };
                 }
               } else if (name === "explode_ad_variants") {
