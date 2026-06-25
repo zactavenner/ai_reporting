@@ -1414,11 +1414,11 @@ async function generateSeedanceVideo(opts: {
     // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
     body.resolution = wireResolution;
     const frames: any[] = [];
-    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
-    if (opts.lastFrameUrl) frames.push({ type: "image_url", image_url: { url: opts.lastFrameUrl }, frame_type: "last_frame" });
+    if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
+    if (providerLastFrameUrl) frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
     if (frames.length) body.frame_images = frames;
-    if (opts.ingredientUrl) {
-      body.reference_images = [{ type: "image_url", image_url: { url: opts.ingredientUrl } }];
+    if (providerIngredientUrl) {
+      body.reference_images = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
   } else if (isHappyHorse) {
     // HappyHorse 1.1 on OpenRouter: hard-force lowercase "1080p",
@@ -1430,16 +1430,16 @@ async function generateSeedanceVideo(opts: {
     body.resolution = "1080p";
     body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
     const frames: any[] = [];
-    if (opts.imageUrl) frames.push({ type: "image_url", image_url: { url: opts.imageUrl }, frame_type: "first_frame" });
+    if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
     if (frames.length) body.frame_images = frames;
   } else if (isKling) {
     // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
     // start frame (image-to-video). It does NOT accept `resolution`, `frame_images`,
     // or `reference_images` — sending them returns a 400 and the run never starts.
     // For an "ingredient" with no first frame, fall back to using it as the start frame.
-    const startFrame = opts.imageUrl || opts.ingredientUrl;
+    const startFrame = providerImageUrl || providerIngredientUrl;
     if (startFrame) body.image_url = startFrame;
-    if (opts.lastFrameUrl) body.tail_image_url = opts.lastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
+    if (providerLastFrameUrl) body.tail_image_url = providerLastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
   }
 
   await recordVideoModelDecision(supa, "generateSeedanceVideo.submit", {
@@ -1466,6 +1466,7 @@ async function generateSeedanceVideo(opts: {
       happyhorse_exact_size: isHappyHorse ? body.size || null : null,
       seedance_4k_case_normalized: isSeedance && effectiveResolution === "4k" ? "4K" : null,
       seedance_fast_resolution_clamped: isSeedanceFast && opts.resolution !== effectiveResolution,
+      frame_rehost_events: frameRehostEvents,
     },
   });
 
