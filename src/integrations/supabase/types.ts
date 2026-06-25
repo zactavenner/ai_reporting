@@ -1443,6 +1443,77 @@ export type Database = {
           },
         ]
       }
+      ai_studio_video_model_decision_logs: {
+        Row: {
+          chosen_model: string | null
+          client_id: string | null
+          conversation_id: string | null
+          created_at: string
+          details: Json
+          downstream_model: string | null
+          event: string
+          id: string
+          override_reason: string | null
+          requested_model: string | null
+          user_id: string | null
+        }
+        Insert: {
+          chosen_model?: string | null
+          client_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          details?: Json
+          downstream_model?: string | null
+          event: string
+          id?: string
+          override_reason?: string | null
+          requested_model?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          chosen_model?: string | null
+          client_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          details?: Json
+          downstream_model?: string | null
+          event?: string
+          id?: string
+          override_reason?: string | null
+          requested_model?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_studio_video_model_decision_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ai_studio_video_model_decision_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_studio_video_model_decision_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ai_studio_video_model_decision_logs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_studio_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alert_configs: {
         Row: {
           client_id: string

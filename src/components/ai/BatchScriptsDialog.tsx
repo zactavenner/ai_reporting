@@ -36,7 +36,7 @@ const MODEL_OPTIONS: { id: string; label: string; perClipCap: number; avatarSafe
   { id: "bytedance/seedance-2.0",     label: "Seedance 2.0 Pro — 15s/clip, 4K",         perClipCap: 15, avatarSafe: false, resolutions: ["720p", "1080p", "4k"] },
   { id: "bytedance/seedance-2.0-fast",label: "Seedance Fast — 15s/clip, 720p",          perClipCap: 15, avatarSafe: false, resolutions: ["720p"] },
   { id: "kwaivgi/kling-v3.0-std",     label: "Kling 3.0 — 10s/clip",                     perClipCap: 10, avatarSafe: true,  resolutions: ["1080p"] },
-  { id: "alibaba/happyhorse-1.1",     label: "HappyHorse 1.1 — 15s/clip, 1080p (avatar-safe)", perClipCap: 15, avatarSafe: true,  resolutions: ["720p", "1080p"] },
+  { id: "alibaba/happyhorse-1.1",     label: "HappyHorse 1.1 — 15s/clip, 1080p (avatar-safe)", perClipCap: 15, avatarSafe: true,  resolutions: ["1080p"] },
 ];
 
 export function BatchScriptsDialog({ open, onOpenChange, hasAvatar, avatarName, defaultModel, onSubmit }: Props) {
