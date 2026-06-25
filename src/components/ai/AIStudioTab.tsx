@@ -101,12 +101,14 @@ const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: nu
   { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts (≤15s, up to 1080p)", maxSeconds: 15, pricePerSecond: 0.272 },
   { value: "bytedance/seedance-2.0",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, up to 1080p)", maxSeconds: 15, pricePerSecond: 0.34 },
   { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s default, 1080p, first-frame image-to-video", maxSeconds: 15, pricePerSecond: 0.1278 },
+  { value: "x-ai/grok-video-1.5",         label: "Grok 1.5",        hint: "xAI Grok 1.5 video — 15s, 720p",                                          maxSeconds: 15, pricePerSecond: 0.08 },
 ];
 // Resolution caps per model. 4K has been removed from the UI.
 const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
   "bytedance/seedance-2.0-fast": ["720p", "1080p"],
   "bytedance/seedance-2.0":      ["720p", "1080p"],
   "alibaba/happyhorse-1.1":      ["1080p"],
+  "x-ai/grok-video-1.5":         ["720p"],
 };
 function resolutionMultiplier(res: "720p" | "1080p" | "4k"): number {
   if (res === "720p") return 0.445;
