@@ -2350,14 +2350,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality 15-second video clip using Seedance 2.0 (Fast/Pro), HappyHorse 1.1, Kling, or Veo. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url to animate a reference frame. HappyHorse 1.1 is hard-locked by the server to 15 seconds at lowercase 1080p; when model='alibaba/happyhorse-1.1', pass duration=15 and resolution='1080p'. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance Pro supports up to 4K and 15s; Seedance Fast supports up to 720p.",
+      description: "Generate a single high-quality 15-second video clip using Seedance 2.0 (Fast/Pro), HappyHorse 1.1, Kling, or Veo. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url to animate a reference frame. HappyHorse 1.1 is hard-locked by the server to 15 seconds at lowercase 1080p; when model='alibaba/happyhorse-1.1', pass duration=15 and resolution='1080p'. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance Pro/Fast support up to 1080p in this UI; HappyHorse is 1080p only.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16"], description: "Video format. Only 9:16 Reel and 16:9 Video are supported." },
           duration: { type: "integer", enum: [15], description: "Clip length in seconds. Only 15 seconds is supported in AI Studio." },
-          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' is supported only by bytedance/seedance-2.0 (Seedance Pro). HappyHorse caps at 1080p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p. 4K is removed from AI Studio video generation. HappyHorse caps at 1080p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast", "alibaba/happyhorse-1.1"], description: "Explicit video model id. Seedance/Kling/HappyHorse route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
@@ -2453,8 +2453,8 @@ const tools = [
             },
           },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast", "alibaba/happyhorse-1.1"], description: "Model to use for non-avatar scripts. Avatar scripts auto-route to Veo." },
-          aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
-          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. 4K only on Seedance Pro." },
+          aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
+          resolution: { type: "string", enum: ["720p", "1080p"], description: "Default 1080p. 4K is removed from AI Studio video generation." },
         },
         required: ["scripts"],
       },
