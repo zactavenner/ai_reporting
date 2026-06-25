@@ -2087,7 +2087,7 @@ const tools = [
     type: "function",
     function: {
       name: "plan_storyboard",
-      description: "Manus-style: break a video brief into N scenes (3–8). Returns a structured storyboard with per-scene image prompt and video animation prompt. ALWAYS call this FIRST when the user asks for a video, ad video, reel, scene set, or storyboard.",
+      description: "OPT-IN ONLY. Break a video brief into N scenes (3–8) with per-scene keyframe + animation prompts. DO NOT call this unless the user literally typed the word 'storyboard' (or 'storyboarding'). For every other video request — 'make a 30s reel', 'video ad', 'animate this image', multi-scene scripts — use generate_seedance_video instead and let the server auto-split clips.",
       parameters: {
         type: "object",
         properties: {
@@ -2463,22 +2463,17 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "- LEAD QUALITY: When the user asks anything about lead quality, spam leads, fake leads, bad data, name/email mismatches, or wants an audit of leads — call check_lead_quality (default 30 days). In your chat reply, state the spam count and mismatch count clearly. If spam_count > 0, flag it in red language: 'Detected N spam leads (armyspy/teleworm/random emails) in the last X days — review the flagged samples in the inline card.' Always be explicit about the numbers.",
   "- DOC PRECHECK: Every doc tool (read_doc, append_to_doc, replace_doc_text) auto-runs a connection test before executing. If a tool result contains `precheck_failed: true`, the operation was BLOCKED — do NOT retry the same tool. Instead, write a chat reply that surfaces the `error` field verbatim and asks the user how to proceed (e.g. tie a different doc, share the doc with the connector account, paste a session-override URL). Never silently ignore a precheck failure.",
   "- COPYWRITING / SCRIPTS: ALWAYS call create_text_artifact when the user asks you to write, draft, or generate ANY kind of script (VSL, caller, video script), ad copy, email, caption, landing page copy, outline, plan, or brief. Put the full body in the artifact (Markdown), not in your chat reply. Your chat reply must only be a 1–2 sentence summary like 'Drafted the 60s VSL script on the canvas.' Pass append_to_doc:true if the user said to put it in the doc.",
-  "- VIDEO / REEL / SCENE WORKFLOW (storyboard review gate):",
-  "- SEEDANCE 2.0 (single-clip video, OpenRouter):",
-  "  • Use generate_seedance_video when the user wants ONE standalone clip (3–15s, up to 1080p): a single hero shot, animated still, product loop, short reel, or 'turn this image into a video'.",
+  "- VIDEO / REEL WORKFLOW (single-clip default — NO STORYBOARDING):",
+  "  • DEFAULT for any video request → generate_seedance_video (single clip, or auto-split into N back-to-back clips when duration > model cap). Always use the user's UI-selected video model.",
+  "  • DO NOT call plan_storyboard unless the user literally types the word 'storyboard' (or 'storyboarding', 'multi-scene storyboard'). For any other video request — even multi-scene scripts, 30s ads, 'make a video' — go straight to generate_seedance_video and let the server split clips. No keyframe-review gate, no scene-by-scene image step.",
+  "- SEEDANCE / HAPPYHORSE / KLING / VEO (single-clip video):",
+  "  • Use generate_seedance_video for any standalone clip (3–15s). The `model` argument MUST match the UI-selected model (passed in VIDEO MODEL PREFERENCE).",
   "- MULTI-SCRIPT BATCH (CRITICAL): If the user pastes 2+ video scripts in one message (numbered list '1. ... 2. ...', or visibly distinct script blocks with their own Avatar/Environment headers, or a 'Batch scripts' payload with a JSON `scripts` array), call generate_script_batch ONCE with the full scripts array — do NOT emit N separate generate_seedance_video calls. The server auto-splits each script into per-clip segments, locks the avatar across clips, and renders all scripts × clips in parallel. Avatar scripts auto-route to Veo unless the user said 'use Seedance anyway'.",
   "  • Text-to-video: just pass `prompt` (+ aspect_ratio, duration, resolution).",
   "  • Image-to-video: pass `image_url` (a canvas keyframe / static ad URL) — Seedance preserves character, style, and brand from the reference. Optionally pass `last_frame_url` for precise motion endpoints.",
-  "  • Default to duration=15, resolution=1080p, aspect_ratio=9:16 unless the user says otherwise. Use fast=true only when the user explicitly asks for a quick/cheap draft.",
-  "  • Prefer Seedance for SINGLE clips and image-animation. Use the multi-scene Veo storyboard pipeline (plan_storyboard → keyframes → generate_scene_video) only when the user explicitly wants a multi-scene cut, storyboard, or video longer than 15s that needs scene-level control.",
-  "  • IMAGE→VIDEO SHORTCUT: If the user says 'animate this ad', 'turn this image into a video', 'make this move', or references a canvas image card, call generate_seedance_video with image_url = that card's image URL. Do NOT first call plan_storyboard.",
-  "  • Each scene = ONE keyframe image animated into an 8-SECOND Veo 3.1 clip. Total video length = scene_count × 8s.",
-  "  • Map the user's target duration to scene_count: 8s→1, 16s→2, 24s→3, 32s→4, 40s→5, 48s→6, 56s→7, 64s→8. If the user doesn't specify a duration, default to 4 scenes (~32s). The user can override by saying 'one image only', 'three scenes', etc.",
-  "  Step 1: Call plan_storyboard with the computed scene_count.",
-  "  Step 2: In ONE assistant turn, emit ONE generate_scene_image tool_call FOR EVERY scene (parallel), passing the user's selected image model. If the user selected MULTIPLE image models, emit ONE generate_scene_image call PER MODEL PER scene (so each scene shows side-by-side keyframes from both models).",
-  "  Step 3: STOP and wait. Do NOT call generate_scene_video on your own. The user reviews the storyboard timeline card on the canvas (reorder scenes, edit prompts, regenerate keyframes) and clicks 'Generate videos' when ready — that click sends a follow-up message that explicitly lists the finalized scene order and prompts. Only THEN emit one generate_scene_video tool_call per scene in parallel using each scene's image_url.",
-  "  Step 4: After Step 2, write a short note like: 'Keyframes are on the canvas — reorder, tweak any prompts, or regenerate a frame, then click Generate videos in the storyboard card.' After Step 3 (videos), write a 1–2 line completion summary.",
-  "  ONLY skip the review gate and go straight from Step 2 to Step 3 if the user explicitly said 'skip review', 'go straight to video', 'don't wait', or similar.",
+  "  • Default to duration=15, resolution = the UI-selected resolution (1080p or 4K if the user picked Seedance Pro 4K), aspect_ratio=9:16 unless the user says otherwise.",
+  "  • IMAGE→VIDEO SHORTCUT: If the user says 'animate this ad', 'turn this image into a video', 'make this move', or references a canvas image card, call generate_seedance_video with image_url = that card's image URL.",
+  "  • STORYBOARD MODE (opt-in only): plan_storyboard / generate_scene_image / generate_scene_video are ONLY allowed when the user literally typed 'storyboard'. Otherwise they are off-limits this turn.",
   "- After running tools, write a brief, plain-language status. Do not paste tool JSON.",
   "",
   "COMPLIANCE:",
@@ -3737,7 +3732,10 @@ Deno.serve(async (req) => {
                 ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
                 : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
               const placeholderDuration = placeholderModels[0] === "alibaba/happyhorse-1.1" ? 15 : (args.duration || 15);
-              const placeholderResolution = placeholderModels[0] === "alibaba/happyhorse-1.1" ? "1080p" : (args.resolution || requestedRes || "1080p");
+              // UI resolution wins; clamp to the model's max (Seedance Pro → 4K, others → 1080p/720p).
+              const placeholderResolution = placeholderModels[0]
+                ? clampResForModel(placeholderModels[0])
+                : (requestedRes || "1080p");
               send({
                 type: "canvas_placeholder",
                 placeholder_id: canvasPlaceholderId,
@@ -4134,10 +4132,11 @@ Deno.serve(async (req) => {
                 const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
                 const promptText = String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : "");
-                const runOne = async (mdl: string, pid: string | null, segPrompt: string, segDuration: number, segImageUrl: string | null, segLastFrame: string | null) => {
-                  const segRes = argRes
-                    ? (RES_RANK[argRes] <= RES_RANK[MODEL_MAX_RES[mdl] || "1080p"] ? argRes : (MODEL_MAX_RES[mdl] || "1080p"))
-                    : clampResForModel(mdl);
+                 const runOne = async (mdl: string, pid: string | null, segPrompt: string, segDuration: number, segImageUrl: string | null, segLastFrame: string | null) => {
+                   // UI-selected resolution wins. Only honor the LLM's args.resolution when the
+                   // user made NO selection (rawVideoResolution unset). This keeps Seedance Pro
+                   // at 4K when the user explicitly picked 4K, and keeps HappyHorse at 1080p.
+                   const segRes = clampResForModel(mdl);
                   await recordVideoModelDecision(supa, "tool_video.clip_dispatch", {
                     conversation_id: conversationId,
                     client_id: clientId || null,
