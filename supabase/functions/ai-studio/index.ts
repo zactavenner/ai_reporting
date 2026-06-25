@@ -1725,6 +1725,7 @@ async function generateSeedanceVideo(opts: {
   const sj = await submit.json();
   const pollingUrl: string | undefined = sj.polling_url;
   const jobId: string = sj.id || crypto.randomUUID();
+  console.log(`[openrouter:/videos][queued] model=${body.model} provider_model=${extractProviderModel(sj) || "-"} job_id=${jobId} polling_url=${pollingUrl ? "yes" : "no"} response=${JSON.stringify(sj).slice(0, 400)}`);
   if (!pollingUrl) throw new Error(`${modelLabel} returned no polling_url: ${JSON.stringify(sj).slice(0, 300)}`);
   const queuedProviderModel = extractProviderModel(sj);
   let downstreamModelSeen = queuedProviderModel || String(body.model || model);
