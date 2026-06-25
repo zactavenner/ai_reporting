@@ -913,6 +913,38 @@ async function generateSceneVideo(opts: {
 }
 
 // ---------- Seedance 2.0 (OpenRouter) — 15s 1080p text-to-video / image-to-video ----------
+// Parse an MP4 file's first non-zero tkhd box to recover the actual rendered
+// width/height. Used to verify the upstream model honored the requested resolution
+// (e.g. confirm Seedance Pro 4K really produced ~2160px output, not a 1080p downscale).
+function parseMp4Dimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  try {
+    const end = Math.min(bytes.length - 8, 8 * 1024 * 1024); // search first ~8MB
+    for (let i = 0; i < end; i++) {
+      if (bytes[i] === 0x74 && bytes[i + 1] === 0x6b && bytes[i + 2] === 0x68 && bytes[i + 3] === 0x64) {
+        const dataStart = i + 4; // after 'tkhd'
+        const version = bytes[dataStart];
+        let offset = dataStart + 4; // skip version+flags
+        const sizes = version === 1 ? [8, 8, 4, 4, 8] : [4, 4, 4, 4, 4];
+        for (const s of sizes) offset += s;
+        offset += 8 + 2 + 2 + 2 + 2 + 36; // reserved+layer+altGroup+volume+reserved+matrix
+        if (offset + 8 > bytes.length) continue;
+        const dv = new DataView(bytes.buffer, bytes.byteOffset + offset, 8);
+        const w = dv.getUint32(0) / 65536;
+        const h = dv.getUint32(4) / 65536;
+        if (w > 0 && h > 0 && w < 10000 && h < 10000) {
+          return { width: Math.round(w), height: Math.round(h) };
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+function classifyResolution(width: number, height: number): "720p" | "1080p" | "4k" {
+  const longSide = Math.max(width, height);
+  if (longSide >= 3000) return "4k";
+  if (longSide >= 1500) return "1080p";
+  return "720p";
+}
 async function generateSeedanceVideo(opts: {
   prompt: string;
   aspectRatio: string;         // "16:9" | "9:16" | "1:1"
