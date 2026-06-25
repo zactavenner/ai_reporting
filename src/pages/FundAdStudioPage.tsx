@@ -30,6 +30,10 @@ type Creative = {
   scene_location: string | null;
   video_url: string | null;
   video_status: string | null;
+  video_model: string | null;
+  video_url_alt: string | null;
+  video_status_alt: string | null;
+  video_model_alt: string | null;
   is_variation: boolean;
   fund_name: string;
   created_at: string;
@@ -142,21 +146,54 @@ export default function FundAdStudioPage() {
     }
   }
 
-  async function renderVideo(creativeId: string, fast: boolean) {
+  async function renderVideo(
+    creativeId: string,
+    fast: boolean,
+    mode: "seedance" | "happyhorse" | "compare" = "seedance",
+  ) {
     setRenderingId(creativeId);
+    const targets: ("seedance" | "happyhorse")[] =
+      mode === "compare" ? ["seedance", "happyhorse"] : [mode];
     setCreatives((prev) =>
-      prev.map((c) => (c.id === creativeId ? { ...c, video_status: "generating" } : c)),
+      prev.map((c) => {
+        if (c.id !== creativeId) return c;
+        const patch: any = { ...c };
+        if (targets.includes("seedance")) patch.video_status = "generating";
+        if (targets.includes("happyhorse")) patch.video_status_alt = "generating";
+        return patch;
+      }),
     );
     try {
-      const { data, error } = await supabase.functions.invoke("fundad-render", {
-        body: { creativeId, fast, resolution: "1080p" },
+      const results = await Promise.allSettled(
+        targets.map((m) =>
+          supabase.functions.invoke("fundad-render", {
+            body: { creativeId, fast, resolution: "1080p", model: m },
+          }),
+        ),
+      );
+      const failures = results
+        .map((r, i) => ({ r, m: targets[i] }))
+        .filter(({ r }) => r.status === "rejected" || (r.status === "fulfilled" && (r as any).value?.error));
+      if (failures.length === targets.length) {
+        const first = failures[0].r as any;
+        throw new Error(first?.reason?.message || first?.value?.error?.message || "Render failed");
+      }
+      toast({
+        title:
+          mode === "compare"
+            ? `Compare ready (${targets.length - failures.length}/${targets.length})`
+            : "Video ready",
       });
-      if (error) throw error;
-      toast({ title: "Video ready" });
     } catch (e: any) {
       toast({ title: "Render failed", description: e?.message, variant: "destructive" });
       setCreatives((prev) =>
-        prev.map((c) => (c.id === creativeId ? { ...c, video_status: "failed" } : c)),
+        prev.map((c) => {
+          if (c.id !== creativeId) return c;
+          const patch: any = { ...c };
+          if (targets.includes("seedance") && c.video_status === "generating") patch.video_status = "failed";
+          if (targets.includes("happyhorse") && c.video_status_alt === "generating") patch.video_status_alt = "failed";
+          return patch;
+        }),
       );
     } finally {
       setRenderingId(null);
@@ -177,7 +214,7 @@ export default function FundAdStudioPage() {
     await Promise.allSettled(
       targets.map((t) =>
         supabase.functions.invoke("fundad-render", {
-          body: { creativeId: t.id, fast, resolution: "1080p" },
+          body: { creativeId: t.id, fast, resolution: "1080p", model: "seedance" },
         }),
       ),
     );
@@ -335,7 +372,7 @@ function CreativeCard({
   rendering,
 }: {
   c: Creative;
-  onRender: (id: string, fast: boolean) => void;
+  onRender: (id: string, fast: boolean, mode?: "seedance" | "happyhorse" | "compare") => void;
   rendering: boolean;
 }) {
   const scenes: any[] = Array.isArray(c.scene_breakdown) ? c.scene_breakdown : [];
@@ -351,32 +388,48 @@ function CreativeCard({
           <h3 className="font-semibold text-base">{c.ad_title || "Untitled"}</h3>
           <p className="text-sm text-foreground/90 mt-1 leading-snug">{c.hook}</p>
         </div>
-        <div className="flex flex-col gap-2 shrink-0">
-          {c.video_url ? (
-            <CaptionedVideo src={c.video_url} captions={captions} className="w-40 aspect-[9/16] rounded-md bg-black overflow-hidden" />
-          ) : (
-            <div className="w-32 aspect-[9/16] rounded-md bg-muted grid place-items-center text-xs text-muted-foreground">
-              {c.video_status === "generating" ? (
-                <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Rendering...</span>
-              ) : c.video_status === "failed" ? "Failed" : "No video"}
-            </div>
-          )}
+        <div className="flex flex-col gap-2 shrink-0 w-[22rem]">
+          <div className="grid grid-cols-2 gap-2">
+            <VideoSlot
+              label="Seedance 2.0"
+              status={c.video_status}
+              url={c.video_url}
+              captions={captions}
+            />
+            <VideoSlot
+              label="HappyHorse 1.1"
+              status={c.video_status_alt}
+              url={c.video_url_alt}
+              captions={captions}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onRender(c.id, false, "seedance")}
+              disabled={rendering || c.video_status === "generating"}
+              className="text-xs"
+            >
+              <Film className="h-3 w-3 mr-1" /> {c.video_url ? "Re-render Seedance" : "Seedance"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onRender(c.id, false, "happyhorse")}
+              disabled={rendering || c.video_status_alt === "generating"}
+              className="text-xs"
+            >
+              <Film className="h-3 w-3 mr-1" /> {c.video_url_alt ? "Re-render HH" : "HappyHorse"}
+            </Button>
+          </div>
           <Button
             size="sm"
-            onClick={() => onRender(c.id, false)}
-            disabled={rendering || c.video_status === "generating"}
+            onClick={() => onRender(c.id, false, "compare")}
+            disabled={rendering || c.video_status === "generating" || c.video_status_alt === "generating"}
             className="text-xs"
           >
-            <Film className="h-3 w-3 mr-1" /> {c.video_url ? "Re-render" : "Render 1080p"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onRender(c.id, true)}
-            disabled={rendering || c.video_status === "generating"}
-            className="text-xs"
-          >
-            <Video className="h-3 w-3 mr-1" /> Fast draft
+            <Video className="h-3 w-3 mr-1" /> Render Both (Compare)
           </Button>
         </div>
       </div>
@@ -435,6 +488,45 @@ function Section({ title, children, onCopy }: any) {
         )}
       </div>
       {children}
+    </div>
+  );
+}
+
+function VideoSlot({
+  label,
+  status,
+  url,
+  captions,
+}: {
+  label: string;
+  status: string | null;
+  url: string | null;
+  captions: any[];
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground text-center font-medium">
+        {label}
+      </div>
+      {url ? (
+        <CaptionedVideo
+          src={url}
+          captions={captions}
+          className="w-full aspect-[9/16] rounded-md bg-black overflow-hidden"
+        />
+      ) : (
+        <div className="w-full aspect-[9/16] rounded-md bg-muted grid place-items-center text-[10px] text-muted-foreground text-center px-2">
+          {status === "generating" ? (
+            <span className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" /> Rendering…
+            </span>
+          ) : status === "failed" ? (
+            "Failed"
+          ) : (
+            "No video"
+          )}
+        </div>
+      )}
     </div>
   );
 }
