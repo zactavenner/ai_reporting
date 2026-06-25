@@ -20,7 +20,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { creativeId, fast = false, resolution = '1080p', model = 'seedance' } = await req.json();
+    const { creativeId, fast: fastIn = false, resolution: resolutionIn = '1080p', model = 'seedance', compare = false } = await req.json();
+    // In compare mode, force identical parameters across both models
+    // (no fast variant, full 1080p) so Seedance vs HappyHorse is a fair A/B.
+    const fast = compare ? false : fastIn;
+    const resolution = compare ? '1080p' : resolutionIn;
     if (!creativeId) {
       return new Response(JSON.stringify({ error: 'creativeId required' }), {
         status: 400,
@@ -46,7 +50,8 @@ Deno.serve(async (req) => {
     const orModel = useHappyHorse
       ? 'alibaba/happyhorse-1.1'
       : (fast ? 'bytedance/seedance-2.0-fast' : 'bytedance/seedance-2.0');
-    const effectiveResolution = (fast && resolution === '1080p') ? '720p' : resolution;
+    // Fast Seedance is capped at 720p; in compare mode `fast` is forced false so this stays 1080p.
+    const effectiveResolution = (!useHappyHorse && fast && resolution === '1080p') ? '720p' : resolution;
     const submit = await fetch('https://openrouter.ai/api/v1/videos', {
       method: 'POST',
       headers: {

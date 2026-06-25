@@ -167,7 +167,15 @@ export default function FundAdStudioPage() {
       const results = await Promise.allSettled(
         targets.map((m) =>
           supabase.functions.invoke("fundad-render", {
-            body: { creativeId, fast, resolution: "1080p", model: m },
+            body: {
+              creativeId,
+              // Compare mode: force identical params for a fair A/B
+              // (no fast mode, full 1080p, 9:16, 15s — both models)
+              fast: mode === "compare" ? false : fast,
+              resolution: "1080p",
+              model: m,
+              compare: mode === "compare",
+            },
           }),
         ),
       );
