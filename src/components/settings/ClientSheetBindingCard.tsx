@@ -24,6 +24,28 @@ const KPI_TABS: { key: string; label: string; hint: string }[] = [
   { key: 'ad_spend', label: 'Ad Spend / Daily', hint: 'e.g. Ads or Daily Spend' },
 ];
 
+// KPI field → sheet column header override.
+// Stored under client_settings.metrics_sheet_mapping.columns and passed into
+// fetch-sheet-metrics as the `mapping` arg so CPL/leads/calls/funded/ad-perf
+// metrics are read from the correct columns even when the client's sheet uses
+// non-standard header names.
+const KPI_COLUMNS: { key: string; label: string; hint: string }[] = [
+  { key: 'date', label: 'Date', hint: 'e.g. Date, Day' },
+  { key: 'ad_spend', label: 'Ad Spend', hint: 'e.g. Spend, Amount Spent' },
+  { key: 'impressions', label: 'Impressions', hint: 'e.g. Impressions' },
+  { key: 'clicks', label: 'Clicks', hint: 'e.g. Link Clicks' },
+  { key: 'leads', label: 'Leads', hint: 'e.g. Leads' },
+  { key: 'spam_leads', label: 'Spam / Bad Leads', hint: 'e.g. Spam' },
+  { key: 'calls', label: 'Calls Booked', hint: 'e.g. Booked Calls' },
+  { key: 'showed_calls', label: 'Calls Showed', hint: 'e.g. Showed' },
+  { key: 'reconnect_calls', label: 'Reconnect Calls', hint: 'e.g. Reconnects' },
+  { key: 'reconnect_showed', label: 'Reconnect Showed', hint: 'e.g. Reconnect Showed' },
+  { key: 'commitments', label: 'Commitments (#)', hint: 'e.g. Committed' },
+  { key: 'commitment_dollars', label: 'Commitment $', hint: 'e.g. Committed $' },
+  { key: 'funded_investors', label: 'Funded Investors (#)', hint: 'e.g. Funded' },
+  { key: 'funded_dollars', label: 'Funded $', hint: 'e.g. Capital Raised' },
+];
+
 interface Props {
   clientId: string;
   clientName?: string;
@@ -50,6 +72,10 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
   const [allTabs, setAllTabs] = useState<{ gid: string; title: string }[]>([]);
   const [loadingTabs, setLoadingTabs] = useState(false);
   const [tabMap, setTabMap] = useState<Record<string, string>>({});
+  const [colMap, setColMap] = useState<Record<string, string>>({});
+  const [colSampleGid, setColSampleGid] = useState<string | undefined>(undefined);
+  const [headerOptions, setHeaderOptions] = useState<string[]>([]);
+  const [loadingHeaders, setLoadingHeaders] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -62,6 +88,7 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
         const built = `https://docs.google.com/spreadsheets/d/${data.metrics_sheet_id}/edit${data.metrics_sheet_gid ? `#gid=${data.metrics_sheet_gid}` : ''}`;
         setUrl(built);
         setBound({ id: data.metrics_sheet_id, gid: data.metrics_sheet_gid ?? null });
+        setColSampleGid(data.metrics_sheet_gid ?? undefined);
       }
       if (data?.metrics_source_default === 'database' || data?.metrics_source_default === 'sheet') {
         setDefaultSource(data.metrics_source_default);
@@ -69,6 +96,9 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
       const mapping: any = (data as any)?.metrics_sheet_mapping || {};
       if (mapping?.tabs && typeof mapping.tabs === 'object') {
         setTabMap(mapping.tabs as Record<string, string>);
+      }
+      if (mapping?.columns && typeof mapping.columns === 'object') {
+        setColMap(mapping.columns as Record<string, string>);
       }
     })();
   }, [clientId]);
@@ -96,6 +126,32 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
     if (bound.id && allTabs.length === 0) loadTabs(bound.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bound.id]);
+
+  async function loadHeaders(gidArg?: string) {
+    if (!bound.id) return;
+    setLoadingHeaders(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-sheet-metrics', {
+        body: { sheet_id: bound.id, gid: gidArg || colSampleGid || bound.gid || undefined, action: 'raw_grid' },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const hdrs: string[] = (((data as any)?.headers || []) as any[])
+        .map((h) => String(h ?? '').trim())
+        .filter((h) => h.length > 0);
+      setHeaderOptions(hdrs);
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Could not load column headers', description: e?.message ?? 'Unknown error' });
+    } finally {
+      setLoadingHeaders(false);
+    }
+  }
+
+  // Auto-load headers when a sample tab is chosen / sheet is bound
+  useEffect(() => {
+    if (bound.id && headerOptions.length === 0) loadHeaders(colSampleGid || bound.gid || undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bound.id, colSampleGid]);
 
   async function handleTest() {
     setError(null);
@@ -133,7 +189,7 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
       const { data: existing } = await supabase
         .from('client_settings').select('id, metrics_sheet_mapping').eq('client_id', clientId).maybeSingle();
       const prevMapping: any = (existing as any)?.metrics_sheet_mapping || {};
-      const nextMapping = { ...prevMapping, tabs: tabMap };
+      const nextMapping = { ...prevMapping, tabs: tabMap, columns: colMap };
       const payload: any = {
         client_id: clientId,
         metrics_sheet_id: sheetId,
@@ -337,6 +393,86 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
           {allTabs.length === 0 && !loadingTabs && (
             <p className="text-xs text-muted-foreground">
               No tabs loaded yet. Click "Reload tabs" to fetch this sheet's tab list.
+            </p>
+          )}
+        </div>
+      )}
+
+      {bound.id && (
+        <div className="space-y-3 pt-3 border-t border-border">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <Label className="text-sm">Column mapping</Label>
+              <p className="text-xs text-muted-foreground">
+                Map each KPI (CPL, calls, funded, ad performance) to the exact header
+                in this client's sheet. Pick the sample tab whose headers we should
+                offer — usually the daily / raw data tab.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Select
+                value={colSampleGid ?? '__bound__'}
+                onValueChange={(v) => {
+                  const next = v === '__bound__' ? (bound.gid ?? undefined) : v;
+                  setColSampleGid(next);
+                  setHeaderOptions([]);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[200px] text-xs">
+                  <SelectValue placeholder="Sample tab" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="__bound__">Bound default tab</SelectItem>
+                  {allTabs.map((t) => (
+                    <SelectItem key={t.gid} value={t.gid}>{t.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={() => loadHeaders(colSampleGid || bound.gid || undefined)} disabled={loadingHeaders}>
+                {loadingHeaders ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                <span className="ml-1">Reload headers</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {KPI_COLUMNS.map((kpi) => {
+              const current = colMap[kpi.key];
+              const value = current ?? '__none__';
+              return (
+                <div key={kpi.key} className="space-y-1">
+                  <Label htmlFor={`col-${kpi.key}`} className="text-xs font-medium">{kpi.label}</Label>
+                  <Select
+                    value={value}
+                    onValueChange={(v) =>
+                      setColMap((prev) => {
+                        const next = { ...prev };
+                        if (v === '__none__') delete next[kpi.key];
+                        else next[kpi.key] = v;
+                        return next;
+                      })
+                    }
+                  >
+                    <SelectTrigger id={`col-${kpi.key}`} className="h-8 text-xs">
+                      <SelectValue placeholder={kpi.hint} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="__none__">— Auto-detect —</SelectItem>
+                      {headerOptions.map((h) => (
+                        <SelectItem key={h} value={h}>{h}</SelectItem>
+                      ))}
+                      {current && !headerOptions.includes(current) && (
+                        <SelectItem value={current}>{current} (not in sample tab)</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </div>
+          {headerOptions.length === 0 && !loadingHeaders && (
+            <p className="text-xs text-muted-foreground">
+              No headers loaded yet. Pick a sample tab and click "Reload headers".
             </p>
           )}
         </div>
