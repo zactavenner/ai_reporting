@@ -2751,7 +2751,10 @@ Deno.serve(async (req) => {
         if (shouldDirectGenerateVideoPrompt(userText || "")) {
           const totalDuration = inferVideoDurationSeconds(userText || "", 15);
           const aspect = inferVideoAspectRatio(userText || "");
-          const modelsToRun = (selectedVideoModels.length ? selectedVideoModels : [selectedVideoModel])
+          const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse)\b/i.test(userText || "")
+            ? "alibaba/happyhorse-1.1"
+            : null;
+          const modelsToRun = (selectedVideoModels.length ? selectedVideoModels : [promptRequestedVideoModel || selectedVideoModel])
             .filter((m, i, arr) => arr.indexOf(m) === i);
           const jobs = modelsToRun.flatMap((model) => {
             // Auto-route to an avatar-safe model (Veo) when an avatar is
