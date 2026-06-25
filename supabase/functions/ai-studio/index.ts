@@ -3536,9 +3536,18 @@ Deno.serve(async (req) => {
           ]);
           const hasImage = selectedImageModels.length > 0;
           const hasVideo = uniqueSelectedVideoModels.length > 0 || !!selectedVideoModel;
+          // Storyboarding is fully disabled. The legacy multi-scene pipeline
+          // (plan_storyboard / generate_scene_image / generate_scene_video) is
+          // never exposed to the LLM — all video requests go through
+          // generate_seedance_video (with server-side auto-splitting for long
+          // durations) so we never re-introduce keyframe-review gates.
+          const STORYBOARD_TOOL_NAMES = new Set([
+            "plan_storyboard", "generate_scene_image", "generate_scene_video",
+          ]);
           const gatedTools = (tools as any[]).filter((t: any) => {
             const n = t?.function?.name || t?.name;
             if (!n) return true;
+            if (STORYBOARD_TOOL_NAMES.has(n)) return false;
             if (n === "image_to_reel") return hasImage && hasVideo;
             if (IMAGE_TOOL_NAMES.has(n)) return hasImage;
             if (VIDEO_TOOL_NAMES.has(n)) return hasVideo;
