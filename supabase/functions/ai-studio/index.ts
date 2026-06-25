@@ -3639,7 +3639,19 @@ Deno.serve(async (req) => {
                     },
                   });
                   if (r.item) send({ type: "canvas_item", item: r.item, replace_placeholder_id: canvasPlaceholderId });
-                  result = { ok: true, keyframe_url_internal: imageUrl, video_url_internal: r.video_url, model: r.model, duration, resolution: r.resolution, aspect_ratio: aspect };
+                  result = {
+                    ok: true,
+                    keyframe_url_internal: imageUrl,
+                    video_url_internal: r.video_url,
+                    model: r.model,
+                    duration,
+                    resolution: r.resolution,
+                    actual_resolution: (r as any).actual_resolution || null,
+                    actual_width: (r as any).actual_width || null,
+                    actual_height: (r as any).actual_height || null,
+                    resolution_match: (r as any).resolution_match ?? null,
+                    aspect_ratio: aspect,
+                  };
                 }
               } else if (name === "generate_script_batch") {
                 // Multi-script batch renderer. Each script gets its own grouped
