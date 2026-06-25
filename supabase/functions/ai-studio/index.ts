@@ -1143,6 +1143,7 @@ async function generateSeedanceVideo(opts: {
     "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
     "alibaba/happyhorse-1.1",
+    "x-ai/grok-video-1.5",
   ];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
@@ -1164,6 +1165,12 @@ async function generateSeedanceVideo(opts: {
     "hourse": "alibaba/happyhorse-1.1",
     "happyhorse-1.1": "alibaba/happyhorse-1.1",
     "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
+    "grok": "x-ai/grok-video-1.5",
+    "grok-1.5": "x-ai/grok-video-1.5",
+    "grok-video": "x-ai/grok-video-1.5",
+    "grok-video-1.5": "x-ai/grok-video-1.5",
+    "x-ai/grok-1.5": "x-ai/grok-video-1.5",
+    "xai/grok-video-1.5": "x-ai/grok-video-1.5",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
   const model = ALLOWED.includes(normalized) ? normalized : "bytedance/seedance-2.0-fast";
@@ -1179,9 +1186,12 @@ async function generateSeedanceVideo(opts: {
   const isSeedance = model.startsWith("bytedance/seedance");
   const isKling = model.startsWith("kwaivgi/kling");
   const isHappyHorse = model.startsWith("alibaba/happyhorse");
+  const isGrok = model.startsWith("x-ai/grok");
   const modelLabel = isHappyHorse
     ? "HappyHorse 1.1"
-    : isSeedance
+    : isGrok
+      ? "Grok 1.5"
+      : isSeedance
       ? (isSeedanceFast ? "Seedance Fast" : "Seedance Pro")
       : isKling
         ? "Kling"
@@ -1194,6 +1204,7 @@ async function generateSeedanceVideo(opts: {
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
   if (isHappyHorse) effectiveResolution = "1080p";
+  else if (isGrok) effectiveResolution = "720p";
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
