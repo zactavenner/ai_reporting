@@ -72,6 +72,10 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
   const [allTabs, setAllTabs] = useState<{ gid: string; title: string }[]>([]);
   const [loadingTabs, setLoadingTabs] = useState(false);
   const [tabMap, setTabMap] = useState<Record<string, string>>({});
+  const [colMap, setColMap] = useState<Record<string, string>>({});
+  const [colSampleGid, setColSampleGid] = useState<string | undefined>(undefined);
+  const [headerOptions, setHeaderOptions] = useState<string[]>([]);
+  const [loadingHeaders, setLoadingHeaders] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -84,6 +88,7 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
         const built = `https://docs.google.com/spreadsheets/d/${data.metrics_sheet_id}/edit${data.metrics_sheet_gid ? `#gid=${data.metrics_sheet_gid}` : ''}`;
         setUrl(built);
         setBound({ id: data.metrics_sheet_id, gid: data.metrics_sheet_gid ?? null });
+        setColSampleGid(data.metrics_sheet_gid ?? undefined);
       }
       if (data?.metrics_source_default === 'database' || data?.metrics_source_default === 'sheet') {
         setDefaultSource(data.metrics_source_default);
@@ -91,6 +96,9 @@ export function ClientSheetBindingCard({ clientId, clientName }: Props) {
       const mapping: any = (data as any)?.metrics_sheet_mapping || {};
       if (mapping?.tabs && typeof mapping.tabs === 'object') {
         setTabMap(mapping.tabs as Record<string, string>);
+      }
+      if (mapping?.columns && typeof mapping.columns === 'object') {
+        setColMap(mapping.columns as Record<string, string>);
       }
     })();
   }, [clientId]);
