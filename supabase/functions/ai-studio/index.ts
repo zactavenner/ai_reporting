@@ -1599,14 +1599,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality short video clip (4–15s) using Seedance 2.0 (Fast or Pro) or Kling via OpenRouter. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url (and optionally last_frame_url) to animate a reference frame. Strong at character consistency, camera motion, and brand-style preservation. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance 2.0 Pro supports up to 1080p and 15s; Seedance 2.0 Fast supports up to 720p.",
+      description: "Generate a single high-quality short video clip (4–15s) using Seedance 2.0 (Fast/Pro), HappyHorse 1.1, Kling, or Veo. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Two modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url to animate a reference frame. HappyHorse 1.1 supports 3–15s at 720p/1080p and first-frame image-to-video via frame_images. Prefer this over the multi-scene Veo storyboard pipeline whenever the user wants ONE clip, an animated image, or asks for 'a 15 second video / reel / ad clip'. Seedance Pro supports up to 4K and 15s; Seedance Fast supports up to 720p.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1"], description: "Default 9:16 for reels/stories." },
           duration: { type: "integer", minimum: 4, maximum: 15, description: "Clip length in seconds. Default 15." },
-          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' is supported only by bytedance/seedance-2.0 (Seedance Pro). Seedance Fast caps at 720p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
+          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' is supported only by bytedance/seedance-2.0 (Seedance Pro). HappyHorse caps at 1080p. Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME (Seedance supports first+last frame control for precise motion endpoints)." },
           model: { type: "string", enum: ["bytedance/seedance-2.0-fast", "bytedance/seedance-2.0", "kwaivgi/kling-v3.0-std", "kwaivgi/kling-v2.1-master", "google/veo-3.1-fast", "alibaba/happyhorse-1.1"], description: "Explicit video model id. Seedance/Kling/HappyHorse route via OpenRouter; Veo routes via Google Gemini. Honor the user's VIDEO MODEL PREFERENCE from the system prompt." },
@@ -1661,16 +1661,16 @@ const tools = [
     type: "function",
     function: {
       name: "image_to_reel",
-      description: "ONE-CLICK PIPELINE (Phase 2): take a brief OR an existing image URL and produce a finished short-form REEL end-to-end. Step 1: if no image_url is provided, generate a 9:16 static ad keyframe with generate_static_ad logic. Step 2: animate that keyframe with Seedance 2.0 (image-to-video) into a 5–15s reel. Returns the static ad AND the final mp4 on the canvas. Use whenever the user says 'image to reel', 'make this image into an ad video', 'one-click reel', 'static + reel', or 'animate this ad'.",
+      description: "ONE-CLICK PIPELINE (Phase 2): take a brief OR an existing image URL and produce a finished short-form REEL end-to-end. Step 1: if no image_url is provided, generate a 9:16 static ad keyframe with generate_static_ad logic. Step 2: animate that keyframe with the user's selected video model (Seedance/HappyHorse/Kling/Veo) into a 5–15s reel. Returns the static ad AND the final mp4 on the canvas. Use whenever the user says 'image to reel', 'make this image into an ad video', 'one-click reel', 'static + reel', or 'animate this ad'.",
       parameters: {
         type: "object",
         properties: {
           brief: { type: "string", description: "What the reel should communicate. Required if no image_url is passed." },
           image_url: { type: "string", description: "Optional existing canvas keyframe / static ad URL. If provided, skips static generation." },
-          motion_prompt: { type: "string", description: "Optional explicit camera/motion description for Seedance. If omitted, one will be auto-derived from the brief." },
+          motion_prompt: { type: "string", description: "Optional explicit camera/motion description for the video model. If omitted, one will be auto-derived from the brief." },
           aspect_ratio: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "Default 9:16." },
-          duration: { type: "integer", minimum: 5, maximum: 15, description: "Reel length in seconds. Default 8." },
-          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' Seedance Pro only." },
+          duration: { type: "integer", minimum: 5, maximum: 15, description: "Reel length in seconds. Default 15." },
+          resolution: { type: "string", enum: ["720p", "1080p", "4k"], description: "Default 1080p. '4k' Seedance Pro only; HappyHorse caps at 1080p." },
         },
         required: [],
       },
