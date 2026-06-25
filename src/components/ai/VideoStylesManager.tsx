@@ -500,7 +500,7 @@ export function VideoStylesBar({ styles, setStyles, selectedId, setSelectedId }:
               Name your style and write the prompt instructions the AI should follow when generating videos in this style.
             </DialogDescription>
           </DialogHeader>
-          <StyleEditor
+          <VideoStyleEditor
             style={editing && !styles.find((x) => x.id === editing.id) ? editing : { id: `style-${Date.now()}`, name: "", prompt: "" }}
             onChange={(s) => setEditing(s)}
           />
@@ -523,7 +523,7 @@ export function VideoStylesBar({ styles, setStyles, selectedId, setSelectedId }:
             </DialogDescription>
           </DialogHeader>
           {editing && (
-            <StyleEditor
+            <VideoStyleEditor
               style={editing}
               onChange={(s) => setEditing(s)}
             />
@@ -766,7 +766,7 @@ export function VideoStylesPopover({ styles, setStyles, selectedId, setSelectedI
             </DialogDescription>
           </DialogHeader>
           {editing && (
-            <StyleEditor style={editing} onChange={(s) => setEditing(s)} />
+            <VideoStyleEditor style={editing} onChange={(s) => setEditing(s)} />
           )}
           <DialogFooter className="flex items-center justify-between sm:justify-between">
             <div>
