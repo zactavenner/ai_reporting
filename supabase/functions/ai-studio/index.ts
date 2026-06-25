@@ -1233,6 +1233,20 @@ async function generateSeedanceVideo(opts: {
     if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
     const { data: pub } = supa.storage.from("creatives").getPublicUrl(path);
     const storedUrlV = pub.publicUrl;
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.completed", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      provider: "google",
+      requested_model: opts.model || null,
+      chosen_model: model,
+      downstream_model: "veo-3.1-fast-generate-preview",
+      downstream_model_override: false,
+      effective_duration: effectiveDuration,
+      effective_resolution: effectiveResolution,
+      wire_resolution: effectiveResolution,
+      storage_path: path,
+    });
     const ciV = await supa.from("ai_studio_canvas_items").insert({
       conversation_id: opts.conversationId,
       user_id: opts.userId,
