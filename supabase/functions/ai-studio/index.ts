@@ -3736,6 +3736,17 @@ Deno.serve(async (req) => {
               const placeholderResolution = placeholderModels[0]
                 ? clampResForModel(placeholderModels[0])
                 : (requestedRes || "1080p");
+              // GUARANTEE: rewrite tool args BEFORE tool_start so the chat
+              // label (`generate_video · <model>`) and downstream dispatch
+              // both see the UI-selected model / duration / resolution and
+              // the user-supplied first-frame, even when the LLM passed
+              // something different (the tool name biases toward Seedance).
+              if (placeholderModels[0]) args.model = placeholderModels[0];
+              args.duration = placeholderDuration;
+              args.resolution = placeholderResolution;
+              if (!args.image_url && videoFrames?.firstFrameUrl) args.image_url = videoFrames.firstFrameUrl;
+              if (!args.last_frame_url && videoFrames?.lastFrameUrl) args.last_frame_url = videoFrames.lastFrameUrl;
+              if (!args.ingredient_url && videoFrames?.ingredientUrl) args.ingredient_url = videoFrames.ingredientUrl;
               send({
                 type: "canvas_placeholder",
                 placeholder_id: canvasPlaceholderId,
