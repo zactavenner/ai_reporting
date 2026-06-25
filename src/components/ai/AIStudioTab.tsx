@@ -664,6 +664,24 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
           <Badge variant="secondary" className="text-[9px] h-4 px-1.5" title={video.model}>{modelLabel(video.model)}</Badge>
           {video.aspect_ratio && <span className="text-[9px] text-muted-foreground">{video.aspect_ratio}</span>}
           {video.resolution && <span className="text-[9px] text-muted-foreground">· {video.resolution}</span>}
+          {video.actual_resolution && (
+            video.resolution_match === false ? (
+              <span
+                className="text-[9px] font-medium text-amber-600 dark:text-amber-400"
+                title={`Requested ${video.resolution || "?"} but actual output is ${video.actual_resolution} (${video.actual_width}×${video.actual_height}). The model may have downscaled.`}
+              >
+                ⚠ actual {video.actual_resolution}
+                {video.actual_width && video.actual_height ? ` (${video.actual_width}×${video.actual_height})` : ""}
+              </span>
+            ) : (
+              <span
+                className="text-[9px] text-emerald-600 dark:text-emerald-400"
+                title={`Verified ${video.actual_resolution} (${video.actual_width}×${video.actual_height})`}
+              >
+                ✓ verified
+              </span>
+            )
+          )}
         </div>
       )}
       <VideoPlayerCard
