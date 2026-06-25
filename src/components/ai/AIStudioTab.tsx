@@ -494,6 +494,16 @@ function toolDisplayName(t: any): string {
   return `generate_video${model ? ` · ${modelLabel(model)}` : ""}`;
 }
 
+function toolErrorText(t: any): string {
+  const raw = String(t?.result?.error || "failed");
+  if (t?.name !== "generate_seedance_video") return raw;
+  const model = t?.result?.effective_model || t?.result?.model || t?.args?.model || "";
+  const label = modelLabel(model);
+  return raw
+    .replace(/generate_seedance_video/gi, "generate_video")
+    .replace(/Seedance(?: 2\.0)?(?: Fast| Pro)?/gi, label || "the selected video model");
+}
+
 function PreviewActionBar({
   url,
   prompt,
