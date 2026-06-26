@@ -3574,27 +3574,10 @@ Deno.serve(async (req) => {
     };
   }
 
-  // ── Auto Doc context ──────────────────────────────────────────────
-  // When the client opts in, prefetch the tied Google Doc once and
-  // inject its text as an extra system message so the model has full
-  // context without needing to call the read_doc tool first.
-  let autoDocChars = 0;
-  let autoDocTitle: string | null = null;
-  if (autoDocContext && effectiveDocUrl && docId && GOOGLE_DOCS_API_KEY) {
-    try {
-      const d = await readDoc(docId);
-      autoDocTitle = d.title || null;
-      autoDocChars = (d.text || "").length;
-      if (autoDocChars > 0) {
-        convo.splice(1, 0, {
-          role: "system",
-          content: `[Auto-loaded Google Doc context]\nTitle: ${autoDocTitle || "Untitled"}\n--- BEGIN DOC ---\n${d.text}\n--- END DOC ---`,
-        });
-      }
-    } catch (e) {
-      // Non-fatal — the model can still call read_doc on demand.
-    }
-  }
+  // Auto Doc context has been removed — the Offers tab is now the
+  // single source of truth for ad/campaign context. The `offerContext`
+  // injection above carries every active offer (and its attached files)
+  // into the model on every turn.
 
   const runStudioTurn = async (controller: any) => {
       const enc = new TextEncoder();
