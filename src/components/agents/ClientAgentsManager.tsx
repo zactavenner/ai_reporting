@@ -111,7 +111,7 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
         <TabsList>
           <TabsTrigger value="agents"><Bot className="h-3.5 w-3.5 mr-1" />Agents</TabsTrigger>
           <TabsTrigger value="folder"><BookOpen className="h-3.5 w-3.5 mr-1" />Agent Folder</TabsTrigger>
-          <TabsTrigger value="refs"><Library className="h-3.5 w-3.5 mr-1" />References</TabsTrigger>
+          <TabsTrigger value="refs"><Library className="h-3.5 w-3.5 mr-1" />Agent Training</TabsTrigger>
         </TabsList>
 
         <TabsContent value="agents" className="mt-3 space-y-3">
