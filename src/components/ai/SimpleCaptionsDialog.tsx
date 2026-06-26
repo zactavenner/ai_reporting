@@ -461,8 +461,21 @@ export function SimpleCaptionsDialog({
               <Slider value={[fontSize]} min={28} max={140} step={2} onValueChange={(v) => setFontSize(v[0] ?? 64)} />
             </div>
 
-            <div className="text-[11px] text-muted-foreground border-t pt-3">
-              {cues.length > 0 ? `${cues.length} caption cue${cues.length === 1 ? "" : "s"} ready.` : transcribing ? "Generating word-level timestamps…" : "No captions yet."}
+            <div className="space-y-2 border-t pt-3">
+              <div className="text-[11px] text-muted-foreground">
+                {cues.length > 0 ? `${cues.length} caption cue${cues.length === 1 ? "" : "s"} ready.` : transcribing ? "Generating word-level timestamps…" : "No captions yet."}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full h-8 text-xs gap-1.5"
+                onClick={handleResync}
+                disabled={transcribing || rendering}
+              >
+                {transcribing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Subtitles className="h-3 w-3" />}
+                Re-sync to latest transcription
+              </Button>
             </div>
           </div>
         </div>
