@@ -1144,6 +1144,7 @@ async function generateSeedanceVideo(opts: {
     "google/veo-3.1-fast",
     "alibaba/happyhorse-1.1",
     "x-ai/grok-video-1.5",
+    "x-ai/grok-imagine-video",
   ];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
@@ -1171,6 +1172,10 @@ async function generateSeedanceVideo(opts: {
     "grok-video-1.5": "x-ai/grok-video-1.5",
     "x-ai/grok-1.5": "x-ai/grok-video-1.5",
     "xai/grok-video-1.5": "x-ai/grok-video-1.5",
+    "grok-imagine": "x-ai/grok-imagine-video",
+    "grok-imagine-video": "x-ai/grok-imagine-video",
+    "x-ai/grok-imagine": "x-ai/grok-imagine-video",
+    "xai/grok-imagine-video": "x-ai/grok-imagine-video",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
   // HARD RULE: when the caller explicitly passed a model id, never silently
