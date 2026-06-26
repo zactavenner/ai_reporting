@@ -72,16 +72,7 @@ type Attachment = { url: string; name: string; mime: string; text?: string; uplo
 
 const CHAT_MODELS = [
   { value: "openrouter/owl-alpha", label: "Owl Alpha (default)" },
-  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (reasoning)" },
-  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (fastest)" },
-  { value: "openai/gpt-5", label: "GPT-5 (multimodal)" },
-  { value: "openai/gpt-5-mini", label: "GPT-5 Mini (cheap)" },
-  // OpenRouter — server routes any model id prefixed with "openrouter/"
-  // through the OpenRouter API using OPENROUTER_API_KEY.
-  { value: "openrouter/anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet (via OpenRouter)" },
-  { value: "openrouter/openai/gpt-5", label: "GPT-5 via OpenRouter" },
-  { value: "openrouter/deepseek/deepseek-chat", label: "DeepSeek Chat (via OpenRouter)" },
-  { value: "openrouter/meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B (via OpenRouter)" },
+  { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
 ];
 
 // Image models the AI can use when generating ad creatives.
