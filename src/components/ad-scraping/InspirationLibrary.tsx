@@ -57,7 +57,7 @@ export function InspirationLibrary({ clientId }: InspirationLibraryProps) {
         {assignments.map((assignment) => (
           <AdCard
             key={assignment.id}
-            ad={(assignment as any).scraped_ads || assignment}
+            ad={(assignment as any).creatives || (assignment as any).scraped_ads || assignment}
             onRemove={() => handleRemove(assignment.id)}
           />
         ))}

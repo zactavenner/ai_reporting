@@ -74,7 +74,7 @@ export function MetaTokenExpiryBanner({ clientFilter }: { clientFilter?: string 
               </span>
               <Button asChild size="sm" variant="outline" className="h-6 px-2 text-[10px]">
                 <a
-                  href={`https://business.facebook.com/settings/system-users?business_id=`}
+                  href={`https://business.facebook.com/settings/system-users`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

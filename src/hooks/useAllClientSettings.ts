@@ -24,36 +24,15 @@ const defaultSettings: Omit<ClientSettings, 'id' | 'client_id'> = {
 };
 
 export function useAllClientSettings(clientIds: string[]) {
-  return useQuery({
-    queryKey: ['all-client-settings', clientIds],
-    queryFn: async () => {
-      if (clientIds.length === 0) return {};
-      
-      const { data, error } = await supabase
-        .from('client_settings')
-        .select('*')
-        .in('client_id', clientIds);
-      
-      if (error) throw error;
-      
-      const result: Record<string, KPIThresholds> = {};
-      
-      for (const clientId of clientIds) {
-        const settings = data?.find(s => s.client_id === clientId);
-        if (settings) {
-          result[clientId] = getThresholdsFromSettings(settings as ClientSettings);
-        } else {
-          result[clientId] = getThresholdsFromSettings({
-            client_id: clientId,
-            ...defaultSettings,
-          } as ClientSettings);
-        }
-      }
-      
-      return result;
-    },
-    enabled: clientIds.length > 0,
-  });
+  // Reuse the full-settings cache so both hooks share one network request.
+  const full = useAllClientFullSettings(clientIds);
+  const data: Record<string, KPIThresholds> = {};
+  if (full.data) {
+    for (const id of Object.keys(full.data)) {
+      data[id] = getThresholdsFromSettings(full.data[id]);
+    }
+  }
+  return { ...full, data } as unknown as ReturnType<typeof useAllClientFullSettings> & { data: Record<string, KPIThresholds> };
 }
 
 // New hook to get full settings for revenue calculations
