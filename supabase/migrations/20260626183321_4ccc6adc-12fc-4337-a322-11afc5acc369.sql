@@ -1,0 +1,1 @@
+ALTER TABLE public.client_team_members ADD COLUMN IF NOT EXISTS notify_prefs jsonb NOT NULL DEFAULT '{"new_tasks":{"email":false,"sms":false,"whatsapp":false},"overdue_tasks":{"email":false,"sms":false,"whatsapp":false},"mentions":{"email":false,"sms":false,"whatsapp":false}}'::jsonb;
