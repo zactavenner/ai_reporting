@@ -2939,7 +2939,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -2964,6 +2964,8 @@ Deno.serve(async (req) => {
     canvasItemKind?: string;
     canvasItemPayload?: any;
     offerContext?: string | null;
+    agentSlug?: string | null;
+    offerIds?: string[] | null;
   };
   const creativeRows: any[] | undefined = (body as any).creativeRows;
 
