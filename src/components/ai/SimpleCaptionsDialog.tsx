@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Subtitles, Download as DownloadIcon, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -25,7 +26,19 @@ type Segment = { text?: string; startTime: number; endTime: number; words?: Word
 
 type Cue = { start: number; end: number; text: string };
 
-const FONT_URL = "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50ojIw2boKoduKmMEVuLyfMZg.ttf";
+// Top social-media caption fonts. Each entry has the rendered name (used in
+// ASS + CSS) and a direct .ttf URL so ffmpeg/libass and the live preview agree.
+type FontKey = "Inter" | "Montserrat" | "Poppins" | "Bebas Neue" | "Anton" | "Oswald" | "Roboto" | "Archivo Black";
+const FONTS: Record<FontKey, { ttf: string; googleHref: string; cssStack: string }> = {
+  "Inter":          { ttf: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50ojIw2boKoduKmMEVuLyfMZg.ttf",            googleHref: "https://fonts.googleapis.com/css2?family=Inter:wght@800&display=swap",          cssStack: "'Inter', system-ui, sans-serif" },
+  "Montserrat":     { ttf: "https://fonts.gstatic.com/s/montserrat/v29/JTUSjIg1_i6t8kCHKm45_dJE3gnD-w.ttf",                            googleHref: "https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap",     cssStack: "'Montserrat', system-ui, sans-serif" },
+  "Poppins":        { ttf: "https://fonts.gstatic.com/s/poppins/v22/pxiByp8kv8JHgFVrLCz7Z1xlFQ.ttf",                                   googleHref: "https://fonts.googleapis.com/css2?family=Poppins:wght@800&display=swap",        cssStack: "'Poppins', system-ui, sans-serif" },
+  "Bebas Neue":     { ttf: "https://fonts.gstatic.com/s/bebasneue/v14/JTUSjIg69CK48gW7PXoo9WlhyTbWaw.ttf",                             googleHref: "https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap",              cssStack: "'Bebas Neue', Impact, sans-serif" },
+  "Anton":          { ttf: "https://fonts.gstatic.com/s/anton/v25/1Ptgg87LROyAm0K08i4gS7lu.ttf",                                       googleHref: "https://fonts.googleapis.com/css2?family=Anton&display=swap",                   cssStack: "'Anton', Impact, sans-serif" },
+  "Oswald":         { ttf: "https://fonts.gstatic.com/s/oswald/v53/TK3_WkUHHAIjg75cFRf3bXL8LICs1y9F-A.ttf",                             googleHref: "https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap",         cssStack: "'Oswald', Impact, sans-serif" },
+  "Roboto":         { ttf: "https://fonts.gstatic.com/s/roboto/v32/KFOlCnqEu92Fr1MmWUlfBBc4.ttf",                                       googleHref: "https://fonts.googleapis.com/css2?family=Roboto:wght@900&display=swap",         cssStack: "'Roboto', system-ui, sans-serif" },
+  "Archivo Black":  { ttf: "https://fonts.gstatic.com/s/archivoblack/v21/HTxqL289NzCGg4MzN6KJ7eW6OYuP_x7yx3A.ttf",                      googleHref: "https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap",           cssStack: "'Archivo Black', Impact, sans-serif" },
+};
 const WORDS_PER_CUE = 3;
 
 function buildCues(segments: Segment[]): Cue[] {
@@ -47,7 +60,14 @@ function buildCues(segments: Segment[]): Cue[] {
       });
     }
   }
-  return cues.sort((a, b) => a.start - b.start);
+  const sorted = cues.sort((a, b) => a.start - b.start);
+  // Tighten timing: extend each cue's end to the next cue's start (capped at
+  // +0.4s) so there's no flicker gap between groups while staying word-synced.
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const gap = sorted[i + 1].start - sorted[i].end;
+    if (gap > 0 && gap < 0.4) sorted[i].end = sorted[i + 1].start;
+  }
+  return sorted;
 }
 
 function fmtAss(t: number) {
@@ -76,10 +96,11 @@ function buildAss(opts: {
   textColor: string;
   bgColor: string;
   fontSize: number;
+  fontName: string;
   // 0..1 from top; 0.5 = middle
   verticalPosition: number;
 }) {
-  const { cues, width, height, textColor, bgColor, fontSize, verticalPosition } = opts;
+  const { cues, width, height, textColor, bgColor, fontSize, fontName, verticalPosition } = opts;
   const primary = hexToAss(textColor);
   const back = hexToAss(bgColor);
   // Alignment 2 = bottom-center. We override per-cue with \pos so position works for any value.
@@ -94,7 +115,7 @@ function buildAss(opts: {
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
     // BorderStyle=4 -> draw box behind text using BackColour
-    `Style: Pill,Inter,${fontSize},${primary},${primary},${back},${back},1,0,0,0,100,100,0,0,4,8,0,2,40,40,40,1`,
+    `Style: Pill,${fontName},${fontSize},${primary},${primary},${back},${back},1,0,0,0,100,100,0,0,4,8,0,2,40,40,40,1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -132,6 +153,7 @@ export function SimpleCaptionsDialog({
   // 0..100: 10 = near top, 50 = middle, 88 = bottom-third (default)
   const [position, setPosition] = useState(82);
   const [fontSize, setFontSize] = useState(64);
+  const [fontName, setFontName] = useState<FontKey>("Inter");
 
   const [cues, setCues] = useState<Cue[]>([]);
   const [transcribing, setTranscribing] = useState(false);
@@ -163,17 +185,30 @@ export function SimpleCaptionsDialog({
     return () => { cancelled = true; };
   }, [open, videoUrl]);
 
+  // Load the chosen Google Font into the preview document.
+  useEffect(() => {
+    const href = FONTS[fontName].googleHref;
+    const id = `cap-font-${fontName.replace(/\s+/g, "-")}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  }, [fontName]);
+
   const activeCue = useMemo(() => pickCue(cues, currentTime), [cues, currentTime]);
 
   const previewStyle = useMemo(() => {
     return {
       color: textColor,
       background: bgColor,
+      fontFamily: FONTS[fontName].cssStack,
       // Scale font size relative to a 1080px reference so preview matches the export.
       fontSize: `clamp(12px, ${(fontSize / 1080) * 100}cqw, ${fontSize}px)`,
       top: `${position}%`,
     } as React.CSSProperties;
-  }, [textColor, bgColor, fontSize, position]);
+  }, [textColor, bgColor, fontSize, position, fontName]);
 
   const renderAndSave = useCallback(async () => {
     if (!cues.length) {
@@ -202,11 +237,11 @@ export function SimpleCaptionsDialog({
       const srcBuf = new Uint8Array(await dl.arrayBuffer());
       await ff.writeFile("in.mp4", srcBuf);
 
-      // Download font (Inter) for libass
-      const fontRes = await fetch(FONT_URL);
+      // Download chosen font for libass
+      const fontRes = await fetch(FONTS[fontName].ttf);
       if (!fontRes.ok) throw new Error(`Font download failed (${fontRes.status})`);
       const fontBuf = new Uint8Array(await fontRes.arrayBuffer());
-      await ff.writeFile("Inter.ttf", fontBuf);
+      await ff.writeFile(`${fontName}.ttf`, fontBuf);
 
       const w = videoMeta?.width || 1080;
       const h = videoMeta?.height || 1920;
@@ -217,6 +252,7 @@ export function SimpleCaptionsDialog({
         textColor,
         bgColor,
         fontSize,
+        fontName,
         verticalPosition: position / 100,
       });
       await ff.writeFile("subs.ass", new TextEncoder().encode(ass));
@@ -282,7 +318,7 @@ export function SimpleCaptionsDialog({
       setRendering(false);
       setRenderProgress(0);
     }
-  }, [cues, videoUrl, videoMeta, textColor, bgColor, fontSize, position, clientId, conversationId, onOpenChange]);
+  }, [cues, videoUrl, videoMeta, textColor, bgColor, fontSize, fontName, position, clientId, conversationId, onOpenChange]);
 
   // void unused import so tree-shake doesn't drop the shared transcoder cache hint
   void transcodeWebmToMp4;
@@ -329,6 +365,22 @@ export function SimpleCaptionsDialog({
 
           {/* Controls */}
           <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Font</Label>
+              <Select value={fontName} onValueChange={(v) => setFontName(v as FontKey)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(FONTS) as FontKey[]).map((name) => (
+                    <SelectItem key={name} value={name}>
+                      <span style={{ fontFamily: FONTS[name].cssStack, fontWeight: 800 }}>{name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs">Text color</Label>
               <div className="flex items-center gap-2">
