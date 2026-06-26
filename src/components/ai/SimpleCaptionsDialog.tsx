@@ -541,6 +541,36 @@ export function SimpleCaptionsDialog({
               </p>
             </div>
 
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Voice sync offset</Label>
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {syncOffsetMs > 0 ? `+${syncOffsetMs}` : syncOffsetMs}ms
+                </span>
+              </div>
+              <Slider
+                value={[syncOffsetMs]}
+                min={-500}
+                max={500}
+                step={10}
+                onValueChange={(v) => setSyncOffsetMs(v[0] ?? 0)}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>Earlier</span>
+                <button
+                  type="button"
+                  onClick={() => setSyncOffsetMs(0)}
+                  className="underline-offset-2 hover:underline"
+                >
+                  Reset
+                </button>
+                <span>Later</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Nudge captions to land exactly on the voice. Updates the preview live.
+              </p>
+            </div>
+
             <div className="space-y-2 border-t pt-3">
               <div className="text-[11px] text-muted-foreground">
                 {cues.length > 0 ? `${cues.length} caption cue${cues.length === 1 ? "" : "s"} ready.` : transcribing ? "Generating word-level timestamps…" : "No captions yet."}
