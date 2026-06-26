@@ -497,6 +497,29 @@ export function SimpleCaptionsDialog({
               <Slider value={[fontSize]} min={28} max={140} step={2} onValueChange={(v) => setFontSize(v[0] ?? 64)} />
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs">Words per caption</Label>
+              <div className="grid grid-cols-5 gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setWordsPerCue(n)}
+                    className={`h-8 rounded border text-xs font-medium transition ${
+                      wordsPerCue === n
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card hover:bg-muted/50 border-input"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {wordsPerCue === 1 ? "One word at a time — instant voice sync." : `${wordsPerCue} words per cue.`}
+              </p>
+            </div>
+
             <div className="space-y-2 border-t pt-3">
               <div className="text-[11px] text-muted-foreground">
                 {cues.length > 0 ? `${cues.length} caption cue${cues.length === 1 ? "" : "s"} ready.` : transcribing ? "Generating word-level timestamps…" : "No captions yet."}
