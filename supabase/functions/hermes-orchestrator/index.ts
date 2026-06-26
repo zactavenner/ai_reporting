@@ -754,6 +754,111 @@ async function handleTriageTasks(body: any, cfg: any) {
   return json({ ok: true, dispatched: created.length, tasks: created });
 }
 
+// ── Offers API ──────────────────────────────────────────────────────
+// Hermes is now the source of truth for client offers (the Auto Doc
+// pipeline has been retired). These endpoints let Hermes read every
+// offer across every client, fetch attached files, and update or
+// create offers programmatically.
+async function handleListOffers(body: any) {
+  let q = supa.from("client_offers").select("*").order("created_at", { ascending: false });
+  const client = await resolveClient(body);
+  if (client) q = q.eq("client_id", (client as any).id);
+  if (body.status) q = q.eq("status", body.status);
+  if (body.limit) q = q.limit(Number(body.limit));
+  const { data, error } = await q;
+  if (error) return json({ error: error.message }, 500);
+
+  // Attach files for each offer so Hermes gets the full picture in one call.
+  const ids = (data || []).map((o: any) => o.id);
+  let filesByOffer: Record<string, any[]> = {};
+  if (ids.length) {
+    const { data: files } = await supa
+      .from("client_offer_files")
+      .select("*")
+      .in("offer_id", ids);
+    for (const f of files || []) {
+      (filesByOffer[(f as any).offer_id] ||= []).push(f);
+    }
+  }
+  const offers = (data || []).map((o: any) => ({ ...o, files: filesByOffer[o.id] || [] }));
+  return json({ ok: true, count: offers.length, offers });
+}
+
+async function handleGetOffer(body: any) {
+  if (!body.offer_id) return json({ error: "offer_id required" }, 400);
+  const { data: offer, error } = await supa
+    .from("client_offers").select("*").eq("id", body.offer_id).maybeSingle();
+  if (error) return json({ error: error.message }, 500);
+  if (!offer) return json({ error: "Offer not found" }, 404);
+  const { data: files } = await supa
+    .from("client_offer_files").select("*").eq("offer_id", body.offer_id);
+  return json({ ok: true, offer: { ...offer, files: files || [] } });
+}
+
+const OFFER_WRITABLE_FIELDS = [
+  "title", "description", "status", "fund_name", "fund_type", "raise_amount",
+  "min_investment", "timeline", "target_investor", "targeted_returns",
+  "hold_period", "distribution_frequency", "asset_class", "geography",
+  "sponsor_name", "sponsor_track_record", "tax_benefits", "exit_strategy",
+  "key_terms", "risks", "use_of_funds", "competitive_advantage",
+  "investor_profile", "compliance_notes", "marketing_angle", "hook_ideas",
+  "tags", "file_name", "file_url", "file_type", "deck_url", "one_pager_url",
+  "webinar_url", "external_id", "notes",
+];
+
+async function handleUpdateOffer(body: any) {
+  if (!body.offer_id) return json({ error: "offer_id required" }, 400);
+  const patch: any = {};
+  for (const k of OFFER_WRITABLE_FIELDS) {
+    if (body[k] !== undefined) patch[k] = body[k];
+  }
+  if (body.fields && typeof body.fields === "object") {
+    for (const k of Object.keys(body.fields)) {
+      if (OFFER_WRITABLE_FIELDS.includes(k)) patch[k] = body.fields[k];
+    }
+  }
+  if (!Object.keys(patch).length) return json({ error: "No writable fields provided" }, 400);
+  patch.updated_at = new Date().toISOString();
+  const { data, error } = await supa
+    .from("client_offers").update(patch).eq("id", body.offer_id).select("*").maybeSingle();
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true, offer: data });
+}
+
+async function handleCreateOffer(body: any) {
+  const client = await resolveClient(body);
+  if (!client) return json({ error: "client_id / client_slug / client_name required" }, 400);
+  if (!body.title) return json({ error: "title required" }, 400);
+  const row: any = { client_id: (client as any).id, title: body.title };
+  for (const k of OFFER_WRITABLE_FIELDS) {
+    if (body[k] !== undefined) row[k] = body[k];
+  }
+  if (body.fields && typeof body.fields === "object") {
+    for (const k of Object.keys(body.fields)) {
+      if (OFFER_WRITABLE_FIELDS.includes(k)) row[k] = body.fields[k];
+    }
+  }
+  const { data, error } = await supa
+    .from("client_offers").insert(row).select("*").maybeSingle();
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true, offer: data });
+}
+
+async function handleDeleteOffer(body: any) {
+  if (!body.offer_id) return json({ error: "offer_id required" }, 400);
+  const { error } = await supa.from("client_offers").delete().eq("id", body.offer_id);
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true });
+}
+
+async function handleListOfferFiles(body: any) {
+  if (!body.offer_id) return json({ error: "offer_id required" }, 400);
+  const { data, error } = await supa
+    .from("client_offer_files").select("*").eq("offer_id", body.offer_id);
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true, files: data || [] });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -792,6 +897,13 @@ Deno.serve(async (req) => {
       case "generate_static_ad": return await handleGenerateImage(body, auth.cfg);
       case "generate_brief":  return await handleGenerateBrief(body, auth.cfg);
       case "triage_tasks":    return await handleTriageTasks(body, auth.cfg);
+      // Offers (replaces Auto Doc pipeline)
+      case "list_offers":      return await handleListOffers(body);
+      case "get_offer":        return await handleGetOffer(body);
+      case "create_offer":     return await handleCreateOffer(body);
+      case "update_offer":     return await handleUpdateOffer(body);
+      case "delete_offer":     return await handleDeleteOffer(body);
+      case "list_offer_files": return await handleListOfferFiles(body);
       case "ping":         return json({ ok: true, pong: new Date().toISOString() });
       default:
         return json({
@@ -802,6 +914,7 @@ Deno.serve(async (req) => {
             "list_agents", "get_agent", "create_agent", "update_agent", "delete_agent", "toggle_agent",
             "generate_copy", "generate_video", "generate_image", "generate_static_ad", "generate_brief",
             "triage_tasks",
+            "list_offers", "get_offer", "create_offer", "update_offer", "delete_offer", "list_offer_files",
           ],
         }, 400);
     }

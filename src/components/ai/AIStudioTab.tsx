@@ -948,8 +948,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => { try { localStorage.setItem(`ai-studio:offer:${clientId}`, selectedOfferId); } catch {} }, [clientId, selectedOfferId]);
   const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
   const [activeVideoReferenceIds, setActiveVideoReferenceIds] = useState<string[]>([]);
-  const [autoDocContext, setAutoDocContext] = useState<boolean>(true);
-  const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number; auto_doc?: { enabled: boolean; chars: number; title?: string | null } } | null>(null);
+  const [contextUsage, setContextUsage] = useState<{ chars: number; tokens: number } | null>(null);
   const [autoConnectedDoc, setAutoConnectedDoc] = useState(false);
   const [autoConnectedSheet, setAutoConnectedSheet] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -1490,7 +1489,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         })(),
         activeReferenceIds,
         activeVideoReferenceIds,
-        autoDocContext,
         agentMode,
         attachments: attSnapshot.map(a => ({ url: a.url, name: a.name, mime: a.mime, text: a.text })),
       }, ctrl.signal);
@@ -1514,7 +1512,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           if (evt.type === "conversation") {
             setConversationId(evt.conversationId);
           } else if (evt.type === "context_usage") {
-            setContextUsage({ chars: evt.chars, tokens: evt.estimated_tokens, auto_doc: evt.auto_doc });
+            setContextUsage({ chars: evt.chars, tokens: evt.estimated_tokens });
           } else if (evt.type === "text") {
             updateAssistant(m => ({ ...m, content: stripImageMarkup((m.content || "") + evt.delta) }));
           } else if (evt.type === "tool_start") {
@@ -2011,15 +2009,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       {used.toLocaleString()} / {limit.toLocaleString()} tok ({pct}%)
                     </span>
                   </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap" title="Auto-load the tied Google Doc into context on every turn">
-                    <Switch checked={autoDocContext} onCheckedChange={setAutoDocContext} className="scale-75" />
-                    Auto Doc context
-                    {contextUsage?.auto_doc?.enabled && contextUsage.auto_doc.chars > 0 && (
-                      <Badge variant="secondary" className="text-[9px] ml-1">
-                        {(contextUsage.auto_doc.chars / 1000).toFixed(1)}k chars
-                      </Badge>
-                    )}
-                  </label>
                 </div>
               );
             })()}
