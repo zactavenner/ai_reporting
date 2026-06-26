@@ -276,7 +276,7 @@ export default function ClientDetail() {
           </div>
           <h2 className="text-xl font-semibold">Dashboard data is reconnecting</h2>
           <p className="text-sm text-muted-foreground">
-            The backend did not respond in time. Refresh in a minute; if it is still reconnecting, open Backend and check the Cloud status.
+            The hosted backend did not respond in time. Refresh in a minute and the dashboard will retry cleanly.
           </p>
           <p className="text-xs text-muted-foreground">{clientQueryError instanceof Error ? clientQueryError.message : 'Client request timed out'}</p>
           <div className="flex flex-col sm:flex-row gap-2 justify-center">
