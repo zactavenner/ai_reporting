@@ -191,6 +191,8 @@ export interface StaticBatchConfig {
   adImageUrls?: string[];
   avatarPercentage?: number; // 0-100, what % of ads should include the avatar
   avatarOnlyWithHuman?: boolean; // only use avatar on reference ads that already show a human
+  /** Optimized image model for static ads. */
+  imageModel?: 'openai/gpt-image-2' | 'google/gemini-3.1-flash-image-preview';
 }
 
 export interface GeneratedAd {
