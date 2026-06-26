@@ -769,6 +769,65 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_channels: {
+        Row: {
+          agent_id: string | null
+          client_id: string | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          scope: string
+        }
+        Insert: {
+          agent_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          scope: string
+        }
+        Update: {
+          agent_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          scope?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_channels_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_channels_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agent_channels_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_channels_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       agent_escalations: {
         Row: {
           agent_name: string
@@ -816,6 +875,80 @@ export type Database = {
           title?: string
         }
         Relationships: []
+      }
+      agent_messages: {
+        Row: {
+          body: string | null
+          channel_id: string
+          created_at: string
+          from_agent_id: string | null
+          id: string
+          kind: string
+          payload: Json
+          role: string
+          run_id: string | null
+          task_id: string | null
+          to_agent_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          channel_id: string
+          created_at?: string
+          from_agent_id?: string | null
+          id?: string
+          kind?: string
+          payload?: Json
+          role: string
+          run_id?: string | null
+          task_id?: string | null
+          to_agent_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          channel_id?: string
+          created_at?: string
+          from_agent_id?: string | null
+          id?: string
+          kind?: string
+          payload?: Json
+          role?: string
+          run_id?: string | null
+          task_id?: string | null
+          to_agent_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_messages_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "agent_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_messages_from_agent_id_fkey"
+            columns: ["from_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_messages_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_messages_to_agent_id_fkey"
+            columns: ["to_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       agent_runs: {
         Row: {
@@ -954,6 +1087,7 @@ export type Database = {
       agents: {
         Row: {
           client_id: string | null
+          config: Json
           connectors: Json | null
           consecutive_failures: number | null
           created_at: string
@@ -961,13 +1095,16 @@ export type Database = {
           enabled: boolean | null
           icon: string | null
           id: string
+          is_core: boolean
           last_run_at: string | null
           last_run_status: string | null
           max_tokens: number | null
           model: string | null
           name: string
           notify_channels: string[]
+          parent_agent_id: string | null
           prompt_template: string
+          role: string | null
           schedule_cron: string | null
           schedule_timezone: string | null
           temperature: number | null
@@ -977,6 +1114,7 @@ export type Database = {
         }
         Insert: {
           client_id?: string | null
+          config?: Json
           connectors?: Json | null
           consecutive_failures?: number | null
           created_at?: string
@@ -984,13 +1122,16 @@ export type Database = {
           enabled?: boolean | null
           icon?: string | null
           id?: string
+          is_core?: boolean
           last_run_at?: string | null
           last_run_status?: string | null
           max_tokens?: number | null
           model?: string | null
           name: string
           notify_channels?: string[]
+          parent_agent_id?: string | null
           prompt_template?: string
+          role?: string | null
           schedule_cron?: string | null
           schedule_timezone?: string | null
           temperature?: number | null
@@ -1000,6 +1141,7 @@ export type Database = {
         }
         Update: {
           client_id?: string | null
+          config?: Json
           connectors?: Json | null
           consecutive_failures?: number | null
           created_at?: string
@@ -1007,13 +1149,16 @@ export type Database = {
           enabled?: boolean | null
           icon?: string | null
           id?: string
+          is_core?: boolean
           last_run_at?: string | null
           last_run_status?: string | null
           max_tokens?: number | null
           model?: string | null
           name?: string
           notify_channels?: string[]
+          parent_agent_id?: string | null
           prompt_template?: string
+          role?: string | null
           schedule_cron?: string | null
           schedule_timezone?: string | null
           temperature?: number | null
@@ -1042,6 +1187,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agents_parent_agent_id_fkey"
+            columns: ["parent_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -11900,6 +12052,7 @@ export type Database = {
       task_comments: {
         Row: {
           audio_url: string | null
+          author_agent_id: string | null
           author_name: string
           comment_type: string | null
           content: string
@@ -11911,6 +12064,7 @@ export type Database = {
         }
         Insert: {
           audio_url?: string | null
+          author_agent_id?: string | null
           author_name: string
           comment_type?: string | null
           content: string
@@ -11922,6 +12076,7 @@ export type Database = {
         }
         Update: {
           audio_url?: string | null
+          author_agent_id?: string | null
           author_name?: string
           comment_type?: string | null
           content?: string
@@ -11932,6 +12087,13 @@ export type Database = {
           transcript?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "task_comments_author_agent_id_fkey"
+            columns: ["author_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "task_comments_task_id_fkey"
             columns: ["task_id"]
