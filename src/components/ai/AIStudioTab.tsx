@@ -2480,30 +2480,52 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
-                  <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
-                    <SelectTrigger className="h-7 text-[10px] w-[160px]">
-                      <SelectValue placeholder="No avatar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" className="text-xs">No avatar</SelectItem>
-                      {studioAvatars.map((a) => (
-                        <SelectItem key={a.id} value={a.id} className="text-xs">
-                          <span className="inline-flex items-center gap-2">
-                            {a.image_url ? <img src={a.image_url} alt="" className="h-4 w-4 rounded-full object-cover" /> : null}
-                            {a.name}{a.is_stock ? " · stock" : ""}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedAvatar && (
-                    <button type="button" onClick={() => setAiStudioTab("avatars")} className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
-                      manage
-                    </button>
-                  )}
-                </div>
+                {(videoModels.length > 0 || imageModels.length > 0) && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
+                    <Select value={videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
+                      if (videoModels.length > 0 && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
+                      else setAdFormat(v);
+                    }}>
+                      <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(videoModels.length > 0 ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
+                          <SelectItem key={f.value} value={f.value} className="text-xs">
+                            {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {(videoModels.length > 0 || imageModels.length > 0) && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
+                    <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
+                      <SelectTrigger className="h-7 text-[10px] w-[160px]">
+                        <SelectValue placeholder="No avatar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none" className="text-xs">No avatar</SelectItem>
+                        {studioAvatars.map((a) => (
+                          <SelectItem key={a.id} value={a.id} className="text-xs">
+                            <span className="inline-flex items-center gap-2">
+                              {a.image_url ? <img src={a.image_url} alt="" className="h-4 w-4 rounded-full object-cover" /> : null}
+                              {a.name}{a.is_stock ? " · stock" : ""}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedAvatar && (
+                      <button type="button" onClick={() => setAiStudioTab("avatars")} className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+                        manage
+                      </button>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setBatchScriptsOpen(true)}
