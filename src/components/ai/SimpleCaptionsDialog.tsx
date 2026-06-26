@@ -39,9 +39,8 @@ const FONTS: Record<FontKey, { ttf: string; googleHref: string; cssStack: string
   "Roboto":         { ttf: "https://fonts.gstatic.com/s/roboto/v32/KFOlCnqEu92Fr1MmWUlfBBc4.ttf",                                       googleHref: "https://fonts.googleapis.com/css2?family=Roboto:wght@900&display=swap",         cssStack: "'Roboto', system-ui, sans-serif" },
   "Archivo Black":  { ttf: "https://fonts.gstatic.com/s/archivoblack/v21/HTxqL289NzCGg4MzN6KJ7eW6OYuP_x7yx3A.ttf",                      googleHref: "https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap",           cssStack: "'Archivo Black', Impact, sans-serif" },
 };
-const WORDS_PER_CUE = 3;
-
-function buildCues(segments: Segment[]): Cue[] {
+function buildCues(segments: Segment[], wordsPerCue: number = 3): Cue[] {
+  const wpc = Math.max(1, Math.min(8, Math.floor(wordsPerCue)));
   const cues: Cue[] = [];
   for (const seg of segments) {
     const words = (seg.words || []).filter(w => Number.isFinite(w.startTime) && Number.isFinite(w.endTime));
@@ -51,8 +50,8 @@ function buildCues(segments: Segment[]): Cue[] {
       }
       continue;
     }
-    for (let i = 0; i < words.length; i += WORDS_PER_CUE) {
-      const chunk = words.slice(i, i + WORDS_PER_CUE);
+    for (let i = 0; i < words.length; i += wpc) {
+      const chunk = words.slice(i, i + wpc);
       cues.push({
         start: chunk[0].startTime,
         end: chunk[chunk.length - 1].endTime,
@@ -61,11 +60,13 @@ function buildCues(segments: Segment[]): Cue[] {
     }
   }
   const sorted = cues.sort((a, b) => a.start - b.start);
-  // Tighten timing: extend each cue's end to the next cue's start (capped at
-  // +0.4s) so there's no flicker gap between groups while staying word-synced.
+  // Tighten timing: extend each cue's end to the next cue's start. For
+  // one-word mode (instant voice sync) we cap the bridge tighter so each
+  // word still pops on/off on its real boundary instead of bleeding.
+  const bridgeCap = wpc === 1 ? 0.08 : 0.4;
   for (let i = 0; i < sorted.length - 1; i++) {
     const gap = sorted[i + 1].start - sorted[i].end;
-    if (gap > 0 && gap < 0.4) sorted[i].end = sorted[i + 1].start;
+    if (gap > 0 && gap < bridgeCap) sorted[i].end = sorted[i + 1].start;
   }
   return sorted;
 }
@@ -156,7 +157,13 @@ export function SimpleCaptionsDialog({
   const [fontName, setFontName] = useState<FontKey>("Inter");
 
   const [cues, setCues] = useState<Cue[]>([]);
+  const [rawSegments, setRawSegments] = useState<Segment[]>([]);
+  // 1 = one word at a time (instant voice sync). Default to 1.
+  const [wordsPerCue, setWordsPerCue] = useState<number>(1);
   const [transcribing, setTranscribing] = useState(false);
+  // Polling-style status used to drive the auto-refresh of the preview
+  // (no manual state poke required — we tick this and the cue memo updates).
+  const [transcribeStatus, setTranscribeStatus] = useState<"idle" | "pending" | "running" | "completed" | "failed">("idle");
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -169,21 +176,29 @@ export function SimpleCaptionsDialog({
   // preview can snap to the first new cue without waiting for a refresh.
   const runTranscription = useCallback(async (): Promise<Cue[]> => {
     setTranscribing(true);
+    setTranscribeStatus("pending");
+    // Small "running" tick so the polling watcher (below) wakes up and the
+    // preview placeholder swaps to the live progress state without a refresh.
+    const startTick = setTimeout(() => setTranscribeStatus("running"), 150);
     try {
       const { data, error } = await supabase.functions.invoke("transcribe-video", { body: { videoUrl } });
       if (error) throw error;
       const segs: Segment[] = Array.isArray((data as any)?.captions) ? (data as any).captions : [];
-      const next = buildCues(segs);
+      setRawSegments(segs);
+      const next = buildCues(segs, wordsPerCue);
       setCues(next);
       setCaptionsVersion((v) => v + 1);
+      setTranscribeStatus("completed");
       return next;
     } catch (e: any) {
       toast.error(`Transcription failed: ${e?.message || e}`);
+      setTranscribeStatus("failed");
       return [];
     } finally {
+      clearTimeout(startTick);
       setTranscribing(false);
     }
-  }, [videoUrl]);
+  }, [videoUrl, wordsPerCue]);
 
   // Snap the live preview to the latest transcription as soon as it lands —
   // pause the video and seek to the first cue's start so the user immediately
@@ -206,6 +221,7 @@ export function SimpleCaptionsDialog({
     if (!open || !videoUrl) return;
     let cancelled = false;
     setCues([]);
+    setRawSegments([]);
     (async () => {
       const next = await runTranscription();
       if (cancelled) return;
@@ -213,6 +229,26 @@ export function SimpleCaptionsDialog({
     })();
     return () => { cancelled = true; };
   }, [open, videoUrl, runTranscription, snapPreviewToLatest]);
+
+  // Status watcher — fires the moment the transcribe job flips to
+  // "completed", driving the auto preview refresh without a manual button.
+  // (Acts as a webhook-style status listener for the local job state.)
+  const lastAutoSyncedVersion = useRef<number>(0);
+  useEffect(() => {
+    if (transcribeStatus !== "completed") return;
+    if (captionsVersion === lastAutoSyncedVersion.current) return;
+    lastAutoSyncedVersion.current = captionsVersion;
+    snapPreviewToLatest(cues);
+  }, [transcribeStatus, captionsVersion, cues, snapPreviewToLatest]);
+
+  // Rebuild cues live whenever the user changes "words per cue" — no
+  // re-transcription needed, the raw segments are cached.
+  useEffect(() => {
+    if (rawSegments.length === 0) return;
+    const next = buildCues(rawSegments, wordsPerCue);
+    setCues(next);
+    setCaptionsVersion((v) => v + 1);
+  }, [wordsPerCue, rawSegments]);
 
   const handleResync = useCallback(async () => {
     const next = await runTranscription();
@@ -459,6 +495,29 @@ export function SimpleCaptionsDialog({
                 <span className="text-[10px] text-muted-foreground">{fontSize}px</span>
               </div>
               <Slider value={[fontSize]} min={28} max={140} step={2} onValueChange={(v) => setFontSize(v[0] ?? 64)} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Words per caption</Label>
+              <div className="grid grid-cols-5 gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setWordsPerCue(n)}
+                    className={`h-8 rounded border text-xs font-medium transition ${
+                      wordsPerCue === n
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card hover:bg-muted/50 border-input"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {wordsPerCue === 1 ? "One word at a time — instant voice sync." : `${wordsPerCue} words per cue.`}
+              </p>
             </div>
 
             <div className="space-y-2 border-t pt-3">
