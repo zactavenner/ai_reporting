@@ -86,7 +86,7 @@ export function useDailyMetrics(clientId: string | undefined, startDate?: string
     queryFn: async () => {
       if (!clientId) return [];
       
-      return await fetchAllRows<DailyMetric>((sb) => {
+      return await withTimeout(fetchAllRows<DailyMetric>((sb) => {
         let query = sb
           .from('daily_metrics')
           .select('*')
@@ -101,9 +101,10 @@ export function useDailyMetrics(clientId: string | undefined, startDate?: string
         }
         
         return query;
-      });
+      }), 'Client daily metrics');
     },
     enabled: !!clientId,
+    retry: 0,
   });
 }
 

@@ -134,8 +134,8 @@ export default function ClientDetail() {
   const [meetingsOpen, setMeetingsOpen] = useState(true);
 
   const { startDate, endDate } = useDateFilter();
-  const { data: client, isLoading: clientLoading } = useClient(clientId);
-  const { data: dailyMetrics = [], isLoading: metricsLoading } = useDailyMetrics(clientId, startDate, endDate);
+  const { data: client, isLoading: clientLoading, isError: clientError, error: clientQueryError } = useClient(clientId);
+  const { data: dailyMetrics = [], isLoading: metricsLoading, isError: metricsError } = useDailyMetrics(clientId, startDate, endDate);
 
   // Broadcast current client so the floating Agency AI Chat auto-scopes to this client
   useEffect(() => {
@@ -245,7 +245,7 @@ export default function ClientDetail() {
     );
   }, [setSearchParams]);
 
-  const isLoading = clientLoading || metricsLoading;
+  const isLoading = clientLoading || (metricsLoading && !metricsError);
 
   if (isLoading) {
     return (
@@ -262,6 +262,30 @@ export default function ClientDetail() {
             ))}
           </div>
           <div className="h-64 rounded-xl bg-muted animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (clientError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-4">
+          <div className="rounded-full bg-muted p-5 inline-flex mb-2">
+            <Building2 className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold">Dashboard data is reconnecting</h2>
+          <p className="text-sm text-muted-foreground">
+            The hosted backend did not respond in time. Refresh in a minute and the dashboard will retry cleanly.
+          </p>
+          <p className="text-xs text-muted-foreground">{clientQueryError instanceof Error ? clientQueryError.message : 'Client request timed out'}</p>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+            <Button variant="outline" onClick={() => navigate('/')}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Clients
+            </Button>
+          </div>
         </div>
       </div>
     );
