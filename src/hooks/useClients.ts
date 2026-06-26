@@ -120,28 +120,13 @@ export function useClientByToken(token: string | undefined) {
       
       console.log('[useClientByToken] Looking up client by token:', token);
       
-      // First try to find by slug (friendly URL)
-      let { data, error } = await supabase
+      // Single-round-trip lookup: match either slug (friendly URL) or public_token (legacy UUID).
+      const { data: rows, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('slug', token)
-        .maybeSingle();
-      
-      console.log('[useClientByToken] Slug lookup result:', { data, error: error?.message });
-      
-      // If not found by slug, try by public_token (legacy UUID-based URLs)
-      if (!data && !error) {
-        console.log('[useClientByToken] Trying public_token lookup');
-        const result = await supabase
-          .from('clients')
-          .select('*')
-          .eq('public_token', token)
-          .maybeSingle();
-        
-        data = result.data;
-        error = result.error;
-        console.log('[useClientByToken] Token lookup result:', { data, error: error?.message });
-      }
+        .or(`slug.eq.${token},public_token.eq.${token}`)
+        .limit(1);
+      const data = rows?.[0] ?? null;
       
       if (error) {
         console.error('[useClientByToken] Error:', error);
