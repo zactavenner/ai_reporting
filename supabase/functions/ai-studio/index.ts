@@ -1561,6 +1561,17 @@ async function generateSeedanceVideo(opts: {
     const startFrame = providerImageUrl || providerIngredientUrl;
     if (startFrame) body.image_url = startFrame;
     if (providerLastFrameUrl) body.tail_image_url = providerLastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
+  } else if (isGrok) {
+    // Grok Imagine Video on OpenRouter: image-to-video uses top-level `image_url`.
+    // It does NOT accept `resolution`, `aspect_ratio`, `frame_images`,
+    // `reference_images`, or `size` — extra keys cause 400s and the job never
+    // starts (the prior code fell through to the generic body which always failed).
+    // Grok caps at 720p, 15s; honor the documented contract only.
+    delete (body as any).resolution;
+    delete (body as any).aspect_ratio;
+    body.duration = Math.max(3, Math.min(15, Number(effectiveDuration) || 15));
+    const startFrame = providerImageUrl || providerIngredientUrl;
+    if (startFrame) body.image_url = startFrame;
   }
 
   await recordVideoModelDecision(supa, "generateSeedanceVideo.submit", {
