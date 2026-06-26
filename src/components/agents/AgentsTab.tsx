@@ -16,6 +16,7 @@ import { ClientScopePicker } from './ClientScopePicker';
 import { AIAgentGenerator } from './AIAgentGenerator';
 import { AgentReferenceLibrary } from './AgentReferenceLibrary';
 import { AgencyAgentsManager } from './AgencyAgentsManager';
+import { AgentChannelPane } from './AgentChannelPane';
 
 interface Props { clients: Client[]; }
 
@@ -42,6 +43,7 @@ export function AgentsTab({ clients }: Props) {
   const [tab, setTab] = useState('overview');
   const [showTemplates, setShowTemplates] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [showAllAgents, setShowAllAgents] = useState(false);
 
   // Deep-link: ?agent=<id> selects that agent + listen for org-chart clicks
   useEffect(() => {
@@ -91,6 +93,10 @@ export function AgentsTab({ clients }: Props) {
   };
 
   const activeAgents = useMemo(() => agents.filter(a => a.enabled), [agents]);
+  const visibleAgents = useMemo(
+    () => (showAllAgents ? agents : agents.filter(a => (a as any).is_core)),
+    [agents, showAllAgents]
+  );
 
   const handleCreateBlank = () => {
     createAgent.mutate({
