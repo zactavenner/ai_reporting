@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ExternalLink } from "lucide-react";
+import { AlertTriangle, ExternalLink, Wand2, Loader2 } from "lucide-react";
 import { useClients } from "@/hooks/useClients";
 import { formatDistanceToNow } from "date-fns";
+import { useState } from "react";
+import { toast } from "sonner";
 
 /**
  * Surfaces Meta Marketing API tokens that are expired or expiring within 14 days.
@@ -13,6 +15,8 @@ import { formatDistanceToNow } from "date-fns";
  */
 export function MetaTokenExpiryBanner({ clientFilter }: { clientFilter?: string }) {
   const { data: clients = [] } = useClients();
+  const qc = useQueryClient();
+  const [applying, setApplying] = useState(false);
   const { data: rows = [] } = useQuery({
     queryKey: ["meta-token-expiry"],
     refetchInterval: 5 * 60 * 1000,
@@ -52,6 +56,22 @@ export function MetaTokenExpiryBanner({ clientFilter }: { clientFilter?: string 
 
   const anyExpired = issues.some(i => i.expired);
 
+  const applyMaster = async () => {
+    setApplying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-apply-master-to-expired', { body: {} });
+      if (error) throw error;
+      if (!(data as any)?.ok) throw new Error((data as any)?.error || 'Apply failed');
+      toast.success(`Master token applied to ${(data as any).applied} client(s)`);
+      qc.invalidateQueries({ queryKey: ['meta-token-expiry'] });
+      qc.invalidateQueries({ queryKey: ['integration-statuses'] });
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to apply master token');
+    } finally {
+      setApplying(false);
+    }
+  };
+
   return (
     <Alert variant={anyExpired ? "destructive" : "default"} className="mb-3 border-amber-500/60">
       <AlertTriangle className="h-4 w-4" />
@@ -61,6 +81,12 @@ export function MetaTokenExpiryBanner({ clientFilter }: { clientFilter?: string 
           : `Meta token expiring soon (${issues.length})`}
       </AlertTitle>
       <AlertDescription>
+        <div className="mt-2 mb-2">
+          <Button size="sm" variant="default" onClick={applyMaster} disabled={applying} className="h-7 text-xs">
+            {applying ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wand2 className="h-3 w-3 mr-1" />}
+            Apply master token to all {issues.length} client{issues.length === 1 ? '' : 's'}
+          </Button>
+        </div>
         <div className="text-xs mt-1 space-y-1 max-h-40 overflow-y-auto">
           {issues.slice(0, 10).map(i => (
             <div key={i.clientId} className="flex items-center justify-between gap-2">
