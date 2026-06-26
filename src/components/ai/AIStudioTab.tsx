@@ -2009,15 +2009,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       {used.toLocaleString()} / {limit.toLocaleString()} tok ({pct}%)
                     </span>
                   </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap" title="Auto-load the tied Google Doc into context on every turn">
-                    <Switch checked={autoDocContext} onCheckedChange={setAutoDocContext} className="scale-75" />
-                    Auto Doc context
-                    {contextUsage?.auto_doc?.enabled && contextUsage.auto_doc.chars > 0 && (
-                      <Badge variant="secondary" className="text-[9px] ml-1">
-                        {(contextUsage.auto_doc.chars / 1000).toFixed(1)}k chars
-                      </Badge>
-                    )}
-                  </label>
                 </div>
               );
             })()}
