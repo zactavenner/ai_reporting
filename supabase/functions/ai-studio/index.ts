@@ -2934,7 +2934,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, autoDocContext, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -2952,7 +2952,6 @@ Deno.serve(async (req) => {
     activeVideoReferenceIds?: string[] | null;
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
-    autoDocContext?: boolean;
     threadTitle?: string | null;
     threadUpdate?: { title?: string | null; pinned?: boolean; archived?: boolean } | null;
     agentMode?: boolean;
@@ -3639,7 +3638,6 @@ Deno.serve(async (req) => {
         type: "context_usage",
         chars: ctxChars,
         estimated_tokens: Math.ceil(ctxChars / 4),
-        auto_doc: { enabled: !!autoDocContext, chars: autoDocChars, title: autoDocTitle },
       });
 
       let finalAssistantText = "";
