@@ -294,7 +294,7 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
                 <div>
                   <label className="text-xs text-muted-foreground">Model</label>
                   <Select
-                    value={editing.model || "google/gemini-3-flash-preview"}
+                    value={editing.model || "openrouter/owl-alpha"}
                     onValueChange={(v) => setEditing({ ...editing, model: v })}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
