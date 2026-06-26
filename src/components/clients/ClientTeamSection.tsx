@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Trash2, Star, Mail, Phone, Users, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Star, Mail, Phone, Users, Loader2, Bell, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -22,7 +22,28 @@ interface TeamMember {
   notes: string | null;
   is_primary_contact: boolean;
   sort_order: number;
+  notify_prefs?: NotifyPrefs | null;
 }
+
+type NotifyChannel = 'email' | 'sms' | 'whatsapp';
+type NotifyEvent = 'new_tasks' | 'overdue_tasks' | 'mentions';
+type NotifyPrefs = Record<NotifyEvent, Record<NotifyChannel, boolean>>;
+
+const NOTIFY_EVENTS: { key: NotifyEvent; label: string }[] = [
+  { key: 'new_tasks', label: 'New tasks' },
+  { key: 'overdue_tasks', label: 'Overdue tasks' },
+  { key: 'mentions', label: 'Mentions' },
+];
+const NOTIFY_CHANNELS: { key: NotifyChannel; label: string }[] = [
+  { key: 'email', label: 'Email' },
+  { key: 'sms', label: 'SMS' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+];
+const emptyNotify: NotifyPrefs = {
+  new_tasks: { email: false, sms: false, whatsapp: false },
+  overdue_tasks: { email: false, sms: false, whatsapp: false },
+  mentions: { email: false, sms: false, whatsapp: false },
+};
 
 type FormState = {
   name: string;
@@ -31,6 +52,7 @@ type FormState = {
   phone: string;
   notes: string;
   is_primary_contact: boolean;
+  notify_prefs: NotifyPrefs;
 };
 
 const emptyForm: FormState = {
@@ -40,6 +62,7 @@ const emptyForm: FormState = {
   phone: '',
   notes: '',
   is_primary_contact: false,
+  notify_prefs: emptyNotify,
 };
 
 export function ClientTeamSection({ clientId }: { clientId: string }) {
@@ -77,6 +100,7 @@ export function ClientTeamSection({ clientId }: { clientId: string }) {
         phone: form.phone.trim() || null,
         notes: form.notes.trim() || null,
         is_primary_contact: form.is_primary_contact,
+        notify_prefs: form.notify_prefs,
       };
 
       // If marking as primary, clear other primary flags
@@ -141,6 +165,7 @@ export function ClientTeamSection({ clientId }: { clientId: string }) {
       phone: m.phone ?? '',
       notes: m.notes ?? '',
       is_primary_contact: m.is_primary_contact,
+      notify_prefs: { ...emptyNotify, ...(m.notify_prefs || {}) } as NotifyPrefs,
     });
     setOpen(true);
   };
@@ -187,7 +212,7 @@ export function ClientTeamSection({ clientId }: { clientId: string }) {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Team Member' : 'Add Team Member'}</DialogTitle>
           </DialogHeader>
@@ -221,6 +246,54 @@ export function ClientTeamSection({ clientId }: { clientId: string }) {
               />
               <span>Primary point of contact</span>
             </label>
+
+            <div className="pt-3 mt-2 border-t border-border">
+              <div className="flex items-center gap-2 mb-1">
+                <Bell className="h-4 w-4 text-primary" />
+                <Label className="text-sm font-semibold">Notification preferences</Label>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Pick which channels this member receives alerts on for each event.
+              </p>
+              <div className="border border-border rounded-md overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40">
+                    <tr>
+                      <th className="text-left font-medium px-3 py-2">Event</th>
+                      {NOTIFY_CHANNELS.map((c) => (
+                        <th key={c.key} className="text-center font-medium px-2 py-2 w-20">{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {NOTIFY_EVENTS.map((ev) => (
+                      <tr key={ev.key} className="border-t border-border">
+                        <td className="px-3 py-2">{ev.label}</td>
+                        {NOTIFY_CHANNELS.map((c) => (
+                          <td key={c.key} className="px-2 py-2 text-center">
+                            <Checkbox
+                              checked={form.notify_prefs[ev.key]?.[c.key] ?? false}
+                              onCheckedChange={(checked) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  notify_prefs: {
+                                    ...prev.notify_prefs,
+                                    [ev.key]: {
+                                      ...prev.notify_prefs[ev.key],
+                                      [c.key]: !!checked,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -244,6 +317,10 @@ function MemberCard({
   onEdit: (m: TeamMember) => void;
   onDelete: (id: string) => void;
 }) {
+  const prefs = (m.notify_prefs || emptyNotify) as NotifyPrefs;
+  const activeChannels = (ev: NotifyEvent) =>
+    NOTIFY_CHANNELS.filter((c) => prefs[ev]?.[c.key]).map((c) => c.label);
+  const hasAnyPref = NOTIFY_EVENTS.some((e) => activeChannels(e.key).length > 0);
   return (
     <div className="group border border-border rounded-lg p-4 bg-card hover:border-primary/40 transition-colors">
       <div className="flex items-start justify-between gap-2">
@@ -286,6 +363,23 @@ function MemberCard({
         </div>
       )}
       {m.notes && <p className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap">{m.notes}</p>}
+      {hasAnyPref && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {NOTIFY_EVENTS.map((ev) => {
+            const chans = activeChannels(ev.key);
+            if (chans.length === 0) return null;
+            return (
+              <span
+                key={ev.key}
+                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
+                title={`${ev.label}: ${chans.join(', ')}`}
+              >
+                <MessageSquare className="h-3 w-3" /> {ev.label}: {chans.join('/')}
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
