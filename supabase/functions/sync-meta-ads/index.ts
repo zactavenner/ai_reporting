@@ -302,14 +302,24 @@ async function attributeCRMData(supabase: any, clientId: string, startDate?: str
     metaAdByMetaId.set(ad.meta_ad_id, ad);
   }
 
-  const campaignByName = new Map<string, any>();
+  // Duplicate names are common on Meta (renamed campaigns, draft duplicates,
+  // multi-account fanout). A plain Map<name, row> overwrites silently and a
+  // single campaign ends up reporting 0 leads. Keep all rows per name so the
+  // attribution loop can fan stats out to every match.
+  const campaignByName = new Map<string, any[]>();
   for (const c of metaCampaigns) {
-    campaignByName.set(c.name, c);
+    if (!c?.name) continue;
+    const arr = campaignByName.get(c.name) || [];
+    arr.push(c);
+    campaignByName.set(c.name, arr);
   }
 
-  const adSetByName = new Map<string, any>();
+  const adSetByName = new Map<string, any[]>();
   for (const as of metaAdSets || []) {
-    adSetByName.set(as.name, as);
+    if (!as?.name) continue;
+    const arr = adSetByName.get(as.name) || [];
+    arr.push(as);
+    adSetByName.set(as.name, arr);
   }
 
   const campaignByMetaId = new Map<string, any>();
@@ -381,10 +391,10 @@ async function attributeCRMData(supabase: any, clientId: string, startDate?: str
     }
 
     if (!matchedAdId && adSetName) {
-      const matchedAdSet = adSetByName.get(adSetName) ||
-        (metaAdSets || []).find((as: any) => as.meta_adset_id === adSetName);
-      if (matchedAdSet) {
-        const adsInSet = adsByAdSetId.get(matchedAdSet.id) || [];
+      const matchedAdSets = adSetByName.get(adSetName) ||
+        ((metaAdSets || []).filter((as: any) => as.meta_adset_id === adSetName));
+      if (matchedAdSets && matchedAdSets.length === 1) {
+        const adsInSet = adsByAdSetId.get(matchedAdSets[0].id) || [];
         if (adsInSet.length === 1) {
           matchedAdId = adsInSet[0].id;
         }

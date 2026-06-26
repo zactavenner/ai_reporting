@@ -80,14 +80,18 @@ serve(async (req) => {
       }
     }
 
+    // Exact-name match only — fuzzy ilike '%name%' caused wrong clients to be
+    // flipped to billing_error when two clients shared a substring.
     if (!clientId && customerName) {
       const { data: c } = await supabase
         .from("clients")
         .select("id, name")
-        .ilike("name", `%${customerName}%`)
-        .limit(1)
-        .maybeSingle();
-      if (c?.id) { clientId = c.id; clientName = c.name; }
+        .ilike("name", customerName)
+        .limit(2);
+      if (c && c.length === 1) { clientId = c[0].id; clientName = c[0].name; }
+      else if (c && c.length > 1) {
+        console.warn("[stripe-webhook] ambiguous client name, skipping auto-flag", { customerName, matches: c.length });
+      }
     }
 
     if (!clientId) {

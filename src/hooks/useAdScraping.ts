@@ -49,14 +49,21 @@ export interface MonitoringTarget {
   client_id: string | null;
 }
 
-export function useScrapedAds() {
+export function useScrapedAds(opts?: { clientId?: string | null; limit?: number }) {
+  const clientId = opts?.clientId ?? null;
+  // PostgREST default cap is 1000; bump explicitly so we don't silently
+  // truncate large libraries. Callers can override per surface.
+  const limit = opts?.limit ?? 5000;
   return useQuery({
-    queryKey: ['scraped-ads'],
+    queryKey: ['scraped-ads', clientId, limit],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('scraped_ads')
         .select('*')
-        .order('scraped_at', { ascending: false });
+        .order('scraped_at', { ascending: false })
+        .limit(limit);
+      if (clientId) q = q.eq('client_id', clientId);
+      const { data, error } = await q;
       if (error) throw error;
       return (data || []) as unknown as ScrapedAd[];
     },

@@ -76,9 +76,13 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
     }
   };
 
+  // dateRange is part of the queryKey so the picker actually re-fetches —
+  // previously the chip was cosmetic and showed stale data.
+  const dateKey = `${dateRange.from.toISOString().slice(0,10)}_${dateRange.to.toISOString().slice(0,10)}`;
+
   // Cached campaigns
   const { data: campaigns = [], isLoading: cLoading } = useQuery({
-    queryKey: ['admin-meta-campaigns', clientFilter, statusFilter],
+    queryKey: ['admin-meta-campaigns', clientFilter, statusFilter, dateKey],
     queryFn: async () => {
       let q = (supabase as any).from('meta_campaigns').select('*').order('spend', { ascending: false }).limit(2000);
       if (clientFilter !== 'all') q = q.eq('client_id', clientFilter);
@@ -91,7 +95,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
 
   // Cached ad sets
   const { data: adSets = [] } = useQuery({
-    queryKey: ['admin-meta-adsets', clientFilter, selectedCampaignId],
+    queryKey: ['admin-meta-adsets', clientFilter, selectedCampaignId, dateKey],
     queryFn: async () => {
       let q = (supabase as any).from('meta_ad_sets').select('*').order('spend', { ascending: false }).limit(2000);
       if (clientFilter !== 'all') q = q.eq('client_id', clientFilter);
@@ -104,7 +108,7 @@ export function AdminAdsManagerTab({ platform = 'all' }: Props) {
 
   // Cached ads
   const { data: ads = [] } = useQuery({
-    queryKey: ['admin-meta-ads', clientFilter, selectedAdSetId],
+    queryKey: ['admin-meta-ads', clientFilter, selectedAdSetId, dateKey],
     queryFn: async () => {
       let q = (supabase as any).from('meta_ads').select('*').order('spend', { ascending: false }).limit(2000);
       if (clientFilter !== 'all') q = q.eq('client_id', clientFilter);
