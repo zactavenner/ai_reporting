@@ -39,9 +39,8 @@ const FONTS: Record<FontKey, { ttf: string; googleHref: string; cssStack: string
   "Roboto":         { ttf: "https://fonts.gstatic.com/s/roboto/v32/KFOlCnqEu92Fr1MmWUlfBBc4.ttf",                                       googleHref: "https://fonts.googleapis.com/css2?family=Roboto:wght@900&display=swap",         cssStack: "'Roboto', system-ui, sans-serif" },
   "Archivo Black":  { ttf: "https://fonts.gstatic.com/s/archivoblack/v21/HTxqL289NzCGg4MzN6KJ7eW6OYuP_x7yx3A.ttf",                      googleHref: "https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap",           cssStack: "'Archivo Black', Impact, sans-serif" },
 };
-const WORDS_PER_CUE = 3;
-
-function buildCues(segments: Segment[]): Cue[] {
+function buildCues(segments: Segment[], wordsPerCue: number = 3): Cue[] {
+  const wpc = Math.max(1, Math.min(8, Math.floor(wordsPerCue)));
   const cues: Cue[] = [];
   for (const seg of segments) {
     const words = (seg.words || []).filter(w => Number.isFinite(w.startTime) && Number.isFinite(w.endTime));
@@ -51,8 +50,8 @@ function buildCues(segments: Segment[]): Cue[] {
       }
       continue;
     }
-    for (let i = 0; i < words.length; i += WORDS_PER_CUE) {
-      const chunk = words.slice(i, i + WORDS_PER_CUE);
+    for (let i = 0; i < words.length; i += wpc) {
+      const chunk = words.slice(i, i + wpc);
       cues.push({
         start: chunk[0].startTime,
         end: chunk[chunk.length - 1].endTime,
@@ -61,11 +60,13 @@ function buildCues(segments: Segment[]): Cue[] {
     }
   }
   const sorted = cues.sort((a, b) => a.start - b.start);
-  // Tighten timing: extend each cue's end to the next cue's start (capped at
-  // +0.4s) so there's no flicker gap between groups while staying word-synced.
+  // Tighten timing: extend each cue's end to the next cue's start. For
+  // one-word mode (instant voice sync) we cap the bridge tighter so each
+  // word still pops on/off on its real boundary instead of bleeding.
+  const bridgeCap = wpc === 1 ? 0.08 : 0.4;
   for (let i = 0; i < sorted.length - 1; i++) {
     const gap = sorted[i + 1].start - sorted[i].end;
-    if (gap > 0 && gap < 0.4) sorted[i].end = sorted[i + 1].start;
+    if (gap > 0 && gap < bridgeCap) sorted[i].end = sorted[i + 1].start;
   }
   return sorted;
 }
