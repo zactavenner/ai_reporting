@@ -195,7 +195,7 @@ export function useClientAssignedAds(clientId: string | undefined) {
       if (!clientId) return [];
       const { data, error } = await supabase
         .from('client_ad_assignments')
-        .select('*, scraped_ads(*)')
+        .select('*, creatives(*)')
         .eq('client_id', clientId)
         .order('assigned_at', { ascending: false });
       if (error) throw error;
@@ -206,7 +206,7 @@ export function useClientAssignedAds(clientId: string | undefined) {
         assigned_at: string;
         assigned_by: string | null;
         notes: string | null;
-        scraped_ads: any;
+        creatives: any;
       }>;
     },
     enabled: !!clientId,
