@@ -170,7 +170,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl border-2 border-border max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] w-[1400px] border-2 border-border max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <Settings2 className="h-5 w-5" />
