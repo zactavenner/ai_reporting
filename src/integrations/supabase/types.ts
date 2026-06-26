@@ -392,6 +392,98 @@ export type Database = {
         }
         Relationships: []
       }
+      agency_agent_training: {
+        Row: {
+          agent_id: string
+          body: string | null
+          created_at: string
+          created_by: string | null
+          file_url: string | null
+          id: string
+          kind: string
+          title: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          agent_id: string
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          file_url?: string | null
+          id?: string
+          kind?: string
+          title: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          agent_id?: string
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          file_url?: string | null
+          id?: string
+          kind?: string
+          title?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_agent_training_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agency_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_agents: {
+        Row: {
+          allowed_creative_types: string[]
+          created_at: string
+          default_model: string
+          icon: string | null
+          id: string
+          is_active: boolean
+          name: string
+          role: string
+          slug: string
+          sort_order: number
+          system_prompt: string
+          updated_at: string
+        }
+        Insert: {
+          allowed_creative_types?: string[]
+          created_at?: string
+          default_model?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          role: string
+          slug: string
+          sort_order?: number
+          system_prompt?: string
+          updated_at?: string
+        }
+        Update: {
+          allowed_creative_types?: string[]
+          created_at?: string
+          default_model?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          role?: string
+          slug?: string
+          sort_order?: number
+          system_prompt?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agency_meetings: {
         Row: {
           action_items: Json | null
@@ -2708,6 +2800,61 @@ export type Database = {
         }
         Relationships: []
       }
+      client_brain: {
+        Row: {
+          brand_guidelines: string | null
+          client_id: string
+          created_at: string
+          do_not_say: string | null
+          icp: string | null
+          learnings: Json
+          updated_at: string
+          voice: string | null
+        }
+        Insert: {
+          brand_guidelines?: string | null
+          client_id: string
+          created_at?: string
+          do_not_say?: string | null
+          icp?: string | null
+          learnings?: Json
+          updated_at?: string
+          voice?: string | null
+        }
+        Update: {
+          brand_guidelines?: string | null
+          client_id?: string
+          created_at?: string
+          do_not_say?: string | null
+          icp?: string | null
+          learnings?: Json
+          updated_at?: string
+          voice?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_brain_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_brain_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_brain_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_constraint_checklists: {
         Row: {
           checked: boolean
@@ -3192,6 +3339,80 @@ export type Database = {
           },
           {
             foreignKeyName: "client_offer_files_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "client_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_offer_training: {
+        Row: {
+          asset_url: string | null
+          body: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          creative_type: string
+          id: string
+          offer_id: string
+          source_canvas_item_id: string | null
+          title: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          asset_url?: string | null
+          body?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          creative_type: string
+          id?: string
+          offer_id: string
+          source_canvas_item_id?: string | null
+          title: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          asset_url?: string | null
+          body?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          creative_type?: string
+          id?: string
+          offer_id?: string
+          source_canvas_item_id?: string | null
+          title?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_offer_training_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_offer_training_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_offer_training_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_offer_training_offer_id_fkey"
             columns: ["offer_id"]
             isOneToOne: false
             referencedRelation: "client_offers"
