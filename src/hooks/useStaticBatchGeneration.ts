@@ -118,6 +118,7 @@ export function useStaticBatchGeneration({
             strictBrandAdherence: config.strictBrandAdherence,
             brandFonts: config.brandFonts.length > 0 ? config.brandFonts : client?.brand_fonts,
             adImageUrls: config.adImageUrls,
+            imageModel: config.imageModel || 'openai/gpt-image-2',
           },
         });
 
