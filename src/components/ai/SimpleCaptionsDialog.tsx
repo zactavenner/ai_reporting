@@ -39,7 +39,7 @@ const FONTS: Record<FontKey, { ttf: string; googleHref: string; cssStack: string
   "Roboto":         { ttf: "https://fonts.gstatic.com/s/roboto/v32/KFOlCnqEu92Fr1MmWUlfBBc4.ttf",                                       googleHref: "https://fonts.googleapis.com/css2?family=Roboto:wght@900&display=swap",         cssStack: "'Roboto', system-ui, sans-serif" },
   "Archivo Black":  { ttf: "https://fonts.gstatic.com/s/archivoblack/v21/HTxqL289NzCGg4MzN6KJ7eW6OYuP_x7yx3A.ttf",                      googleHref: "https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap",           cssStack: "'Archivo Black', Impact, sans-serif" },
 };
-function buildCues(segments: Segment[], wordsPerCue: number = 3): Cue[] {
+function buildCues(segments: Segment[], wordsPerCue: number = 3, offsetSec: number = 0): Cue[] {
   const wpc = Math.max(1, Math.min(8, Math.floor(wordsPerCue)));
   const cues: Cue[] = [];
   for (const seg of segments) {
@@ -67,6 +67,23 @@ function buildCues(segments: Segment[], wordsPerCue: number = 3): Cue[] {
   for (let i = 0; i < sorted.length - 1; i++) {
     const gap = sorted[i + 1].start - sorted[i].end;
     if (gap > 0 && gap < bridgeCap) sorted[i].end = sorted[i + 1].start;
+  }
+  // Minimum on-screen time so a 60ms word doesn't flash invisibly.
+  const MIN_DUR = wpc === 1 ? 0.12 : 0.2;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].end - sorted[i].start < MIN_DUR) {
+      const cap = i < sorted.length - 1 ? sorted[i + 1].start : sorted[i].end + MIN_DUR;
+      sorted[i].end = Math.min(cap, sorted[i].start + MIN_DUR);
+    }
+  }
+  // Apply user voice-sync offset (negative = caption appears earlier than
+  // the model's reported word boundary, which usually feels tighter to
+  // human ears because the model lags consonant onsets).
+  if (offsetSec !== 0) {
+    for (const c of sorted) {
+      c.start = Math.max(0, c.start + offsetSec);
+      c.end = Math.max(c.start + 0.05, c.end + offsetSec);
+    }
   }
   return sorted;
 }
