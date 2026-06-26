@@ -2,6 +2,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+const CLIENT_QUERY_TIMEOUT_MS = 12000;
+
+async function withTimeout<T>(promise: Promise<T>, label: string, ms = CLIENT_QUERY_TIMEOUT_MS): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -41,15 +56,16 @@ export function useClients() {
   return useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await withTimeout(supabase
         .from('clients')
         .select('*')
         .order('sort_order', { ascending: true })
-        .order('name');
+        .order('name'), 'Clients');
       
       if (error) throw error;
       return data as Client[];
     },
+    retry: 0,
   });
 }
 
@@ -59,16 +75,17 @@ export function useClient(clientId: string | undefined) {
     queryFn: async () => {
       if (!clientId) return null;
       
-      const { data, error } = await supabase
+      const { data, error } = await withTimeout(supabase
         .from('clients')
         .select('*')
         .eq('id', clientId)
-        .maybeSingle();
+        .maybeSingle(), 'Client');
       
       if (error) throw error;
       return data as Client | null;
     },
     enabled: !!clientId,
+    retry: 0,
   });
 }
 
