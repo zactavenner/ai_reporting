@@ -32,7 +32,7 @@ export function useAllClientSettings(clientIds: string[]) {
       data[id] = getThresholdsFromSettings(full.data[id]);
     }
   }
-  return { ...full, data };
+  return { ...full, data } as unknown as ReturnType<typeof useAllClientFullSettings> & { data: Record<string, KPIThresholds> };
 }
 
 // New hook to get full settings for revenue calculations
