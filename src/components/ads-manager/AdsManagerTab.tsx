@@ -344,17 +344,9 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
 
   const currentRangeKey = `${startDate}_${endDate}`;
 
-  useEffect(() => {
-    const hasCredentials = (settings as any)?.meta_ads_sync_enabled || 
-      ((settings as any) && (settings as any).meta_ads_last_sync);
-    
-    if (!hasCredentials) return;
-    if (syncMutation.isPending) return;
-    if (lastSyncedRange.current === currentRangeKey) return;
-    
-    lastSyncedRange.current = currentRangeKey;
-    syncMutation.mutate({ clientId, startDate, endDate });
-  }, [currentRangeKey, clientId, settings]);
+  // Auto-sync on mount/date-change was exhausting Meta rate limits. Sync now
+  // only fires on explicit "Sync Meta Ads" button click. Daily cron + webhooks
+  // keep data fresh in the background.
 
   const lastSync = (settings as any)?.meta_ads_last_sync
     ? formatDistanceToNow(new Date((settings as any).meta_ads_last_sync), { addSuffix: true })
