@@ -15,6 +15,7 @@ import { CronSchedulePicker } from './CronSchedulePicker';
 import { ClientScopePicker } from './ClientScopePicker';
 import { AIAgentGenerator } from './AIAgentGenerator';
 import { AgentReferenceLibrary } from './AgentReferenceLibrary';
+import { AgencyAgentsManager } from './AgencyAgentsManager';
 
 interface Props { clients: Client[]; }
 
@@ -129,6 +130,9 @@ export function AgentsTab({ clients }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Phase 2: Shared Agency Agents with 3-layer knowledge */}
+      <AgencyAgentsManager clients={clients} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

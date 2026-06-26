@@ -1486,6 +1486,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         activeReferenceIds,
         activeVideoReferenceIds,
         agentMode,
+        // Phase 5 wiring: pass offer scope so the edge function can load
+        // 3-layer context (agency agent + client brain + offer training).
+        offerIds: selectedOfferId && selectedOfferId !== "all" ? [selectedOfferId] : (clientOffers || []).map((o: any) => o.id),
         attachments: attSnapshot.map(a => ({ url: a.url, name: a.name, mime: a.mime, text: a.text })),
       }, ctrl.signal);
       if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status} ${await res.text().catch(() => "")}`);
