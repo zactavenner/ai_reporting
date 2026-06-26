@@ -2152,31 +2152,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <div className="flex flex-col md:flex-row md:items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
                 <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible -mx-1 px-1 pb-1 md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0 [&>button]:shrink-0">
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
-                  <Select value={videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
-                    if (videoModels.length > 0 && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
-                    else setAdFormat(v);
-                  }}>
-                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(videoModels.length > 0 ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
-                        <SelectItem key={f.value} value={f.value} className="text-xs">
-                          {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Offer:</span>
                   <Select value={selectedOfferId} onValueChange={setSelectedOfferId}>
                     <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg max-w-[220px]">
-                      <SelectValue placeholder="All offers" />
+                      <SelectValue placeholder="Pick an offer" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all" className="text-xs">All offers ({clientOffers.length})</SelectItem>
                       {clientOffers.map(o => (
                         <SelectItem key={o.id} value={o.id} className="text-xs">
                           {o.title}
