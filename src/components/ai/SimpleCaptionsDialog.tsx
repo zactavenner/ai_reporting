@@ -161,29 +161,64 @@ export function SimpleCaptionsDialog({
   const [renderProgress, setRenderProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoMeta, setVideoMeta] = useState<{ width: number; height: number } | null>(null);
+  const [captionsVersion, setCaptionsVersion] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Auto-transcribe on open
+  // Shared transcription runner — used by auto-run on open AND the manual
+  // "Re-sync captions" button. Always returns the freshly built cues so the
+  // preview can snap to the first new cue without waiting for a refresh.
+  const runTranscription = useCallback(async (): Promise<Cue[]> => {
+    setTranscribing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("transcribe-video", { body: { videoUrl } });
+      if (error) throw error;
+      const segs: Segment[] = Array.isArray((data as any)?.captions) ? (data as any).captions : [];
+      const next = buildCues(segs);
+      setCues(next);
+      setCaptionsVersion((v) => v + 1);
+      return next;
+    } catch (e: any) {
+      toast.error(`Transcription failed: ${e?.message || e}`);
+      return [];
+    } finally {
+      setTranscribing(false);
+    }
+  }, [videoUrl]);
+
+  // Snap the live preview to the latest transcription as soon as it lands —
+  // pause the video and seek to the first cue's start so the user immediately
+  // sees the freshly-synced caption overlay without touching the player.
+  const snapPreviewToLatest = useCallback((next: Cue[]) => {
+    const el = videoRef.current;
+    if (!el || next.length === 0) return;
+    try {
+      el.pause();
+      const seekTo = Math.max(0, next[0].start + 0.001);
+      el.currentTime = seekTo;
+      setCurrentTime(seekTo);
+    } catch {
+      /* seek may fail before metadata; the timeupdate handler will catch up */
+    }
+  }, []);
+
+  // Auto-transcribe on open and auto-sync the preview when it finishes.
   useEffect(() => {
     if (!open || !videoUrl) return;
     let cancelled = false;
     setCues([]);
-    setTranscribing(true);
     (async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("transcribe-video", { body: { videoUrl } });
-        if (cancelled) return;
-        if (error) throw error;
-        const segs: Segment[] = Array.isArray((data as any)?.captions) ? (data as any).captions : [];
-        setCues(buildCues(segs));
-      } catch (e: any) {
-        toast.error(`Transcription failed: ${e?.message || e}`);
-      } finally {
-        if (!cancelled) setTranscribing(false);
-      }
+      const next = await runTranscription();
+      if (cancelled) return;
+      snapPreviewToLatest(next);
     })();
     return () => { cancelled = true; };
-  }, [open, videoUrl]);
+  }, [open, videoUrl, runTranscription, snapPreviewToLatest]);
+
+  const handleResync = useCallback(async () => {
+    const next = await runTranscription();
+    snapPreviewToLatest(next);
+    if (next.length > 0) toast.success(`Re-synced ${next.length} caption cue${next.length === 1 ? "" : "s"}`);
+  }, [runTranscription, snapPreviewToLatest]);
 
   // Load the chosen Google Font into the preview document.
   useEffect(() => {
@@ -197,7 +232,9 @@ export function SimpleCaptionsDialog({
     document.head.appendChild(link);
   }, [fontName]);
 
-  const activeCue = useMemo(() => pickCue(cues, currentTime), [cues, currentTime]);
+  // captionsVersion is included so the memo re-runs after a re-sync even if
+  // currentTime didn't change (e.g. paused player with the same timestamp).
+  const activeCue = useMemo(() => pickCue(cues, currentTime), [cues, currentTime, captionsVersion]);
 
   const previewStyle = useMemo(() => {
     return {
@@ -424,8 +461,21 @@ export function SimpleCaptionsDialog({
               <Slider value={[fontSize]} min={28} max={140} step={2} onValueChange={(v) => setFontSize(v[0] ?? 64)} />
             </div>
 
-            <div className="text-[11px] text-muted-foreground border-t pt-3">
-              {cues.length > 0 ? `${cues.length} caption cue${cues.length === 1 ? "" : "s"} ready.` : transcribing ? "Generating word-level timestamps…" : "No captions yet."}
+            <div className="space-y-2 border-t pt-3">
+              <div className="text-[11px] text-muted-foreground">
+                {cues.length > 0 ? `${cues.length} caption cue${cues.length === 1 ? "" : "s"} ready.` : transcribing ? "Generating word-level timestamps…" : "No captions yet."}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full h-8 text-xs gap-1.5"
+                onClick={handleResync}
+                disabled={transcribing || rendering}
+              >
+                {transcribing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Subtitles className="h-3 w-3" />}
+                Re-sync to latest transcription
+              </Button>
             </div>
           </div>
         </div>
