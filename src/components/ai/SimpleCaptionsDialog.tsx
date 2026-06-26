@@ -153,6 +153,7 @@ export function SimpleCaptionsDialog({
   // 0..100: 10 = near top, 50 = middle, 88 = bottom-third (default)
   const [position, setPosition] = useState(82);
   const [fontSize, setFontSize] = useState(64);
+  const [fontName, setFontName] = useState<FontKey>("Inter");
 
   const [cues, setCues] = useState<Cue[]>([]);
   const [transcribing, setTranscribing] = useState(false);
@@ -184,17 +185,30 @@ export function SimpleCaptionsDialog({
     return () => { cancelled = true; };
   }, [open, videoUrl]);
 
+  // Load the chosen Google Font into the preview document.
+  useEffect(() => {
+    const href = FONTS[fontName].googleHref;
+    const id = `cap-font-${fontName.replace(/\s+/g, "-")}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  }, [fontName]);
+
   const activeCue = useMemo(() => pickCue(cues, currentTime), [cues, currentTime]);
 
   const previewStyle = useMemo(() => {
     return {
       color: textColor,
       background: bgColor,
+      fontFamily: FONTS[fontName].cssStack,
       // Scale font size relative to a 1080px reference so preview matches the export.
       fontSize: `clamp(12px, ${(fontSize / 1080) * 100}cqw, ${fontSize}px)`,
       top: `${position}%`,
     } as React.CSSProperties;
-  }, [textColor, bgColor, fontSize, position]);
+  }, [textColor, bgColor, fontSize, position, fontName]);
 
   const renderAndSave = useCallback(async () => {
     if (!cues.length) {
@@ -223,11 +237,11 @@ export function SimpleCaptionsDialog({
       const srcBuf = new Uint8Array(await dl.arrayBuffer());
       await ff.writeFile("in.mp4", srcBuf);
 
-      // Download font (Inter) for libass
-      const fontRes = await fetch(FONT_URL);
+      // Download chosen font for libass
+      const fontRes = await fetch(FONTS[fontName].ttf);
       if (!fontRes.ok) throw new Error(`Font download failed (${fontRes.status})`);
       const fontBuf = new Uint8Array(await fontRes.arrayBuffer());
-      await ff.writeFile("Inter.ttf", fontBuf);
+      await ff.writeFile(`${fontName}.ttf`, fontBuf);
 
       const w = videoMeta?.width || 1080;
       const h = videoMeta?.height || 1920;
@@ -238,6 +252,7 @@ export function SimpleCaptionsDialog({
         textColor,
         bgColor,
         fontSize,
+        fontName,
         verticalPosition: position / 100,
       });
       await ff.writeFile("subs.ass", new TextEncoder().encode(ass));
@@ -303,7 +318,7 @@ export function SimpleCaptionsDialog({
       setRendering(false);
       setRenderProgress(0);
     }
-  }, [cues, videoUrl, videoMeta, textColor, bgColor, fontSize, position, clientId, conversationId, onOpenChange]);
+  }, [cues, videoUrl, videoMeta, textColor, bgColor, fontSize, fontName, position, clientId, conversationId, onOpenChange]);
 
   // void unused import so tree-shake doesn't drop the shared transcoder cache hint
   void transcodeWebmToMp4;
