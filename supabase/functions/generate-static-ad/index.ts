@@ -305,9 +305,23 @@ serve(async (req) => {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: 'google/gemini-3.1-flash-image-preview',
-        models: ['google/gemini-3.1-flash-image-preview', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+      body: JSON.stringify((() => {
+        const requested = (body.imageModel || '').trim();
+        const MODEL_ALIASES: Record<string, string> = {
+          'gpt-image-2': 'openai/gpt-image-2',
+          'openai/gpt-image-2': 'openai/gpt-image-2',
+          'nano-banana-pro-2': 'google/gemini-3.1-flash-image-preview',
+          'google/nano-banana-pro-2': 'google/gemini-3.1-flash-image-preview',
+          'google/gemini-3.1-flash-image-preview': 'google/gemini-3.1-flash-image-preview',
+        };
+        const chosen = MODEL_ALIASES[requested] || 'openai/gpt-image-2';
+        const fallbacks = chosen === 'openai/gpt-image-2'
+          ? ['google/gemini-3.1-flash-image-preview']
+          : ['openai/gpt-image-2'];
+        console.log('[generate-static-ad] image model →', chosen, 'requested:', requested);
+        return {
+        model: chosen,
+        models: [chosen, ...fallbacks],
         messages: [
           {
             role: 'user',
@@ -315,7 +329,8 @@ serve(async (req) => {
           },
         ],
         modalities: ['image', 'text'],
-      }),
+        };
+      })()),
     });
 
     if (!aiResponse.ok) {
