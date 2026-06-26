@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useEffect } from 'react';
 
 const CLIENT_QUERY_TIMEOUT_MS = 12000;
 
@@ -53,6 +54,25 @@ export interface Client {
 }
 
 export function useClients() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('clients-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['clients'] });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
