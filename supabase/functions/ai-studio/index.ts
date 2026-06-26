@@ -3855,10 +3855,11 @@ Deno.serve(async (req) => {
             send({ type: "tool_start", id: toolId, name: "generate_seedance_video", args });
             let result: any;
             try {
-              const r = await generateSeedanceVideo({
+            const r = await generateSeedanceVideo({
                 prompt: segment.prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
                 aspectRatio: aspect,
-                duration: 15,
+                // HappyHorse hard-locks to 15s internally; everything else respects the segment/user duration.
+                duration: model === "alibaba/happyhorse-1.1" ? 15 : (segment.duration || 15),
                 resolution: segRes,
                 imageUrl,
                 lastFrameUrl,
