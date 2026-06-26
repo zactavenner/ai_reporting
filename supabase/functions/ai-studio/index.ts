@@ -3586,27 +3586,24 @@ Deno.serve(async (req) => {
     const brainRow: any = (brainRes as any)?.data || null;
     const trainRows: any[] = ((offerTrainRes as any)?.data || []) as any[];
 
-    if (agentRow) {
-      // Load agency-level training for this agent (top weighted, capped).
-      const { data: agencyTrain } = await supa
-        .from("agency_agent_training")
-        .select("kind,title,body,file_url,weight")
-        .eq("agent_id", agentRow.id)
-        .order("weight", { ascending: false })
-        .limit(30);
-      const trainingBlock = (agencyTrain || []).map((t: any) =>
-        `- [${t.kind}] ${t.title}${t.body ? `: ${String(t.body).slice(0, 600)}` : ""}${t.file_url ? ` (file: ${t.file_url})` : ""}`
-      ).join("\n");
-      convo.splice(1, 0, {
-        role: "system",
-        content:
-          `🧠 ACTIVE AGENCY AGENT: ${agentRow.name} (${agentRow.role})\n\n` +
-          `Role brief:\n${agentRow.system_prompt || ""}\n` +
-          (trainingBlock ? `\nAgency training library (apply silently, do not list back):\n${trainingBlock}\n` : "") +
-          (Array.isArray(agentRow.allowed_creative_types) && agentRow.allowed_creative_types.length
-            ? `\nAllowed creative types for this agent: ${agentRow.allowed_creative_types.join(", ")}.\n`
-            : ""),
-      });
+    // 3-layer context priority (highest first after splices = LAST splice wins position 1):
+    //   1. Active Agency Agent  ← splice LAST so it ends up at index 1 (top)
+    //   2. Client Brain
+    //   3. Offer Training
+    // The previous order put Agent first and Offer last, which inverted priority
+    // (Offer Training ended up dominating the role brief).
+    if (trainRows.length) {
+      const allowed: string[] | null = agentRow?.allowed_creative_types && agentRow.allowed_creative_types.length ? agentRow.allowed_creative_types : null;
+      const filtered = allowed ? trainRows.filter(t => allowed.includes(t.creative_type)) : trainRows;
+      if (filtered.length) {
+        const block = filtered.slice(0, 25).map((t: any) =>
+          `- [${t.creative_type}] ${t.title}${t.body ? `: ${String(t.body).slice(0, 500)}` : ""}${t.asset_url ? ` (asset: ${t.asset_url})` : ""}`
+        ).join("\n");
+        convo.splice(1, 0, {
+          role: "system",
+          content: `🎯 OFFER TRAINING EXAMPLES (proven patterns tied to the selected offer — use as style/quality reference, do not copy verbatim):\n\n${block}`,
+        });
+      }
     }
 
     if (brainRow && (brainRow.voice || brainRow.icp || brainRow.brand_guidelines || brainRow.do_not_say || (Array.isArray(brainRow.learnings) && brainRow.learnings.length))) {
@@ -3623,18 +3620,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (trainRows.length) {
-      const allowed: string[] | null = agentRow?.allowed_creative_types && agentRow.allowed_creative_types.length ? agentRow.allowed_creative_types : null;
-      const filtered = allowed ? trainRows.filter(t => allowed.includes(t.creative_type)) : trainRows;
-      if (filtered.length) {
-        const block = filtered.slice(0, 25).map((t: any) =>
-          `- [${t.creative_type}] ${t.title}${t.body ? `: ${String(t.body).slice(0, 500)}` : ""}${t.asset_url ? ` (asset: ${t.asset_url})` : ""}`
-        ).join("\n");
-        convo.splice(1, 0, {
-          role: "system",
-          content: `🎯 OFFER TRAINING EXAMPLES (proven patterns tied to the selected offer — use as style/quality reference, do not copy verbatim):\n\n${block}`,
-        });
-      }
+    if (agentRow) {
+      // Load agency-level training for this agent (top weighted, capped).
+      const { data: agencyTrain } = await supa
+        .from("agency_agent_training")
+        .select("kind,title,body,file_url,weight")
+        .eq("agent_id", agentRow.id)
+        .order("weight", { ascending: false })
+        .limit(30);
+      // Cap each body to ~400 chars and trim total training block to ~8k chars
+      // so 3-layer context cannot single-handedly burn 30-50k tokens on
+      // heavy clients (was uncapped previously).
+      const trainingBlock = (agencyTrain || []).map((t: any) =>
+        `- [${t.kind}] ${t.title}${t.body ? `: ${String(t.body).slice(0, 400)}` : ""}${t.file_url ? ` (file: ${t.file_url})` : ""}`
+      ).join("\n").slice(0, 8000);
+      convo.splice(1, 0, {
+        role: "system",
+        content:
+          `🧠 ACTIVE AGENCY AGENT: ${agentRow.name} (${agentRow.role})\n\n` +
+          `Role brief:\n${agentRow.system_prompt || ""}\n` +
+          (trainingBlock ? `\nAgency training library (apply silently, do not list back):\n${trainingBlock}\n` : "") +
+          (Array.isArray(agentRow.allowed_creative_types) && agentRow.allowed_creative_types.length
+            ? `\nAllowed creative types for this agent: ${agentRow.allowed_creative_types.join(", ")}.\n`
+            : ""),
+      });
     }
   } catch (e) {
     console.warn("[ai-studio] 3-layer context load failed (non-fatal):", (e as any)?.message);
