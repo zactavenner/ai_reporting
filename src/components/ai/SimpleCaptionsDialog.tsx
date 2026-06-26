@@ -157,7 +157,13 @@ export function SimpleCaptionsDialog({
   const [fontName, setFontName] = useState<FontKey>("Inter");
 
   const [cues, setCues] = useState<Cue[]>([]);
+  const [rawSegments, setRawSegments] = useState<Segment[]>([]);
+  // 1 = one word at a time (instant voice sync). Default to 1.
+  const [wordsPerCue, setWordsPerCue] = useState<number>(1);
   const [transcribing, setTranscribing] = useState(false);
+  // Polling-style status used to drive the auto-refresh of the preview
+  // (no manual state poke required — we tick this and the cue memo updates).
+  const [transcribeStatus, setTranscribeStatus] = useState<"idle" | "pending" | "running" | "completed" | "failed">("idle");
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -170,21 +176,29 @@ export function SimpleCaptionsDialog({
   // preview can snap to the first new cue without waiting for a refresh.
   const runTranscription = useCallback(async (): Promise<Cue[]> => {
     setTranscribing(true);
+    setTranscribeStatus("pending");
+    // Small "running" tick so the polling watcher (below) wakes up and the
+    // preview placeholder swaps to the live progress state without a refresh.
+    const startTick = setTimeout(() => setTranscribeStatus("running"), 150);
     try {
       const { data, error } = await supabase.functions.invoke("transcribe-video", { body: { videoUrl } });
       if (error) throw error;
       const segs: Segment[] = Array.isArray((data as any)?.captions) ? (data as any).captions : [];
-      const next = buildCues(segs);
+      setRawSegments(segs);
+      const next = buildCues(segs, wordsPerCue);
       setCues(next);
       setCaptionsVersion((v) => v + 1);
+      setTranscribeStatus("completed");
       return next;
     } catch (e: any) {
       toast.error(`Transcription failed: ${e?.message || e}`);
+      setTranscribeStatus("failed");
       return [];
     } finally {
+      clearTimeout(startTick);
       setTranscribing(false);
     }
-  }, [videoUrl]);
+  }, [videoUrl, wordsPerCue]);
 
   // Snap the live preview to the latest transcription as soon as it lands —
   // pause the video and seek to the first cue's start so the user immediately
@@ -207,6 +221,7 @@ export function SimpleCaptionsDialog({
     if (!open || !videoUrl) return;
     let cancelled = false;
     setCues([]);
+    setRawSegments([]);
     (async () => {
       const next = await runTranscription();
       if (cancelled) return;
@@ -214,6 +229,26 @@ export function SimpleCaptionsDialog({
     })();
     return () => { cancelled = true; };
   }, [open, videoUrl, runTranscription, snapPreviewToLatest]);
+
+  // Status watcher — fires the moment the transcribe job flips to
+  // "completed", driving the auto preview refresh without a manual button.
+  // (Acts as a webhook-style status listener for the local job state.)
+  const lastAutoSyncedVersion = useRef<number>(0);
+  useEffect(() => {
+    if (transcribeStatus !== "completed") return;
+    if (captionsVersion === lastAutoSyncedVersion.current) return;
+    lastAutoSyncedVersion.current = captionsVersion;
+    snapPreviewToLatest(cues);
+  }, [transcribeStatus, captionsVersion, cues, snapPreviewToLatest]);
+
+  // Rebuild cues live whenever the user changes "words per cue" — no
+  // re-transcription needed, the raw segments are cached.
+  useEffect(() => {
+    if (rawSegments.length === 0) return;
+    const next = buildCues(rawSegments, wordsPerCue);
+    setCues(next);
+    setCaptionsVersion((v) => v + 1);
+  }, [wordsPerCue, rawSegments]);
 
   const handleResync = useCallback(async () => {
     const next = await runTranscription();
