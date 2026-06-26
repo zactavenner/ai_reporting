@@ -1,101 +1,84 @@
-# AI Studio Agents — Phased Architecture Rollout
 
-Goal: move from per-client ad-hoc agents to a 3-layer knowledge model — **Agency Agents** (shared workforce) → **Client Brain** (per-client memory) → **Offer Knowledge** (per-offer context) — with mass-training and creative-type routing.
+# Agent Workforce v2 — 5 Core Agents + Audit Trail
 
-## Layer model
+## 1. Collapse to 5 core agents
 
-```text
-Agency Agents (shared)        Client Brain (per client)        Offer Knowledge (per offer)
-─────────────────────────     ──────────────────────────       ───────────────────────────
-Media Buyer                   Voice / tone / ICP                Offer doc, pricing, hooks
-Reporting                     Brand assets / colors             Funnel, CTAs, target CPA
-Static Ads Specialist         Win/loss patterns                 Creative training (per type)
-Video Ads Specialist          Compliance rules                  Past ads + performance
-Copywriter                    Historical learnings              Asset library
-```
-
-Every turn the agent runs with: Agency role prompt + Client Brain + Selected Offer context. Switching clients/offers swaps only the lower two layers.
-
----
-
-## Phase 1 — Data model (1 migration)
-
-New tables (all RLS + grants):
-
-- `agency_agents` — id, slug, name, role, icon, default_model (`openrouter/owl-alpha`), system_prompt, allowed_creative_types[], is_active
-- `agency_agent_training` — id, agent_id → agency_agents, kind (`doc|url|note|example`), title, body, file_url, weight
-- `client_brain` — client_id PK, voice, icp, brand_guidelines, do_not_say, learnings (jsonb)
-- `client_offer_training` — id, offer_id → client_offers, creative_type (`static|video|copy|reporting|media_buying`), title, body, asset_url
-
-Seed 5 agency agents: `media_buyer`, `reporting`, `static_ads`, `video_ads`, `copywriter`. Owl Alpha default; per-agent override allowed (Owl Alpha / DeepSeek V4 Flash / GPT-5 / GPT-5 Mini only).
-
-## Phase 2 — Three-column UI
-
-New route `/agents` (rename existing tab):
+Replace the current 15-agent roster (Agency Agents) with a fixed hierarchy. Deactivate (don't delete) the rest so historical runs/escalations stay intact.
 
 ```text
-┌─────────────┬───────────────────────┬────────────────────────┐
-│ Agency      │ Agent detail          │ Training / Context     │
-│ Agents (5)  │ Prompt • Model • Type │ Tabs: Agency Training, │
-│ + Client    │ Tools • Schedule      │ Client Brain, Offer    │
-│   Brain     │                       │ Training               │
-└─────────────┴───────────────────────┴────────────────────────┘
+                 HERMES  ⇄  JARVIS  (OPS / AI COO)
+                              │
+        ┌────────────┬────────┴────────┬────────────┐
+   MEDIA BUYER    CREATIVE         REPORTING        QA
+   (SCALE)        (CANVAS)         (PULSE)          (SENTRY)
 ```
 
-- Left rail: 5 shared agents + a "Client Brain" entry per active client.
-- Middle: editable agent config (model picker restricted to the 4 approved models, Owl Alpha default).
-- Right: 3-tab training surface; **Agency Training** is global, **Client Brain** auto-scopes to the selected client, **Offer Training** scopes to the selected offer with creative-type sub-tabs.
+Each agent gets:
+- Slug, default model (Owl Alpha), system prompt aligned to role
+- Connector matrix (Meta, GHL, Sheets, Slack, WhatsApp, Tasks, DB, Stripe)
+- `parent_agent_id` → all four report to Jarvis; Jarvis ⇄ Hermes peer link
+- `allowed_creative_types` for Creative includes static + video
 
-## Phase 3 — Mass training UI
+**Creative (CANVAS)** Static Ads sub-config:
+- Image model picker with two options: **GPT Image 2** (`openai/gpt-image-2`) and **Nano Banana Pro 2** (`google/gemini-3-pro-image`)
+- Per-agent default + per-run override surfaced in the Static Ads Generator UI
+- Wire selection through `useStaticBatchGeneration` → `generate-static-ads` edge function
 
-"Agent Training" tab (renamed from References, already shipped) gets:
+## 2. Per-client + agency scope
 
-- Multi-select files/URLs → bulk attach to one or many agents.
-- "Route by type" toggle: drops `static` examples onto Static Ads agent, `video` onto Video Ads, `copy` onto Copywriter, etc.
-- CSV import for examples (prompt → desired output pairs).
+- Agency-level: the 5 agents exist once, visible only in agency view (`/agents`)
+- Each client gets a mirror row in `client_agents` so connectors/access/training can be overridden per client without forking the agent definition
+- Effective config = client override ⟶ falls back to agency default
+- Agency Agents page shows the 5 cards; clicking opens tabs: Overview / Config / Agent Training / **Channel** / Runs / Escalations
 
-## Phase 4 — Creative-train routing
+## 3. Inter-agent channels (audit trail)
 
-In `AIStudioCanvas` the existing "Train on creative" action becomes type-aware:
+New schema:
 
-- image / static asset → `static_ads` agent training (offer-scoped)
-- video / reel → `video_ads` agent training
-- script / caption → `copywriter` agent training
+```sql
+agent_channels        -- one per (scope, agent) + system channels
+  id, scope ('agency'|'client'), client_id NULL,
+  agent_id NULL, kind ('agent'|'jarvis-hermes'|'jarvis-team'), name
 
-Stored in `client_offer_training` with `creative_type` set automatically from the asset MIME / canvas item kind.
+agent_messages
+  id, channel_id, from_agent_id, to_agent_id NULL,
+  role ('agent'|'human'|'system'),
+  user_id NULL, kind ('message'|'command'|'handoff'|'escalation'|'task-comment'),
+  body, payload jsonb, task_id NULL, run_id NULL, created_at
+```
 
-## Phase 5 — Runtime context assembly (ai-studio edge function)
+Channel layout per scope (auto-seeded):
+- `#hermes-jarvis` — loop/commands between the two brains
+- `#jarvis-mediabuyer`, `#jarvis-creative`, `#jarvis-reporting`, `#jarvis-qa` — Jarvis ↔ each report (humans can read & post)
+- One agency-wide read view aggregating all channels (filter by agent/client/kind)
 
-On every turn:
+Every backend agent action (model call, tool call, task touch, escalation) writes an `agent_messages` row → complete audit trail.
 
-1. Resolve `agentSlug` (from `@mention` or active tab) → load agency prompt + training (top-K by weight, capped tokens).
-2. Load `client_brain` for `selectedClientId`.
-3. Load `client_offer_training` for `selectedOfferId`, filtered to the agent's `allowed_creative_types`.
-4. Compose system prompt in fixed order: Agency role → Client Brain → Offer context → user request.
-5. Model = agent's `default_model` (Owl Alpha unless overridden); never silently swap.
+## 4. Task comments by agents
 
-Knowledge isolation: an agent only ever sees the currently-selected client's brain and selected offer's training — no cross-client leakage.
+- When any agent edits/closes/comments on a `tasks` row, the same write fans out as a `task-comment` message into that agent's channel **and** as a normal task comment visible on the task card
+- Reuse existing `task_comments` table; add `author_agent_id` column so UI can render the agent avatar inline
+- Hermes/Jarvis orchestrator updated to require a comment whenever it mutates a task
 
-## Phase 6 — Permissions
+## 5. UI
 
-- `authenticated` can read/write agency agents & training (team workspace).
-- Client brain + offer training scoped by existing client-membership policies.
-- `service_role` for edge functions.
+- `AgencyAgentsManager` rewritten as 5 fixed cards (no "New Agent" for core five; keep button for custom)
+- New **Channel** tab inside each agent: Slack-style thread, filter chips (commands/handoffs/escalations/task-comments), human reply box (posts as `role='human'`, routed to that agent)
+- Agency-level "Comms" page: unified inbox of all channels with client/agent filters
+- Per-client agent page reuses the same component, scoped to that client's channels
 
-## Phase 7 — Migration of existing data
+## 6. Migration / seed
 
-- Existing `client_agents` rows → mapped into `agency_agents` (deduped by role) + their per-client overrides moved into `client_brain.learnings`.
-- Existing `agency_references` → `agency_agent_training` (kind=`doc`).
-- Existing offer files already in `client_offer_files` are surfaced read-only inside the Offer Training tab — no data move needed.
+- Seed/upsert the 5 agents (idempotent on slug)
+- Deactivate non-core agents (`is_active=false`) but keep rows
+- Backfill `agent_channels` for every existing client
+- One-time copy of recent `hermes_logs` / `agent_runs` into `agent_messages` so the audit view isn't empty
 
----
-
-## Build order (shippable per phase)
-
-1. Phase 1 migration + seed 5 agents.
-2. Phase 5 runtime assembly (so even the old UI immediately benefits from layered context).
-3. Phase 2 three-column UI.
-4. Phase 3 mass-training + Phase 4 creative routing.
-5. Phase 7 data migration + retire legacy `client_agents` UI.
-
-Approve and I'll start with Phase 1 + 2 + 5 in the first build pass (the highest-leverage slice: schema, layered context at runtime, and the new UI shell).
+## Technical notes
+- Tables: `agent_channels`, `agent_messages`, `client_agents` (mirror), plus `tasks.author_agent_id`, `task_comments.author_agent_id`
+- RLS: agency-only on agency channels; client team members can read their client's channels but not other clients'
+- GRANTs to `authenticated` + `service_role` per the public-schema rule
+- Realtime enabled on `agent_messages` for live channel updates
+- Edge function `agent-bus` is the single write path so audit logging can't be bypassed
+- Static ads model picker stored on `agency_agents.config.static_image_model`, overridable per run
+- No new chat models introduced — Owl Alpha stays default
