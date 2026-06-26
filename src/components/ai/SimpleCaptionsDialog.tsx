@@ -366,6 +366,22 @@ export function SimpleCaptionsDialog({
           {/* Controls */}
           <div className="space-y-4">
             <div className="space-y-1.5">
+              <Label className="text-xs">Font</Label>
+              <Select value={fontName} onValueChange={(v) => setFontName(v as FontKey)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(FONTS) as FontKey[]).map((name) => (
+                    <SelectItem key={name} value={name}>
+                      <span style={{ fontFamily: FONTS[name].cssStack, fontWeight: 800 }}>{name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-xs">Text color</Label>
               <div className="flex items-center gap-2">
                 <input
