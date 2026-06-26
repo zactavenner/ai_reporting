@@ -14,6 +14,7 @@ const defaultConfig: StaticBatchConfig = {
   variationsPerStyle: 1,
   includeDisclaimer: true,
   disclaimerText: 'Investing involves risk, including loss of principal. This is not investment advice. Past performance does not guarantee future results. For accredited investors only. Consult a financial advisor before investing.',
+  imageModel: 'openai/gpt-image-2',
 };
 
 export function useStaticBatch() {
