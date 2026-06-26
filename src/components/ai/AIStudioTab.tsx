@@ -2596,7 +2596,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
               <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
-              <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> References</TabsTrigger>
+              <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> Agent Training</TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-1 ml-auto">
             <Button

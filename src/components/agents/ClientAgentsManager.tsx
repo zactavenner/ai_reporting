@@ -52,8 +52,8 @@ const TYPE_META: Record<AgentType, { label: string; icon: any; prompt: string }>
 };
 
 const MODELS = [
-  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (fast, default)" },
-  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (reasoning)" },
+  { value: "openrouter/owl-alpha", label: "Owl Alpha (default)" },
+  { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
   { value: "openai/gpt-5", label: "GPT-5" },
   { value: "openai/gpt-5-mini", label: "GPT-5 Mini" },
 ];
@@ -98,7 +98,7 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
       agent_type: type,
       name: `${meta.label} Agent`,
       handle: type,
-      model: "google/gemini-3-flash-preview",
+      model: "openrouter/owl-alpha",
       system_prompt: meta.prompt,
       knowledge_md: "",
       enabled: true,
@@ -111,7 +111,7 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
         <TabsList>
           <TabsTrigger value="agents"><Bot className="h-3.5 w-3.5 mr-1" />Agents</TabsTrigger>
           <TabsTrigger value="folder"><BookOpen className="h-3.5 w-3.5 mr-1" />Agent Folder</TabsTrigger>
-          <TabsTrigger value="refs"><Library className="h-3.5 w-3.5 mr-1" />References</TabsTrigger>
+          <TabsTrigger value="refs"><Library className="h-3.5 w-3.5 mr-1" />Agent Training</TabsTrigger>
         </TabsList>
 
         <TabsContent value="agents" className="mt-3 space-y-3">
@@ -294,7 +294,7 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
                 <div>
                   <label className="text-xs text-muted-foreground">Model</label>
                   <Select
-                    value={editing.model || "google/gemini-3-flash-preview"}
+                    value={editing.model || "openrouter/owl-alpha"}
                     onValueChange={(v) => setEditing({ ...editing, model: v })}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>

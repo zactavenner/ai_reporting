@@ -98,7 +98,7 @@ export function AgentsTab({ clients }: Props) {
       description: '',
       prompt_template: '',
       schedule_cron: '0 6 * * *',
-      model: 'google/gemini-2.5-pro',
+      model: 'openrouter/owl-alpha',
       connectors: ['database'] as any,
       enabled: false,
     } as any);
@@ -334,7 +334,7 @@ export function AgentsTab({ clients }: Props) {
                     <TabsList>
                       <TabsTrigger value="overview">Overview</TabsTrigger>
                       <TabsTrigger value="config">Config</TabsTrigger>
-                      <TabsTrigger value="references">References</TabsTrigger>
+                      <TabsTrigger value="references">Agent Training</TabsTrigger>
                       <TabsTrigger value="runs">Runs ({runs.length})</TabsTrigger>
                       <TabsTrigger value="escalations">Escalations</TabsTrigger>
                     </TabsList>

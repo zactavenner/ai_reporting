@@ -182,14 +182,10 @@ export function useRunAgent() {
 }
 
 export const AVAILABLE_MODELS = [
-  { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-  { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
-  { value: 'google/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' },
+  { value: 'openrouter/owl-alpha', label: 'Owl Alpha (default)' },
+  { value: 'openrouter/deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
   { value: 'openai/gpt-5', label: 'GPT-5' },
   { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini' },
-  { value: 'openai/gpt-5-nano', label: 'GPT-5 Nano' },
 ];
 
 export const AVAILABLE_CONNECTORS = [
