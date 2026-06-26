@@ -147,6 +147,36 @@ export function GenerationConfig({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Image Model */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="h-4 w-4" /> Image Model
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: 'openai/gpt-image-2', label: 'GPT Image 2', desc: 'Best text legibility & branded layouts' },
+                { value: 'google/gemini-3.1-flash-image-preview', label: 'Nano Banana Pro 2', desc: 'Fastest photoreal & cheaper at scale' },
+              ].map((m) => {
+                const active = (config.imageModel || 'openai/gpt-image-2') === m.value;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => updateConfig({ imageModel: m.value as any })}
+                    className={`text-left p-3 border rounded-lg transition-colors ${active ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
+                  >
+                    <p className="font-medium text-sm">{m.label}</p>
+                    <p className="text-xs text-muted-foreground">{m.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Aspect Ratios */}
         <Card>
           <CardHeader>

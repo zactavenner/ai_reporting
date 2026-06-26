@@ -16,6 +16,7 @@ import { ClientScopePicker } from './ClientScopePicker';
 import { AIAgentGenerator } from './AIAgentGenerator';
 import { AgentReferenceLibrary } from './AgentReferenceLibrary';
 import { AgencyAgentsManager } from './AgencyAgentsManager';
+import { AgentChannelPane } from './AgentChannelPane';
 
 interface Props { clients: Client[]; }
 
@@ -42,6 +43,7 @@ export function AgentsTab({ clients }: Props) {
   const [tab, setTab] = useState('overview');
   const [showTemplates, setShowTemplates] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [showAllAgents, setShowAllAgents] = useState(false);
 
   // Deep-link: ?agent=<id> selects that agent + listen for org-chart clicks
   useEffect(() => {
@@ -91,6 +93,10 @@ export function AgentsTab({ clients }: Props) {
   };
 
   const activeAgents = useMemo(() => agents.filter(a => a.enabled), [agents]);
+  const visibleAgents = useMemo(
+    () => (showAllAgents ? agents : agents.filter(a => (a as any).is_core)),
+    [agents, showAllAgents]
+  );
 
   const handleCreateBlank = () => {
     createAgent.mutate({
@@ -268,7 +274,15 @@ export function AgentsTab({ clients }: Props) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Agent list */}
           <div className="space-y-2 lg:col-span-1">
-            {agents.map((agent) => {
+            <div className="flex items-center justify-between px-1 pb-2">
+              <p className="text-xs text-muted-foreground">
+                {showAllAgents ? `All ${agents.length} agents` : `${visibleAgents.length} core agents`}
+              </p>
+              <Button variant="ghost" size="sm" className="h-6 text-[11px]" onClick={() => setShowAllAgents(v => !v)}>
+                {showAllAgents ? 'Show core only' : 'Show all'}
+              </Button>
+            </div>
+            {visibleAgents.map((agent) => {
               const lastStatus = agent.last_run_status || 'unknown';
               const statusCfg = STATUS_CONFIG[lastStatus];
               return (
@@ -339,6 +353,7 @@ export function AgentsTab({ clients }: Props) {
                       <TabsTrigger value="overview">Overview</TabsTrigger>
                       <TabsTrigger value="config">Config</TabsTrigger>
                       <TabsTrigger value="references">Agent Training</TabsTrigger>
+                    <TabsTrigger value="channel">Channel</TabsTrigger>
                       <TabsTrigger value="runs">Runs ({runs.length})</TabsTrigger>
                       <TabsTrigger value="escalations">Escalations</TabsTrigger>
                     </TabsList>
@@ -518,6 +533,13 @@ export function AgentsTab({ clients }: Props) {
                       <AgentReferenceLibrary
                         agentTag={selectedAgent.template_key || selectedAgent.id}
                         agentName={selectedAgent.name}
+                      />
+                    </TabsContent>
+                    <TabsContent value="channel" className="mt-4">
+                      <AgentChannelPane
+                        agentId={selectedAgent.id}
+                        scope={selectedAgent.client_id ? 'client' : 'agency'}
+                        clientId={selectedAgent.client_id || null}
                       />
                     </TabsContent>
                     <TabsContent value="runs" className="space-y-3 mt-4">
