@@ -102,6 +102,50 @@ serve(async (req) => {
       );
     }
 
+    // Respect client_team_members.notify_prefs matrix (event x channel).
+    // Action → event name (matches the UI checkboxes in ClientTeamSection).
+    const eventName =
+      action === 'assigned' ? 'new_tasks'
+      : action === 'due_reminder' ? 'overdue_tasks'
+      : null;
+    let smsTarget: string | null = null;
+    let whatsappTarget: string | null = null;
+    let emailEnabled = true;
+    if (eventName) {
+      const { data: tm } = await supabase
+        .from('client_team_members')
+        .select('phone, notify_prefs')
+        .eq('client_id', targetClientId)
+        .ilike('email', emailTo)
+        .maybeSingle();
+      const prefs = (tm as any)?.notify_prefs?.[eventName] || null;
+      if (prefs) {
+        emailEnabled = !!prefs.email;
+        if (prefs.sms && (tm as any)?.phone) smsTarget = (tm as any).phone;
+        if (prefs.whatsapp && (tm as any)?.phone) whatsappTarget = (tm as any).phone;
+      }
+    }
+
+    // Fan out SMS / WhatsApp through their respective delivery functions.
+    if (smsTarget) {
+      supabase.functions.invoke('send-sms', {
+        body: { to: smsTarget, message: `[${client.name}] ${task.title}` },
+      }).catch((e) => console.warn('send-sms failed (non-fatal):', e?.message));
+    }
+    if (whatsappTarget) {
+      supabase.functions.invoke('whatsapp-send', {
+        body: { to: whatsappTarget, text: `[${client.name}] ${task.title}` },
+      }).catch((e) => console.warn('whatsapp-send failed (non-fatal):', e?.message));
+    }
+
+    if (!emailEnabled) {
+      console.log(`Email channel disabled in notify_prefs for ${emailTo} / event=${eventName}`);
+      return new Response(
+        JSON.stringify({ success: true, emailSent: false, smsQueued: !!smsTarget, whatsappQueued: !!whatsappTarget, reason: 'email_pref_disabled' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Build email content based on action
     const emailContent = buildEmailContent(task, action, client.name, recipientName);
 
