@@ -1176,6 +1176,11 @@ async function generateSeedanceVideo(opts: {
     "grok-imagine-video": "x-ai/grok-imagine-video",
     "x-ai/grok-imagine": "x-ai/grok-imagine-video",
     "xai/grok-imagine-video": "x-ai/grok-imagine-video",
+    "grok-imagine-1.5": "x-ai/grok-imagine-video",
+    "grok-imagine-1-5": "x-ai/grok-imagine-video",
+    "grok-imagine 1.5": "x-ai/grok-imagine-video",
+    "x-ai/grok-imagine-1.5": "x-ai/grok-imagine-video",
+    "xai/grok-imagine-1.5": "x-ai/grok-imagine-video",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
   // HARD RULE: when the caller explicitly passed a model id, never silently
@@ -1218,7 +1223,7 @@ async function generateSeedanceVideo(opts: {
   const modelLabel = isHappyHorse
     ? "HappyHorse 1.1"
     : isGrok
-      ? (model === "x-ai/grok-imagine-video" ? "Grok Imagine" : "Grok 1.5")
+      ? (model === "x-ai/grok-imagine-video" ? "Grok Imagine 1.5" : "Grok 1.5")
       : isSeedance
       ? (isSeedanceFast ? "Seedance Fast" : "Seedance Pro")
       : isKling
@@ -2605,7 +2610,7 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
   "alibaba/happyhorse-1.1":      { maxDuration: 15, label: "HappyHorse 1.1 (≤15s per clip, 1080p)" },
   "x-ai/grok-video-1.5":         { maxDuration: 15, label: "Grok 1.5 (≤15s per clip, 720p)" },
-  "x-ai/grok-imagine-video":     { maxDuration: 15, label: "Grok Imagine (≤15s per clip, up to 720p)" },
+  "x-ai/grok-imagine-video":     { maxDuration: 15, label: "Grok Imagine 1.5 (≤15s per clip, up to 720p)" },
 };
 
 // Models known to RELIABLY render synthetic / AI-generated human avatars.
