@@ -4233,6 +4233,7 @@ export type Database = {
           is_primary_contact: boolean
           name: string
           notes: string | null
+          notify_prefs: Json
           phone: string | null
           role: string | null
           sort_order: number
@@ -4246,6 +4247,7 @@ export type Database = {
           is_primary_contact?: boolean
           name: string
           notes?: string | null
+          notify_prefs?: Json
           phone?: string | null
           role?: string | null
           sort_order?: number
@@ -4259,6 +4261,7 @@ export type Database = {
           is_primary_contact?: boolean
           name?: string
           notes?: string | null
+          notify_prefs?: Json
           phone?: string | null
           role?: string | null
           sort_order?: number
