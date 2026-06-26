@@ -2604,6 +2604,8 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
   "alibaba/happyhorse-1.1":      { maxDuration: 15, label: "HappyHorse 1.1 (≤15s per clip, 1080p)" },
+  "x-ai/grok-video-1.5":         { maxDuration: 15, label: "Grok 1.5 (≤15s per clip, 720p)" },
+  "x-ai/grok-imagine-video":     { maxDuration: 15, label: "Grok Imagine (≤15s per clip, up to 720p)" },
 };
 
 // Models known to RELIABLY render synthetic / AI-generated human avatars.
