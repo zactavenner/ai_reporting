@@ -177,6 +177,10 @@ export function SimpleCaptionsDialog({
   const [rawSegments, setRawSegments] = useState<Segment[]>([]);
   // 1 = one word at a time (instant voice sync). Default to 1.
   const [wordsPerCue, setWordsPerCue] = useState<number>(1);
+  // Voice-sync offset in milliseconds. Negative = captions appear earlier
+  // than the transcription says (most TTS/voiceover feels best around -80ms
+  // because Gemini reports word *onset* a hair late vs the human ear).
+  const [syncOffsetMs, setSyncOffsetMs] = useState<number>(-80);
   const [transcribing, setTranscribing] = useState(false);
   // Polling-style status used to drive the auto-refresh of the preview
   // (no manual state poke required — we tick this and the cue memo updates).
@@ -202,7 +206,7 @@ export function SimpleCaptionsDialog({
       if (error) throw error;
       const segs: Segment[] = Array.isArray((data as any)?.captions) ? (data as any).captions : [];
       setRawSegments(segs);
-      const next = buildCues(segs, wordsPerCue);
+      const next = buildCues(segs, wordsPerCue, syncOffsetMs / 1000);
       setCues(next);
       setCaptionsVersion((v) => v + 1);
       setTranscribeStatus("completed");
@@ -215,7 +219,7 @@ export function SimpleCaptionsDialog({
       clearTimeout(startTick);
       setTranscribing(false);
     }
-  }, [videoUrl, wordsPerCue]);
+  }, [videoUrl, wordsPerCue, syncOffsetMs]);
 
   // Snap the live preview to the latest transcription as soon as it lands —
   // pause the video and seek to the first cue's start so the user immediately
@@ -262,10 +266,10 @@ export function SimpleCaptionsDialog({
   // re-transcription needed, the raw segments are cached.
   useEffect(() => {
     if (rawSegments.length === 0) return;
-    const next = buildCues(rawSegments, wordsPerCue);
+    const next = buildCues(rawSegments, wordsPerCue, syncOffsetMs / 1000);
     setCues(next);
     setCaptionsVersion((v) => v + 1);
-  }, [wordsPerCue, rawSegments]);
+  }, [wordsPerCue, syncOffsetMs, rawSegments]);
 
   const handleResync = useCallback(async () => {
     const next = await runTranscription();
