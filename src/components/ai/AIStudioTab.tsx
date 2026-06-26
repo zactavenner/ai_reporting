@@ -90,17 +90,13 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // Pricing base is 1080p USD/sec (from OpenRouter). 720p applies a multiplier.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
   { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts (≤15s, up to 1080p)", maxSeconds: 15, pricePerSecond: 0.272 },
-  { value: "bytedance/seedance-2.0",  label: "Seedance Pro",   hint: "Highest-quality Seedance (≤15s, up to 1080p)", maxSeconds: 15, pricePerSecond: 0.34 },
   { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s default, 1080p, first-frame image-to-video", maxSeconds: 15, pricePerSecond: 0.1278 },
-  { value: "x-ai/grok-video-1.5",         label: "Grok 1.5",        hint: "xAI Grok 1.5 video — 15s, 720p",                                          maxSeconds: 15, pricePerSecond: 0.08 },
-  { value: "x-ai/grok-imagine-video",     label: "Grok Imagine 1.5", hint: "xAI Grok Imagine 1.5 — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
+  { value: "x-ai/grok-imagine-video",     label: "Grok Imagine",     hint: "xAI Grok Imagine — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
 ];
 // Resolution caps per model. 4K has been removed from the UI.
 const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
   "bytedance/seedance-2.0-fast": ["720p", "1080p"],
-  "bytedance/seedance-2.0":      ["720p", "1080p"],
   "alibaba/happyhorse-1.1":      ["1080p"],
-  "x-ai/grok-video-1.5":         ["720p"],
   "x-ai/grok-imagine-video":     ["720p"],
 };
 function resolutionMultiplier(res: "720p" | "1080p" | "4k"): number {
@@ -2156,31 +2152,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <div className="flex flex-col md:flex-row md:items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
                 <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible -mx-1 px-1 pb-1 md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0 [&>button]:shrink-0">
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
-                  <Select value={videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
-                    if (videoModels.length > 0 && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
-                    else setAdFormat(v);
-                  }}>
-                    <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(videoModels.length > 0 ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
-                        <SelectItem key={f.value} value={f.value} className="text-xs">
-                          {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Offer:</span>
                   <Select value={selectedOfferId} onValueChange={setSelectedOfferId}>
                     <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg max-w-[220px]">
-                      <SelectValue placeholder="All offers" />
+                      <SelectValue placeholder="Pick an offer" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all" className="text-xs">All offers ({clientOffers.length})</SelectItem>
                       {clientOffers.map(o => (
                         <SelectItem key={o.id} value={o.id} className="text-xs">
                           {o.title}
@@ -2503,30 +2480,52 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
-                  <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
-                    <SelectTrigger className="h-7 text-[10px] w-[160px]">
-                      <SelectValue placeholder="No avatar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" className="text-xs">No avatar</SelectItem>
-                      {studioAvatars.map((a) => (
-                        <SelectItem key={a.id} value={a.id} className="text-xs">
-                          <span className="inline-flex items-center gap-2">
-                            {a.image_url ? <img src={a.image_url} alt="" className="h-4 w-4 rounded-full object-cover" /> : null}
-                            {a.name}{a.is_stock ? " · stock" : ""}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedAvatar && (
-                    <button type="button" onClick={() => setAiStudioTab("avatars")} className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
-                      manage
-                    </button>
-                  )}
-                </div>
+                {(videoModels.length > 0 || imageModels.length > 0) && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
+                    <Select value={videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
+                      if (videoModels.length > 0 && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
+                      else setAdFormat(v);
+                    }}>
+                      <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(videoModels.length > 0 ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
+                          <SelectItem key={f.value} value={f.value} className="text-xs">
+                            {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {(videoModels.length > 0 || imageModels.length > 0) && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
+                    <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
+                      <SelectTrigger className="h-7 text-[10px] w-[160px]">
+                        <SelectValue placeholder="No avatar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none" className="text-xs">No avatar</SelectItem>
+                        {studioAvatars.map((a) => (
+                          <SelectItem key={a.id} value={a.id} className="text-xs">
+                            <span className="inline-flex items-center gap-2">
+                              {a.image_url ? <img src={a.image_url} alt="" className="h-4 w-4 rounded-full object-cover" /> : null}
+                              {a.name}{a.is_stock ? " · stock" : ""}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedAvatar && (
+                      <button type="button" onClick={() => setAiStudioTab("avatars")} className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+                        manage
+                      </button>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setBatchScriptsOpen(true)}
