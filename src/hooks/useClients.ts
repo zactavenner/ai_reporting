@@ -4,14 +4,14 @@ import { toast } from 'sonner';
 
 const CLIENT_QUERY_TIMEOUT_MS = 12000;
 
-async function withTimeout<T>(promise: Promise<T>, label: string, ms = CLIENT_QUERY_TIMEOUT_MS): Promise<T> {
+async function withTimeout<T>(promise: PromiseLike<T>, label: string, ms = CLIENT_QUERY_TIMEOUT_MS): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
   });
 
   try {
-    return await Promise.race([promise, timeout]);
+    return await Promise.race([Promise.resolve(promise), timeout]);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
