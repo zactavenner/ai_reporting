@@ -3556,6 +3556,79 @@ Deno.serve(async (req) => {
         `if multiple offers are listed, treat them as separate campaigns and label outputs by offer title):\n\n${offerContext.trim()}`,
     });
   }
+
+  // === Phase 5: 3-layer agent knowledge (Agency Agent + Client Brain + Offer Training) ===
+  // Loads in parallel; safe no-op if tables are empty or selections missing.
+  try {
+    const [agentRes, brainRes, offerTrainRes] = await Promise.all([
+      agentSlug
+        ? supa.from("agency_agents").select("id,slug,name,role,system_prompt,allowed_creative_types,default_model").eq("slug", agentSlug).eq("is_active", true).maybeSingle()
+        : Promise.resolve({ data: null } as any),
+      clientId
+        ? supa.from("client_brain").select("voice,icp,brand_guidelines,do_not_say,learnings").eq("client_id", clientId).maybeSingle()
+        : Promise.resolve({ data: null } as any),
+      Array.isArray(offerIds) && offerIds.length
+        ? supa.from("client_offer_training").select("creative_type,title,body,asset_url,weight").in("offer_id", offerIds).order("weight", { ascending: false }).limit(40)
+        : Promise.resolve({ data: [] } as any),
+    ]);
+    const agentRow: any = (agentRes as any)?.data || null;
+    const brainRow: any = (brainRes as any)?.data || null;
+    const trainRows: any[] = ((offerTrainRes as any)?.data || []) as any[];
+
+    if (agentRow) {
+      // Load agency-level training for this agent (top weighted, capped).
+      const { data: agencyTrain } = await supa
+        .from("agency_agent_training")
+        .select("kind,title,body,file_url,weight")
+        .eq("agent_id", agentRow.id)
+        .order("weight", { ascending: false })
+        .limit(30);
+      const trainingBlock = (agencyTrain || []).map((t: any) =>
+        `- [${t.kind}] ${t.title}${t.body ? `: ${String(t.body).slice(0, 600)}` : ""}${t.file_url ? ` (file: ${t.file_url})` : ""}`
+      ).join("\n");
+      convo.splice(1, 0, {
+        role: "system",
+        content:
+          `🧠 ACTIVE AGENCY AGENT: ${agentRow.name} (${agentRow.role})\n\n` +
+          `Role brief:\n${agentRow.system_prompt || ""}\n` +
+          (trainingBlock ? `\nAgency training library (apply silently, do not list back):\n${trainingBlock}\n` : "") +
+          (Array.isArray(agentRow.allowed_creative_types) && agentRow.allowed_creative_types.length
+            ? `\nAllowed creative types for this agent: ${agentRow.allowed_creative_types.join(", ")}.\n`
+            : ""),
+      });
+    }
+
+    if (brainRow && (brainRow.voice || brainRow.icp || brainRow.brand_guidelines || brainRow.do_not_say || (Array.isArray(brainRow.learnings) && brainRow.learnings.length))) {
+      const learnings = Array.isArray(brainRow.learnings) ? brainRow.learnings.slice(0, 20).map((l: any) => `- ${typeof l === "string" ? l : (l?.text || JSON.stringify(l))}`).join("\n") : "";
+      convo.splice(1, 0, {
+        role: "system",
+        content:
+          `🧬 CLIENT BRAIN (the persistent knowledge for the currently-selected client — apply to every output):\n` +
+          (brainRow.voice ? `\nVoice & tone:\n${brainRow.voice}\n` : "") +
+          (brainRow.icp ? `\nICP / target customer:\n${brainRow.icp}\n` : "") +
+          (brainRow.brand_guidelines ? `\nBrand guidelines:\n${brainRow.brand_guidelines}\n` : "") +
+          (brainRow.do_not_say ? `\nDo NOT say / avoid:\n${brainRow.do_not_say}\n` : "") +
+          (learnings ? `\nLearnings:\n${learnings}\n` : ""),
+      });
+    }
+
+    if (trainRows.length) {
+      const allowed: string[] | null = agentRow?.allowed_creative_types && agentRow.allowed_creative_types.length ? agentRow.allowed_creative_types : null;
+      const filtered = allowed ? trainRows.filter(t => allowed.includes(t.creative_type)) : trainRows;
+      if (filtered.length) {
+        const block = filtered.slice(0, 25).map((t: any) =>
+          `- [${t.creative_type}] ${t.title}${t.body ? `: ${String(t.body).slice(0, 500)}` : ""}${t.asset_url ? ` (asset: ${t.asset_url})` : ""}`
+        ).join("\n");
+        convo.splice(1, 0, {
+          role: "system",
+          content: `🎯 OFFER TRAINING EXAMPLES (proven patterns tied to the selected offer — use as style/quality reference, do not copy verbatim):\n\n${block}`,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("[ai-studio] 3-layer context load failed (non-fatal):", (e as any)?.message);
+  }
+
   if (agentMode) {
     convo.splice(1, 0, {
       role: "system",
