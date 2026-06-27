@@ -1236,7 +1236,10 @@ async function generateSeedanceVideo(opts: {
   // or return a lower-res output when the user expects the 15s/1080p profile.
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
-  if (isHappyHorse) effectiveResolution = "1080p";
+  if (isHappyHorse) {
+    // HappyHorse 1.1 supports 720p and 1080p only. Default to 720p per spec.
+    effectiveResolution = effectiveResolution === "1080p" ? "1080p" : "720p";
+  }
   else if (isGrok) effectiveResolution = "720p";
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
@@ -1294,7 +1297,7 @@ async function generateSeedanceVideo(opts: {
     has_ingredient_url: !!providerIngredientUrl,
     original_has_image_url: !!opts.imageUrl,
     frame_rehost_events: frameRehostEvents,
-    happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: "1080p" } : null,
+    happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: effectiveResolution } : null,
     fallback_attempt: opts._avatarFallbackAttempt || 0,
   });
 
