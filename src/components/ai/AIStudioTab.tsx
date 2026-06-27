@@ -1427,9 +1427,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       : text;
     const optimisticActorName =
       (typeof window !== "undefined" && localStorage.getItem("team_member_name")) || null;
-    const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName };
+    const nowIso = new Date().toISOString();
+    const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName, createdAt: nowIso };
     const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0, streaming: true };
+    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0, streaming: true, createdAt: nowIso };
     setMessages(curr => [...curr, userMsg, placeholder]);
     setInput("");
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
