@@ -2359,7 +2359,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       ? videoResolution
                       : supportedRes[supportedRes.length - 1];
                     const mult = resolutionMultiplier(effectiveRes);
-                    const clipCost = m.maxSeconds * m.pricePerSecond * mult;
+                    const perSec = modelPricePerSecond(m.value, effectiveRes, m.pricePerSecond);
+                    const clipCost = m.maxSeconds * perSec;
                     return (
                       <button
                         key={m.value}
@@ -2369,7 +2370,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                            // Video compare was removed — one model per request, batch generation later.
                            setVideoModels((curr) => (curr.length === 1 && curr[0] === m.value ? [] : [m.value]));
                          }}
-                         title={`${m.label} — ${m.hint}\n${effectiveRes.toUpperCase()} · ${m.maxSeconds}s · ~$${clipCost.toFixed(2)} per clip\n(base rate: ~$${m.pricePerSecond.toFixed(3)}/sec${mult !== 1 ? ` · ${effectiveRes.toUpperCase()} ×${mult}` : ""})`}
+                         title={`${m.label} — ${m.hint}\n${effectiveRes.toUpperCase()} · ${m.maxSeconds}s · ~$${clipCost.toFixed(2)} per clip\n(rate: $${perSec.toFixed(4)}/sec)`}
                         className={`px-2 py-1 rounded-lg text-[10px] border transition flex flex-col items-start leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
                         <span>{m.label}</span>
