@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function AgentChannelPane({ agentId, scope = "agency", clientId = null }: Props) {
-  const { data: channel } = useAgentChannelForAgent(agentId, scope, clientId);
+  const { data: channel, isLoading: channelLoading } = useAgentChannelForAgent(agentId, scope, clientId);
   const { data: messages = [] } = useAgentMessages(channel?.id);
   const post = usePostAgentMessage();
   const [body, setBody] = useState("");
@@ -49,7 +49,7 @@ export function AgentChannelPane({ agentId, scope = "agency", clientId = null }:
       <CardContent className="p-0">
         <div className="px-4 py-2 border-b flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-primary" />
-          <p className="text-sm font-semibold">{channel?.name || "Loading channel…"}</p>
+          <p className="text-sm font-semibold">{channel?.name || (channelLoading ? "Loading channel…" : "Channel unavailable")}</p>
           <Badge variant="secondary" className="text-[10px] ml-auto">audit trail</Badge>
           {channel && (
             <EscalateButton
