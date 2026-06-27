@@ -6,7 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, Brain, GraduationCap, Target, Users } from "lucide-react";
+import { Plus, Trash2, Brain, GraduationCap, Target, Users, Send, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
   useAgencyAgents,
   useUpdateAgencyAgent,
@@ -32,6 +34,24 @@ export function AgencyAgentsManager({ clients }: Props) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  const [propagating, setPropagating] = useState(false);
+
+  const handlePropagate = async () => {
+    if (!confirm(`Push ${agents.length} master agents (with OWL Alpha) to all ${clients.length} clients? This will upsert per-client agent rows.`)) return;
+    setPropagating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("propagate-agency-agents", {
+        body: { forceModel: "openrouter/owl-alpha" },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Propagation failed");
+      toast.success(`Propagated ${data.agents} agents × ${data.clients} clients (${data.upserted} rows)`);
+    } catch (e: any) {
+      toast.error(`Propagate failed: ${e?.message || e}`);
+    } finally {
+      setPropagating(false);
+    }
+  };
 
   const selected = useMemo(() => agents.find(a => a.id === selectedAgentId) || agents[0] || null, [agents, selectedAgentId]);
   const updateAgent = useUpdateAgencyAgent();
@@ -43,6 +63,12 @@ export function AgencyAgentsManager({ clients }: Props) {
           <Users className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Agency Agents</h2>
           <Badge variant="secondary" className="text-[10px]">3-layer knowledge: Agency → Client Brain → Offer</Badge>
+          <div className="ml-auto">
+            <Button size="sm" variant="outline" onClick={handlePropagate} disabled={propagating || !agents.length || !clients.length}>
+              {propagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              Propagate to all clients
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-12 min-h-[520px]">
           {/* Left rail */}
