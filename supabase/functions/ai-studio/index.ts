@@ -1240,7 +1240,11 @@ async function generateSeedanceVideo(opts: {
     // HappyHorse 1.1 supports 720p and 1080p only. Default to 720p per spec.
     effectiveResolution = effectiveResolution === "1080p" ? "1080p" : "720p";
   }
-  else if (isGrok) effectiveResolution = "720p";
+  else if (isGrok) {
+    // Grok Imagine Video supports only 480p and 720p via OpenRouter /v1/videos.
+    // Older x-ai/grok-video-1.5 caps at 720p as well.
+    effectiveResolution = effectiveResolution === "480p" ? "480p" : "720p";
+  }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
