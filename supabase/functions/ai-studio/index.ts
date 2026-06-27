@@ -2079,15 +2079,32 @@ async function generateSeedanceVideo(opts: {
   // generation record so users (and us, when debugging) can audit what HappyHorse /
   // Seedance / Kling received — model id, aspect_ratio, resolution, size, duration,
   // and the first_frame / last_frame / reference_image URLs that were actually wired.
+  // Normalize URL extraction across all model shapes:
+  //  - Seedance/Grok use { type: "image_url", image_url: { url }, frame_type: "first_frame" }
+  //  - HappyHorse uses    { type: "first_frame", image_url: "<url string>" }
+  //  - Kling uses top-level body.image_url / body.tail_image_url
+  const pickFrameUrl = (entry: any): string | null => {
+    if (!entry) return null;
+    const iu = entry.image_url;
+    if (typeof iu === "string") return iu;
+    if (iu && typeof iu === "object" && typeof iu.url === "string") return iu.url;
+    return null;
+  };
   const firstFrameUrl = (() => {
-    const f = (body.frame_images as any[] | undefined)?.find((x) => x?.frame_type === "first_frame");
-    return f?.image_url?.url || (body.image_url as string | undefined) || null;
+    const frames = body.frame_images as any[] | undefined;
+    const f = frames?.find((x) => x?.frame_type === "first_frame" || x?.type === "first_frame");
+    return pickFrameUrl(f) || (body.image_url as string | undefined) || null;
   })();
   const lastFrameUrl = (() => {
-    const f = (body.frame_images as any[] | undefined)?.find((x) => x?.frame_type === "last_frame");
-    return f?.image_url?.url || (body.tail_image_url as string | undefined) || null;
+    const frames = body.frame_images as any[] | undefined;
+    const f = frames?.find((x) => x?.frame_type === "last_frame" || x?.type === "last_frame");
+    return pickFrameUrl(f) || (body.tail_image_url as string | undefined) || null;
   })();
-  const referenceImageUrl = (body.reference_images as any[] | undefined)?.[0]?.image_url?.url || null;
+  const referenceImageUrls = (() => {
+    const refs = (body.input_references as any[] | undefined) || (body.reference_images as any[] | undefined) || [];
+    return refs.map(pickFrameUrl).filter((u): u is string => !!u);
+  })();
+  const referenceImageUrl = referenceImageUrls[0] || null;
   const openrouterRequest = {
     endpoint: "https://openrouter.ai/api/v1/videos",
     method: "POST",
