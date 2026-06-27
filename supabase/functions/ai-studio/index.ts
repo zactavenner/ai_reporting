@@ -1765,7 +1765,11 @@ async function generateSeedanceVideo(opts: {
     },
     body: JSON.stringify(body),
   });
-  console.log(`[openrouter:/videos][submit] model=${body.model} status=${submit.status} size=${body.size || "-"} resolution=${body.resolution || "-"} aspect=${body.aspect_ratio || "-"} duration=${body.duration} has_frames=${!!(body as any).frame_images} has_image_url=${!!(body as any).image_url}`);
+  const _frameCount = Array.isArray((body as any).frame_images) ? (body as any).frame_images.length : 0;
+  const _refCount = Array.isArray((body as any).input_references)
+    ? (body as any).input_references.length
+    : Array.isArray((body as any).reference_images) ? (body as any).reference_images.length : 0;
+  console.log(`[openrouter:/videos][submit] model=${body.model} status=${submit.status} size=${body.size || "-"} resolution=${body.resolution || "-"} aspect=${body.aspect_ratio || "-"} duration=${body.duration} frames=${_frameCount} refs=${_refCount} has_image_url=${!!(body as any).image_url}`);
   if (!submit.ok) {
     const t = await submit.text();
     console.error(`[openrouter:/videos][submit-failed] model=${body.model} status=${submit.status} body=${t.slice(0, 800)}`);
