@@ -45,6 +45,7 @@ export function AgentReferenceLibrary({
   const [kind, setKind] = useState<Kind>("image");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
 
   const { data: refs = [], isLoading } = useQuery({
@@ -61,15 +62,15 @@ export function AgentReferenceLibrary({
   });
 
   const addRef = useMutation({
-    mutationFn: async (r: { kind: string; name: string; url: string }) => {
+    mutationFn: async (r: { kind: string; name: string; url: string; notes?: string }) => {
       const { error } = await supabase
         .from("agency_references" as any)
-        .insert({ ...r, tags: [tagKey] } as any);
+        .insert({ ...r, notes: r.notes || null, tags: [tagKey] } as any);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent-references", tagKey] });
-      setName(""); setUrl("");
+      setName(""); setUrl(""); setNotes("");
       toast.success("Reference added");
     },
     onError: (e: any) => toast.error(e.message || "Failed to add"),
@@ -99,7 +100,7 @@ export function AgentReferenceLibrary({
         : file.type === "application/pdf"
         ? "pdf"
         : "image";
-      await addRef.mutateAsync({ kind: guessedKind, name: file.name, url: pub.publicUrl });
+      await addRef.mutateAsync({ kind: guessedKind, name: file.name, url: pub.publicUrl, notes: notes.trim() || undefined });
     } catch (e: any) {
       toast.error(e.message || "Upload failed");
     } finally {
@@ -133,11 +134,17 @@ export function AgentReferenceLibrary({
           size="sm"
           className="h-8"
           disabled={!name.trim() || !url.trim() || addRef.isPending}
-          onClick={() => addRef.mutate({ kind, name: name.trim(), url: url.trim() })}
+          onClick={() => addRef.mutate({ kind, name: name.trim(), url: url.trim(), notes: notes.trim() || undefined })}
         >
           <Plus className="h-3.5 w-3.5 mr-1" /> Add
         </Button>
       </div>
+      <Input
+        className="h-8 text-xs"
+        placeholder="Coaching notes for the agent (when to use this, why it works, do/don't)…"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+      />
 
       <div>
         <label className="inline-flex items-center gap-2 text-xs cursor-pointer border border-dashed rounded-md px-3 py-2 hover:border-primary">
@@ -178,6 +185,9 @@ export function AgentReferenceLibrary({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium truncate">{r.name}</div>
+                {r.notes && (
+                  <div className="text-[10px] text-muted-foreground line-clamp-2 italic">{r.notes}</div>
+                )}
                 <a href={r.url} target="_blank" rel="noreferrer" className="text-[10px] text-muted-foreground truncate flex items-center gap-1 hover:underline">
                   <ExternalLink className="h-2.5 w-2.5" /> {r.url.slice(0, 70)}
                 </a>
