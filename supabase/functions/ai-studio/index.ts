@@ -1246,6 +1246,8 @@ async function generateSeedanceVideo(opts: {
     effectiveResolution = effectiveResolution === "480p" ? "480p" : "720p";
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
+  // Seedance 2.0 Fast supports only 480p and 720p per spec.
+  else if (isSeedanceFast && effectiveResolution !== "480p" && effectiveResolution !== "720p") effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
   const wireResolution = effectiveResolution === "4k" ? "4K" : effectiveResolution;
@@ -1531,12 +1533,15 @@ async function generateSeedanceVideo(opts: {
   if (isSeedance) {
     // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
     body.resolution = wireResolution;
+    // Default generate_audio = true per spec; honor opts.generateAudio when caller sets it explicitly to false.
+    (body as any).generate_audio = opts.generateAudio === false ? false : true;
     const frames: any[] = [];
     if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
     if (providerLastFrameUrl) frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
     if (frames.length) body.frame_images = frames;
     if (providerIngredientUrl) {
-      body.reference_images = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+      // Spec: visual guidance images go in `input_references`, not the legacy `reference_images` key.
+      body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
   } else if (isHappyHorse) {
     // HappyHorse 1.1 on OpenRouter — documented /api/v1/videos contract:
