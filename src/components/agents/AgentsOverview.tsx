@@ -223,70 +223,97 @@ function OrgChart({
   byClient: Map<string, any[]>;
   onAgentClick?: AgentClick;
 }) {
-  // Group agency agents by functional category based on template_key / name.
-  const cats: { label: string; emoji: string; keys: string[] }[] = [
-    { label: "Creative", emoji: "🎨", keys: ["static_ads_generator", "video_ads_generator", "video_editor", "marketing"] },
-    { label: "Reporting & Ops", emoji: "📊", keys: ["reporting_agent", "ai_coo", "operations", "data_qa", "sheet_auditor", "finance"] },
-    { label: "Revenue", emoji: "💼", keys: ["sales", "call_analysis", "client_success"] },
-  ];
-  const used = new Set<string>();
-  const grouped = cats.map((c) => {
-    const list = agents.filter((a) => {
-      const k = (a.template_key || "").toLowerCase();
-      if (c.keys.includes(k)) {
-        used.add(a.id);
-        return true;
-      }
-      return false;
-    });
-    return { ...c, list };
-  });
-  const other = agents.filter((a) => !used.has(a.id));
-  if (other.length) grouped.push({ label: "Other", emoji: "⚙️", keys: [], list: other });
+  // New v2 hierarchy: JARVIS (AI COO) at the top, 4 core agents reporting to him.
+  const jarvis = agents.find(
+    (a: any) => a.template_key === "ai_coo" || /jarvis/i.test(a.name || ""),
+  );
+  const isReport = (a: any) => {
+    if (!jarvis) return false;
+    if (a.id === jarvis.id) return false;
+    if (a.parent_agent_id === jarvis.id) return true;
+    return /media buyer|creative agent|reporting agent|qa agent|sentry|canvas|pulse|scale/i.test(a.name || "");
+  };
+  const reports = agents.filter(isReport);
+  const others = agents.filter((a: any) => a.id !== jarvis?.id && !reports.includes(a));
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {/* Root */}
-      <div className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow">
+      {/* Hermes umbrella */}
+      <div className="px-5 py-2.5 rounded-xl bg-emerald-700 text-white text-sm font-semibold shadow">
         🪽 Hermes (Master Orchestrator)
       </div>
-      <div className="w-px h-6 bg-border" />
+      <div className="w-px h-4 bg-border" />
 
-      {/* Category buses */}
+      {/* JARVIS (AI COO) — apex of agent workforce */}
+      {jarvis && (
+        <button
+          type="button"
+          onClick={() => onAgentClick?.(jarvis.id)}
+          className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow hover:opacity-90"
+        >
+          {jarvis.icon || "🧠"} {jarvis.name} — AI COO
+        </button>
+      )}
+      <div className="w-px h-4 bg-border" />
+
+      {/* 4 direct reports */}
       <div className="relative w-full">
-        <div className="absolute top-0 left-[10%] right-[10%] h-px bg-border" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3">
-          {grouped.map((g) => (
-            <div key={g.label} className="flex flex-col items-center">
+        <div className="absolute top-0 left-[8%] right-[8%] h-px bg-border" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3">
+          {reports.length === 0 && (
+            <p className="col-span-full text-[10px] text-muted-foreground text-center">
+              No direct reports yet
+            </p>
+          )}
+          {reports.map((a: any) => (
+            <div key={a.id} className="flex flex-col items-center">
               <div className="w-px h-3 bg-border" />
-              <div className="px-3 py-1 rounded-md border bg-muted/60 text-xs font-medium mb-2">
-                {g.emoji} {g.label}
-              </div>
-              <div className="flex flex-col gap-1.5 w-full">
-                {g.list.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground text-center">No agents</p>
+              <button
+                type="button"
+                onClick={() => onAgentClick?.(a.id)}
+                className="px-2.5 py-2 rounded-md border bg-card/60 text-xs flex items-center gap-1.5 hover:border-primary hover:bg-primary/5 transition-colors text-left w-full"
+              >
+                <span className="text-base">{a.icon || "⚙️"}</span>
+                <span className="font-medium truncate flex-1">{a.name}</span>
+                {a.enabled ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
                 )}
-                {g.list.map((a: any) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => onAgentClick?.(a.id)}
-                    className="px-2.5 py-1.5 rounded-md border bg-card/50 text-xs flex items-center gap-1.5 hover:border-primary hover:bg-primary/5 transition-colors text-left w-full"
-                  >
-                    <span>{a.icon || "⚙️"}</span>
-                    <span className="font-medium truncate flex-1">{a.name}</span>
-                    {a.enabled ? (
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-                    )}
-                  </button>
-                ))}
-              </div>
+              </button>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Other agents */}
+      {others.length > 0 && (
+        <div className="w-full mt-3">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-px flex-1 bg-border" />
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Other agents</p>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+            {others.map((a: any) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => onAgentClick?.(a.id)}
+                className="px-2.5 py-1.5 rounded-md border bg-card/40 text-xs flex items-center gap-1.5 hover:border-primary/40 text-left"
+              >
+                <span>{a.icon || "⚙️"}</span>
+                <span className="font-medium truncate flex-1">{a.name}</span>
+                {a.enabled ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Per-client teams */}
       <div className="w-full mt-4">
