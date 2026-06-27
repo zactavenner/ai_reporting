@@ -2117,6 +2117,8 @@ async function generateSeedanceVideo(opts: {
     first_frame_url: firstFrameUrl,
     last_frame_url: lastFrameUrl,
     reference_image_url: referenceImageUrl,
+    reference_image_urls: referenceImageUrls,
+    reference_count: referenceImageUrls.length,
     frame_count: Array.isArray(body.frame_images) ? (body.frame_images as any[]).length : 0,
     job_id: jobId,
     ui_selection: {
