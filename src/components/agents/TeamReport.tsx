@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Users,
   Bot,
@@ -23,17 +25,18 @@ import {
  * - Real OpenRouter $ + estimated cost from agent_runs
  * - Top model by usage
  */
-const WINDOW_DAYS = 30;
+const WINDOW_OPTIONS = [7, 30, 90] as const;
 
 export function TeamReport() {
-  const since = new Date(Date.now() - WINDOW_DAYS * 86400_000).toISOString();
+  const [windowDays, setWindowDays] = useState<number>(30);
+  const since = new Date(Date.now() - windowDays * 86400_000).toISOString();
 
   // Real OpenRouter spend via edge function
   const { data: usage } = useQuery({
-    queryKey: ["team-report", "openrouter-usage", WINDOW_DAYS],
+    queryKey: ["team-report", "openrouter-usage", windowDays],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("openrouter-usage", {
-        body: { days: WINDOW_DAYS },
+        body: { days: windowDays },
       });
       if (error) throw error;
       return data as {
@@ -58,7 +61,7 @@ export function TeamReport() {
 
   // Human tasks completed in window
   const { data: humanTasks = [] } = useQuery({
-    queryKey: ["team-report", "human-tasks", WINDOW_DAYS],
+    queryKey: ["team-report", "human-tasks", windowDays],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
@@ -85,7 +88,7 @@ export function TeamReport() {
 
   // Agent runs (used for runs/cost/model breakdown)
   const { data: runs = [] } = useQuery({
-    queryKey: ["team-report", "agent-runs", WINDOW_DAYS],
+    queryKey: ["team-report", "agent-runs", windowDays],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("agent_runs")
@@ -99,7 +102,7 @@ export function TeamReport() {
 
   // Hermes tasks (per-client AI agent execution)
   const { data: hermes = [] } = useQuery({
-    queryKey: ["team-report", "hermes", WINDOW_DAYS],
+    queryKey: ["team-report", "hermes", windowDays],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hermes_tasks" as any)
@@ -113,7 +116,7 @@ export function TeamReport() {
 
   // Creative output (window)
   const { data: creatives = [] } = useQuery({
-    queryKey: ["team-report", "creatives", WINDOW_DAYS],
+    queryKey: ["team-report", "creatives", windowDays],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("creatives")
@@ -209,7 +212,20 @@ export function TeamReport() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Users className="h-4 w-4 text-primary" /> Team Report
-          <Badge variant="outline" className="ml-2 text-[10px]">Last {WINDOW_DAYS}d</Badge>
+          <Badge variant="outline" className="ml-2 text-[10px]">Last {windowDays}d</Badge>
+          <div className="ml-auto flex items-center gap-1">
+            {WINDOW_OPTIONS.map((d) => (
+              <Button
+                key={d}
+                size="sm"
+                variant={windowDays === d ? "default" : "outline"}
+                className="h-7 px-2 text-[11px]"
+                onClick={() => setWindowDays(d)}
+              >
+                Last {d}d
+              </Button>
+            ))}
+          </div>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           Humans + AI agents. Tasks completed, creative output, model usage and real OpenRouter cost.
@@ -229,7 +245,7 @@ export function TeamReport() {
             value={`$${(realSpend ?? estSpend).toFixed(2)}`}
             hint={
               realSpend != null
-                ? `est. ${WINDOW_DAYS}d: $${estSpend.toFixed(2)}`
+                ? `est. ${windowDays}d: $${estSpend.toFixed(2)}`
                 : usage?.real?.error || "fallback estimate"
             }
           />

@@ -365,8 +365,24 @@ export function AgentsTab({ clients }: Props) {
                     <TabsContent value="overview" className="space-y-4 mt-4">
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                         <div className="bg-muted/50 rounded-lg p-3">
-                          <p className="text-xs text-muted-foreground">Model</p>
-                          <p className="text-sm font-medium truncate">{AVAILABLE_MODELS.find(m => m.value === selectedAgent.model)?.label || selectedAgent.model || 'Not set'}</p>
+                          <p className="text-xs text-muted-foreground mb-1">Model</p>
+                          <Select
+                            value={selectedAgent.model || 'openrouter/owl-alpha'}
+                            onValueChange={(v) =>
+                              updateAgent.mutate({ id: selectedAgent.id, model: v } as any)
+                            }
+                          >
+                            <SelectTrigger className="h-7 px-2 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {AVAILABLE_MODELS.map((m) => (
+                                <SelectItem key={m.value} value={m.value} className="text-xs">
+                                  {m.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="bg-muted/50 rounded-lg p-3">
                           <p className="text-xs text-muted-foreground">Schedule</p>
