@@ -429,10 +429,11 @@ export function AgencyAIChat({ clients, clientMetrics, agencyMetrics }: AgencyAI
                 <div
                   key={i}
                   className={cn(
-                    'flex',
+                    'flex flex-col gap-1',
                     msg.role === 'user' ? 'justify-end' : 'justify-start'
                   )}
                 >
+                  <div className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                   <div
                     className={cn(
                       'max-w-[85%] px-4 py-2 rounded-2xl text-sm',
@@ -459,6 +460,18 @@ export function AgencyAIChat({ clients, clientMetrics, agencyMetrics }: AgencyAI
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     )}
                   </div>
+                  </div>
+                  {(msg as any).createdAt && (
+                    <div
+                      className={cn(
+                        'text-[10px] text-muted-foreground/70 px-1',
+                        msg.role === 'user' ? 'text-right' : 'text-left'
+                      )}
+                      title={(msg as any).createdAt}
+                    >
+                      {formatHermesTimestamp((msg as any).createdAt)}
+                    </div>
+                  )}
                 </div>
               ))}
               {isLoading && messages[messages.length - 1]?.role === 'user' && (
