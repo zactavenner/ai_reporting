@@ -9,6 +9,7 @@ import {
   useAgentMessages,
   usePostAgentMessage,
 } from "@/hooks/useAgentChannels";
+import { EscalateButton } from "./EscalateButton";
 
 interface Props {
   agentId: string;
@@ -50,6 +51,14 @@ export function AgentChannelPane({ agentId, scope = "agency", clientId = null }:
           <MessageSquare className="h-4 w-4 text-primary" />
           <p className="text-sm font-semibold">{channel?.name || "Loading channel…"}</p>
           <Badge variant="secondary" className="text-[10px] ml-auto">audit trail</Badge>
+          {channel && (
+            <EscalateButton
+              channelId={channel.id}
+              channelName={channel.name}
+              clientId={channel.client_id}
+              agentId={agentId}
+            />
+          )}
         </div>
         <div ref={scrollRef} className="max-h-[420px] overflow-y-auto p-3 space-y-2">
           {messages.length === 0 && (
