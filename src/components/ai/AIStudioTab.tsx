@@ -1224,6 +1224,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             role: m.role as "user" | "assistant",
             content: m.content || "",
             tools,
+            createdAt: m.created_at || m.createdAt || undefined,
             compare: compareResults.length ? compareResults.map((r: any) => ({
               model: r.model,
               label: CHAT_MODELS.find(mm => mm.value === r.model || mm.value === `openrouter/${r.model}`)?.label || r.model,
