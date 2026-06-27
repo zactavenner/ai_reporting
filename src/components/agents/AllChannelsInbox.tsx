@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Inbox, Bot, User, Search, RefreshCw, MessageSquare } from "lucide-react";
+import { EscalateButton } from "./EscalateButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAgents } from "@/hooks/useAgents";
@@ -256,9 +257,18 @@ export function AllChannelsInbox({ clients }: Props) {
                   <p className="text-sm font-semibold">{labelForChannel(activeChannel)}</p>
                   <Badge variant="outline" className="text-[10px]">{activeChannel.scope}</Badge>
                   <Badge variant="outline" className="text-[10px]">{activeChannel.kind}</Badge>
-                  <Button variant="ghost" size="sm" className="ml-auto h-6 text-[11px]" onClick={() => setActiveChannelId(null)}>
+                  <div className="ml-auto flex items-center gap-2">
+                  <EscalateButton
+                    channelId={activeChannel.id}
+                    channelName={labelForChannel(activeChannel)}
+                    clientId={activeChannel.client_id}
+                    agentId={activeChannel.agent_id}
+                    agentName={activeChannel.agent_id ? agentById.get(activeChannel.agent_id)?.name : null}
+                  />
+                  <Button variant="ghost" size="sm" className="h-6 text-[11px]" onClick={() => setActiveChannelId(null)}>
                     Back to stream
                   </Button>
+                  </div>
                 </div>
                 <ScrollArea className="flex-1 max-h-[420px]">
                   <div className="p-3 space-y-2">
