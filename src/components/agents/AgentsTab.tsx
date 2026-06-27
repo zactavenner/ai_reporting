@@ -8,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useAgents, useAgentRuns, useCreateAgent, useUpdateAgent, useDeleteAgent, useRunAgent, useAgentEscalations, useAgentTasks, AVAILABLE_MODELS, AVAILABLE_CONNECTORS, AGENT_TEMPLATES, type Agent } from '@/hooks/useAgents';
+import { useAgents, useAgentRuns, useCreateAgent, useUpdateAgent, useDeleteAgent, useRunAgent, useAgentTasks, AVAILABLE_MODELS, AVAILABLE_CONNECTORS, AGENT_TEMPLATES, type Agent } from '@/hooks/useAgents';
+import { useAgentChannelForAgent, useAgentMessages } from '@/hooks/useAgentChannels';
 import type { Client } from '@/hooks/useClients';
 import { toast } from 'sonner';
 import { CronSchedulePicker } from './CronSchedulePicker';
@@ -33,8 +34,13 @@ export function AgentsTab({ clients }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedAgent = agents.find(a => a.id === selectedId) || null;
   const { data: runs = [] } = useAgentRuns(selectedId);
-  const { data: escalations = [] } = useAgentEscalations();
   const { data: tasks = [] } = useAgentTasks();
+  const { data: selectedChannel } = useAgentChannelForAgent(
+    selectedId,
+    selectedAgent?.client_id ? 'client' : 'agency',
+    selectedAgent?.client_id || null
+  );
+  const { data: selectedChannelMessages = [] } = useAgentMessages(selectedChannel?.id);
   const createAgent = useCreateAgent();
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
@@ -69,9 +75,12 @@ export function AgentsTab({ clients }: Props) {
     });
     const failedRuns = recentRuns.filter(r => r.status === 'failed').length;
     const totalTokens = recentRuns.reduce((sum, r) => sum + (r.tokens_used || 0), 0);
-    const openEscalations = escalations.filter(e => !e.resolved_at).length;
-    return { total, active, failedRuns, totalTokens, openEscalations };
-  }, [agents, runs, escalations]);
+    const lastMsg = selectedChannelMessages.length
+      ? selectedChannelMessages[selectedChannelMessages.length - 1]
+      : null;
+    const lastActivityAt = lastMsg?.created_at || null;
+    return { total, active, failedRuns, totalTokens, lastActivityAt };
+  }, [agents, runs, selectedChannelMessages]);
 
   const handleCreateFromTemplate = (template: typeof AGENT_TEMPLATES[0]) => {
     const exists = agents.some(a => a.template_key === template.key);
@@ -151,7 +160,7 @@ export function AgentsTab({ clients }: Props) {
             Agent Workforce
           </h2>
           <p className="text-sm text-muted-foreground">
-            {stats.active}/{stats.total} active · {stats.openEscalations} open escalations
+            {stats.active}/{stats.total} active · Last activity {stats.lastActivityAt ? new Date(stats.lastActivityAt).toLocaleString() : '—'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -201,7 +210,7 @@ export function AgentsTab({ clients }: Props) {
           { label: 'Active', value: stats.active, icon: Power },
           { label: 'Failed (24h)', value: stats.failedRuns, icon: AlertTriangle },
           { label: 'Tokens (24h)', value: stats.totalTokens.toLocaleString(), icon: Zap },
-          { label: 'Escalations', value: stats.openEscalations, icon: AlertTriangle },
+          { label: 'Last Activity', value: stats.lastActivityAt ? new Date(stats.lastActivityAt).toLocaleString() : '—', icon: Activity },
         ].map((s, i) => (
           <Card key={i}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -359,7 +368,7 @@ export function AgentsTab({ clients }: Props) {
                       <TabsTrigger value="references">Agent Training</TabsTrigger>
                     <TabsTrigger value="channel">Channel</TabsTrigger>
                       <TabsTrigger value="runs">Runs ({runs.length})</TabsTrigger>
-                      <TabsTrigger value="escalations">Escalations</TabsTrigger>
+                      <TabsTrigger value="activity">Last Activity</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="space-y-4 mt-4">
@@ -598,25 +607,20 @@ export function AgentsTab({ clients }: Props) {
                       )}
                     </TabsContent>
 
-                    <TabsContent value="escalations" className="space-y-3 mt-4">
-                      {escalations.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-8">No escalations</p>
+                    <TabsContent value="activity" className="space-y-3 mt-4">
+                      {selectedChannelMessages.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">No recent activity yet. Runs, commands, and human notes appear here.</p>
                       ) : (
-                        escalations.slice(0, 15).map(esc => (
-                          <div key={esc.id} className="border rounded-lg p-3 space-y-1">
+                        [...selectedChannelMessages].reverse().slice(0, 30).map((m) => (
+                          <div key={m.id} className="border rounded-lg p-3 space-y-1">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <Badge variant={esc.severity === 'critical' ? 'destructive' : esc.severity === 'high' ? 'destructive' : 'secondary'} className="text-[10px]">
-                                  {esc.severity}
-                                </Badge>
-                                <span className="text-sm font-medium">{esc.title}</span>
+                                <Badge variant="outline" className="text-[10px] capitalize">{m.kind}</Badge>
+                                <span className="text-xs font-medium capitalize">{m.role}</span>
                               </div>
-                              <span className="text-xs text-muted-foreground">
-                                {esc.resolved_at ? '✅ Resolved' : '⏳ Open'}
-                              </span>
+                              <span className="text-[10px] text-muted-foreground">{new Date(m.created_at).toLocaleString()}</span>
                             </div>
-                            <p className="text-xs text-muted-foreground">{esc.description}</p>
-                            <p className="text-[10px] text-muted-foreground">from {esc.agent_name} · {new Date(esc.created_at).toLocaleString()}</p>
+                            {m.body && <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4">{m.body}</p>}
                           </div>
                         ))
                       )}
