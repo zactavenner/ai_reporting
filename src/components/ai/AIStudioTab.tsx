@@ -90,15 +90,23 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // Pricing base is 1080p USD/sec (from OpenRouter). 720p applies a multiplier.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
   { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "Cheapest, quick drafts (≤15s, up to 1080p)", maxSeconds: 15, pricePerSecond: 0.272 },
-  { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s default, 1080p, first-frame image-to-video", maxSeconds: 15, pricePerSecond: 0.1278 },
-  { value: "x-ai/grok-imagine-video",     label: "Grok Imagine",     hint: "xAI Grok Imagine — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
+  { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s, 720p ($1.48) or 1080p ($1.92), first-frame or reference image-to-video", maxSeconds: 15, pricePerSecond: 0.0988 },
+  { value: "x-ai/grok-imagine-video",     label: "Grok Imagine",   hint: "xAI Grok Imagine — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
 ];
 // Resolution caps per model. 4K has been removed from the UI.
 const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
   "bytedance/seedance-2.0-fast": ["720p", "1080p"],
-  "alibaba/happyhorse-1.1":      ["1080p"],
+  "alibaba/happyhorse-1.1":      ["720p", "1080p"],
   "x-ai/grok-imagine-video":     ["720p"],
 };
+// Per-model, per-resolution USD pricing per second (OpenRouter list rates).
+// Falls back to model.pricePerSecond * generic multiplier when not specified.
+const VIDEO_MODEL_PRICE: Record<string, Partial<Record<"720p" | "1080p" | "4k", number>>> = {
+  "alibaba/happyhorse-1.1": { "720p": 0.0988, "1080p": 0.1278 },
+};
+function modelPricePerSecond(modelId: string, res: "720p" | "1080p" | "4k", fallback: number): number {
+  return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
+}
 function resolutionMultiplier(res: "720p" | "1080p" | "4k"): number {
   if (res === "720p") return 0.445;
   return 1;
