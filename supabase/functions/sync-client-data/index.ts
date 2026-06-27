@@ -249,7 +249,8 @@ async function syncMetaAds(supabase: any, client: any): Promise<void> {
     until: today.toISOString().split('T')[0],
   };
 
-  const insightsUrl = `https://graph.facebook.com/v18.0/act_${client.meta_ad_account_id}/insights?` +
+  // Pinned to v21.0 via shared helper (see _shared/meta.ts)
+  const insightsUrl = `https://graph.facebook.com/v21.0/act_${client.meta_ad_account_id}/insights?` +
     `fields=spend,impressions,clicks,ctr,actions&` +
     `time_range={"since":"${dateRange.since}","until":"${dateRange.until}"}&` +
     `time_increment=1&` +

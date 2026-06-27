@@ -1037,6 +1037,8 @@ export type Database = {
         Row: {
           assigned_to_agent: string
           attempts: number | null
+          claimed_at: string | null
+          claimed_by: string | null
           completed_at: string | null
           created_at: string | null
           created_by_agent: string
@@ -1053,6 +1055,8 @@ export type Database = {
         Insert: {
           assigned_to_agent: string
           attempts?: number | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           completed_at?: string | null
           created_at?: string | null
           created_by_agent: string
@@ -1069,6 +1073,8 @@ export type Database = {
         Update: {
           assigned_to_agent?: string
           attempts?: number | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           completed_at?: string | null
           created_at?: string | null
           created_by_agent?: string
@@ -4645,6 +4651,8 @@ export type Database = {
           meta_access_token: string | null
           meta_ad_account_id: string | null
           meta_ad_account_ids: string[] | null
+          meta_system_user_token: string | null
+          meta_token_type: string | null
           name: string
           notification_email: string | null
           notification_phone: string | null
@@ -4693,6 +4701,8 @@ export type Database = {
           meta_access_token?: string | null
           meta_ad_account_id?: string | null
           meta_ad_account_ids?: string[] | null
+          meta_system_user_token?: string | null
+          meta_token_type?: string | null
           name: string
           notification_email?: string | null
           notification_phone?: string | null
@@ -4741,6 +4751,8 @@ export type Database = {
           meta_access_token?: string | null
           meta_ad_account_id?: string | null
           meta_ad_account_ids?: string[] | null
+          meta_system_user_token?: string | null
+          meta_token_type?: string | null
           name?: string
           notification_email?: string | null
           notification_phone?: string | null
@@ -13444,6 +13456,18 @@ export type Database = {
           cost_of_capital_pct: number | null
           funded_dollars: number | null
           week_start: string | null
+        }
+        Relationships: []
+      }
+      v_agent_dispatch_recent: {
+        Row: {
+          duration_ms: number | null
+          error_message: string | null
+          id: string | null
+          job_name: string | null
+          ran_at: string | null
+          status: string | null
+          status_code: number | null
         }
         Relationships: []
       }
