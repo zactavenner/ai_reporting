@@ -1240,7 +1240,11 @@ async function generateSeedanceVideo(opts: {
     // HappyHorse 1.1 supports 720p and 1080p only. Default to 720p per spec.
     effectiveResolution = effectiveResolution === "1080p" ? "1080p" : "720p";
   }
-  else if (isGrok) effectiveResolution = "720p";
+  else if (isGrok) {
+    // Grok Imagine Video supports only 480p and 720p via OpenRouter /v1/videos.
+    // Older x-ai/grok-video-1.5 caps at 720p as well.
+    effectiveResolution = effectiveResolution === "480p" ? "480p" : "720p";
+  }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
@@ -1571,16 +1575,47 @@ async function generateSeedanceVideo(opts: {
     if (startFrame) body.image_url = startFrame;
     if (providerLastFrameUrl) body.tail_image_url = providerLastFrameUrl; // Kling 1.6+ supports tail frame; ignored if unsupported
   } else if (isGrok) {
-    // Grok Imagine Video on OpenRouter: image-to-video uses top-level `image_url`.
-    // It does NOT accept `resolution`, `aspect_ratio`, `frame_images`,
-    // `reference_images`, or `size` — extra keys cause 400s and the job never
-    // starts (the prior code fell through to the generic body which always failed).
-    // Grok caps at 720p, 15s; honor the documented contract only.
-    delete (body as any).resolution;
-    delete (body as any).aspect_ratio;
-    body.duration = Math.max(3, Math.min(15, Number(effectiveDuration) || 15));
-    const startFrame = providerImageUrl || providerIngredientUrl;
-    if (startFrame) body.image_url = startFrame;
+    // Grok Imagine Video — OpenRouter /api/v1/videos asynchronous Video API.
+    // Spec contract:
+    //   { model: "x-ai/grok-imagine-video", prompt, duration (1-15, default 15),
+    //     resolution ("480p" | "720p", default "720p"),
+    //     aspect_ratio ("1:1"|"16:9"|"9:16"|"4:3"|"3:4"|"3:2"|"2:3", default "9:16"),
+    //     generate_audio (default true),
+    //     frame_images: [{ type: "image_url", image_url: { url }, frame_type: "first_frame" }],
+    //     input_references: [{ type: "image_url", image_url: { url } }, ... up to 7 ] }
+    // When both frames and references are present, frame_images takes precedence
+    // (operates as image-to-video) per spec.
+    const allowedAspects = new Set(["1:1","16:9","9:16","4:3","3:4","3:2","2:3"]);
+    const requestedAspect = opts.aspectRatio || "9:16";
+    body.duration = Math.max(1, Math.min(15, Number(effectiveDuration) || 15));
+    body.resolution = effectiveResolution; // "480p" | "720p"
+    body.aspect_ratio = allowedAspects.has(requestedAspect) ? requestedAspect : "9:16";
+    (body as any).generate_audio = opts.generateAudio === false ? false : true;
+    delete (body as any).size;
+    delete (body as any).seconds;
+    delete (body as any).first_frame;
+    delete (body as any).reference_images;
+    delete (body as any).image_url;
+
+    const firstFrameUrl = providerImageUrl || null;
+    const referenceUrls: string[] = [];
+    if (providerIngredientUrl && providerIngredientUrl !== firstFrameUrl) referenceUrls.push(providerIngredientUrl);
+    if (providerLastFrameUrl && providerLastFrameUrl !== firstFrameUrl) referenceUrls.push(providerLastFrameUrl);
+
+    if (firstFrameUrl) {
+      body.frame_images = [{
+        type: "image_url",
+        image_url: { url: firstFrameUrl },
+        frame_type: "first_frame",
+      }];
+      // frame_images takes precedence; do not also send input_references.
+    } else if (referenceUrls.length) {
+      // Reject the eighth reference image per spec.
+      body.input_references = referenceUrls.slice(0, 7).map((u) => ({
+        type: "image_url",
+        image_url: { url: u },
+      }));
+    }
   }
 
   await recordVideoModelDecision(supa, "generateSeedanceVideo.submit", {
