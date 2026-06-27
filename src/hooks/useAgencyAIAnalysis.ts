@@ -4,6 +4,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   attachments?: File[];
+  createdAt?: string;
 }
 
 interface ClientMetrics {
@@ -57,7 +58,7 @@ export function useAgencyAIAnalysis() {
             i === prev.length - 1 ? { ...m, content: assistantContent } : m
           );
         }
-        return [...prev, { role: 'assistant', content: assistantContent }];
+        return [...prev, { role: 'assistant', content: assistantContent, createdAt: new Date().toISOString() }];
       });
     };
 
@@ -107,7 +108,8 @@ export function useAgencyAIAnalysis() {
     const userMsg: Message = {
       role: 'user',
       content: input || (files && files.length > 0 ? `[Attached ${files.length} file(s)]` : ''),
-      attachments: files
+      attachments: files,
+      createdAt: new Date().toISOString(),
     };
     const allMessages = [...existingMessages, userMsg];
     setMessages(allMessages);
@@ -148,7 +150,7 @@ export function useAgencyAIAnalysis() {
       await streamResponse(response, allMessages);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${errorMessage}` }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${errorMessage}`, createdAt: new Date().toISOString() }]);
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +163,7 @@ export function useAgencyAIAnalysis() {
     clientFilter: string = 'all',
     onTokenUsage?: (used: number, system: number) => void,
   ) => {
-    const userMsg: Message = { role: 'user', content: input };
+    const userMsg: Message = { role: 'user', content: input, createdAt: new Date().toISOString() };
     const allMessages = [...existingMessages, userMsg];
     setMessages(allMessages);
     setIsLoading(true);
@@ -199,7 +201,7 @@ export function useAgencyAIAnalysis() {
       await streamResponse(response, allMessages);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${errorMessage}` }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${errorMessage}`, createdAt: new Date().toISOString() }]);
     } finally {
       setIsLoading(false);
     }

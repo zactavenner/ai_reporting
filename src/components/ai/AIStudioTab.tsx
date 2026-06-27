@@ -44,7 +44,7 @@ interface Props {
 }
 
 type CompareResult = { model: string; label: string; output?: string; error?: string; ms?: number; usage?: any };
-type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean; streaming?: boolean };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean; streaming?: boolean; createdAt?: string };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
 type ChatVideo = {
   url: string;
@@ -209,14 +209,18 @@ function CompareGrid({ primary, isStreaming, compare, loading }: { primary: stri
 
 function ChatMessage({ message: m, isStreaming, clientId, clientName }: { message: Msg; isStreaming: boolean; clientId: string; clientName?: string }) {
   const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
+  const ts = formatChatTimestamp(m.createdAt);
   if (m.role === "user") {
     return (
       <div className="flex flex-col items-end gap-1 group">
         <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2 text-sm whitespace-pre-wrap text-foreground">
           {m.content}
         </div>
-        {m.actorName && (
-          <div className="text-[10px] text-muted-foreground/70 pr-1">— {m.actorName}</div>
+        {(m.actorName || ts) && (
+          <div className="text-[10px] text-muted-foreground/70 pr-1 flex items-center gap-1.5">
+            {m.actorName && <span>— {m.actorName}</span>}
+            {ts && <span title={m.createdAt}>{ts}</span>}
+          </div>
         )}
         <div className="opacity-0 group-hover:opacity-100 transition-opacity">
           <CopyButton text={m.content} />
@@ -378,10 +382,30 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
           {artifacts.map((a, i) => (
             <ArtifactPreviewButton key={i} artifact={a} />
           ))}
+          {ts && (
+            <span className="text-[10px] text-muted-foreground/70 ml-1" title={m.createdAt}>{ts}</span>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+function formatChatTimestamp(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (sameDay) return time;
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return `Yesterday · ${time}`;
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const date = d.toLocaleDateString([], sameYear
+    ? { month: "short", day: "numeric" }
+    : { month: "short", day: "numeric", year: "numeric" });
+  return `${date} · ${time}`;
 }
 
 type Artifact = { lang: string; code: string; label: string };
@@ -1200,6 +1224,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             role: m.role as "user" | "assistant",
             content: m.content || "",
             tools,
+            createdAt: m.created_at || m.createdAt || undefined,
             compare: compareResults.length ? compareResults.map((r: any) => ({
               model: r.model,
               label: CHAT_MODELS.find(mm => mm.value === r.model || mm.value === `openrouter/${r.model}`)?.label || r.model,
@@ -1402,9 +1427,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       : text;
     const optimisticActorName =
       (typeof window !== "undefined" && localStorage.getItem("team_member_name")) || null;
-    const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName };
+    const nowIso = new Date().toISOString();
+    const userMsg: Msg = { role: "user", content: userContent, actorName: optimisticActorName, createdAt: nowIso };
     const placeholderId = `__pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0, streaming: true };
+    const placeholder: Msg = { id: placeholderId, role: "assistant", content: "", tools: [], compareLoading: compareModels.length > 0, streaming: true, createdAt: nowIso };
     setMessages(curr => [...curr, userMsg, placeholder]);
     setInput("");
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
