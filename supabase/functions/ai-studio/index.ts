@@ -1236,7 +1236,10 @@ async function generateSeedanceVideo(opts: {
   // or return a lower-res output when the user expects the 15s/1080p profile.
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
-  if (isHappyHorse) effectiveResolution = "1080p";
+  if (isHappyHorse) {
+    // HappyHorse 1.1 supports 720p and 1080p only. Default to 720p per spec.
+    effectiveResolution = effectiveResolution === "1080p" ? "1080p" : "720p";
+  }
   else if (isGrok) effectiveResolution = "720p";
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
@@ -1294,7 +1297,7 @@ async function generateSeedanceVideo(opts: {
     has_ingredient_url: !!providerIngredientUrl,
     original_has_image_url: !!opts.imageUrl,
     frame_rehost_events: frameRehostEvents,
-    happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: "1080p" } : null,
+    happyhorse_hard_lock: isHappyHorse ? { duration: 15, resolution: effectiveResolution } : null,
     fallback_attempt: opts._avatarFallbackAttempt || 0,
   });
 
@@ -1532,27 +1535,33 @@ async function generateSeedanceVideo(opts: {
       body.reference_images = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
   } else if (isHappyHorse) {
-    // HappyHorse 1.1 on OpenRouter — follow the documented video API contract:
-    //   { model, prompt, size: "1080x1920" | "1920x1080" | "1080x1080",
-    //     seconds: 3..15 integer,
-    //     first_frame: "<url>" (optional, image-driven / avatar lip-sync),
-    //     reference_images: ["<url>", ...] (optional extra refs) }
-    // Do NOT send aspect_ratio, resolution, duration, frame_images,
-    // frame_type, or image_url — those keys are not part of the spec and
-    // can cause the job to be rejected or silently downscaled.
-    body.size = exactVideoSize(opts.aspectRatio, "1080p") || "1080x1920";
-    body.seconds = Math.max(3, Math.min(15, Number(effectiveDuration) || 15));
-    delete (body as any).aspect_ratio;
-    delete (body as any).resolution;
-    delete (body as any).duration;
-    // Avatar / first-frame identity lock for lip-sync renders.
-    const happyHorseFirstFrame = providerImageUrl || providerIngredientUrl || null;
-    if (happyHorseFirstFrame) body.first_frame = happyHorseFirstFrame;
-    // Extra reference images (only when we also have a distinct first frame).
-    const extraRefs: string[] = [];
-    if (providerIngredientUrl && providerIngredientUrl !== happyHorseFirstFrame) extraRefs.push(providerIngredientUrl);
-    if (providerLastFrameUrl && providerLastFrameUrl !== happyHorseFirstFrame) extraRefs.push(providerLastFrameUrl);
-    if (extraRefs.length) body.reference_images = extraRefs;
+    // HappyHorse 1.1 on OpenRouter — documented /api/v1/videos contract:
+    //   { model, prompt, duration: 15, resolution: "720p"|"1080p",
+    //     aspect_ratio: "9:16"|"16:9"|"1:1", generate_audio: false,
+    //     frame_images: [{ type: "first_frame", image_url }],   // first-frame mode
+    //     input_references: [{ image_url }, ...] }              // reference-image mode
+    // Per spec: when both frames and references are provided, treat as
+    // image-to-video with the first frame taking priority (omit input_references).
+    body.duration = 15;
+    body.resolution = effectiveResolution; // "720p" or "1080p"
+    body.aspect_ratio = opts.aspectRatio || "9:16";
+    (body as any).generate_audio = false;
+    delete (body as any).size;
+    delete (body as any).seconds;
+    delete (body as any).first_frame;
+    delete (body as any).reference_images;
+
+    const firstFrameUrl = providerImageUrl || null;
+    const referenceUrls: string[] = [];
+    if (providerIngredientUrl && providerIngredientUrl !== firstFrameUrl) referenceUrls.push(providerIngredientUrl);
+    if (providerLastFrameUrl && providerLastFrameUrl !== firstFrameUrl) referenceUrls.push(providerLastFrameUrl);
+
+    if (firstFrameUrl) {
+      body.frame_images = [{ type: "first_frame", image_url: firstFrameUrl }];
+      // First frame takes priority over references per spec.
+    } else if (referenceUrls.length) {
+      body.input_references = referenceUrls.map((u) => ({ image_url: u }));
+    }
   } else if (isKling) {
     // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
     // start frame (image-to-video). It does NOT accept `resolution`, `frame_images`,
