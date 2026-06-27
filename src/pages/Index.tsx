@@ -705,12 +705,50 @@ const Index = () => {
             {/* Agents */}
             {activeTab === 'agents' && (
               <SectionErrorBoundary sectionName="Agents">
-                <div className="space-y-6">
-                  <AgentsOverview clients={clients} />
-                  <TeamReport />
-                  <div id="agent-workforce">
-                    <AgentsTab clients={clients} />
-                  </div>
+                <div className="space-y-10">
+                  {/* 1. Agent Workforce — primary control center */}
+                  <section
+                    id="agent-workforce"
+                    className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-background via-background to-primary/[0.04] shadow-[0_1px_0_0_hsl(var(--border))] backdrop-blur-sm"
+                  >
+                    <div className="pointer-events-none absolute inset-x-0 -top-32 h-64 bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.10),transparent_60%)]" />
+                    <div className="relative px-6 py-6 sm:px-8 sm:py-8">
+                      <div className="mb-6 flex items-end justify-between gap-4">
+                        <div>
+                          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-primary/80">
+                            01 · Operations
+                          </p>
+                          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+                            Agent Workforce
+                          </h1>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Configure, deploy, and supervise every AI agent across your agency.
+                          </p>
+                        </div>
+                      </div>
+                      <AgentsTab clients={clients} />
+                    </div>
+                  </section>
+
+                  {/* 2. Agent Reporting — performance below */}
+                  <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/40 shadow-[0_1px_0_0_hsl(var(--border))]">
+                    <div className="pointer-events-none absolute inset-x-0 -top-32 h-64 bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.06),transparent_60%)]" />
+                    <div className="relative px-6 py-6 sm:px-8 sm:py-8 space-y-6">
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                          02 · Performance
+                        </p>
+                        <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+                          Agent Reporting
+                        </h2>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Output, spend, and model usage across humans and AI — live.
+                        </p>
+                      </div>
+                      <TeamReport />
+                      <AgentsOverview clients={clients} />
+                    </div>
+                  </section>
                 </div>
               </SectionErrorBoundary>
             )}
