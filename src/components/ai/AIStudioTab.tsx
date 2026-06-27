@@ -94,20 +94,25 @@ const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: nu
   { value: "x-ai/grok-imagine-video",     label: "Grok Imagine",   hint: "xAI Grok Imagine — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
 ];
 // Resolution caps per model. 4K has been removed from the UI.
-const VIDEO_MODEL_RES: Record<string, ("720p" | "1080p" | "4k")[]> = {
+type VideoRes = "480p" | "720p" | "1080p" | "4k";
+const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   "bytedance/seedance-2.0-fast": ["720p", "1080p"],
   "alibaba/happyhorse-1.1":      ["720p", "1080p"],
-  "x-ai/grok-imagine-video":     ["720p"],
+  // Grok Imagine Video currently only supports 480p and 720p via OpenRouter /v1/videos.
+  "x-ai/grok-imagine-video":     ["480p", "720p"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
-const VIDEO_MODEL_PRICE: Record<string, Partial<Record<"720p" | "1080p" | "4k", number>>> = {
-  "alibaba/happyhorse-1.1": { "720p": 0.0988, "1080p": 0.1278 },
+const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
+  "alibaba/happyhorse-1.1":   { "720p": 0.0988, "1080p": 0.1278 },
+  // Grok Imagine Video: published OpenRouter base rate $0.05/sec for both resolutions.
+  "x-ai/grok-imagine-video":  { "480p": 0.05, "720p": 0.05 },
 };
-function modelPricePerSecond(modelId: string, res: "720p" | "1080p" | "4k", fallback: number): number {
+function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
   return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
 }
-function resolutionMultiplier(res: "720p" | "1080p" | "4k"): number {
+function resolutionMultiplier(res: VideoRes): number {
+  if (res === "480p") return 0.25;
   if (res === "720p") return 0.445;
   return 1;
 }
@@ -926,10 +931,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const videoModel = videoModels[0] || undefined;
   // Resolution selection for video generation. Persisted per browser.
   // Validated against the active video model's supported resolutions on render.
-  const [videoResolution, setVideoResolution] = useState<"720p" | "1080p" | "4k">(() => {
+  const [videoResolution, setVideoResolution] = useState<VideoRes>(() => {
     try {
       const v = localStorage.getItem("ai-studio:video-resolution");
-      if (v === "720p" || v === "1080p") return v;
+      if (v === "480p" || v === "720p" || v === "1080p") return v;
     } catch {}
     return "1080p";
   });
@@ -2381,7 +2386,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     const active = videoModels.includes(m.value);
                     // Reflect resolution-based pricing (Seedance Pro 4K ≈ 2.5×, 720p ≈ 0.7×).
                     const supportedRes = VIDEO_MODEL_RES[m.value] || ["1080p"];
-                    const effectiveRes: "720p" | "1080p" | "4k" = supportedRes.includes(videoResolution)
+                    const effectiveRes: VideoRes = supportedRes.includes(videoResolution)
                       ? videoResolution
                       : supportedRes[supportedRes.length - 1];
                     const mult = resolutionMultiplier(effectiveRes);
@@ -2409,11 +2414,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 {videoModels.length > 0 && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
-                  const supportedSet = new Set<"720p" | "1080p" | "4k">();
+                  const supportedSet = new Set<VideoRes>();
                   for (const id of videoModels) {
                     for (const r of (VIDEO_MODEL_RES[id] || ["1080p"])) supportedSet.add(r);
                   }
-                  const supported = (["720p", "1080p", "4k"] as const).filter(r => supportedSet.has(r));
+                  const supported = (["480p", "720p", "1080p", "4k"] as const).filter(r => supportedSet.has(r));
                   const activeRes = supported.includes(videoResolution) ? videoResolution : supported[supported.length - 1];
                   if (activeRes !== videoResolution) {
                     // auto-correct when user switches to a model that doesn't support current res
