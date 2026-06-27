@@ -44,7 +44,7 @@ interface Props {
 }
 
 type CompareResult = { model: string; label: string; output?: string; error?: string; ms?: number; usage?: any };
-type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean; streaming?: boolean };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; tools?: any[]; actorName?: string | null; compare?: CompareResult[]; compareLoading?: boolean; streaming?: boolean; createdAt?: string };
 type ChatImage = { url: string; aspect_ratio?: string; prompt?: string; toolName?: string; args?: any; model?: string };
 type ChatVideo = {
   url: string;
