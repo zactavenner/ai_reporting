@@ -51,16 +51,21 @@ export function useAgentChannelForAgent(agentId: string | null | undefined, scop
       const { data, error } = await q.maybeSingle();
       if (error) throw error;
       if (data) return data as AgentChannel;
-      // auto-create
+      // auto-create — tolerate FK failures (stale agent IDs) so UI doesn't hang on "Loading channel..."
       const { data: created, error: insErr } = await (supabase as any)
         .from("agent_channels")
         .insert({ scope, client_id: clientId, agent_id: agentId, kind: "agent", name: "#agent-" + (agentId || "").slice(0, 6) })
         .select()
         .single();
-      if (insErr) throw insErr;
+      if (insErr) {
+        console.warn("[agent_channels] auto-create failed", insErr);
+        return null;
+      }
       qc.invalidateQueries({ queryKey: ["agent_channels"] });
       return created as AgentChannel;
     },
+    retry: false,
+    staleTime: 30_000,
   });
 }
 
