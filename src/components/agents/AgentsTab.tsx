@@ -17,6 +17,7 @@ import { AIAgentGenerator } from './AIAgentGenerator';
 import { AgentReferenceLibrary } from './AgentReferenceLibrary';
 import { AgencyAgentsManager } from './AgencyAgentsManager';
 import { AgentChannelPane } from './AgentChannelPane';
+import { AllChannelsInbox } from './AllChannelsInbox';
 
 interface Props { clients: Client[]; }
 
@@ -138,6 +139,9 @@ export function AgentsTab({ clients }: Props) {
     <div className="space-y-6">
       {/* Phase 2: Shared Agency Agents with 3-layer knowledge */}
       <AgencyAgentsManager clients={clients} />
+
+      {/* Agency-wide unified inbox across all agent channels (agency + client) */}
+      <AllChannelsInbox clients={clients} />
 
       {/* Header */}
       <div className="flex items-center justify-between">
