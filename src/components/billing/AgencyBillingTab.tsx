@@ -422,7 +422,50 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Link in client settings</span>
+                        linkingClientId === client.id ? (
+                          <div className="flex gap-1 justify-end items-center">
+                            <Input
+                              autoFocus
+                              type="email"
+                              placeholder="billing@client.com"
+                              value={linkEmail}
+                              onChange={(e) => setLinkEmail(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveLink(client.id);
+                                if (e.key === 'Escape') setLinkingClientId(null);
+                              }}
+                              className="h-8 w-56 text-xs"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => saveLink(client.id)}
+                              disabled={linkSubmitting}
+                            >
+                              {linkSubmitting ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setLinkingClientId(null)}
+                              disabled={linkSubmitting}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => startLink(client.id, client.name)}
+                          >
+                            <Link2 className="h-3 w-3 mr-1" />
+                            Link Stripe
+                          </Button>
+                        )
                       )}
                     </TableCell>
                   </TableRow>
