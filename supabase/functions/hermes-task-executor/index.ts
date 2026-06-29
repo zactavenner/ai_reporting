@@ -459,6 +459,12 @@ async function executeTask(taskId: string) {
   const agent = await loadAgent(task.agent_id);
   const profile = await loadProfile(task.client_id);
   const startedAt = Date.now();
+  const channelId = await ensureAgentChannel(task.client_id, task.agent_id, agent?.name);
+  await postChannel({
+    channelId, role: "system", kind: "command", taskId: taskId, toAgentId: task.agent_id,
+    body: `🪽 Hermes dispatched **${task.task_type}** task for ${client.name}.\n\n${(task.instructions || "").slice(0, 1200)}`,
+    payload: { hermes_task_id: taskId, task_type: task.task_type },
+  });
 
   try {
     const triageContext = task.task_type === "task_triage"
@@ -479,6 +485,11 @@ async function executeTask(taskId: string) {
         client: { id: client.id, name: client.name },
         agent,
         isVideo,
+      });
+      await postChannel({
+        channelId, role: "agent", kind: "tool-call", taskId: taskId, fromAgentId: task.agent_id,
+        body: `🎨 ${isVideo ? "Video" : "Image"} generation routed to AI Studio.\n${summary}`,
+        payload: { source: "ai-studio", isVideo },
       });
       const nowIso = new Date().toISOString();
       await supa.from("hermes_tasks").update({
@@ -508,15 +519,35 @@ async function executeTask(taskId: string) {
       return { ok: true, routed: "ai-studio" };
     }
 
-    const { parsed, raw, model, usage } = await runAgentInference({
-      agent,
-      profile,
-      client: { id: client.id, name: client.name },
-      instructions: task.instructions || "",
-      taskType: task.task_type || "general",
-      metadata: task.metadata || {},
-      triageContext,
-    });
+    // Multi-turn loop: agent ↔ Hermes back-and-forth, posted to channel.
+    const followups: { question: string; hermes_reply: string }[] = [];
+    let parsed: any, raw: string, model: string, usage: any;
+    for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
+      const out = await runAgentInference({
+        agent, profile,
+        client: { id: client.id, name: client.name },
+        instructions: task.instructions || "",
+        taskType: task.task_type || "general",
+        metadata: task.metadata || {},
+        triageContext,
+        followups,
+      });
+      parsed = out.parsed; raw = out.raw; model = out.model; usage = out.usage;
+      if (parsed?.needs_input && parsed?.question && task.task_type !== "task_triage") {
+        await postChannel({
+          channelId, role: "agent", kind: "message", taskId: taskId, fromAgentId: task.agent_id,
+          body: `❓ ${parsed.question}`, payload: { turn: turn + 1 },
+        });
+        const hermesReply = await hermesAutoReply(parsed.question, { name: client.name }, task.instructions || "", profile?.profile_md || null);
+        await postChannel({
+          channelId, role: "system", kind: "message", taskId: taskId, toAgentId: task.agent_id,
+          body: `🪽 Hermes: ${hermesReply}`, payload: { turn: turn + 1 },
+        });
+        followups.push({ question: parsed.question, hermes_reply: hermesReply });
+        continue;
+      }
+      break;
+    }
 
     const assets = Array.isArray(parsed?.assets) ? parsed.assets : [];
     let triageStats: any = null;
@@ -560,6 +591,11 @@ async function executeTask(taskId: string) {
       assets,
       summary: parsed?.summary || null,
     });
+    await postChannel({
+      channelId, role: "agent", kind: "message", taskId: taskId, fromAgentId: task.agent_id,
+      body: `✅ ${agent?.name || "Agent"} completed\n\n${(parsed?.summary || "(no summary)").slice(0, 2000)}` + (assets.length ? `\n\n${assets.length} asset(s) attached.` : ""),
+      payload: { model, turns: followups.length + 1, cost_usd: estimateCost(model, usage) },
+    });
     return { ok: true };
   } catch (e: any) {
     const msg = e?.message || String(e);
@@ -573,6 +609,10 @@ async function executeTask(taskId: string) {
     if (task.conversation_id) {
       await postMessage(task.conversation_id, "assistant", `❌ Agent failed: ${msg}`, { hermes_task_id: taskId, source: "hermes" });
     }
+    await postChannel({
+      channelId, role: "agent", kind: "escalation", taskId: taskId, fromAgentId: task.agent_id,
+      body: `❌ Task failed: ${msg.slice(0, 500)}`,
+    });
     await callbackHermes(task.hermes_callback_url, {
       event: "task.completed",
       task_id: taskId,
