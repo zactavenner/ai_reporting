@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { Client } from '@/hooks/useClients';
 import { useAllClientFullSettings } from '@/hooks/useAllClientSettings';
 import { useAllClientsStripePayments, StripeCustomerData } from '@/hooks/useStripePayments';
+import { useUpdateClientSettings } from '@/hooks/useClientSettings';
+import { BillingForecastChart } from './BillingForecastChart';
 import { Sparkline } from '@/components/dashboard/Sparkline';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { DollarSign, TrendingUp, Calendar, CreditCard, Send, Zap, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
+import { DollarSign, TrendingUp, Calendar, CreditCard, Send, Zap, Loader2, RefreshCw, ExternalLink, Link2, Check } from 'lucide-react';
 import { format, startOfMonth, startOfYear, subMonths, differenceInMonths } from 'date-fns';
 import { Users, AlertTriangle } from 'lucide-react';
 
@@ -27,6 +29,10 @@ const formatCurrency = (amount: number, currency = 'usd') =>
 export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
   const clientIds = useMemo(() => clients.map(c => c.id), [clients]);
   const { data: clientFullSettings = {} } = useAllClientFullSettings(clientIds);
+  const updateSettings = useUpdateClientSettings();
+  const [linkingClientId, setLinkingClientId] = useState<string | null>(null);
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkSubmitting, setLinkSubmitting] = useState(false);
 
   // Build email map for Stripe lookup
   const clientEmails = useMemo(() => {
@@ -123,6 +129,41 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
 
     return { totalClients, activeSubscriptions, noSubscription };
   }, [clients, clientRows]);
+
+  const totalMRR = useMemo(
+    () => Object.values(stripeDataMap).reduce((sum, d: any) => sum + (d?.mrr || 0), 0),
+    [stripeDataMap]
+  );
+
+  const startLink = (clientId: string, clientName: string) => {
+    const guess =
+      (clients.find((c) => c.id === clientId) as any)?.notification_email || '';
+    setLinkEmail(guess);
+    setLinkingClientId(clientId);
+  };
+
+  const saveLink = async (clientId: string) => {
+    const email = linkEmail.trim();
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      toast.error('Enter a valid email');
+      return;
+    }
+    setLinkSubmitting(true);
+    try {
+      await updateSettings.mutateAsync({
+        client_id: clientId,
+        stripe_email: email,
+      } as any);
+      toast.success('Linked — syncing Stripe…');
+      setLinkingClientId(null);
+      setLinkEmail('');
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to link');
+    } finally {
+      setLinkSubmitting(false);
+    }
+  };
 
   // Client rows with months since first charge
   const clientRowsWithMonths = useMemo(() => {
@@ -295,6 +336,9 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
         </Card>
       </div>
 
+      {/* Forecast & graphs */}
+      <BillingForecastChart stripeDataMap={stripeDataMap} totalMRR={totalMRR} />
+
       {/* Actions bar */}
       <div className="flex items-center justify-between">
         <h3 className="text-base font-bold">Client Billing Overview</h3>
@@ -378,7 +422,50 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Link in client settings</span>
+                        linkingClientId === client.id ? (
+                          <div className="flex gap-1 justify-end items-center">
+                            <Input
+                              autoFocus
+                              type="email"
+                              placeholder="billing@client.com"
+                              value={linkEmail}
+                              onChange={(e) => setLinkEmail(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveLink(client.id);
+                                if (e.key === 'Escape') setLinkingClientId(null);
+                              }}
+                              className="h-8 w-56 text-xs"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => saveLink(client.id)}
+                              disabled={linkSubmitting}
+                            >
+                              {linkSubmitting ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setLinkingClientId(null)}
+                              disabled={linkSubmitting}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => startLink(client.id, client.name)}
+                          >
+                            <Link2 className="h-3 w-3 mr-1" />
+                            Link Stripe
+                          </Button>
+                        )
                       )}
                     </TableCell>
                   </TableRow>
