@@ -1374,6 +1374,9 @@ async function generateSeedanceVideo(opts: {
       conversation_id: opts.conversationId,
       user_id: opts.userId,
       kind: "scene_video",
+      // Wave C #9: orphan tracking — sweeper auto-deletes stuck placeholders
+      // after this deadline (45 min covers the 20 min poll budget + buffer).
+      placeholder_until: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
       payload: {
         status: "processing",
         aspect_ratio: opts.aspectRatio,
@@ -2271,7 +2274,7 @@ async function generateSeedanceVideo(opts: {
   };
   const ci = pendingCanvasItemId
     ? await supa.from("ai_studio_canvas_items")
-        .update({ payload: completedPayload })
+        .update({ payload: completedPayload, job_id: jobId, placeholder_until: null })
         .eq("id", pendingCanvasItemId)
         .select("id, kind, payload, created_at").single()
     : await supa.from("ai_studio_canvas_items").insert({
@@ -2279,6 +2282,7 @@ async function generateSeedanceVideo(opts: {
         user_id: opts.userId,
         kind: "scene_video",
         payload: completedPayload,
+        job_id: jobId,
       }).select("id, kind, payload, created_at").single();
 
   if (opts.clientId) {
@@ -5267,7 +5271,19 @@ Deno.serve(async (req) => {
 
   const stream = new ReadableStream({
     start(controller) {
+      // Wave C #10: SSE heartbeat. Long video jobs (HappyHorse 20 min poll
+      // budget) can sit idle between progress events; some proxies/browsers
+      // tear down the connection after ~30s of silence. Emit an SSE comment
+      // every 15s while the turn is running so the pipe stays warm.
+      let alive = true;
+      const enc = new TextEncoder();
+      const heartbeat = setInterval(() => {
+        if (!alive) return;
+        try { controller.enqueue(enc.encode(`: heartbeat ${Date.now()}\n\n`)); }
+        catch { alive = false; clearInterval(heartbeat); }
+      }, 15_000);
       const turnPromise = runStudioTurn(controller);
+      turnPromise.finally(() => { alive = false; clearInterval(heartbeat); });
       const edgeRuntime = (globalThis as any).EdgeRuntime;
       if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
         edgeRuntime.waitUntil(turnPromise.catch((e: any) => {
