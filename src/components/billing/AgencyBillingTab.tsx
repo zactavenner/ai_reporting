@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Client } from '@/hooks/useClients';
 import { useAllClientFullSettings } from '@/hooks/useAllClientSettings';
 import { useAllClientsStripePayments, StripeCustomerData } from '@/hooks/useStripePayments';
@@ -33,19 +33,44 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
   const [linkingClientId, setLinkingClientId] = useState<string | null>(null);
   const [linkEmail, setLinkEmail] = useState('');
   const [linkSubmitting, setLinkSubmitting] = useState(false);
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [targetDraft, setTargetDraft] = useState('');
 
-  // Build email map for Stripe lookup
+  // Build email map for Stripe lookup — auto-match via client's notification_email
+  // when no explicit stripe_email is set yet.
   const clientEmails = useMemo(() => {
     const map: Record<string, string> = {};
     for (const client of clients) {
       const settings = clientFullSettings[client.id];
-      const email = (settings as any)?.stripe_email || (settings as any)?.stripe_customer_id;
+      const email =
+        (settings as any)?.stripe_email ||
+        (settings as any)?.stripe_customer_id ||
+        (client as any)?.notification_email ||
+        (client as any)?.contact_email;
       if (email) map[client.id] = email;
     }
     return map;
   }, [clients, clientFullSettings]);
 
   const { data: stripeDataMap = {}, isLoading, refetch } = useAllClientsStripePayments(clientEmails);
+
+  // Auto-persist successful auto-matches so future loads are stable + cached.
+  const autoPersistedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const client of clients) {
+      const settings = clientFullSettings[client.id] as any;
+      if (settings?.stripe_email || settings?.stripe_customer_id) continue;
+      const data = stripeDataMap[client.id];
+      if (!data?.customer?.email) continue;
+      if (autoPersistedRef.current.has(client.id)) continue;
+      autoPersistedRef.current.add(client.id);
+      updateSettings.mutate({
+        client_id: client.id,
+        stripe_email: data.customer.email,
+        stripe_customer_id: data.customer.id,
+      } as any);
+    }
+  }, [stripeDataMap, clients, clientFullSettings, updateSettings]);
 
   // Charge/Invoice modal state
   const [chargeModal, setChargeModal] = useState<{ clientId: string; clientName: string; customerId: string; mode: 'invoice' | 'charge' } | null>(null);
@@ -134,6 +159,26 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
     () => Object.values(stripeDataMap).reduce((sum, d: any) => sum + (d?.mrr || 0), 0),
     [stripeDataMap]
   );
+
+  const totalMonthlyTarget = useMemo(() => {
+    return Object.values(clientFullSettings).reduce((sum: number, s: any) => sum + (Number(s?.mrr) || 0), 0);
+  }, [clientFullSettings]);
+  const targetAttainment = totalMonthlyTarget > 0 ? (totalMRR / totalMonthlyTarget) * 100 : 0;
+
+  const saveTarget = async (clientId: string) => {
+    const v = parseFloat(targetDraft);
+    if (Number.isNaN(v) || v < 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+    try {
+      await updateSettings.mutateAsync({ client_id: clientId, mrr: v } as any);
+      toast.success('Monthly target updated');
+      setEditingTargetId(null);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save target');
+    }
+  };
 
   const startLink = (clientId: string, clientName: string) => {
     const guess =
@@ -306,7 +351,7 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       </div>
 
       {/* Enhanced Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-2">
           <CardContent className="p-5 flex items-center gap-3">
             <Users className="h-6 w-6 text-primary" />
@@ -331,6 +376,23 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
             <div>
               <p className="text-2xl font-bold text-destructive">{enhancedStats.noSubscription}</p>
               <p className="text-xs text-muted-foreground">No Subscription</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-2">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" /> Target Attainment
+                </p>
+                <p className={`text-2xl font-bold mt-1 ${targetAttainment >= 100 ? 'text-chart-2' : targetAttainment >= 75 ? 'text-amber-500' : 'text-destructive'}`}>
+                  {targetAttainment.toFixed(0)}%
+                </p>
+                <p className="text-[10px] text-muted-foreground tabular-nums">
+                  {formatCurrency(totalMRR)} / {formatCurrency(totalMonthlyTarget)}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -366,6 +428,7 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                   <TableHead>Client</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Monthly Sub</TableHead>
+                  <TableHead className="text-right">Target / Actual</TableHead>
                   <TableHead className="text-right">Total Paid</TableHead>
                   <TableHead>Next Billing</TableHead>
                   <TableHead>Client Since</TableHead>
@@ -374,6 +437,12 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
               </TableHeader>
               <TableBody>
                 {clientRowsWithMonths.map(({ client, isConnected, customerId, customerEmail, mrr, totalPaid, nextBilling, subStatus, interval, monthsSinceFirstCharge }) => (
+                  (() => {
+                    const settings = clientFullSettings[client.id] as any;
+                    const target = Number(settings?.mrr) || 0;
+                    const attain = target > 0 ? (mrr / target) * 100 : 0;
+                    const attainColor = attain >= 100 ? 'text-chart-2' : attain >= 75 ? 'text-amber-500' : target > 0 ? 'text-destructive' : 'text-muted-foreground';
+                    return (
                   <TableRow key={client.id}>
                     <TableCell>
                       <div>
@@ -391,6 +460,42 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                     <TableCell className="text-right font-bold tabular-nums">
                       {isConnected ? formatCurrency(mrr) : '—'}
                       {interval && <span className="text-xs text-muted-foreground ml-1">/{interval}</span>}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {editingTargetId === client.id ? (
+                        <div className="flex gap-1 justify-end items-center">
+                          <Input
+                            autoFocus
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={targetDraft}
+                            onChange={(e) => setTargetDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveTarget(client.id);
+                              if (e.key === 'Escape') setEditingTargetId(null);
+                            }}
+                            className="h-7 w-24 text-xs"
+                          />
+                          <Button size="sm" className="h-7 px-2" onClick={() => saveTarget(client.id)}>
+                            <Check className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-right hover:underline"
+                          onClick={() => { setEditingTargetId(client.id); setTargetDraft(String(target || '')); }}
+                          title="Click to edit monthly target"
+                        >
+                          <div className="text-xs text-muted-foreground">
+                            target {target > 0 ? formatCurrency(target) : '—'}
+                          </div>
+                          <div className={`text-sm font-semibold ${attainColor}`}>
+                            {target > 0 ? `${attain.toFixed(0)}%` : 'set target'}
+                          </div>
+                        </button>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {isConnected ? formatCurrency(totalPaid) : '—'}
@@ -473,6 +578,8 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                       )}
                     </TableCell>
                   </TableRow>
+                    );
+                  })()
                 ))}
               </TableBody>
             </Table>
