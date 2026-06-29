@@ -337,7 +337,11 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       </div>
 
       {/* Forecast & graphs */}
-      <BillingForecastChart stripeDataMap={stripeDataMap} totalMRR={totalMRR} />
+      <BillingForecastChart
+        stripeDataMap={stripeDataMap}
+        totalMRR={totalMRR}
+        clientNameMap={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
+      />
 
       {/* Actions bar */}
       <div className="flex items-center justify-between">
