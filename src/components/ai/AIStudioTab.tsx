@@ -1400,6 +1400,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     const root = scrollRef.current as HTMLElement | null;
     if (!root) return;
     const viewport = root.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]") || root;
+    // Wave C #13: only follow the live feed when the user is already near the
+    // bottom. If they've scrolled up to re-read an earlier message, leave the
+    // scroll position alone instead of yanking them back down on every token.
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    if (distanceFromBottom > 240 && !loading) return;
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: loading ? "auto" : "smooth" });
   }, [messages, loading]);
 
