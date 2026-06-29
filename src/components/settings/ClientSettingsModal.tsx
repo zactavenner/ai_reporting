@@ -28,6 +28,7 @@ import { SyncHealthIndicator, getSyncStatus } from './SyncHealthIndicator';
 import { useSyncQueue } from '@/hooks/useSyncQueue';
 import { DollarSign, Target, Plug, Loader2, RefreshCw, CheckCircle, XCircle, Users, Lock, Eye, EyeOff, AlertTriangle, ListOrdered, MessageSquare as MessageSquareIcon } from 'lucide-react';
 import { ClientSheetBindingCard } from './ClientSheetBindingCard';
+import { StripeSyncStatus } from './StripeSyncStatus';
 
 function ClientUrlField({
   clientId,
@@ -1316,6 +1317,7 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
                   <p className="text-xs text-muted-foreground">Takes priority over email if set</p>
                 </div>
               </div>
+              <StripeSyncStatus clientId={client.id} settings={settings} />
             </div>
 
             {/* Slack Channel Mapping */}
