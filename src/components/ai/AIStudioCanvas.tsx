@@ -182,6 +182,11 @@ export function AIStudioCanvas({
     lastEntryCountRef.current = entries.length;
     lastEntryKeyRef.current = lastKey;
     if (!grew && !changed) return;
+    // Wave C #13: don't hijack the user when they've scrolled up to inspect an
+    // older creative. Only snap to bottom if they're already within ~240px of
+    // it (the standard "follow the live feed" threshold).
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom > 240) return;
     // Defer to next frame so newly inserted card has a measured height.
     requestAnimationFrame(() => {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
