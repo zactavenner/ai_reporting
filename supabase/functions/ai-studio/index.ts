@@ -339,7 +339,6 @@ async function generateStaticAd(opts: {
         headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
         body: JSON.stringify({
           model: "openai/gpt-image-2",
-        models: ["openai/gpt-image-2", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
           prompt: fullPrompt + (opts.referenceImageUrl ? `\n\nReference image (clone style/layout): ${opts.referenceImageUrl}` : ""),
           size: sz,
           n: 1,
@@ -363,8 +362,8 @@ async function generateStaticAd(opts: {
     // When the user attached reference images we upgrade to Gemini 3 Pro Image Preview ("Nano Banana Pro")
     // for best identity / product preservation across multiple references.
     modelUsed = hasAttachmentRefs
-      ? "google/gemini-3-pro-image-preview"
-      : "google/gemini-3.1-flash-image-preview";
+      ? "google/gemini-3-pro-image"
+      : "google/gemini-3.1-flash-image";
 
     // Build multimodal content: text prompt + every attachment + any prior reference image.
     const refUrls: string[] = [];
@@ -495,7 +494,7 @@ async function editStaticAd(opts: {
 
   {
     // All edits use Nano Banana 2 (image+text) via Lovable AI Gateway.
-    modelUsed = "google/gemini-3.1-flash-image-preview";
+    modelUsed = "google/gemini-3.1-flash-image";
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -575,7 +574,7 @@ async function generateOneVariation(opts: {
     hasReference: !!opts.sourceImageUrl,
   });
 
-  const modelUsed = "google/gemini-3.1-flash-image-preview";
+  const modelUsed = "google/gemini-3.1-flash-image";
   const userContent: any = opts.sourceImageUrl
     ? [
         { type: "text", text: basePrompt },
@@ -758,8 +757,7 @@ async function generateSceneImage(opts: {
       : await fetch("https://openrouter.ai/api/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
-          body: JSON.stringify({ model: "openai/gpt-image-2",
-        models: ["openai/gpt-image-2", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"], prompt: fullPrompt, size: sz, n: 1, response_format: "b64_json" }),
+          body: JSON.stringify({ model: "openai/gpt-image-2", prompt: fullPrompt, size: sz, n: 1, response_format: "b64_json" }),
         });
     if (!res.ok) throw new Error(`Scene image [${res.status}]: ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();
@@ -771,7 +769,7 @@ async function generateSceneImage(opts: {
       mime = r.headers.get("content-type") || "image/png";
     } else throw new Error("OpenAI returned no scene image data");
   } else {
-    modelUsed = "google/gemini-3.1-flash-image-preview";
+    modelUsed = "google/gemini-3.1-flash-image";
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
