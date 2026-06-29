@@ -1,39 +1,109 @@
+# Agency Billing & Revenue Dashboard
 
-## Goal
-Verify the "Executive Scorecard" tab on every client's KPI Google Sheet is readable end-to-end (Sheets API → `fetch-sheet-metrics` edge function → app), and report any gaps. Then make the integration treat it correctly — today the function aggregates every non-denylisted tab, and "Executive Scorecard" isn't in the denylist or in any explicit allowlist, so it may be silently double-counting (if it's a rollup) or being missed (if it's the wrong shape).
+Internal-only billing operations console for High Performance Ads. Replaces the current `AgencyBillingTab` with a multi-section dashboard layered on Stripe + our existing client/AM data. No client-facing notifications anywhere.
 
-## What I'll do
+This is a large build. I'll ship it in 3 waves so you can use each stage immediately. Confirm the plan and I'll start Wave 1.
 
-### 1. Audit pass (read-only)
-For each active/cc_error client with a `kpi_google_sheet_url`:
-- Call `fetch-sheet-metrics` with `action: 'list_tabs'` to enumerate tab titles + gids
-- Identify the Executive Scorecard tab (case-insensitive match on "executive", "scorecard", "exec scorecard")
-- Call `fetch-sheet-metrics` with `action: 'raw_grid'` and that tab's gid to confirm headers + non-zero rows come back
-- Record per-client: tab found? headers present? row count? fetch latency? errors?
+---
 
-Produces a status table covering all ~22 clients (plus the 2 with no sheet configured).
+## Wave 1 — Foundation + Dashboard shell (ship first)
 
-### 2. Classify the tab shape
-For each sheet's Executive Scorecard, determine whether it's:
-- **Rollup** (totals / KPI summary, not date-indexed) — should be denylisted so it doesn't double-count daily metrics
-- **Record/daily** (date-indexed rows) — keep included in aggregation
-- **Empty / formula-only** — flag for the client to fix
+**Schema (new tables, all RLS-locked to internal team):**
+- `billing_agreements` — contract terms per client (base_fee, setup_fee, included_ad_spend, variable_fee_%, performance_fee_%, billing_day, auto_charge, contract dates, approval_required)
+- `billing_invoices` — internal invoice ledger (mirrors Stripe + manual invoices, with status, due/paid dates, period)
+- `billing_line_items` — breakdown per invoice (base/setup/variable/performance/credit)
+- `billing_payments` — payments + attempts (mirrors Stripe charges/PIs, failure_reason, next_retry_date)
+- `billing_actions` — internal action queue (issue, priority, due_date, assigned AM, status)
+- `billing_notifications` — internal alert log (channel, delivery_status, dedup_key, retry_count)
+- `stripe_webhook_events` — raw event log + processing status + dedup
+- `billing_audit_log` — who/what/when on every financial action
+- Extend `client_team_members` already has notify_prefs; reuse for AM alerts (email/SMS/whatsapp).
 
-### 3. Code fixes in `supabase/functions/fetch-sheet-metrics/index.ts`
-Based on classification:
-- Add `'scorecard'`, `'executive scorecard'`, `'exec scorecard'` to `TAB_DENYLIST` if (as expected) it's a KPI rollup, so it stops contaminating daily aggregation
-- OR add a dedicated parser branch that surfaces the scorecard values separately under a new `scorecard` field in the response, leaving daily aggregation untouched
-- Add a structured log line `[scorecard] sheet=<id> tab=<title> rows=<n>` so future audits can grep edge logs
+All tables: `GRANT` to `authenticated` + `service_role`, RLS = team members only.
 
-### 4. Surface in the app (optional, ask)
-If you want the Executive Scorecard values shown anywhere in the dashboard (not just hidden from aggregation), I'll add a small read-only panel on the client dashboard that calls `fetch-sheet-metrics` with `action: 'raw_grid'` on the scorecard tab and renders the KPI rows.
+**Top of dashboard:**
+- 13 KPI cards in a responsive grid (Collected YTD, Collected MTD, Active MRR, Projected MRR, ARPU, Outstanding, Overdue, Failed, Active clients, Active subs, No-sub clients, Target attainment, 30d forecast). Each: value, Δ vs prior period, sparkline, tooltip, click-to-filter.
+- Clear visual separation between **collected** vs **forecast** (forecast cards get a dotted border + "Estimate" pill).
 
-### 5. Deliverable
-- Markdown audit table posted in chat (✅ found & healthy, ⚠️ found but empty/broken, ❌ no scorecard tab, ⛔ no sheet configured)
-- Code patch + redeploy of `fetch-sheet-metrics`
-- Spot-check 3 clients after deploy to confirm aggregation totals didn't drop (rollup removed) or jump (records added)
+**Revenue & Forecast chart (rebuild of current chart):**
+- Daily / Weekly / Monthly / Quarterly / Yearly toggles
+- Series toggles: Cash collected, Invoices issued, Active MRR, One-time, Variable, Performance, Forecast, Target
+- Solid bars = actual, dotted line = forecast, horizontal line = target
+- Summary row below: Active MRR, Avg monthly, Actual (period), Forecast, New MRR, Expansion, Contraction, Churned, Net MRR growth
+- Click datapoint → drilldown dialog (already partially built, extend to show invoices + payments)
 
-## Open questions before I build
-1. Is "Executive Scorecard" the **exact** tab name to look for, or are aliases ("Exec Scorecard", "Executive KPIs", etc.) in play?
-2. Should the scorecard be **excluded from daily aggregation** (denylist) or **surfaced separately** in a new dashboard panel? Or both?
-3. For clients missing the tab, do you want me to flag them only, or auto-create the tab from the master template via `create-client-sheet`?
+**Billing Action Queue (new component, top of page below KPIs):**
+- Tabs: All / Due soon / Invoice needed / Failed / Overdue / Missing PM / Stripe not linked / Fee review / Contract ending / Sub mismatch
+- Auto-generated from rules over invoices/subs/agreements + manual entries
+- Priority sort, AM avatar, action button per row
+
+---
+
+## Wave 2 — Client table, drawer, calendar
+
+**Client Billing Table (rebuild):**
+- Columns per spec including the prominent **Days Until Next Charge** badge (color rules: >7 neutral, 4–7 blue, 1–3 orange, today orange/red, overdue red, none gray)
+- Quick filters: Charging today / 3d / 7d / 14d / this month / Overdue / Not scheduled
+- Sticky header, search, sort, column filters
+- Row actions menu: View, Generate invoice, Send, Charge now, Retry, Edit terms, Link Stripe, Add PM, Pause, Cancel, Apply credit, Mark paid, Add note — all gated by role with confirm modals
+
+**Client Billing Drawer:**
+- Summary, AM info, Contract terms, **transparent invoice calculation** (base + ad spend math + variable fee + credits), Invoice history, Payment history
+- Pulls live ad spend from existing `meta_ads` / spend tables for %-of-spend math
+- Approve / Edit / Generate draft / Charge actions with audit log entries
+
+**Billing Calendar:**
+- Month/Week/Agenda views (use existing calendar primitives)
+- Events from subscription next_charge_date + scheduled invoices
+- Summary cards: charges today/week/month, expected cash week/month
+
+**Reconciliation page:**
+- Side-by-side: contract fee vs Stripe sub vs invoice vs charged vs collected
+- Auto-flags per spec (mismatch, missing sub, dup charges, unpaid setup, etc.)
+
+---
+
+## Wave 3 — Stripe webhooks + internal AM alerts + forecasting
+
+**Stripe webhook handler (extend existing `stripe-webhook`):**
+- Subscribe to: payment_intent.succeeded/failed, invoice.paid/payment_failed, charge.succeeded/failed, customer.subscription.updated/deleted
+- Dedup by PI/charge/invoice ID into `stripe_webhook_events`
+- On success: update payments/invoice, recompute next_charge, clear related actions, notify AM
+- On failure: mark failed, add to action queue, flag client row, notify AM (+ optional billing admin CC)
+
+**Internal AM notifications:**
+- Email via Resend (templates per spec — Payment Successful / URGENT Failed)
+- SMS via existing GHL agency SMS path (already wired in this project; Twilio optional later)
+- In-app notification (reuse `task_notifications` infra)
+- Per-client AM lookup via `client_team_members` with role=account_manager
+- **Never** message the client. All copy is internal.
+- Log every send to `billing_notifications` with delivery_status + retry button in UI
+
+**Forecasting engine (RPC):**
+- `get_billing_forecast(horizon_days)` → expected/best/conservative
+- Inputs: active subs, scheduled invoices, setup installments, approved variable/performance fees, renewals; subtracts at-risk + expected churn
+- Returns by-day rollup for chart + headline numbers for KPI cards
+
+**Roles & permissions:**
+- New `app_role` values: `billing_manager`, `account_manager`, `viewer` (admin already exists)
+- `has_role()` checks gate charge/refund/cancel/edit-terms/approve/mark-paid
+
+**Seed data:** sample agreements/invoices/payments/actions for LSCRE, Paradyme, Lansing, Legacy, Blue, Titan, InjuryPro, Icon American — covering every state in the spec (today/3d/7d/14d/30d charges, failed, overdue, no-Stripe, %-of-spend, setup installments, mismatches, missing PM, pending variable approval).
+
+---
+
+## Tech notes
+- All new UI uses existing semantic tokens (no hardcoded colors); status colors mapped to `--success`, `--destructive`, `--warning`, `--primary` variants.
+- Sticky table headers, skeletons, empty + error states everywhere.
+- Drilldown dialog extended from existing one in `BillingForecastChart`.
+- All financial mutations go through edge functions with audit-log writes; UI never touches Stripe directly.
+- Realtime channels on `billing_invoices` / `billing_payments` / `billing_actions` so the dashboard updates the instant a webhook lands.
+
+---
+
+## What I need from you
+1. Approve the 3-wave split (or tell me to compress / reorder).
+2. Confirm Resend for AM email (already configured) and GHL agency SMS for AM SMS (already configured) — or say if you want Twilio instead.
+3. Confirm the role names above are fine to add alongside the existing `admin` role.
+
+Reply "go" and I start Wave 1 (schema + KPIs + action queue + chart rebuild) immediately.
