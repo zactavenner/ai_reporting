@@ -431,6 +431,9 @@ Deno.serve(async (req) => {
               if (!title || title === sheetTitle) continue;
               if (isDenylistedTab(title)) {
                 tabsSkipped.push({ title, reason: 'denylist' });
+                if (title.toLowerCase().includes('scorecard')) {
+                  console.log(`[scorecard] sheet=${sheet_id} tab="${title}" gid=${s?.properties?.sheetId} skipped from aggregation (rollup)`);
+                }
                 continue;
               }
               extraTitles.push(title);
