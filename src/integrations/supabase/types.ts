@@ -2266,6 +2266,506 @@ export type Database = {
           },
         ]
       }
+      billing_actions: {
+        Row: {
+          action_type: string
+          amount: number | null
+          assigned_to: string | null
+          client_id: string
+          created_at: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          priority: number
+          related_invoice_id: string | null
+          related_payment_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          action_type: string
+          amount?: number | null
+          assigned_to?: string | null
+          client_id: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          priority?: number
+          related_invoice_id?: string | null
+          related_payment_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string
+          amount?: number | null
+          assigned_to?: string | null
+          client_id?: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          priority?: number
+          related_invoice_id?: string | null
+          related_payment_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_actions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_actions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_actions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_actions_related_invoice_id_fkey"
+            columns: ["related_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "billing_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_actions_related_payment_id_fkey"
+            columns: ["related_payment_id"]
+            isOneToOne: false
+            referencedRelation: "billing_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_agreements: {
+        Row: {
+          active: boolean | null
+          approval_required: boolean | null
+          auto_charge: boolean | null
+          base_fee: number | null
+          billing_day: number | null
+          billing_frequency: string | null
+          billing_type: string
+          client_id: string
+          contract_end_date: string | null
+          contract_start_date: string | null
+          created_at: string
+          id: string
+          included_ad_spend: number | null
+          notes: string | null
+          performance_fee_percentage: number | null
+          remaining_setup_fee: number | null
+          setup_fee: number | null
+          updated_at: string
+          variable_fee_percentage: number | null
+        }
+        Insert: {
+          active?: boolean | null
+          approval_required?: boolean | null
+          auto_charge?: boolean | null
+          base_fee?: number | null
+          billing_day?: number | null
+          billing_frequency?: string | null
+          billing_type?: string
+          client_id: string
+          contract_end_date?: string | null
+          contract_start_date?: string | null
+          created_at?: string
+          id?: string
+          included_ad_spend?: number | null
+          notes?: string | null
+          performance_fee_percentage?: number | null
+          remaining_setup_fee?: number | null
+          setup_fee?: number | null
+          updated_at?: string
+          variable_fee_percentage?: number | null
+        }
+        Update: {
+          active?: boolean | null
+          approval_required?: boolean | null
+          auto_charge?: boolean | null
+          base_fee?: number | null
+          billing_day?: number | null
+          billing_frequency?: string | null
+          billing_type?: string
+          client_id?: string
+          contract_end_date?: string | null
+          contract_start_date?: string | null
+          created_at?: string
+          id?: string
+          included_ad_spend?: number | null
+          notes?: string | null
+          performance_fee_percentage?: number | null
+          remaining_setup_fee?: number | null
+          setup_fee?: number | null
+          updated_at?: string
+          variable_fee_percentage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_agreements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_agreements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_agreements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      billing_audit_log: {
+        Row: {
+          action: string
+          client_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          new_value: Json | null
+          previous_value: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          client_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          new_value?: Json | null
+          previous_value?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          client_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          new_value?: Json | null
+          previous_value?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      billing_invoices: {
+        Row: {
+          amount: number
+          amount_outstanding: number | null
+          amount_paid: number
+          billing_period_end: string | null
+          billing_period_start: string | null
+          client_id: string
+          created_at: string
+          due_date: string | null
+          hosted_url: string | null
+          id: string
+          invoice_number: string | null
+          issue_date: string | null
+          notes: string | null
+          paid_date: string | null
+          status: string
+          stripe_invoice_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          amount_outstanding?: number | null
+          amount_paid?: number
+          billing_period_end?: string | null
+          billing_period_start?: string | null
+          client_id: string
+          created_at?: string
+          due_date?: string | null
+          hosted_url?: string | null
+          id?: string
+          invoice_number?: string | null
+          issue_date?: string | null
+          notes?: string | null
+          paid_date?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          amount_outstanding?: number | null
+          amount_paid?: number
+          billing_period_end?: string | null
+          billing_period_start?: string | null
+          client_id?: string
+          created_at?: string
+          due_date?: string | null
+          hosted_url?: string | null
+          id?: string
+          invoice_number?: string | null
+          issue_date?: string | null
+          notes?: string | null
+          paid_date?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      billing_line_items: {
+        Row: {
+          amount: number
+          calculation_source: Json | null
+          created_at: string
+          description: string | null
+          id: string
+          invoice_id: string
+          quantity: number | null
+          rate: number | null
+          type: string
+        }
+        Insert: {
+          amount?: number
+          calculation_source?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invoice_id: string
+          quantity?: number | null
+          rate?: number | null
+          type: string
+        }
+        Update: {
+          amount?: number
+          calculation_source?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invoice_id?: string
+          quantity?: number | null
+          rate?: number | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "billing_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_notifications: {
+        Row: {
+          account_manager_id: string | null
+          body: string | null
+          channel: string
+          client_id: string
+          created_at: string
+          deduplication_key: string
+          delivery_status: string
+          error_message: string | null
+          id: string
+          notification_type: string
+          payment_id: string | null
+          recipient: string | null
+          retry_count: number
+          sent_at: string | null
+          stripe_event_id: string | null
+          subject: string | null
+        }
+        Insert: {
+          account_manager_id?: string | null
+          body?: string | null
+          channel: string
+          client_id: string
+          created_at?: string
+          deduplication_key: string
+          delivery_status?: string
+          error_message?: string | null
+          id?: string
+          notification_type: string
+          payment_id?: string | null
+          recipient?: string | null
+          retry_count?: number
+          sent_at?: string | null
+          stripe_event_id?: string | null
+          subject?: string | null
+        }
+        Update: {
+          account_manager_id?: string | null
+          body?: string | null
+          channel?: string
+          client_id?: string
+          created_at?: string
+          deduplication_key?: string
+          delivery_status?: string
+          error_message?: string | null
+          id?: string
+          notification_type?: string
+          payment_id?: string | null
+          recipient?: string | null
+          retry_count?: number
+          sent_at?: string | null
+          stripe_event_id?: string | null
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_notifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_notifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_notifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_notifications_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "billing_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_payments: {
+        Row: {
+          amount: number
+          attempted_at: string
+          client_id: string
+          created_at: string
+          failure_reason: string | null
+          id: string
+          invoice_id: string | null
+          next_retry_date: string | null
+          payment_date: string | null
+          payment_method: string | null
+          status: string
+          stripe_charge_id: string | null
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          attempted_at?: string
+          client_id: string
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          invoice_id?: string | null
+          next_retry_date?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          status?: string
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          attempted_at?: string
+          client_id?: string
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          invoice_id?: string | null
+          next_retry_date?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          status?: string
+          stripe_charge_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "billing_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "billing_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       browser_tasks: {
         Row: {
           claimed_at: string | null
@@ -11492,6 +11992,42 @@ export type Database = {
           reason?: string | null
           type?: string
           value?: string
+        }
+        Relationships: []
+      }
+      stripe_webhook_events: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          object_id: string | null
+          payload: Json | null
+          processed_at: string | null
+          processing_status: string
+          stripe_event_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          object_id?: string | null
+          payload?: Json | null
+          processed_at?: string | null
+          processing_status?: string
+          stripe_event_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          object_id?: string | null
+          payload?: Json | null
+          processed_at?: string | null
+          processing_status?: string
+          stripe_event_id?: string
         }
         Relationships: []
       }
