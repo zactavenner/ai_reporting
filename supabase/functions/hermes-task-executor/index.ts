@@ -374,6 +374,49 @@ async function executeTask(taskId: string) {
       ? await loadTriageContext(task.client_id)
       : undefined;
 
+    // Creative tasks: route through ai-studio so the generated image/video
+    // lands on the per-client canvas AND posts an assistant message in the
+    // Hermes conversation (mirrors the regular user surface for audit and
+    // creative tracking). Locked to GPT Image 2 (images) and Seedance 2.0
+    // Fast @ 720p (videos). Client-scoped: ai-studio only resolves offers,
+    // brand kit, and references for task.client_id.
+    const ttype = (task.task_type || "").toLowerCase();
+    if (IMAGE_TASK_TYPES.has(ttype) || VIDEO_TASK_TYPES.has(ttype)) {
+      const isVideo = VIDEO_TASK_TYPES.has(ttype);
+      const { summary } = await invokeAiStudioForCreative({
+        task,
+        client: { id: client.id, name: client.name },
+        agent,
+        isVideo,
+      });
+      const nowIso = new Date().toISOString();
+      await supa.from("hermes_tasks").update({
+        status: "completed",
+        result_assets: [],
+        completed_at: nowIso,
+        delivered_at: nowIso,
+        metadata: {
+          ...(task.metadata || {}),
+          summary,
+          model: isVideo ? "bytedance/seedance-2.0-fast" : "openai/gpt-image-2",
+          resolution: isVideo ? "720p" : null,
+          source: "ai-studio",
+          duration_ms: Date.now() - startedAt,
+        },
+      }).eq("id", taskId).is("delivered_at", null);
+      await callbackHermes(task.hermes_callback_url, {
+        event: "task.completed",
+        task_id: taskId,
+        hermes_external_id: task.hermes_external_id,
+        client_id: task.client_id,
+        task_type: task.task_type,
+        status: "completed",
+        assets: [],
+        summary,
+      });
+      return { ok: true, routed: "ai-studio" };
+    }
+
     const { parsed, raw, model, usage } = await runAgentInference({
       agent,
       profile,
