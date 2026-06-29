@@ -3697,6 +3697,11 @@ Deno.serve(async (req) => {
     const agentRow: any = (agentRes as any)?.data || null;
     const brainRow: any = (brainRes as any)?.data || null;
     const trainRows: any[] = ((offerTrainRes as any)?.data || []) as any[];
+    if (Array.isArray(agentRow?.fallback_models)) {
+      agentFallbackModels = (agentRow.fallback_models as any[])
+        .filter((m) => typeof m === "string" && m.trim())
+        .slice(0, 2);
+    }
 
     // 3-layer context priority (highest first after splices = LAST splice wins position 1):
     //   1. Active Agency Agent  ← splice LAST so it ends up at index 1 (top)
