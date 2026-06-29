@@ -100,21 +100,18 @@ async function postMessage(conversationId: string, role: "user" | "assistant" | 
 }
 
 async function pickDefaultAgent(clientId: string, taskType: string) {
-  const typeToType: Record<string, string[]> = {
-    video: ["video_ads_generator", "video_ads", "video", "creative", "content"],
-    video_ad: ["video_ads_generator", "video_ads", "video"],
-    video_edit: ["video_editor", "video_editing"],
-    video_editing: ["video_editor", "video_editing"],
-    static_ad: ["static_ads_generator", "static_ads", "image", "creative", "static_ad"],
-    static: ["static_ads_generator", "static_ads"],
-    copy: ["copy", "content", "writing"],
-    research: ["research", "analyst"],
-    reporting: ["reporting", "analyst"],
-    report: ["reporting", "analyst"],
-    task_triage: ["task_triage", "triage", "project_manager", "pm", "operations"],
-    triage: ["task_triage", "triage", "project_manager", "pm", "operations"],
-  };
-  const cats = typeToType[taskType] || [taskType];
+  // Wave C #12: load routing map from public.hermes_task_type_routes so admins
+  // can re-route task types to different agent buckets without a redeploy.
+  // Fall back to the row's own task_type when no route exists.
+  let cats: string[] = [taskType];
+  try {
+    const { data: route } = await supa
+      .from("hermes_task_type_routes")
+      .select("agent_types")
+      .eq("task_type", taskType)
+      .maybeSingle();
+    if (route?.agent_types?.length) cats = route.agent_types as string[];
+  } catch (e) { console.warn("hermes_task_type_routes lookup failed; using raw taskType", e); }
   const { data } = await supa
     .from("client_agents")
     .select("id, name, agent_type, enabled")
