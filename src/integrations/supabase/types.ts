@@ -4230,6 +4230,14 @@ export type Database = {
           slack_review_channel_id: string | null
           stripe_customer_id: string | null
           stripe_email: string | null
+          stripe_last_sync_at: string | null
+          stripe_last_sync_customer_id: string | null
+          stripe_last_sync_error: string | null
+          stripe_last_sync_mrr: number | null
+          stripe_last_sync_payments_count: number | null
+          stripe_last_sync_status: string | null
+          stripe_last_sync_subscriptions_count: number | null
+          stripe_last_sync_total_paid: number | null
           total_raise_amount: number | null
           tracked_calendar_ids: string[] | null
           updated_at: string
@@ -4316,6 +4324,14 @@ export type Database = {
           slack_review_channel_id?: string | null
           stripe_customer_id?: string | null
           stripe_email?: string | null
+          stripe_last_sync_at?: string | null
+          stripe_last_sync_customer_id?: string | null
+          stripe_last_sync_error?: string | null
+          stripe_last_sync_mrr?: number | null
+          stripe_last_sync_payments_count?: number | null
+          stripe_last_sync_status?: string | null
+          stripe_last_sync_subscriptions_count?: number | null
+          stripe_last_sync_total_paid?: number | null
           total_raise_amount?: number | null
           tracked_calendar_ids?: string[] | null
           updated_at?: string
@@ -4402,6 +4418,14 @@ export type Database = {
           slack_review_channel_id?: string | null
           stripe_customer_id?: string | null
           stripe_email?: string | null
+          stripe_last_sync_at?: string | null
+          stripe_last_sync_customer_id?: string | null
+          stripe_last_sync_error?: string | null
+          stripe_last_sync_mrr?: number | null
+          stripe_last_sync_payments_count?: number | null
+          stripe_last_sync_status?: string | null
+          stripe_last_sync_subscriptions_count?: number | null
+          stripe_last_sync_total_paid?: number | null
           total_raise_amount?: number | null
           tracked_calendar_ids?: string[] | null
           updated_at?: string
