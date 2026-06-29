@@ -47,6 +47,15 @@ export interface ClientSettings {
   stripe_email?: string | null;
   // Webhook mappings (attribution, etc.)
   webhook_mappings?: Record<string, any> | null;
+  // Stripe sync status
+  stripe_last_sync_at?: string | null;
+  stripe_last_sync_status?: string | null;
+  stripe_last_sync_error?: string | null;
+  stripe_last_sync_payments_count?: number | null;
+  stripe_last_sync_subscriptions_count?: number | null;
+  stripe_last_sync_customer_id?: string | null;
+  stripe_last_sync_total_paid?: number | null;
+  stripe_last_sync_mrr?: number | null;
 }
 
 export interface KPIThresholds {
