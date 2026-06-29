@@ -47,17 +47,22 @@ export function bytesToTokensApprox(bytes: number): number {
 
 export type VideoModelSpec = {
   value: string;
+  /** alias for value */
+  id: string;
   label: string;
   hint: string;
   maxSeconds: number;
   pricePerSecond: number;
   supportsResolutions?: string[];
+  defaultDuration?: number;
+  durations?: number[];
+  maxRes?: string;
 };
 
 export const VIDEO_MODELS: VideoModelSpec[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance 2.0 Fast", hint: "Fast text/image-to-video", maxSeconds: 15, pricePerSecond: 0.0538, supportsResolutions: ["480p", "720p"] },
-  { value: "x-ai/grok-imagine-video", label: "Grok Imagine", hint: "xAI cinematic video", maxSeconds: 15, pricePerSecond: 0.05, supportsResolutions: ["480p", "720p"] },
-  { value: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", hint: "Identity-locked avatar video", maxSeconds: 15, pricePerSecond: 0.1278, supportsResolutions: ["720p", "1080p"] },
+  { value: "bytedance/seedance-2.0-fast", id: "bytedance/seedance-2.0-fast", label: "Seedance 2.0 Fast", hint: "Fast text/image-to-video", maxSeconds: 15, pricePerSecond: 0.0538, supportsResolutions: ["480p", "720p"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "720p" },
+  { value: "x-ai/grok-imagine-video", id: "x-ai/grok-imagine-video", label: "Grok Imagine", hint: "xAI cinematic video", maxSeconds: 15, pricePerSecond: 0.05, supportsResolutions: ["480p", "720p"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "720p" },
+  { value: "alibaba/happyhorse-1.1", id: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", hint: "Identity-locked avatar video", maxSeconds: 15, pricePerSecond: 0.1278, supportsResolutions: ["720p", "1080p"], defaultDuration: 15, durations: [15], maxRes: "1080p" },
 ];
 
 export const OFFER_IMAGE_ROLES = [
