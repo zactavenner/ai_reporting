@@ -3360,6 +3360,65 @@ export type Database = {
           },
         ]
       }
+      client_agent_overrides: {
+        Row: {
+          agent_id: string
+          client_id: string
+          created_at: string
+          id: string
+          instructions_md: string | null
+          memory_md: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          client_id: string
+          created_at?: string
+          id?: string
+          instructions_md?: string | null
+          memory_md?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          instructions_md?: string | null
+          memory_md?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_agent_overrides_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agency_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agent_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_agent_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agent_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_agent_profiles: {
         Row: {
           brand_kit: Json | null
