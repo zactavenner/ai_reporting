@@ -53,7 +53,7 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, onEditVideo, onAddCaptions, onDeleteItem, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
+  entries, onEditImage, onInlineEdit, onEditVideo, onAddCaptions, onAddDisclaimer, onDeleteItem, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
@@ -61,6 +61,7 @@ export function AIStudioCanvas({
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   onEditVideo?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
   onAddCaptions?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
+  onAddDisclaimer?: (target: { kind: "image" | "video"; url: string; aspect_ratio?: string; prompt?: string }) => void;
   /** Delete a canvas card (removes the row from ai_studio_canvas_items). */
   onDeleteItem?: (itemId: string) => void | Promise<void>;
   clientId?: string;
