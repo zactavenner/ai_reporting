@@ -30,6 +30,7 @@ import { useAvatars } from "@/hooks/useAvatars";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { SimpleCaptionsDialog } from "./SimpleCaptionsDialog";
+import { SimpleDisclaimerDialog } from "./SimpleDisclaimerDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useClientOffers } from "@/hooks/useClientOffers";
