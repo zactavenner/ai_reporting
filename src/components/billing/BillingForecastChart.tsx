@@ -3,6 +3,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { ExternalLink } from 'lucide-react';
+import {
   ResponsiveContainer,
   ComposedChart,
   Bar,
@@ -30,7 +47,7 @@ import {
   subYears,
   isAfter,
 } from 'date-fns';
-import type { StripeCustomerData } from '@/hooks/useStripePayments';
+import type { StripeCustomerData, StripePayment } from '@/hooks/useStripePayments';
 import { TrendingUp } from 'lucide-react';
 
 type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -38,6 +55,7 @@ type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
 interface Props {
   stripeDataMap: Record<string, StripeCustomerData>;
   totalMRR: number;
+  clientNameMap?: Record<string, string>;
 }
 
 const fmtMoney = (v: number) =>
@@ -102,10 +120,17 @@ const CONFIG: Record<
   },
 };
 
-export function BillingForecastChart({ stripeDataMap, totalMRR }: Props) {
-  const [granularity, setGranularity] = useState<Granularity>('monthly');
+type DrilldownRow = StripePayment & { clientId: string; clientName: string };
 
-  const { chartData, summary } = useMemo(() => {
+export function BillingForecastChart({ stripeDataMap, totalMRR, clientNameMap = {} }: Props) {
+  const [granularity, setGranularity] = useState<Granularity>('monthly');
+  const [drilldown, setDrilldown] = useState<{
+    label: string;
+    isForecast: boolean;
+    rows: DrilldownRow[];
+  } | null>(null);
+
+  const { chartData, summary, paymentsByBucket } = useMemo(() => {
     const cfg = CONFIG[granularity];
     const now = new Date();
     const currentBucket = cfg.bucketStart(now);
@@ -119,13 +144,21 @@ export function BillingForecastChart({ stripeDataMap, totalMRR }: Props) {
 
     // Aggregate succeeded, non-refunded payments
     const totals = new Map<string, number>();
+    const byBucket = new Map<string, DrilldownRow[]>();
     for (const data of Object.values(stripeDataMap)) {
       if (!data?.payments) continue;
+      // Find clientId for this dataset
+      const clientId =
+        Object.keys(stripeDataMap).find((id) => stripeDataMap[id] === data) || '';
+      const clientName = clientNameMap[clientId] || data.customer?.name || data.customer?.email || 'Unknown';
       for (const p of data.payments) {
         if (p.status !== 'succeeded' || p.refunded) continue;
         const d = cfg.bucketStart(new Date(p.created));
         const key = d.toISOString();
         totals.set(key, (totals.get(key) || 0) + (p.amount || 0));
+        const arr = byBucket.get(key) || [];
+        arr.push({ ...p, clientId, clientName });
+        byBucket.set(key, arr);
       }
     }
 
@@ -175,10 +208,27 @@ export function BillingForecastChart({ stripeDataMap, totalMRR }: Props) {
         forecast: totalForecast,
         projectedPerBucket,
       },
+      paymentsByBucket: byBucket,
     };
-  }, [stripeDataMap, totalMRR, granularity]);
+  }, [stripeDataMap, totalMRR, granularity, clientNameMap]);
+
+  const handleBucketClick = (payload: any) => {
+    if (!payload) return;
+    const bucketDate: Date | undefined = payload.bucket;
+    if (!bucketDate) return;
+    const key = bucketDate.toISOString();
+    const rows = (paymentsByBucket.get(key) || []).sort((a, b) =>
+      new Date(b.created).getTime() - new Date(a.created).getTime(),
+    );
+    setDrilldown({
+      label: payload.label,
+      isForecast: Boolean(payload.isForecast),
+      rows,
+    });
+  };
 
   return (
+    <>
     <Card className="border-2">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -242,6 +292,8 @@ export function BillingForecastChart({ stripeDataMap, totalMRR }: Props) {
                 fill="url(#billingActualFill)"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={48}
+                cursor="pointer"
+                onClick={(d: any) => handleBucketClick(d?.payload)}
               />
               <Line
                 type="monotone"
@@ -250,12 +302,16 @@ export function BillingForecastChart({ stripeDataMap, totalMRR }: Props) {
                 stroke="hsl(var(--chart-3))"
                 strokeWidth={2}
                 strokeDasharray="5 5"
-                dot={{ r: 3 }}
+                dot={{ r: 3, cursor: 'pointer' }}
+                activeDot={{ r: 5, cursor: 'pointer', onClick: (_: any, d: any) => handleBucketClick(d?.payload) }}
                 connectNulls
               />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground text-center">
+          Tip: click any bar or forecast point to see the underlying Stripe charges.
+        </p>
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <Stat label="Active MRR" value={fmtMoney(totalMRR)} />
           <Stat label={`Per ${CONFIG[granularity].label}`} value={fmtMoney(summary.projectedPerBucket)} />
@@ -264,6 +320,68 @@ export function BillingForecastChart({ stripeDataMap, totalMRR }: Props) {
         </div>
       </CardContent>
     </Card>
+
+    <Dialog open={!!drilldown} onOpenChange={(o) => !o && setDrilldown(null)}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle>
+            {drilldown?.isForecast ? 'Forecast' : 'Stripe charges'} · {drilldown?.label}
+          </DialogTitle>
+          <DialogDescription>
+            {drilldown?.isForecast
+              ? 'This bucket is a forward projection based on active MRR — no charges have settled yet.'
+              : `${drilldown?.rows.length ?? 0} succeeded charges · ${fmtMoney(
+                  (drilldown?.rows ?? []).reduce((s, r) => s + (r.amount || 0), 0) / 100,
+                )} total`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="overflow-auto">
+          {drilldown && !drilldown.isForecast && drilldown.rows.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {drilldown.rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {format(new Date(r.created), 'MMM d, yyyy · h:mm a')}
+                    </TableCell>
+                    <TableCell className="text-sm font-medium">{r.clientName}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[280px] truncate">
+                      {r.description || r.id}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">
+                      {fmtMoney((r.amount || 0) / 100)}
+                    </TableCell>
+                    <TableCell>
+                      {r.receipt_url ? (
+                        <Button asChild variant="ghost" size="icon" className="h-7 w-7">
+                          <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" aria-label="Open receipt">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : !drilldown?.isForecast ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No Stripe charges landed in this bucket.
+            </p>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
