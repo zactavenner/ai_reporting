@@ -3684,7 +3684,7 @@ Deno.serve(async (req) => {
   try {
     const [agentRes, brainRes, offerTrainRes] = await Promise.all([
       agentSlug
-        ? supa.from("agency_agents").select("id,slug,name,role,system_prompt,allowed_creative_types,default_model").eq("slug", agentSlug).eq("is_active", true).maybeSingle()
+        ? supa.from("agency_agents").select("id,slug,name,role,system_prompt,allowed_creative_types,default_model,fallback_models").eq("slug", agentSlug).eq("is_active", true).maybeSingle()
         : Promise.resolve({ data: null } as any),
       clientId
         ? supa.from("client_brain").select("voice,icp,brand_guidelines,do_not_say,learnings").eq("client_id", clientId).maybeSingle()
