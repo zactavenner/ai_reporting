@@ -675,6 +675,9 @@ export type Database = {
           anthropic_api_key: string | null
           api_usage_limit: number | null
           created_at: string
+          default_chat_model: string
+          default_image_model: string
+          default_video_model: string
           eod_send_to_hermes: boolean | null
           gemini_api_key: string | null
           hermes_api_key: string | null
@@ -708,6 +711,9 @@ export type Database = {
           anthropic_api_key?: string | null
           api_usage_limit?: number | null
           created_at?: string
+          default_chat_model?: string
+          default_image_model?: string
+          default_video_model?: string
           eod_send_to_hermes?: boolean | null
           gemini_api_key?: string | null
           hermes_api_key?: string | null
@@ -741,6 +747,9 @@ export type Database = {
           anthropic_api_key?: string | null
           api_usage_limit?: number | null
           created_at?: string
+          default_chat_model?: string
+          default_image_model?: string
+          default_video_model?: string
           eod_send_to_hermes?: boolean | null
           gemini_api_key?: string | null
           hermes_api_key?: string | null
@@ -1407,8 +1416,10 @@ export type Database = {
           feedback_notes: string | null
           feedback_status: string
           id: string
+          job_id: string | null
           kind: string
           payload: Json
+          placeholder_until: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           user_id: string
@@ -1420,8 +1431,10 @@ export type Database = {
           feedback_notes?: string | null
           feedback_status?: string
           id?: string
+          job_id?: string | null
           kind: string
           payload?: Json
+          placeholder_until?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           user_id: string
@@ -1433,8 +1446,10 @@ export type Database = {
           feedback_notes?: string | null
           feedback_status?: string
           id?: string
+          job_id?: string | null
           kind?: string
           payload?: Json
+          placeholder_until?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           user_id?: string
@@ -7642,6 +7657,33 @@ export type Database = {
           },
         ]
       }
+      hermes_task_type_routes: {
+        Row: {
+          agent_types: string[]
+          created_at: string
+          id: string
+          notes: string | null
+          task_type: string
+          updated_at: string
+        }
+        Insert: {
+          agent_types: string[]
+          created_at?: string
+          id?: string
+          notes?: string | null
+          task_type: string
+          updated_at?: string
+        }
+        Update: {
+          agent_types?: string[]
+          created_at?: string
+          id?: string
+          notes?: string | null
+          task_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hermes_tasks: {
         Row: {
           agent_id: string | null
@@ -13780,6 +13822,7 @@ export type Database = {
         Args: { p_days_back?: number }
         Returns: number
       }
+      reap_orphaned_canvas_placeholders: { Args: never; Returns: number }
       reap_stale_agent_tasks: { Args: { p_minutes?: number }; Returns: number }
     }
     Enums: {
