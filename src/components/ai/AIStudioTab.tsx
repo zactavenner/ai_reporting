@@ -1011,6 +1011,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const selectedAvatar = studioAvatars.find(a => a.id === selectedAvatarId) || null;
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
   const [captionsVideo, setCaptionsVideo] = useState<{ url: string } | null>(null);
+  const [disclaimerTarget, setDisclaimerTarget] = useState<{ kind: "image" | "video"; url: string; aspect_ratio?: string; prompt?: string } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
   // Counter of in-flight `send()` calls. Treated as boolean (0 = idle, >0 = running)
