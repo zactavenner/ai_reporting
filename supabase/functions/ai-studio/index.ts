@@ -465,6 +465,12 @@ async function generateStaticAd(opts: {
         prompt: opts.prompt.slice(0, 1000),
       },
     });
+    await deliverHermesTaskIfPending({
+      supa,
+      clientId: opts.clientId,
+      taskType: "static_ad",
+      assets: [{ type: "image", title: opts.prompt.slice(0, 120), url: pub.publicUrl, aspect_ratio: aspect }],
+    });
   }
 
   return { url: pub.publicUrl, mime, storage_path: path, model: modelUsed, aspect_ratio: aspect };
