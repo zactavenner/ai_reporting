@@ -687,6 +687,24 @@ export function CreativesTab() {
                     Download
                   </Button>
                 )}
+                {selectedCreative.file_url && (selectedCreative.type === 'image' || selectedCreative.type === 'video') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() =>
+                      setDisclaimerTarget({
+                        kind: selectedCreative.type as 'image' | 'video',
+                        url: selectedCreative.file_url!,
+                        clientId: selectedCreative.client_id,
+                      })
+                    }
+                    title="Burn an accredited-investor disclaimer onto this creative (agency only)"
+                  >
+                    <FileWarning className="h-4 w-4" />
+                    Add Disclaimer
+                  </Button>
+                )}
                 <Sparkles className="h-4 w-4 text-primary ml-2" />
                 <span className="text-sm font-medium mr-1">AI Tools:</span>
                 <CreativeAIActions creative={selectedCreative} />
