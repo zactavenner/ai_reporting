@@ -1374,6 +1374,9 @@ async function generateSeedanceVideo(opts: {
       conversation_id: opts.conversationId,
       user_id: opts.userId,
       kind: "scene_video",
+      // Wave C #9: orphan tracking — sweeper auto-deletes stuck placeholders
+      // after this deadline (45 min covers the 20 min poll budget + buffer).
+      placeholder_until: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
       payload: {
         status: "processing",
         aspect_ratio: opts.aspectRatio,
