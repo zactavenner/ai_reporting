@@ -336,6 +336,9 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
         </Card>
       </div>
 
+      {/* Forecast & graphs */}
+      <BillingForecastChart stripeDataMap={stripeDataMap} totalMRR={totalMRR} />
+
       {/* Actions bar */}
       <div className="flex items-center justify-between">
         <h3 className="text-base font-bold">Client Billing Overview</h3>
