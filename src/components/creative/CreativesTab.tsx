@@ -867,6 +867,13 @@ export function CreativesTab() {
           <Suspense fallback={SuspenseFallback}><CreativeAnalyticsLazy embedded /></Suspense>
         </TabsContent>
       </Tabs>
+      <SimpleDisclaimerDialog
+        open={!!disclaimerTarget}
+        onOpenChange={(o) => !o && setDisclaimerTarget(null)}
+        target={disclaimerTarget}
+        clientId={disclaimerTarget?.clientId || ''}
+        conversationId={null}
+      />
     </div>
   );
 }
