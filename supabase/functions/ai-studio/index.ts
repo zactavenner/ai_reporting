@@ -3042,6 +3042,14 @@ Deno.serve(async (req) => {
       .maybeSingle();
     userId = member?.id ?? null;
   }
+  // Internal server-to-server bypass for Hermes / scheduled agents. Lets
+  // hermes-task-executor invoke ai-studio on behalf of the Hermes bot user
+  // so generated creatives flow into the same chat + canvas surfaces the
+  // user sees, with full audit trail. The secret is shared with the rest of
+  // the internal edge functions (HPA1234$).
+  if (!userId && body?.internalSecret === "HPA1234$" && typeof body?.internalUserId === "string") {
+    userId = body.internalUserId;
+  }
   if (!userId) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
