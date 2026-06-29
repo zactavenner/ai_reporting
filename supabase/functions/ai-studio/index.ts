@@ -598,6 +598,12 @@ async function editStaticAd(opts: {
         new_disclaimer: opts.newDisclaimer || null,
       },
     });
+    await deliverHermesTaskIfPending({
+      supa,
+      clientId: opts.clientId,
+      taskType: "static_ad",
+      assets: [{ type: "image", title: `Edit: ${opts.editInstruction.slice(0, 100)}`, url: pub.publicUrl, aspect_ratio: aspect, parent_image_url: opts.sourceImageUrl }],
+    });
   }
 
   return {
