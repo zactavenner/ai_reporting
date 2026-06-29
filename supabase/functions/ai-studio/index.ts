@@ -3681,6 +3681,7 @@ Deno.serve(async (req) => {
 
   // === Phase 5: 3-layer agent knowledge (Agency Agent + Client Brain + Offer Training) ===
   // Loads in parallel; safe no-op if tables are empty or selections missing.
+  let agentFallbackModels: string[] = [];
   try {
     const [agentRes, brainRes, offerTrainRes] = await Promise.all([
       agentSlug
