@@ -17,6 +17,12 @@ const TAB_DENYLIST = [
   // Standard client-tab template additions
   'media buying', 'media buying update', 'media buying updates',
   'lead disposition', 'disposition',
+  // Executive Scorecard variants (e.g. "SCORECARD-26", "2026 Scorecard",
+  // "CR Scorecard-25"). These are KPI rollups that aggregate the per-record
+  // tabs into weekly/monthly totals — including them would double-count
+  // daily metrics. The dashboard pulls scorecard values via the dedicated
+  // raw_grid action when it needs them.
+  'scorecard',
 ];
 
 function isDenylistedTab(title: string): boolean {
@@ -425,6 +431,9 @@ Deno.serve(async (req) => {
               if (!title || title === sheetTitle) continue;
               if (isDenylistedTab(title)) {
                 tabsSkipped.push({ title, reason: 'denylist' });
+                if (title.toLowerCase().includes('scorecard')) {
+                  console.log(`[scorecard] sheet=${sheet_id} tab="${title}" gid=${s?.properties?.sheetId} skipped from aggregation (rollup)`);
+                }
                 continue;
               }
               extraTitles.push(title);
