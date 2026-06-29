@@ -671,6 +671,17 @@ export function AIStudioCanvas({
                         <Subtitles className="h-3.5 w-3.5" /> Captions
                       </Button>
                     )}
+                    {onAddDisclaimer && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                        title="Burn a fine-print legal disclaimer onto this video"
+                        onClick={() => onAddDisclaimer({ kind: "video", url: p.video_url, aspect_ratio: p.aspect_ratio, prompt: p.video_prompt })}
+                      >
+                        <FileWarning className="h-3.5 w-3.5" /> Disclaimer
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="secondary"
