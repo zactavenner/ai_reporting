@@ -12,7 +12,7 @@ import {
   useUpdateAgencyAgent,
   AGENCY_AGENT_MODELS,
 } from "@/hooks/useAgencyAgents";
-import { useClientBrain, useUpsertClientBrain } from "@/hooks/useAgencyAgents";
+import { useClientBrain, useUpsertClientBrain, useClientAgentOverride, useUpsertClientAgentOverride } from "@/hooks/useAgencyAgents";
 import { useClientOffers } from "@/hooks/useClientOffers";
 import { AgentFilesUploader } from "./AgentFilesUploader";
 import { CONNECTOR_REGISTRY, MODEL_REGISTRY, getModelInfo } from "@/lib/modelRegistry";
@@ -60,6 +60,26 @@ export function AgentProfilePanel({
   const { data: brain } = useClientBrain(isClientView ? clientId : null);
   const upsertBrain = useUpsertClientBrain();
   const { data: offers = [] } = useClientOffers(isClientView ? clientId! : "");
+  const { data: clientOverride } = useClientAgentOverride(isClientView ? clientId : null, isClientView ? agent.id : null);
+  const upsertOverride = useUpsertClientAgentOverride();
+  const [clientMemory, setClientMemory] = useState("");
+  const [clientInstr, setClientInstr] = useState("");
+  const [editingClientMemory, setEditingClientMemory] = useState(false);
+  const [editingClientInstr, setEditingClientInstr] = useState(false);
+  useEffect(() => {
+    setClientMemory(clientOverride?.memory_md || "");
+    setClientInstr(clientOverride?.instructions_md || "");
+  }, [clientOverride?.client_id, clientOverride?.agent_id, agent.id]);
+
+  const saveClientOverride = (patch: { memory_md?: string; instructions_md?: string }) => {
+    if (!isClientView) return;
+    upsertOverride.mutate({
+      client_id: clientId!,
+      agent_id: agent.id,
+      memory_md: patch.memory_md ?? clientMemory,
+      instructions_md: patch.instructions_md ?? clientInstr,
+    });
+  };
   const [brainDraft, setBrainDraft] = useState<{ voice: string; icp: string; brand_guidelines: string; do_not_say: string }>({
     voice: "", icp: "", brand_guidelines: "", do_not_say: "",
   });
@@ -291,14 +311,14 @@ export function AgentProfilePanel({
         {/* Memory */}
         <Card className="p-4 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">Memory</p>
+            <p className="text-sm font-semibold">Memory <span className="text-[10px] font-normal text-muted-foreground">· Master</span></p>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-[10px]">
-                {mode === "master" ? "Master · trickles to every client" : "Master (read-only here)"}
+                {mode === "master" ? "Trains every client" : "Read-only here · edit in Agents tab"}
               </Badge>
               {mode === "master" && (
                 <Button size="sm" variant="ghost" onClick={() => editingMemory ? (saveMaster({ memory_md: memory }), setEditingMemory(false)) : setEditingMemory(true)}>
-                  {editingMemory ? <><Save className="h-3.5 w-3.5 mr-1" /> Save</> : <><Edit3 className="h-3.5 w-3.5 mr-1" /> Edit</>}
+                  {editingMemory ? <><Save className="h-3.5 w-3.5 mr-1" /> Train master</> : <><Edit3 className="h-3.5 w-3.5 mr-1" /> Train master</>}
                 </Button>
               )}
             </div>
@@ -312,17 +332,39 @@ export function AgentProfilePanel({
           )}
         </Card>
 
+        {/* Client memory addendum */}
+        {isClientView && (
+          <Card className="p-4 space-y-2 border-primary/30">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold">Memory <span className="text-[10px] font-normal text-muted-foreground">· {clientName || "Client"} addendum</span></p>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-[10px]">Only for this client</Badge>
+                <Button size="sm" variant="ghost" onClick={() => editingClientMemory ? (saveClientOverride({ memory_md: clientMemory }), setEditingClientMemory(false)) : setEditingClientMemory(true)}>
+                  {editingClientMemory ? <><Save className="h-3.5 w-3.5 mr-1" /> Train client</> : <><Edit3 className="h-3.5 w-3.5 mr-1" /> Train client</>}
+                </Button>
+              </div>
+            </div>
+            {editingClientMemory ? (
+              <Textarea value={clientMemory} onChange={(e) => setClientMemory(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Client-specific memory that layers on top of master…" />
+            ) : (
+              <p className="text-xs whitespace-pre-wrap text-muted-foreground min-h-[3em]">
+                {clientMemory || "No client-specific memory yet."}
+              </p>
+            )}
+          </Card>
+        )}
+
         {/* Instructions */}
         <Card className="p-4 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">Instructions</p>
+            <p className="text-sm font-semibold">Instructions <span className="text-[10px] font-normal text-muted-foreground">· Master</span></p>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-[10px]">
-                {mode === "master" ? "Master · trickles to every client" : "Master (read-only here)"}
+                {mode === "master" ? "Trains every client" : "Read-only here · edit in Agents tab"}
               </Badge>
               {mode === "master" && (
                 <Button size="sm" variant="ghost" onClick={() => editingInstr ? (saveMaster({ instructions_md: instructions }), setEditingInstr(false)) : setEditingInstr(true)}>
-                  {editingInstr ? <><Save className="h-3.5 w-3.5 mr-1" /> Save</> : <><Edit3 className="h-3.5 w-3.5 mr-1" /> Edit</>}
+                  {editingInstr ? <><Save className="h-3.5 w-3.5 mr-1" /> Train master</> : <><Edit3 className="h-3.5 w-3.5 mr-1" /> Train master</>}
                 </Button>
               )}
             </div>
@@ -335,6 +377,28 @@ export function AgentProfilePanel({
             </p>
           )}
         </Card>
+
+        {/* Client instructions addendum */}
+        {isClientView && (
+          <Card className="p-4 space-y-2 border-primary/30">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold">Instructions <span className="text-[10px] font-normal text-muted-foreground">· {clientName || "Client"} addendum</span></p>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-[10px]">Only for this client</Badge>
+                <Button size="sm" variant="ghost" onClick={() => editingClientInstr ? (saveClientOverride({ instructions_md: clientInstr }), setEditingClientInstr(false)) : setEditingClientInstr(true)}>
+                  {editingClientInstr ? <><Save className="h-3.5 w-3.5 mr-1" /> Train client</> : <><Edit3 className="h-3.5 w-3.5 mr-1" /> Train client</>}
+                </Button>
+              </div>
+            </div>
+            {editingClientInstr ? (
+              <Textarea value={clientInstr} onChange={(e) => setClientInstr(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Client-specific instructions that layer on top of master…" />
+            ) : (
+              <p className="text-xs whitespace-pre-wrap text-muted-foreground min-h-[3em]">
+                {clientInstr || "No client-specific instructions yet."}
+              </p>
+            )}
+          </Card>
+        )}
 
         {/* Files */}
         <Card className="p-4">
