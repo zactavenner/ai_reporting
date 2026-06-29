@@ -490,7 +490,7 @@ serve(async (req) => {
           const parsed = JSON.parse(cleaned);
 
           // Apply corrections to daily_metrics
-          if (parsed.corrections && Object.keys(parsed.corrections).length > 0 && connectors.includes('database')) {
+          if (parsed.corrections && Object.keys(parsed.corrections).length > 0 && connectors.includes('database') && !shadowMode) {
             await prodDb
               .from('daily_metrics')
               .upsert({
@@ -500,12 +500,18 @@ serve(async (req) => {
                 updated_at: new Date().toISOString(),
               }, { onConflict: 'client_id,date' });
             actionsTaken.push({ type: 'daily_metrics_update', corrections: parsed.corrections });
+          } else if (parsed.corrections && Object.keys(parsed.corrections).length > 0 && shadowMode) {
+            actionsTaken.push({ type: 'shadow.daily_metrics_update', corrections: parsed.corrections });
           }
 
           // Handle escalations
           if (parsed.escalations?.length) {
             for (const esc of parsed.escalations) {
               if (!esc.title || !esc.description) continue;
+              if (shadowMode) {
+                actionsTaken.push({ type: 'shadow.escalation', severity: esc.severity, title: esc.title });
+                continue;
+              }
               await cloudDb.from('agent_escalations').insert({
                 agent_name: agent.name,
                 severity: esc.severity || 'medium',
@@ -522,6 +528,10 @@ serve(async (req) => {
           if (parsed.task_comments?.length && connectors.includes('tasks')) {
             for (const tc of parsed.task_comments) {
               if (!tc.task_id || !tc.comment) continue;
+              if (shadowMode) {
+                actionsTaken.push({ type: 'shadow.task_comment', task_id: tc.task_id });
+                continue;
+              }
               try {
                 await prodDb.from('task_comments').insert({
                   task_id: tc.task_id,
@@ -547,6 +557,10 @@ serve(async (req) => {
           if (parsed.auto_assigned?.length && connectors.includes('tasks')) {
             for (const assignment of parsed.auto_assigned) {
               if (!assignment.task_id || !assignment.member_id) continue;
+              if (shadowMode) {
+                actionsTaken.push({ type: 'shadow.auto_assign', task_id: assignment.task_id, member: assignment.assigned_to });
+                continue;
+              }
               try {
                 // Check if already assigned to prevent duplicates
                 const { data: existing } = await prodDb
@@ -575,6 +589,9 @@ serve(async (req) => {
           }
 
           if (parsed.slack_message && connectors.includes('slack')) {
+            if (shadowMode) {
+              actionsTaken.push({ type: 'shadow.slack_channel_message' });
+            } else {
             const slackApiKey = Deno.env.get('SLACK_API_KEY');
             if (slackApiKey && LOVABLE_API_KEY) {
               const { data: cs } = await prodDb.from('client_settings').select('slack_channel_id').eq('client_id', client.id).maybeSingle();
@@ -592,11 +609,12 @@ serve(async (req) => {
                 actionsTaken.push({ type: 'slack_channel_message', channel: channelId });
               }
             }
+            }
           }
 
           // ── WhatsApp dispatch (notify_channels includes 'whatsapp') ──
           const notifyChannels: string[] = (agent as any).notify_channels || ['slack'];
-          if (notifyChannels.includes('whatsapp')) {
+          if (notifyChannels.includes('whatsapp') && !shadowMode) {
             try {
               const waMsg = parsed.whatsapp_message || parsed.slack_message || parsed.summary || aiOutput.slice(0, 500);
               const agentRecipients: string[] = (agent as any).whatsapp_recipients || [];
