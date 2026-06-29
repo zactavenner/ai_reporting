@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { Client } from '@/hooks/useClients';
 import { useAllClientFullSettings } from '@/hooks/useAllClientSettings';
 import { useAllClientsStripePayments, StripeCustomerData } from '@/hooks/useStripePayments';
+import { useUpdateClientSettings } from '@/hooks/useClientSettings';
+import { BillingForecastChart } from './BillingForecastChart';
 import { Sparkline } from '@/components/dashboard/Sparkline';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { DollarSign, TrendingUp, Calendar, CreditCard, Send, Zap, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
+import { DollarSign, TrendingUp, Calendar, CreditCard, Send, Zap, Loader2, RefreshCw, ExternalLink, Link2, Check } from 'lucide-react';
 import { format, startOfMonth, startOfYear, subMonths, differenceInMonths } from 'date-fns';
 import { Users, AlertTriangle } from 'lucide-react';
 
@@ -27,6 +29,10 @@ const formatCurrency = (amount: number, currency = 'usd') =>
 export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
   const clientIds = useMemo(() => clients.map(c => c.id), [clients]);
   const { data: clientFullSettings = {} } = useAllClientFullSettings(clientIds);
+  const updateSettings = useUpdateClientSettings();
+  const [linkingClientId, setLinkingClientId] = useState<string | null>(null);
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkSubmitting, setLinkSubmitting] = useState(false);
 
   // Build email map for Stripe lookup
   const clientEmails = useMemo(() => {
@@ -123,6 +129,41 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
 
     return { totalClients, activeSubscriptions, noSubscription };
   }, [clients, clientRows]);
+
+  const totalMRR = useMemo(
+    () => Object.values(stripeDataMap).reduce((sum, d: any) => sum + (d?.mrr || 0), 0),
+    [stripeDataMap]
+  );
+
+  const startLink = (clientId: string, clientName: string) => {
+    const guess =
+      (clients.find((c) => c.id === clientId) as any)?.notification_email || '';
+    setLinkEmail(guess);
+    setLinkingClientId(clientId);
+  };
+
+  const saveLink = async (clientId: string) => {
+    const email = linkEmail.trim();
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      toast.error('Enter a valid email');
+      return;
+    }
+    setLinkSubmitting(true);
+    try {
+      await updateSettings.mutateAsync({
+        client_id: clientId,
+        stripe_email: email,
+      } as any);
+      toast.success('Linked — syncing Stripe…');
+      setLinkingClientId(null);
+      setLinkEmail('');
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to link');
+    } finally {
+      setLinkSubmitting(false);
+    }
+  };
 
   // Client rows with months since first charge
   const clientRowsWithMonths = useMemo(() => {
