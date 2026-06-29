@@ -4094,7 +4094,9 @@ Deno.serve(async (req) => {
                 model: modelId,
                 messages: convo,
                 tools: gatedTools,
-                tool_choice: "auto",
+                tool_choice: forceToolName && gatedTools.some((t: any) => (t?.function?.name || t?.name) === forceToolName)
+                  ? { type: "function", function: { name: forceToolName } }
+                  : "auto",
                 stream: true,
               }),
               // No req.signal: the LLM step must keep running even if the
