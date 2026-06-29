@@ -165,6 +165,47 @@ export function useUpsertClientBrain() {
   });
 }
 
+export type ClientAgentOverride = {
+  client_id: string;
+  agent_id: string;
+  memory_md: string | null;
+  instructions_md: string | null;
+};
+
+export function useClientAgentOverride(clientId: string | null, agentId: string | null) {
+  return useQuery({
+    queryKey: ["client_agent_override", clientId, agentId],
+    enabled: !!clientId && !!agentId,
+    queryFn: async (): Promise<ClientAgentOverride | null> => {
+      const { data, error } = await (supabase as any)
+        .from("client_agent_overrides")
+        .select("client_id, agent_id, memory_md, instructions_md")
+        .eq("client_id", clientId)
+        .eq("agent_id", agentId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as ClientAgentOverride) || null;
+    },
+  });
+}
+
+export function useUpsertClientAgentOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ClientAgentOverride) => {
+      const { error } = await (supabase as any)
+        .from("client_agent_overrides")
+        .upsert(input, { onConflict: "client_id,agent_id" });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["client_agent_override", vars.client_id, vars.agent_id] });
+      toast.success("Client training saved");
+    },
+    onError: (e: any) => toast.error(`Save failed: ${e?.message || e}`),
+  });
+}
+
 export function useOfferTraining(offerId: string | null) {
   return useQuery({
     queryKey: ["client_offer_training", offerId],
