@@ -444,6 +444,13 @@ export function AIStudioCanvas({
                       onClick={(ev) => { ev.stopPropagation(); navigator.clipboard.writeText(p.image_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
+                    {onAddDisclaimer && (
+                      <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                        title="Burn a fine-print legal disclaimer onto this creative"
+                        onClick={(ev) => { ev.stopPropagation(); onAddDisclaimer({ kind: "image", url: p.image_url, aspect_ratio: p.aspect_ratio || "1:1", prompt: p.prompt }); }}>
+                        <FileWarning className="h-3.5 w-3.5" /> Disclaimer
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Open" asChild>
                       <a href={p.image_url} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}>
                         <ExternalLink className="h-3.5 w-3.5" />
