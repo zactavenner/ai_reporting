@@ -5,6 +5,9 @@ import { useAllClientsStripePayments, StripeCustomerData } from '@/hooks/useStri
 import { useUpdateClientSettings } from '@/hooks/useClientSettings';
 import { BillingForecastChart } from './BillingForecastChart';
 import { Sparkline } from '@/components/dashboard/Sparkline';
+import { BillingKpiGrid, type BillingKpis } from './BillingKpiGrid';
+import { BillingActionQueue, type QueueItem } from './BillingActionQueue';
+import { useBillingInvoices, useBillingPayments, useBillingActions, useBillingAgreements } from '@/hooks/useBillingData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { DollarSign, TrendingUp, Calendar, CreditCard, Send, Zap, Loader2, RefreshCw, ExternalLink, Link2, Check } from 'lucide-react';
-import { format, startOfMonth, startOfYear, subMonths, differenceInMonths } from 'date-fns';
+import { format, startOfMonth, startOfYear, subMonths, differenceInMonths, addDays, differenceInCalendarDays } from 'date-fns';
 import { Users, AlertTriangle } from 'lucide-react';
 
 interface AgencyBillingTabProps {
@@ -30,6 +33,10 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
   const clientIds = useMemo(() => clients.map(c => c.id), [clients]);
   const { data: clientFullSettings = {} } = useAllClientFullSettings(clientIds);
   const updateSettings = useUpdateClientSettings();
+  const { data: billingInvoices = [] } = useBillingInvoices();
+  const { data: billingPayments = [] } = useBillingPayments();
+  const { data: billingActions = [] } = useBillingActions();
+  const { data: billingAgreements = [] } = useBillingAgreements();
   const [linkingClientId, setLinkingClientId] = useState<string | null>(null);
   const [linkEmail, setLinkEmail] = useState('');
   const [linkSubmitting, setLinkSubmitting] = useState(false);
@@ -164,6 +171,202 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
     return Object.values(clientFullSettings).reduce((sum: number, s: any) => sum + (Number(s?.mrr) || 0), 0);
   }, [clientFullSettings]);
   const targetAttainment = totalMonthlyTarget > 0 ? (totalMRR / totalMonthlyTarget) * 100 : 0;
+
+  // ============ Expanded KPIs ============
+  const expandedKpis: BillingKpis = useMemo(() => {
+    // Prior YTD (last calendar year same range) and prior month from Stripe payments
+    const lastYear = now.getFullYear() - 1;
+    const dayOfYear = differenceInCalendarDays(now, new Date(now.getFullYear(), 0, 1));
+    let priorYtd = 0;
+    let priorMtd = 0;
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const thisDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    for (const data of Object.values(stripeDataMap) as any[]) {
+      if (!data?.payments) continue;
+      for (const p of data.payments) {
+        if (p.status !== 'succeeded' || p.refunded) continue;
+        const d = new Date(p.created);
+        if (d.getFullYear() === lastYear && differenceInCalendarDays(d, new Date(lastYear, 0, 1)) <= dayOfYear) {
+          priorYtd += p.amount;
+        }
+        if (d >= lastMonthStart && d <= thisDayLastMonth) priorMtd += p.amount;
+      }
+    }
+
+    // Outstanding / overdue / failed from internal tables
+    const today = new Date();
+    const outstanding = billingInvoices.reduce((s, i) => s + Number(i.amount_outstanding || 0), 0);
+    const overdue = billingInvoices
+      .filter(i => i.due_date && new Date(i.due_date) < today && Number(i.amount_outstanding) > 0)
+      .reduce((s, i) => s + Number(i.amount_outstanding || 0), 0);
+    const failedCount = billingPayments.filter(p => p.status === 'failed').length;
+
+    // Subscription counts
+    let activeSubs = 0;
+    let noSubConnected = 0;
+    for (const row of clientRows) {
+      if (row.subStatus === 'active') activeSubs++;
+      else if (row.isConnected && !row.subStatus) noSubConnected++;
+    }
+    const activeClients = clients.filter(c => c.status === 'active').length;
+
+    const arpu = activeSubs > 0 ? totalMRR / activeSubs : 0;
+
+    // 30-day forecast: active MRR (scaled by remaining days in current cycle) + scheduled invoices in next 30d
+    const next30 = addDays(now, 30);
+    const scheduledInvoiceCash = billingInvoices
+      .filter(i => i.due_date && new Date(i.due_date) >= now && new Date(i.due_date) <= next30)
+      .reduce((s, i) => s + Number(i.amount_outstanding || 0), 0);
+    const forecast30d = totalMRR + scheduledInvoiceCash;
+
+    // Projected MRR = active MRR + signed agreements not yet active in Stripe
+    const agreedMRR = billingAgreements
+      .filter(a => a.active && a.billing_frequency === 'monthly')
+      .reduce((s, a) => s + Number(a.base_fee || 0), 0);
+    const projectedMRR = Math.max(totalMRR, agreedMRR);
+
+    const ytdChg = priorYtd > 0 ? ((kpis.totalRevThisYear - priorYtd) / priorYtd) * 100 : null;
+    const mtdChg = priorMtd > 0 ? ((kpis.monthToDate - priorMtd) / priorMtd) * 100 : null;
+
+    return {
+      collectedYTD: kpis.totalRevThisYear,
+      collectedMTD: kpis.monthToDate,
+      activeMRR: totalMRR,
+      projectedMRR,
+      arpu,
+      outstanding,
+      overdue,
+      failedCount,
+      activeClients,
+      activeSubscriptions: activeSubs,
+      noSubscription: noSubConnected,
+      targetAttainmentPct: targetAttainment,
+      forecast30d,
+      monthlySpark: kpis.monthlyTotals.slice(0, now.getMonth() + 1),
+      ytdPriorChange: ytdChg,
+      mtdPriorChange: mtdChg,
+      mrrPriorChange: null,
+    };
+  }, [stripeDataMap, billingInvoices, billingPayments, billingAgreements, clients, clientRows, totalMRR, targetAttainment, kpis, now]);
+
+  // ============ Action queue (derived + stored) ============
+  const clientNameById = useMemo(() => new Map(clients.map(c => [c.id, c.name] as const)), [clients]);
+  const queueItems: QueueItem[] = useMemo(() => {
+    const today = new Date();
+    const items: QueueItem[] = [];
+
+    // Persisted actions first
+    for (const a of billingActions) {
+      items.push({
+        id: a.id,
+        clientId: a.client_id,
+        clientName: clientNameById.get(a.client_id) || 'Unknown',
+        actionType: (a.action_type as any) || 'invoice_needed',
+        amount: a.amount,
+        dueDate: a.due_date,
+        recommendation: a.notes || 'Review and resolve.',
+        priority: a.priority,
+      });
+    }
+
+    // Derived: overdue + due-soon from invoices
+    for (const inv of billingInvoices) {
+      if (Number(inv.amount_outstanding) <= 0) continue;
+      if (!inv.due_date) continue;
+      const days = differenceInCalendarDays(new Date(inv.due_date), today);
+      if (days < 0) {
+        items.push({
+          id: `inv-overdue-${inv.id}`,
+          clientId: inv.client_id,
+          clientName: clientNameById.get(inv.client_id) || 'Unknown',
+          actionType: 'overdue',
+          amount: Number(inv.amount_outstanding),
+          dueDate: inv.due_date,
+          recommendation: `Invoice ${inv.invoice_number ?? ''} is ${Math.abs(days)} day(s) overdue — chase payment.`,
+          priority: 1,
+        });
+      } else if (days <= 7) {
+        items.push({
+          id: `inv-due-${inv.id}`,
+          clientId: inv.client_id,
+          clientName: clientNameById.get(inv.client_id) || 'Unknown',
+          actionType: 'due_soon',
+          amount: Number(inv.amount_outstanding),
+          dueDate: inv.due_date,
+          recommendation: `Invoice ${inv.invoice_number ?? ''} due in ${days} day(s).`,
+          priority: 3,
+        });
+      }
+    }
+
+    // Derived: failed payments
+    for (const p of billingPayments) {
+      if (p.status !== 'failed') continue;
+      items.push({
+        id: `pay-failed-${p.id}`,
+        clientId: p.client_id,
+        clientName: clientNameById.get(p.client_id) || 'Unknown',
+        actionType: 'failed_payment',
+        amount: Number(p.amount),
+        dueDate: p.next_retry_date,
+        recommendation: p.failure_reason || 'Stripe reported a failed charge — retry or contact client.',
+        priority: 1,
+      });
+    }
+
+    // Derived: stripe-not-linked + missing subscription
+    for (const row of clientRows) {
+      if (row.client.status !== 'active') continue;
+      if (!row.isConnected) {
+        items.push({
+          id: `nolink-${row.client.id}`,
+          clientId: row.client.id,
+          clientName: row.client.name,
+          actionType: 'stripe_not_linked',
+          recommendation: 'Link this client to a Stripe customer to enable billing.',
+          priority: 4,
+        });
+      } else if (!row.subStatus) {
+        items.push({
+          id: `nosub-${row.client.id}`,
+          clientId: row.client.id,
+          clientName: row.client.name,
+          actionType: 'invoice_needed',
+          recommendation: 'Client linked but has no active subscription — invoice or create one.',
+          priority: 3,
+        });
+      }
+    }
+
+    // Derived: contract ending soon
+    for (const a of billingAgreements) {
+      if (!a.active || !a.contract_end_date) continue;
+      const days = differenceInCalendarDays(new Date(a.contract_end_date), today);
+      if (days >= 0 && days <= 30) {
+        items.push({
+          id: `end-${a.id}`,
+          clientId: a.client_id,
+          clientName: clientNameById.get(a.client_id) || 'Unknown',
+          actionType: 'contract_ending',
+          dueDate: a.contract_end_date,
+          recommendation: `Contract ends in ${days} day(s) — confirm renewal.`,
+          priority: 4,
+        });
+      }
+    }
+
+    return items;
+  }, [billingActions, billingInvoices, billingPayments, billingAgreements, clientRows, clientNameById]);
+
+  const handleActOnItem = (it: QueueItem) => {
+    const row = clientRows.find(r => r.client.id === it.clientId);
+    if (row?.customerId) {
+      const mode: 'invoice' | 'charge' = it.actionType === 'failed_payment' ? 'charge' : 'invoice';
+      openChargeModal(it.clientId, it.clientName, row.customerId, mode);
+    } else {
+      startLink(it.clientId, it.clientName);
+    }
+  };
 
   const saveTarget = async (clientId: string) => {
     const v = parseFloat(targetDraft);
@@ -307,96 +510,23 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* KPI Scorecards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-2">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Total Rev This Year</p>
-                <p className="text-2xl font-bold mt-1">{formatCurrency(kpis.totalRevThisYear)}</p>
-              </div>
-              <div className="w-20">
-                <Sparkline data={kpis.sparklineData} height={32} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-2">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Month To Date</p>
-                <p className="text-2xl font-bold mt-1">{formatCurrency(kpis.monthToDate)}</p>
-              </div>
-              <div className="w-20">
-                <Sparkline data={kpis.monthlyTotals.slice(Math.max(0, now.getMonth() - 5), now.getMonth() + 1)} height={32} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-2">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" /> Avg Per Month</p>
-                <p className="text-2xl font-bold mt-1">{formatCurrency(kpis.avgPerMonth)}</p>
-              </div>
-              <div className="w-20">
-                <Sparkline data={kpis.sparklineData} height={32} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight">Agency Billing & Revenue</h2>
+          <p className="text-sm text-muted-foreground">Internal command center — collected revenue, MRR, outstanding, forecast, and action queue.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
-      {/* Enhanced Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-2">
-          <CardContent className="p-5 flex items-center gap-3">
-            <Users className="h-6 w-6 text-primary" />
-            <div>
-              <p className="text-2xl font-bold">{enhancedStats.totalClients}</p>
-              <p className="text-xs text-muted-foreground">Total Clients</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-2">
-          <CardContent className="p-5 flex items-center gap-3">
-            <CreditCard className="h-6 w-6 text-chart-2" />
-            <div>
-              <p className="text-2xl font-bold">{enhancedStats.activeSubscriptions}</p>
-              <p className="text-xs text-muted-foreground">Active Subscriptions</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-2">
-          <CardContent className="p-5 flex items-center gap-3">
-            <AlertTriangle className="h-6 w-6 text-destructive" />
-            <div>
-              <p className="text-2xl font-bold text-destructive">{enhancedStats.noSubscription}</p>
-              <p className="text-xs text-muted-foreground">No Subscription</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-2">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" /> Target Attainment
-                </p>
-                <p className={`text-2xl font-bold mt-1 ${targetAttainment >= 100 ? 'text-chart-2' : targetAttainment >= 75 ? 'text-amber-500' : 'text-destructive'}`}>
-                  {targetAttainment.toFixed(0)}%
-                </p>
-                <p className="text-[10px] text-muted-foreground tabular-nums">
-                  {formatCurrency(totalMRR)} / {formatCurrency(totalMonthlyTarget)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Expanded KPI grid (13 cards) */}
+      <BillingKpiGrid kpis={expandedKpis} />
+
+      {/* Action queue */}
+      <BillingActionQueue items={queueItems} onAct={handleActOnItem} />
 
       {/* Forecast & graphs */}
       <BillingForecastChart
@@ -405,13 +535,12 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
         clientNameMap={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
       />
 
-      {/* Actions bar */}
+      {/* Client billing overview */}
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold">Client Billing Overview</h3>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div>
+          <h3 className="text-base font-bold">Client Billing Overview</h3>
+          <p className="text-xs text-muted-foreground">Per-client subscriptions, targets, and quick actions.</p>
+        </div>
       </div>
 
       {/* Client billing table */}
