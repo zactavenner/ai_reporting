@@ -4152,24 +4152,90 @@ Deno.serve(async (req) => {
             return { stepText, toolCallsAcc };
           };
 
-          let { stepText, toolCallsAcc } = await runStreamingStep(CHAT_API_URL, CHAT_API_KEY, CHAT_MODEL_ID, USE_OPENROUTER);
+          // Build the model attempt chain: primary → agent fallback_models[] →
+          // final Gemini safety net. Each entry is { fullId, apiUrl, apiKey, modelId, useOR }.
+          const buildAttempt = (fullId: string) => {
+            const useOR = fullId.startsWith("openrouter/");
+            return {
+              fullId,
+              useOR,
+              apiUrl: useOR
+                ? "https://openrouter.ai/api/v1/chat/completions"
+                : "https://ai.gateway.lovable.dev/v1/chat/completions",
+              apiKey: useOR ? (OPENROUTER_API_KEY || "") : LOVABLE_API_KEY,
+              modelId: useOR ? fullId.replace(/^openrouter\//, "") : fullId,
+            };
+          };
+          const chainIds: string[] = [];
+          const pushUnique = (id: string) => { if (id && !chainIds.includes(id)) chainIds.push(id); };
+          pushUnique(CHAT_MODEL);
+          for (const fm of agentFallbackModels) pushUnique(fm);
+          pushUnique("google/gemini-2.5-flash"); // always-on safety net
+          const attempts = chainIds
+            .map(buildAttempt)
+            .filter((a) => !!a.apiKey); // skip OR fallbacks if no key configured
 
-          // FALLBACK: if the primary model produced no text AND no tool calls
-          // on the FIRST step, automatically retry with Gemini 2.5 Flash via
-          // Lovable AI Gateway. owl-alpha occasionally returns an empty stream
-          // on heavy script + tool-schema prompts, which previously left the
-          // user with a silent "nothing happened" (no video generated).
-          if (step === 0 && !aborted.v && !stepText && toolCallsAcc.length === 0) {
-            console.warn("ai-studio: primary chat model returned empty response, falling back to gemini-2.5-flash");
+          let stepText = "";
+          let toolCallsAcc: any[] = [];
+          let usedModelId: string | null = null;
+          let lastError: unknown = null;
+
+          for (let i = 0; i < attempts.length; i++) {
+            const a = attempts[i];
+            if (aborted.v) break;
+            try {
+              const r = await runStreamingStep(a.apiUrl, a.apiKey, a.modelId, a.useOR);
+              stepText = r.stepText;
+              toolCallsAcc = r.toolCallsAcc;
+              usedModelId = a.fullId;
+              // Only fall through on FIRST step when primary returned a true empty
+              // (no text AND no tool calls). Subsequent steps keep whatever model
+              // won the first step.
+              const isEmpty = !stepText && toolCallsAcc.length === 0;
+              if (step === 0 && isEmpty && i < attempts.length - 1) {
+                await recordVideoModelDecision(supa, "agentChat.fallback", {
+                  conversation_id: conversationId,
+                  client_id: clientId,
+                  user_id: userId,
+                  requested_model: a.fullId,
+                  chosen_model: attempts[i + 1]?.fullId || null,
+                  reason: "empty_response",
+                  attempt: i + 1,
+                  agent_slug: agentSlug || null,
+                });
+                continue;
+              }
+              await recordVideoModelDecision(supa, "agentChat.model_used", {
+                conversation_id: conversationId,
+                client_id: clientId,
+                user_id: userId,
+                requested_model: CHAT_MODEL,
+                chosen_model: a.fullId,
+                attempt: i + 1,
+                fallback_chain: chainIds.join(" → "),
+                agent_slug: agentSlug || null,
+                reason: i === 0 ? "primary" : "fallback",
+              });
+              break;
+            } catch (e: any) {
+              lastError = e;
+              await recordVideoModelDecision(supa, "agentChat.fallback", {
+                conversation_id: conversationId,
+                client_id: clientId,
+                user_id: userId,
+                requested_model: a.fullId,
+                chosen_model: attempts[i + 1]?.fullId || null,
+                reason: `error:${String(e?.message || e).slice(0, 200)}`,
+                attempt: i + 1,
+                agent_slug: agentSlug || null,
+              });
+              if (i === attempts.length - 1) throw e;
+              // otherwise loop to next fallback
+            }
+          }
+          if (step === 0 && usedModelId && usedModelId !== CHAT_MODEL) {
             send({ type: "text", delta: "" });
-            const fallback = await runStreamingStep(
-              "https://ai.gateway.lovable.dev/v1/chat/completions",
-              LOVABLE_API_KEY,
-              "google/gemini-2.5-flash",
-              false,
-            );
-            stepText = fallback.stepText;
-            toolCallsAcc = fallback.toolCallsAcc;
+            console.warn(`ai-studio: primary ${CHAT_MODEL} replaced with ${usedModelId}`);
           }
 
           finalAssistantText += (finalAssistantText ? "\n\n" : "") + stepText;
