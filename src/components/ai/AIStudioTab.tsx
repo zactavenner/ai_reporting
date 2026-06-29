@@ -2823,6 +2823,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           conversationId={conversationId}
         />
       )}
+      <SimpleDisclaimerDialog
+        open={!!disclaimerTarget}
+        onOpenChange={(o) => !o && setDisclaimerTarget(null)}
+        target={disclaimerTarget}
+        clientId={clientId}
+        conversationId={conversationId}
+      />
       <BatchScriptsDialog
         open={batchScriptsOpen}
         onOpenChange={setBatchScriptsOpen}
