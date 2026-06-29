@@ -12,13 +12,16 @@ export type ModelInfo = {
 };
 
 export const MODEL_REGISTRY: Record<string, ModelInfo> = {
-  "openrouter/owl-alpha": { id: "openrouter/owl-alpha", label: "Owl Alpha", provider: "OpenRouter", contextTokens: 200_000, capability: "chat" },
+  "openrouter/owl-alpha": { id: "openrouter/owl-alpha", label: "Owl Alpha", provider: "OpenRouter", contextTokens: 1_000_000, capability: "chat" },
   "openrouter/deepseek/deepseek-v4-flash": { id: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "DeepSeek", contextTokens: 128_000, capability: "chat" },
   "openai/gpt-5": { id: "openai/gpt-5", label: "GPT-5", provider: "OpenAI", contextTokens: 400_000, capability: "chat" },
   "openai/gpt-5-mini": { id: "openai/gpt-5-mini", label: "GPT-5 Mini", provider: "OpenAI", contextTokens: 200_000, capability: "chat" },
+  "google/gemini-2.5-pro": { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: "Google", contextTokens: 2_000_000, capability: "chat" },
+  "anthropic/claude-3.7-sonnet": { id: "anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet", provider: "Anthropic", contextTokens: 200_000, capability: "chat" },
   "openai/gpt-image-2": { id: "openai/gpt-image-2", label: "GPT Image 2", provider: "OpenAI", contextTokens: 0, capability: "image" },
   "google/gemini-3.1-flash-image": { id: "google/gemini-3.1-flash-image", label: "Nano Banana Pro", provider: "Google", contextTokens: 0, capability: "image" },
   "bytedance/seedance-2.0-fast": { id: "bytedance/seedance-2.0-fast", label: "Seedance 2.0 Fast", provider: "ByteDance", contextTokens: 0, capability: "video" },
+  "bytedance/seedance-2.0-pro": { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", provider: "ByteDance", contextTokens: 0, capability: "video" },
   "x-ai/grok-imagine-video": { id: "x-ai/grok-imagine-video", label: "Grok Imagine", provider: "xAI", contextTokens: 0, capability: "video" },
   "alibaba/happyhorse-1.1": { id: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", provider: "Alibaba", contextTokens: 0, capability: "video" },
 };
@@ -28,10 +31,19 @@ export const CONNECTOR_REGISTRY: Record<string, { label: string; emoji: string }
   ghl: { label: "GoHighLevel", emoji: "📞" },
   stripe: { label: "Stripe", emoji: "💳" },
   "google-sheets": { label: "Google Sheets", emoji: "📊" },
+  "google-drive": { label: "Google Drive", emoji: "📁" },
+  notion: { label: "Notion", emoji: "📝" },
   slack: { label: "Slack", emoji: "💬" },
   whatsapp: { label: "WhatsApp", emoji: "🟢" },
   openrouter: { label: "OpenRouter", emoji: "🛰️" },
   fathom: { label: "Fathom", emoji: "🎙️" },
+  seedance: { label: "Seedance", emoji: "🎬" },
+  happyhorse: { label: "HappyHorse", emoji: "🐴" },
+  grok: { label: "Grok Imagine", emoji: "✨" },
+  "gpt-image": { label: "GPT Image", emoji: "🖼️" },
+  "nano-banana": { label: "Nano Banana", emoji: "🍌" },
+  database: { label: "Database", emoji: "🗄️" },
+  wave: { label: "Wave Accounting", emoji: "🌊" },
 };
 
 export function getModelInfo(id: string): ModelInfo | undefined {
