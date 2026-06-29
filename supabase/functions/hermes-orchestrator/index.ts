@@ -3,6 +3,7 @@
 // post messages into a dedicated per-client AI Studio channel, and receive
 // callbacks when generated assets are ready.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { getAgencyDefaults, FALLBACK_CHAT_MODEL } from "../_shared/defaults.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -441,12 +442,13 @@ async function handleCreateAgent(body: any) {
   if (!name) return json({ error: "name required" }, 400);
   const handle = String(body.handle || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).slice(0, 60);
   const agent_type = String(body.agent_type || "custom").toLowerCase();
+  const defaults = await getAgencyDefaults({ supabaseUrl: SUPABASE_URL, serviceKey: SERVICE_KEY });
   const insert = {
     client_id: client.id,
     handle,
     name,
     agent_type,
-    model: body.model || "openrouter/owl-alpha",
+    model: body.model || defaults.chat,
     system_prompt: body.system_prompt ?? "",
     knowledge_md: body.knowledge_md ?? "",
     reference_files: Array.isArray(body.reference_files) ? body.reference_files : [],
