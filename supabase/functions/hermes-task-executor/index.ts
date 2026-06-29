@@ -22,6 +22,91 @@ const AI_GATEWAY_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
+// Task types that should drive a real creative generation through ai-studio
+// (image + canvas drop) instead of a plain LLM text summary. Hermes-routed
+// creative tasks are locked to: openai/gpt-image-2 for images and
+// bytedance/seedance-2.0-fast @ 720p for videos. Output appears in the
+// per-client Hermes conversation chat + canvas for full audit tracking.
+const IMAGE_TASK_TYPES = new Set([
+  "image", "image_ad", "static", "static_ad", "ad", "creative", "creative_image",
+]);
+const VIDEO_TASK_TYPES = new Set([
+  "video", "video_ad", "reel", "creative_video", "ugc_video",
+]);
+
+async function invokeAiStudioForCreative(opts: {
+  task: any;
+  client: { id: string; name: string };
+  agent: any | null;
+  isVideo: boolean;
+}): Promise<{ summary: string }> {
+  const { task, client, agent, isVideo } = opts;
+  // Lock the model + resolution. Hermes never picks anything else — this
+  // guarantees the agent cannot drift to other providers or sizes.
+  const lockedImageModels = isVideo ? null : ["openai"]; // openai => GPT Image 2
+  const lockedVideoModel = isVideo ? "bytedance/seedance-2.0-fast" : null;
+  const lockedVideoResolution = isVideo ? "720p" : null;
+
+  const guard = [
+    `🔒 HERMES HARD-LOCK — generate ${isVideo ? "a 15s 720p video" : "a static ad image"} for **${client.name}** now.`,
+    isVideo
+      ? `Use ONLY model="bytedance/seedance-2.0-fast" at resolution="720p" duration=15s. Do not switch models.`
+      : `Use ONLY image model="openai" (GPT Image 2). Do not switch models.`,
+    `Ground every creative choice in this client's offers, brand kit, and best-performing references. NEVER reference or pull data from any other client.`,
+    `Drop the result on the canvas and post the asset URL in chat so the team can audit it.`,
+    `Hermes task: ${task.task_type}`,
+    ``,
+    `Brief:`,
+    task.instructions || "(no instructions)",
+  ].join("\n");
+
+  const payload: Record<string, unknown> = {
+    internalSecret: "HPA1234$",
+    internalUserId: HERMES_BOT_USER_ID,
+    clientId: client.id,
+    conversationId: task.conversation_id,
+    userText: guard,
+    chatModel: agent?.model || "openrouter/owl-alpha",
+    quality: "pro",
+    agentMode: true,
+    adFormat: isVideo ? "reel_9x16" : "static_1x1",
+    imageModels: lockedImageModels,
+    videoModel: lockedVideoModel,
+    videoModels: lockedVideoModel ? [lockedVideoModel] : null,
+    videoResolution: lockedVideoResolution,
+  };
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-studio`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok || !res.body) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`ai-studio invoke ${res.status}: ${t.slice(0, 400)}`);
+  }
+  // Drain the SSE stream so ai-studio finishes generation, persists the
+  // canvas item, and posts the assistant message before we resolve.
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let collected = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value) collected += decoder.decode(value, { stream: true });
+  }
+  // Best-effort summary line: ai-studio prints "done" / asset URLs in SSE,
+  // but for the Hermes record we just note what was attempted.
+  return {
+    summary: `Routed to AI Studio for ${isVideo ? "video" : "static"} generation. Asset will appear in the canvas + chat.`,
+  };
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -288,6 +373,49 @@ async function executeTask(taskId: string) {
     const triageContext = task.task_type === "task_triage"
       ? await loadTriageContext(task.client_id)
       : undefined;
+
+    // Creative tasks: route through ai-studio so the generated image/video
+    // lands on the per-client canvas AND posts an assistant message in the
+    // Hermes conversation (mirrors the regular user surface for audit and
+    // creative tracking). Locked to GPT Image 2 (images) and Seedance 2.0
+    // Fast @ 720p (videos). Client-scoped: ai-studio only resolves offers,
+    // brand kit, and references for task.client_id.
+    const ttype = (task.task_type || "").toLowerCase();
+    if (IMAGE_TASK_TYPES.has(ttype) || VIDEO_TASK_TYPES.has(ttype)) {
+      const isVideo = VIDEO_TASK_TYPES.has(ttype);
+      const { summary } = await invokeAiStudioForCreative({
+        task,
+        client: { id: client.id, name: client.name },
+        agent,
+        isVideo,
+      });
+      const nowIso = new Date().toISOString();
+      await supa.from("hermes_tasks").update({
+        status: "completed",
+        result_assets: [],
+        completed_at: nowIso,
+        delivered_at: nowIso,
+        metadata: {
+          ...(task.metadata || {}),
+          summary,
+          model: isVideo ? "bytedance/seedance-2.0-fast" : "openai/gpt-image-2",
+          resolution: isVideo ? "720p" : null,
+          source: "ai-studio",
+          duration_ms: Date.now() - startedAt,
+        },
+      }).eq("id", taskId).is("delivered_at", null);
+      await callbackHermes(task.hermes_callback_url, {
+        event: "task.completed",
+        task_id: taskId,
+        hermes_external_id: task.hermes_external_id,
+        client_id: task.client_id,
+        task_type: task.task_type,
+        status: "completed",
+        assets: [],
+        summary,
+      });
+      return { ok: true, routed: "ai-studio" };
+    }
 
     const { parsed, raw, model, usage } = await runAgentInference({
       agent,
