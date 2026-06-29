@@ -45,6 +45,27 @@ serve(async (req) => {
       return new Response(JSON.stringify({ status: 'disabled', reason: 'Auto-disabled after 3 consecutive failures' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Wave B #6 — Pre-run budget check (month-to-date)
+    if (agent.budget_usd_monthly != null && Number(agent.budget_usd_monthly) > 0) {
+      try {
+        const { data: mtd } = await cloudDb.rpc('agent_cost_mtd', { p_agent_id: agent_id });
+        const spent = Number(mtd) || 0;
+        if (spent >= Number(agent.budget_usd_monthly)) {
+          return new Response(JSON.stringify({
+            status: 'budget_exceeded',
+            agent_id,
+            spent_mtd_usd: spent,
+            budget_usd_monthly: Number(agent.budget_usd_monthly),
+          }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      } catch (e) {
+        console.warn('budget check failed (non-fatal)', e);
+      }
+    }
+
+    // Wave B #5 — Shadow mode: log only, skip every side-effect / write-back.
+    const shadowMode = !!agent.shadow_mode;
+
     // Determine clients to process
     const targetClientId = overrideClientId || agent.client_id;
     let clientsToProcess: any[] = [];
