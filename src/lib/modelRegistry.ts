@@ -1,135 +1,75 @@
-// Single source of truth for AI model capabilities (OpenRouter ids).
-// Used by: agent dropdowns, video batch dispatch UI, canvas badges,
-// composer "next request" badge, model-override pickers.
-// Mirror this list in supabase/functions/_shared/video-models.ts for server-side validation.
+// Centralized model registry for Agent Workforce.
+// `contextTokens` is approx; capacity bar = sum(file tokens) / contextTokens.
 
-export type ModelKind = "text" | "image" | "video";
+export type CapabilityKind = "chat" | "image" | "video";
 
-export interface VideoModelSpec {
-  id: string;                       // OpenRouter model id ("provider/name")
-  label: string;                    // Human label
-  provider: "openrouter" | "gemini";
-  durations: number[];              // Allowed scene durations (seconds)
-  defaultDuration: number;
-  maxRes: "720p" | "1080p" | "4k";
-  aspectRatios: ("9:16" | "1:1" | "16:9")[];
-  estCostPerSecondUsd?: number;     // Rough credit estimate for UI preview
-  // Whether this model reliably renders synthetic / AI-generated human avatars
-  // without rejecting them as "real people". Seedance currently rejects most
-  // photoreal AI avatars; Veo handles them. Used by AI Studio to auto-route
-  // avatar clips to a compatible model.
-  supportsRealisticAvatars: boolean;
-}
-
-export interface TextModelSpec {
-  id: string;                       // gateway id ("openai/gpt-5", "google/gemini-2.5-pro", "openrouter/owl-alpha", etc.)
+export type ModelInfo = {
+  id: string;
   label: string;
-  provider: "lovable" | "openrouter";
-  good_for: string;                 // Short description for picker tooltips
+  provider: string;
+  contextTokens: number; // approx context window
+  capability: CapabilityKind;
+};
+
+export const MODEL_REGISTRY: Record<string, ModelInfo> = {
+  "openrouter/owl-alpha": { id: "openrouter/owl-alpha", label: "Owl Alpha", provider: "OpenRouter", contextTokens: 200_000, capability: "chat" },
+  "openrouter/deepseek/deepseek-v4-flash": { id: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "DeepSeek", contextTokens: 128_000, capability: "chat" },
+  "openai/gpt-5": { id: "openai/gpt-5", label: "GPT-5", provider: "OpenAI", contextTokens: 400_000, capability: "chat" },
+  "openai/gpt-5-mini": { id: "openai/gpt-5-mini", label: "GPT-5 Mini", provider: "OpenAI", contextTokens: 200_000, capability: "chat" },
+  "openai/gpt-image-2": { id: "openai/gpt-image-2", label: "GPT Image 2", provider: "OpenAI", contextTokens: 0, capability: "image" },
+  "google/gemini-3.1-flash-image": { id: "google/gemini-3.1-flash-image", label: "Nano Banana Pro", provider: "Google", contextTokens: 0, capability: "image" },
+  "bytedance/seedance-2.0-fast": { id: "bytedance/seedance-2.0-fast", label: "Seedance 2.0 Fast", provider: "ByteDance", contextTokens: 0, capability: "video" },
+  "x-ai/grok-imagine-video": { id: "x-ai/grok-imagine-video", label: "Grok Imagine", provider: "xAI", contextTokens: 0, capability: "video" },
+  "alibaba/happyhorse-1.1": { id: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", provider: "Alibaba", contextTokens: 0, capability: "video" },
+};
+
+export const CONNECTOR_REGISTRY: Record<string, { label: string; emoji: string }> = {
+  meta: { label: "Meta Ads", emoji: "📘" },
+  ghl: { label: "GoHighLevel", emoji: "📞" },
+  stripe: { label: "Stripe", emoji: "💳" },
+  "google-sheets": { label: "Google Sheets", emoji: "📊" },
+  slack: { label: "Slack", emoji: "💬" },
+  whatsapp: { label: "WhatsApp", emoji: "🟢" },
+  openrouter: { label: "OpenRouter", emoji: "🛰️" },
+  fathom: { label: "Fathom", emoji: "🎙️" },
+};
+
+export function getModelInfo(id: string): ModelInfo | undefined {
+  return MODEL_REGISTRY[id];
 }
+
+// Rough char→token conversion: ~4 chars/token. Used for capacity bar from file size.
+export function bytesToTokensApprox(bytes: number): number {
+  return Math.ceil(bytes / 4);
+}
+
+// ----- Legacy exports kept for video batch + offer UI ------------------------
+
+export type VideoModelSpec = {
+  value: string;
+  /** alias for value */
+  id: string;
+  label: string;
+  hint: string;
+  maxSeconds: number;
+  pricePerSecond: number;
+  supportsResolutions?: string[];
+  defaultDuration?: number;
+  durations?: number[];
+  maxRes?: "720p" | "1080p" | "4k";
+};
 
 export const VIDEO_MODELS: VideoModelSpec[] = [
-  {
-    id: "bytedance/seedance-2.0-fast",
-    label: "Seedance Fast",
-    provider: "openrouter",
-    durations: [4, 5, 8, 10, 12, 15],
-    defaultDuration: 15,
-    maxRes: "720p",
-    aspectRatios: ["9:16", "1:1", "16:9"],
-    estCostPerSecondUsd: 0.05,
-    supportsRealisticAvatars: false,
-  },
-  {
-    id: "bytedance/seedance-2.0",
-    label: "Seedance Pro",
-    provider: "openrouter",
-    durations: [4, 5, 8, 10, 12, 15],
-    defaultDuration: 15,
-    maxRes: "4k",
-    aspectRatios: ["9:16", "1:1", "16:9"],
-    estCostPerSecondUsd: 0.15,
-    supportsRealisticAvatars: false,
-  },
-  {
-    id: "kwaivgi/kling-v3.0-std",
-    label: "Kling Standard",
-    provider: "openrouter",
-    durations: [5, 10],
-    defaultDuration: 10,
-    maxRes: "1080p",
-    aspectRatios: ["9:16", "1:1", "16:9"],
-    estCostPerSecondUsd: 0.09,
-    supportsRealisticAvatars: true,
-  },
-  {
-    id: "kwaivgi/kling-v2.1-master",
-    label: "Kling Pro",
-    provider: "openrouter",
-    durations: [5, 10],
-    defaultDuration: 10,
-    maxRes: "1080p",
-    aspectRatios: ["9:16", "1:1", "16:9"],
-    estCostPerSecondUsd: 0.18,
-    supportsRealisticAvatars: true,
-  },
-  {
-    id: "google/veo-3.1-fast",
-    label: "Veo 3.1",
-    provider: "gemini",
-    durations: [4, 6, 8],
-    defaultDuration: 8,
-    maxRes: "1080p",
-    aspectRatios: ["9:16", "16:9"],
-    estCostPerSecondUsd: 0.40,
-    supportsRealisticAvatars: true,
-  },
-  {
-    id: "alibaba/happyhorse-1.1",
-    label: "HappyHorse 1.1",
-    provider: "openrouter",
-    durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-    defaultDuration: 15,
-    maxRes: "1080p",
-    aspectRatios: ["9:16", "1:1", "16:9"],
-    estCostPerSecondUsd: 0.0988,
-    supportsRealisticAvatars: true,
-  },
+  { value: "bytedance/seedance-2.0-fast", id: "bytedance/seedance-2.0-fast", label: "Seedance 2.0 Fast", hint: "Fast text/image-to-video", maxSeconds: 15, pricePerSecond: 0.0538, supportsResolutions: ["480p", "720p"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "720p" },
+  { value: "x-ai/grok-imagine-video", id: "x-ai/grok-imagine-video", label: "Grok Imagine", hint: "xAI cinematic video", maxSeconds: 15, pricePerSecond: 0.05, supportsResolutions: ["480p", "720p"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "720p" },
+  { value: "alibaba/happyhorse-1.1", id: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", hint: "Identity-locked avatar video", maxSeconds: 15, pricePerSecond: 0.1278, supportsResolutions: ["720p", "1080p"], defaultDuration: 15, durations: [15], maxRes: "1080p" },
 ];
 
-export const TEXT_MODELS: TextModelSpec[] = [
-  { id: "openrouter/owl-alpha",          label: "Owl Alpha (default)",  provider: "openrouter", good_for: "Default chat/agent model. Balanced reasoning + speed." },
-  { id: "google/gemini-2.5-pro",         label: "Gemini 2.5 Pro",       provider: "lovable",    good_for: "Strong multimodal reasoning. Use for complex analysis, sheet audits, vision." },
-  { id: "google/gemini-2.5-flash",       label: "Gemini 2.5 Flash",     provider: "lovable",    good_for: "Cheaper, faster Gemini. High-volume drafting." },
-  { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash",       provider: "lovable",    good_for: "Newest Gemini preview, fast." },
-  { id: "openai/gpt-5",                  label: "GPT-5",                provider: "lovable",    good_for: "Premium nuance + accuracy." },
-  { id: "openai/gpt-5-mini",             label: "GPT-5 Mini",           provider: "lovable",    good_for: "Lower-cost GPT-5." },
-];
-
-export function findVideoModel(id: string): VideoModelSpec | undefined {
-  return VIDEO_MODELS.find((m) => m.id === id);
-}
-
-export function findTextModel(id: string): TextModelSpec | undefined {
-  return TEXT_MODELS.find((m) => m.id === id);
-}
-
-export function shortModelLabel(id?: string | null): string {
-  if (!id) return "default";
-  const v = findVideoModel(id) ?? findTextModel(id);
-  if (v) return v.label;
-  const parts = id.split("/");
-  return parts[parts.length - 1] || id;
-}
-
-// Offer image tags / semantic roles used as reference hints in AI prompts.
 export const OFFER_IMAGE_ROLES = [
-  { key: "product",     label: "Product",     hint: "Hero product photo, the thing being sold." },
-  { key: "lifestyle",   label: "Lifestyle",   hint: "Person using the product in context." },
-  { key: "logo",        label: "Logo",        hint: "Brand mark / wordmark." },
-  { key: "testimonial", label: "Testimonial", hint: "Customer quote or proof image." },
-  { key: "background",  label: "Background",  hint: "Texture / scene background plate." },
-  { key: "reference",   label: "Reference",   hint: "Generic style reference." },
+  { key: "reference", label: "Reference" },
+  { key: "product", label: "Product" },
+  { key: "logo", label: "Logo" },
+  { key: "lifestyle", label: "Lifestyle" },
+  { key: "testimonial", label: "Testimonial" },
+  { key: "avatar", label: "Avatar" },
 ] as const;
-
-export type OfferImageRole = typeof OFFER_IMAGE_ROLES[number]["key"];

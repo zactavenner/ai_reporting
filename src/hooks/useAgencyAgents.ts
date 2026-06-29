@@ -13,6 +13,10 @@ export type AgencyAgent = {
   allowed_creative_types: string[];
   is_active: boolean;
   sort_order: number;
+  memory_md?: string | null;
+  instructions_md?: string | null;
+  connectors?: string[] | null;
+  capabilities?: { models?: string[] } | null;
 };
 
 export type AgencyAgentTraining = {

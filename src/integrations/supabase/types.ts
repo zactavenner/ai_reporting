@@ -392,6 +392,74 @@ export type Database = {
         }
         Relationships: []
       }
+      agency_agent_files: {
+        Row: {
+          agent_id: string
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          lines: number | null
+          mime: string | null
+          name: string
+          size_bytes: number
+          storage_path: string
+        }
+        Insert: {
+          agent_id: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lines?: number | null
+          mime?: string | null
+          name: string
+          size_bytes?: number
+          storage_path: string
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lines?: number | null
+          mime?: string | null
+          name?: string
+          size_bytes?: number
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_agent_files_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agency_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_agent_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agency_agent_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_agent_files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       agency_agent_training: {
         Row: {
           agent_id: string
@@ -442,11 +510,15 @@ export type Database = {
       agency_agents: {
         Row: {
           allowed_creative_types: string[]
+          capabilities: Json
+          connectors: Json
           created_at: string
           default_model: string
           icon: string | null
           id: string
+          instructions_md: string | null
           is_active: boolean
+          memory_md: string | null
           name: string
           role: string
           slug: string
@@ -456,11 +528,15 @@ export type Database = {
         }
         Insert: {
           allowed_creative_types?: string[]
+          capabilities?: Json
+          connectors?: Json
           created_at?: string
           default_model?: string
           icon?: string | null
           id?: string
+          instructions_md?: string | null
           is_active?: boolean
+          memory_md?: string | null
           name: string
           role: string
           slug: string
@@ -470,11 +546,15 @@ export type Database = {
         }
         Update: {
           allowed_creative_types?: string[]
+          capabilities?: Json
+          connectors?: Json
           created_at?: string
           default_model?: string
           icon?: string | null
           id?: string
+          instructions_md?: string | null
           is_active?: boolean
+          memory_md?: string | null
           name?: string
           role?: string
           slug?: string
