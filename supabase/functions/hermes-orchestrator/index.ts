@@ -346,12 +346,25 @@ async function handlePostMessage(body: any) {
   const cfg = await loadAgencyConfig();
   const callbackUrl = body.callback_url || cfg?.hermes_callback_url || null;
 
+  // Idempotency for auto-respond path — Hermes retried post_message should not
+  // stack duplicate tasks.
+  const externalId2 = body.hermes_external_id || null;
+  if (externalId2) {
+    const { data: dup2 } = await supa
+      .from("hermes_tasks")
+      .select("id")
+      .eq("client_id", client.id)
+      .eq("hermes_external_id", externalId2)
+      .maybeSingle();
+    if (dup2) return json({ ok: true, conversation_id: conversationId, task_id: dup2.id, deduped: true });
+  }
+
   const { data: task, error: taskErr } = await supa
     .from("hermes_tasks")
     .insert({
       client_id: client.id,
       conversation_id: conversationId,
-      hermes_external_id: body.hermes_external_id || null,
+      hermes_external_id: externalId2,
       task_type: taskType,
       instructions: message,
       status: "queued",
