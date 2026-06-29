@@ -22,6 +22,58 @@ const AI_GATEWAY_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
+// ------------------------------------------------------------------
+// Channel audit + back-and-forth helpers
+// ------------------------------------------------------------------
+// Every Hermes task now mirrors its lifecycle into an agent_channels
+// thread so Hermes and the agent can be observed (and replied to)
+// from the UI in real time. For multi-turn tasks the agent can return
+// `{ needs_input: true, question: "..." }` and Hermes will auto-reply
+// with extra context up to MAX_TURNS.
+const MAX_AGENT_TURNS = 3;
+
+async function ensureAgentChannel(clientId: string | null, agentId: string | null, agentName?: string) {
+  if (!agentId) return null;
+  const scope = clientId ? "client" : "agency";
+  let q = supa.from("agent_channels").select("id").eq("scope", scope).eq("agent_id", agentId).eq("kind", "agent");
+  q = clientId ? q.eq("client_id", clientId) : q.is("client_id", null);
+  const { data: existing } = await q.maybeSingle();
+  if (existing?.id) return existing.id as string;
+  const { data: created } = await supa.from("agent_channels").insert({
+    scope, client_id: clientId, agent_id: agentId, kind: "agent",
+    name: "#agent-" + (agentName ? agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24) : agentId.slice(0, 6)),
+  }).select("id").maybeSingle();
+  return created?.id ?? null;
+}
+
+async function postChannel(opts: {
+  channelId: string | null;
+  role: "agent" | "human" | "system";
+  kind: "message" | "command" | "handoff" | "escalation" | "task-comment" | "tool-call" | "model-call";
+  body: string;
+  taskId?: string | null;
+  toAgentId?: string | null;
+  fromAgentId?: string | null;
+  payload?: Record<string, unknown>;
+}) {
+  if (!opts.channelId) return;
+  try {
+    await supa.from("agent_messages").insert({
+      channel_id: opts.channelId,
+      role: opts.role,
+      kind: opts.kind,
+      body: opts.body.slice(0, 8000),
+      task_id: opts.taskId || null,
+      to_agent_id: opts.toAgentId || null,
+      from_agent_id: opts.fromAgentId || null,
+      user_id: HERMES_BOT_USER_ID,
+      payload: opts.payload || {},
+    });
+  } catch (e) {
+    console.warn("postChannel failed (non-fatal)", e);
+  }
+}
+
 // Task types that should drive a real creative generation through ai-studio
 // (image + canvas drop) instead of a plain LLM text summary. Hermes-routed
 // creative tasks are locked to: openai/gpt-image-2 for images and
@@ -269,6 +321,7 @@ async function runAgentInference(opts: {
   taskType: string;
   metadata: any;
   triageContext?: any;
+  followups?: { question: string; hermes_reply: string }[];
 }) {
   const sysParts: string[] = [];
   if (opts.agent?.system_prompt) sysParts.push(opts.agent.system_prompt);
@@ -296,18 +349,26 @@ async function runAgentInference(opts: {
   } else {
     sysParts.push(
       `You are executing a Hermes task of type "${opts.taskType}" for client "${opts.client.name}". ` +
-      `Respond with JSON: { "summary": string, "assets": [{ "title": string, "url"?: string, "kind"?: string, "text"?: string }], "notes"?: string }. ` +
+      `Respond with JSON ONLY in one of these shapes:\n` +
+      `  Final answer: { "summary": string, "assets": [{ "title": string, "url"?: string, "kind"?: string, "text"?: string }], "notes"?: string }\n` +
+      `  Ask Hermes:  { "needs_input": true, "question": string }\n` +
+      `Use "needs_input" only when missing facts truly block the work — Hermes will reply with the answer and you'll continue. ` +
       `If you cannot produce real asset URLs, return text assets so a human can pick them up in AI Studio.`,
     );
   }
 
   const model = opts.agent?.model || "openrouter/owl-alpha";
+  const messages: any[] = [
+    { role: "system", content: sysParts.join("\n\n") },
+    { role: "user", content: `${opts.instructions}\n\nMetadata: ${JSON.stringify(opts.metadata || {})}` },
+  ];
+  for (const f of (opts.followups || [])) {
+    messages.push({ role: "assistant", content: JSON.stringify({ needs_input: true, question: f.question }) });
+    messages.push({ role: "user", content: `Hermes reply: ${f.hermes_reply}` });
+  }
   const body = {
     model,
-    messages: [
-      { role: "system", content: sysParts.join("\n\n") },
-      { role: "user", content: `${opts.instructions}\n\nMetadata: ${JSON.stringify(opts.metadata || {})}` },
-    ],
+    messages,
     temperature: opts.taskType === "task_triage" ? 0.2 : 0.4,
     max_tokens: opts.taskType === "task_triage" ? 6000 : 2048,
   } as any;
@@ -337,6 +398,34 @@ async function runAgentInference(opts: {
   }
   const usage = data?.usage || {};
   return { parsed, raw, model, usage };
+}
+
+// Hermes acts as the coordinator when the agent asks a question.
+// Lightweight LLM call grounded only on the original task brief + client
+// context — no external lookups, so it stays fast and deterministic.
+async function hermesAutoReply(question: string, client: { name: string }, taskBrief: string, profileMd: string | null) {
+  const sys = `You are Hermes, the agency coordinator for client "${client.name}". `
+    + `An agent asked a clarifying question while working a task. Reply concisely (1-3 sentences) with the answer or best-judgment guidance so the agent can finish. `
+    + `Never invent client data — if unknown, tell the agent to proceed with stated assumptions.`;
+  const usr = `Original task brief:\n${taskBrief}\n\nClient memory:\n${(profileMd || "(none)").slice(0, 2000)}\n\nAgent question:\n${question}`;
+  const res = await fetch(AI_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "HTTP-Referer": "https://reporting.highperformanceads.com",
+      "X-Title": "Hermes Coordinator",
+    },
+    body: JSON.stringify({
+      model: "openrouter/owl-alpha",
+      messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+      temperature: 0.3,
+      max_tokens: 400,
+    }),
+  });
+  if (!res.ok) return "Proceed with reasonable assumptions; flag anything risky in your summary.";
+  const d = await res.json().catch(() => null);
+  return (d?.choices?.[0]?.message?.content || "Proceed with reasonable assumptions.").trim();
 }
 
 // Rough per-1k-token pricing for cost_usd estimation. Update as new models ship.
