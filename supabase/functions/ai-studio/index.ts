@@ -3060,7 +3060,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds, forceToolName } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -3087,6 +3087,7 @@ Deno.serve(async (req) => {
     offerContext?: string | null;
     agentSlug?: string | null;
     offerIds?: string[] | null;
+    forceToolName?: string | null;
   };
   const creativeRows: any[] | undefined = (body as any).creativeRows;
 
@@ -4093,7 +4094,9 @@ Deno.serve(async (req) => {
                 model: modelId,
                 messages: convo,
                 tools: gatedTools,
-                tool_choice: "auto",
+                tool_choice: forceToolName && gatedTools.some((t: any) => (t?.function?.name || t?.name) === forceToolName)
+                  ? { type: "function", function: { name: forceToolName } }
+                  : "auto",
                 stream: true,
               }),
               // No req.signal: the LLM step must keep running even if the

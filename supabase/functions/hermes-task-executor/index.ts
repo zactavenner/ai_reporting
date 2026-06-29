@@ -49,6 +49,7 @@ async function invokeAiStudioForCreative(opts: {
 
   const guard = [
     `🔒 HERMES HARD-LOCK — generate ${isVideo ? "a 15s 720p video" : "a static ad image"} for **${client.name}** now.`,
+    `MANDATORY: Your FIRST and ONLY action this turn MUST be a tool_call to ${isVideo ? "generate_seedance_video" : "generate_static_ad"}. DO NOT write a script, plan, brief, or any chat reply. Emit the tool_call immediately. Text-only responses are forbidden.`,
     isVideo
       ? `Use ONLY model="bytedance/seedance-2.0-fast" at resolution="720p" duration=15s. Do not switch models.`
       : `Use ONLY image model="openai" (GPT Image 2). Do not switch models.`,
@@ -74,6 +75,7 @@ async function invokeAiStudioForCreative(opts: {
     videoModel: lockedVideoModel,
     videoModels: lockedVideoModel ? [lockedVideoModel] : null,
     videoResolution: lockedVideoResolution,
+    forceToolName: isVideo ? "generate_seedance_video" : "generate_static_ad",
   };
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-studio`, {
