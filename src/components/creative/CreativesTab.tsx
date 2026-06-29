@@ -29,6 +29,7 @@ import {
 import { CreativeHorizontalPreview } from './CreativeHorizontalPreview';
 import { CreativeAIActions } from './CreativeAIActions';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
+import { SimpleDisclaimerDialog } from '@/components/ai/SimpleDisclaimerDialog';
 const MetaOpsTabLazy = lazy(() => import('@/components/meta-ops/MetaOpsTab'));
 import { formatFileSize } from '@/lib/uploadWithProgress';
 import {
@@ -62,6 +63,7 @@ import {
   FolderArchive,
   Trophy,
   Palette,
+  FileWarning,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
@@ -100,6 +102,9 @@ export function CreativesTab() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedCreative, setSelectedCreative] = useState<CreativeWithClient | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [disclaimerTarget, setDisclaimerTarget] = useState<
+    { kind: 'image' | 'video'; url: string; aspect_ratio?: string; clientId: string } | null
+  >(null);
 
   // Map client names to creatives
   const clientMap = clients.reduce((acc, client) => {
