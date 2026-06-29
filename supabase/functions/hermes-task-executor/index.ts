@@ -74,6 +74,7 @@ async function invokeAiStudioForCreative(opts: {
     videoModel: lockedVideoModel,
     videoModels: lockedVideoModel ? [lockedVideoModel] : null,
     videoResolution: lockedVideoResolution,
+    forceToolName: isVideo ? "generate_seedance_video" : "generate_static_ad",
   };
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-studio`, {
