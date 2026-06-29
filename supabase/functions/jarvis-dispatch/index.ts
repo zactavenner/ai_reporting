@@ -140,6 +140,14 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const sweepStart = Date.now();
   try {
+    // Reap stale claims (>10 min without heartbeat) before claiming new work.
+    let reaped = 0;
+    try {
+      const { data: reapedCount } = await supa.rpc("reap_stale_agent_tasks", { p_minutes: 10 });
+      reaped = Number(reapedCount) || 0;
+    } catch (e) {
+      console.warn("reap_stale_agent_tasks failed (non-fatal)", e);
+    }
     const tasks = await claimNext();
     const outcomes: any[] = [];
     for (const t of tasks) {
@@ -151,11 +159,11 @@ Deno.serve(async (req) => {
       p_job_name: "jarvis-dispatch",
       p_status: "success",
       p_status_code: 200,
-      p_response_body: JSON.stringify({ worker: WORKER_ID, claimed: tasks.length, outcomes: outcomes.length }),
+      p_response_body: JSON.stringify({ worker: WORKER_ID, claimed: tasks.length, outcomes: outcomes.length, reaped }),
       p_error_message: null,
       p_duration_ms: Date.now() - sweepStart,
     });
-    return new Response(JSON.stringify({ ok: true, worker: WORKER_ID, claimed: tasks.length, outcomes }), {
+    return new Response(JSON.stringify({ ok: true, worker: WORKER_ID, claimed: tasks.length, reaped, outcomes }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
