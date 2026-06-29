@@ -1,150 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Plus, Play, Power, Trash2, AlertTriangle, CheckCircle, XCircle, Clock, Zap, Activity, Bot, Settings2, ChevronRight, Circle, Building2, User, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { useAgents, useAgentRuns, useCreateAgent, useUpdateAgent, useDeleteAgent, useRunAgent, useAgentTasks, AVAILABLE_MODELS, AVAILABLE_CONNECTORS, AGENT_TEMPLATES, type Agent } from '@/hooks/useAgents';
-import { useAgentChannelForAgent, useAgentMessages } from '@/hooks/useAgentChannels';
 import type { Client } from '@/hooks/useClients';
-import { toast } from 'sonner';
-import { CronSchedulePicker } from './CronSchedulePicker';
-import { ClientScopePicker } from './ClientScopePicker';
-import { AIAgentGenerator } from './AIAgentGenerator';
-import { AgentReferenceLibrary } from './AgentReferenceLibrary';
-import { AgencyAgentsManager } from './AgencyAgentsManager';
 import { AgentWorkforceV3 } from './AgentWorkforceV3';
-import { AgentChannelPane } from './AgentChannelPane';
 import { AllChannelsInbox } from './AllChannelsInbox';
 
 interface Props { clients: Client[]; }
 
-const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle; color: string; label: string }> = {
-  completed: { icon: CheckCircle, color: 'text-primary', label: 'Completed' },
-  running: { icon: Activity, color: 'text-warning', label: 'Running' },
-  failed: { icon: XCircle, color: 'text-destructive', label: 'Failed' },
-  skipped: { icon: Clock, color: 'text-muted-foreground', label: 'Skipped' },
-};
-
 export function AgentsTab({ clients }: Props) {
-  const { data: agents = [], isLoading } = useAgents();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selectedAgent = agents.find(a => a.id === selectedId) || null;
-  const { data: runs = [] } = useAgentRuns(selectedId);
-  const { data: tasks = [] } = useAgentTasks();
-  const { data: selectedChannel } = useAgentChannelForAgent(
-    selectedId,
-    selectedAgent?.client_id ? 'client' : 'agency',
-    selectedAgent?.client_id || null
-  );
-  const { data: selectedChannelMessages = [] } = useAgentMessages(selectedChannel?.id);
-  const createAgent = useCreateAgent();
-  const updateAgent = useUpdateAgent();
-  const deleteAgent = useDeleteAgent();
-  const runAgent = useRunAgent();
-  const [editMode, setEditMode] = useState(false);
-  const [editData, setEditData] = useState<Partial<Agent>>({});
-  const [tab, setTab] = useState('overview');
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
-  const [showAllAgents, setShowAllAgents] = useState(false);
-
-  // Deep-link: ?agent=<id> selects that agent + listen for org-chart clicks
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const id = sp.get('agent');
-    if (id) setSelectedId(id);
-    const handler = (e: any) => {
-      const id = e?.detail?.id;
-      if (id) { setSelectedId(id); setEditMode(false); }
-    };
-    window.addEventListener('agents:select', handler as any);
-    return () => window.removeEventListener('agents:select', handler as any);
-  }, []);
-
-  // Computed stats
-  const stats = useMemo(() => {
-    const total = agents.length;
-    const active = agents.filter(a => a.enabled).length;
-    const recentRuns = runs.filter(r => {
-      const started = r.started_at ? new Date(r.started_at).getTime() : 0;
-      return Date.now() - started < 24 * 60 * 60 * 1000;
-    });
-    const failedRuns = recentRuns.filter(r => r.status === 'failed').length;
-    const totalTokens = recentRuns.reduce((sum, r) => sum + (r.tokens_used || 0), 0);
-    const lastMsg = selectedChannelMessages.length
-      ? selectedChannelMessages[selectedChannelMessages.length - 1]
-      : null;
-    const lastActivityAt = lastMsg?.created_at || null;
-    return { total, active, failedRuns, totalTokens, lastActivityAt };
-  }, [agents, runs, selectedChannelMessages]);
-
-  const handleCreateFromTemplate = (template: typeof AGENT_TEMPLATES[0]) => {
-    const exists = agents.some(a => a.template_key === template.key);
-    if (exists) {
-      toast.warning(`${template.name} already exists in your workforce`);
-      return;
-    }
-    createAgent.mutate({
-      name: template.name,
-      icon: template.icon,
-      description: template.description,
-      prompt_template: template.prompt_template,
-      schedule_cron: template.schedule_cron,
-      model: template.model,
-      connectors: template.connectors as any,
-      enabled: false,
-      template_key: template.key,
-    } as any);
-    setShowTemplates(false);
-  };
-
-  const activeAgents = useMemo(() => agents.filter(a => a.enabled), [agents]);
-  const visibleAgents = useMemo(
-    () => (showAllAgents ? agents : agents.filter(a => (a as any).is_core)),
-    [agents, showAllAgents]
-  );
-
-  const handleCreateBlank = () => {
-    createAgent.mutate({
-      name: 'New Agent',
-      icon: '🤖',
-      description: '',
-      prompt_template: '',
-      schedule_cron: '0 6 * * *',
-      model: 'openrouter/owl-alpha',
-      connectors: ['database'] as any,
-      enabled: false,
-    } as any);
-  };
-
-  const startEditing = () => {
-    if (!selectedAgent) return;
-    setEditData({
-      name: selectedAgent.name,
-      description: selectedAgent.description,
-      prompt_template: selectedAgent.prompt_template,
-      schedule_cron: selectedAgent.schedule_cron,
-      model: selectedAgent.model,
-      icon: selectedAgent.icon,
-      connectors: selectedAgent.connectors,
-      client_id: selectedAgent.client_id,
-      notify_channels: (selectedAgent as any).notify_channels || ['slack'],
-      whatsapp_recipients: (selectedAgent as any).whatsapp_recipients || [],
-    } as any);
-    setEditMode(true);
-  };
-
-  const saveEdit = () => {
-    if (!selectedAgent) return;
-    updateAgent.mutate({ id: selectedAgent.id, ...editData } as any);
-    setEditMode(false);
-  };
-
   return (
     <div className="space-y-6">
       {/* Agent Workforce v3 — Claude-style profiles with Memory / Instructions / Files / Connectors / Models */}
@@ -152,8 +12,12 @@ export function AgentsTab({ clients }: Props) {
 
       {/* Agency-wide unified inbox across all agent channels (agency + client) */}
       <AllChannelsInbox clients={clients} />
+    </div>
+  );
+}
 
-      {/* Header */}
+// Legacy Agent Workflow UI removed in favor of Agent Workforce v3.
+/*
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
