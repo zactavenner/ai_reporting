@@ -25,17 +25,33 @@ Deno.serve(async (req) => {
     const { data: clients, error: cErr } = await clientsQ;
     if (cErr) throw cErr;
 
+    // Pull every existing client_agent so we can preserve per-client customizations.
+    // Anything with is_customized=true keeps its system_prompt/model — propagation only refreshes
+    // name/agent_type/enabled and inserts missing rows.
+    const { data: existing, error: eErr } = await supabase
+      .from("client_agents")
+      .select("client_id, handle, system_prompt, model, is_customized");
+    if (eErr) throw eErr;
+    const existingByKey = new Map<string, any>();
+    for (const r of existing ?? []) existingByKey.set(`${r.client_id}::${r.handle}`, r);
+
     const rows: any[] = [];
     for (const c of clients ?? []) {
       for (const a of agencyAgents ?? []) {
+        const prev = existingByKey.get(`${c.id}::${a.slug}`);
+        const isCustomized = !!prev?.is_customized;
         rows.push({
           client_id: c.id,
           handle: a.slug,
           name: a.name,
           agent_type: ["static", "video", "copy"].includes(a.role) ? "creatives" : "custom",
-          model: forceModel || a.default_model || "openrouter/owl-alpha",
-          system_prompt: a.system_prompt || "",
+          // Preserve customized model/prompt; only overwrite when not customized.
+          model: isCustomized
+            ? (prev?.model || forceModel || a.default_model || "openrouter/owl-alpha")
+            : (forceModel || a.default_model || "openrouter/owl-alpha"),
+          system_prompt: isCustomized ? (prev?.system_prompt ?? "") : (a.system_prompt || ""),
           enabled: true,
+          is_customized: isCustomized,
         });
       }
     }
