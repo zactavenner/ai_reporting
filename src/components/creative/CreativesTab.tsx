@@ -29,6 +29,7 @@ import {
 import { CreativeHorizontalPreview } from './CreativeHorizontalPreview';
 import { CreativeAIActions } from './CreativeAIActions';
 import { CashBagLoader } from '@/components/ui/CashBagLoader';
+import { SimpleDisclaimerDialog } from '@/components/ai/SimpleDisclaimerDialog';
 const MetaOpsTabLazy = lazy(() => import('@/components/meta-ops/MetaOpsTab'));
 import { formatFileSize } from '@/lib/uploadWithProgress';
 import {
@@ -62,6 +63,7 @@ import {
   FolderArchive,
   Trophy,
   Palette,
+  FileWarning,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
@@ -100,6 +102,9 @@ export function CreativesTab() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedCreative, setSelectedCreative] = useState<CreativeWithClient | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [disclaimerTarget, setDisclaimerTarget] = useState<
+    { kind: 'image' | 'video'; url: string; aspect_ratio?: string; clientId: string } | null
+  >(null);
 
   // Map client names to creatives
   const clientMap = clients.reduce((acc, client) => {
@@ -682,6 +687,24 @@ export function CreativesTab() {
                     Download
                   </Button>
                 )}
+                {selectedCreative.file_url && (selectedCreative.type === 'image' || selectedCreative.type === 'video') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() =>
+                      setDisclaimerTarget({
+                        kind: selectedCreative.type as 'image' | 'video',
+                        url: selectedCreative.file_url!,
+                        clientId: selectedCreative.client_id,
+                      })
+                    }
+                    title="Burn an accredited-investor disclaimer onto this creative (agency only)"
+                  >
+                    <FileWarning className="h-4 w-4" />
+                    Add Disclaimer
+                  </Button>
+                )}
                 <Sparkles className="h-4 w-4 text-primary ml-2" />
                 <span className="text-sm font-medium mr-1">AI Tools:</span>
                 <CreativeAIActions creative={selectedCreative} />
@@ -844,6 +867,13 @@ export function CreativesTab() {
           <Suspense fallback={SuspenseFallback}><CreativeAnalyticsLazy embedded /></Suspense>
         </TabsContent>
       </Tabs>
+      <SimpleDisclaimerDialog
+        open={!!disclaimerTarget}
+        onOpenChange={(o) => !o && setDisclaimerTarget(null)}
+        target={disclaimerTarget}
+        clientId={disclaimerTarget?.clientId || ''}
+        conversationId={null}
+      />
     </div>
   );
 }
