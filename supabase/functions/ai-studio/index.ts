@@ -2274,7 +2274,7 @@ async function generateSeedanceVideo(opts: {
   };
   const ci = pendingCanvasItemId
     ? await supa.from("ai_studio_canvas_items")
-        .update({ payload: completedPayload })
+        .update({ payload: completedPayload, job_id: jobId, placeholder_until: null })
         .eq("id", pendingCanvasItemId)
         .select("id, kind, payload, created_at").single()
     : await supa.from("ai_studio_canvas_items").insert({
@@ -2282,6 +2282,7 @@ async function generateSeedanceVideo(opts: {
         user_id: opts.userId,
         kind: "scene_video",
         payload: completedPayload,
+        job_id: jobId,
       }).select("id, kind, payload, created_at").single();
 
   if (opts.clientId) {
