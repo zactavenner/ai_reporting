@@ -30,6 +30,7 @@ import { useAvatars } from "@/hooks/useAvatars";
 import { VideoPlayerCard } from "./VideoPlayerCard";
 import { VideoEditDialog } from "./VideoEditDialog";
 import { SimpleCaptionsDialog } from "./SimpleCaptionsDialog";
+import { SimpleDisclaimerDialog } from "./SimpleDisclaimerDialog";
 import { useAgencyReferences, useClientReferences, buildMasterReferenceBlock } from "@/hooks/useReferences";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useClientOffers } from "@/hooks/useClientOffers";
@@ -1010,6 +1011,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const selectedAvatar = studioAvatars.find(a => a.id === selectedAvatarId) || null;
   const [editVideo, setEditVideo] = useState<{ url: string; prompt?: string; aspect_ratio?: string; autoCaptions?: boolean } | null>(null);
   const [captionsVideo, setCaptionsVideo] = useState<{ url: string } | null>(null);
+  const [disclaimerTarget, setDisclaimerTarget] = useState<{ kind: "image" | "video"; url: string; aspect_ratio?: string; prompt?: string } | null>(null);
   const { data: agencyRefs } = useAgencyReferences();
   const { data: clientRefs } = useClientReferences(clientId);
   // Counter of in-flight `send()` calls. Treated as boolean (0 = idle, >0 = running)
@@ -2686,6 +2688,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               }}
               onEditVideo={(url, meta) => setEditVideo({ url, prompt: meta?.prompt, aspect_ratio: meta?.aspect_ratio })}
               onAddCaptions={(url) => setCaptionsVideo({ url })}
+              onAddDisclaimer={(t) => setDisclaimerTarget(t)}
               onDeleteItem={async (itemId) => {
                 // Optimistic remove; realtime DELETE event will also reconcile.
                 setCanvas(curr => curr.filter(c => ("__placeholder" in c) || (c as any).id !== itemId));
@@ -2820,6 +2823,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           conversationId={conversationId}
         />
       )}
+      <SimpleDisclaimerDialog
+        open={!!disclaimerTarget}
+        onOpenChange={(o) => !o && setDisclaimerTarget(null)}
+        target={disclaimerTarget}
+        clientId={clientId}
+        conversationId={conversationId}
+      />
       <BatchScriptsDialog
         open={batchScriptsOpen}
         onOpenChange={setBatchScriptsOpen}

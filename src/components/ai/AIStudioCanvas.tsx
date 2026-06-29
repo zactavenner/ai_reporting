@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3, Grid3x3, RefreshCw, GraduationCap, Trash2 } from "lucide-react";
+import { Loader2, Copy, ExternalLink, FileText, Table as TableIcon, Image as ImageIcon, AlertCircle, Wand2, Check, Save, Film, Clapperboard, ScrollText, Plus, Minus, Maximize2, Send, X, ShieldCheck, Download, Scissors, Subtitles, Crosshair, LayoutGrid, Rows3, Grid3x3, RefreshCw, GraduationCap, Trash2, FileWarning } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,7 +53,7 @@ export type CanvasItem = {
 export type CanvasEntry = CanvasItem | CanvasPlaceholder;
 
 export function AIStudioCanvas({
-  entries, onEditImage, onInlineEdit, onEditVideo, onAddCaptions, onDeleteItem, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
+  entries, onEditImage, onInlineEdit, onEditVideo, onAddCaptions, onAddDisclaimer, onDeleteItem, clientId, onCanvasItemUpdated, onSendMessage, onSendToCreatives,
   initialView, focusedItemId, onViewChange, onFocusItem,
 }: {
   entries: CanvasEntry[];
@@ -61,6 +61,7 @@ export function AIStudioCanvas({
   onInlineEdit?: (imageUrl: string, aspectRatio: string, instruction: string) => Promise<void> | void;
   onEditVideo?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
   onAddCaptions?: (videoUrl: string, meta?: { prompt?: string; aspect_ratio?: string }) => void;
+  onAddDisclaimer?: (target: { kind: "image" | "video"; url: string; aspect_ratio?: string; prompt?: string }) => void;
   /** Delete a canvas card (removes the row from ai_studio_canvas_items). */
   onDeleteItem?: (itemId: string) => void | Promise<void>;
   clientId?: string;
@@ -443,6 +444,13 @@ export function AIStudioCanvas({
                       onClick={(ev) => { ev.stopPropagation(); navigator.clipboard.writeText(p.image_url); toast.success("URL copied"); }}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
+                    {onAddDisclaimer && (
+                      <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                        title="Burn a fine-print legal disclaimer onto this creative"
+                        onClick={(ev) => { ev.stopPropagation(); onAddDisclaimer({ kind: "image", url: p.image_url, aspect_ratio: p.aspect_ratio || "1:1", prompt: p.prompt }); }}>
+                        <FileWarning className="h-3.5 w-3.5" /> Disclaimer
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Open" asChild>
                       <a href={p.image_url} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}>
                         <ExternalLink className="h-3.5 w-3.5" />
@@ -661,6 +669,17 @@ export function AIStudioCanvas({
                         onClick={() => onAddCaptions(p.video_url, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio })}
                       >
                         <Subtitles className="h-3.5 w-3.5" /> Captions
+                      </Button>
+                    )}
+                    {onAddDisclaimer && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                        title="Burn a fine-print legal disclaimer onto this video"
+                        onClick={() => onAddDisclaimer({ kind: "video", url: p.video_url, aspect_ratio: p.aspect_ratio, prompt: p.video_prompt })}
+                      >
+                        <FileWarning className="h-3.5 w-3.5" /> Disclaimer
                       </Button>
                     )}
                     <Button
