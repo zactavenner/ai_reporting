@@ -87,7 +87,16 @@ async function executeTask(task: AgentTask): Promise<{ ok: boolean; status: numb
   if (!agentId) {
     return { ok: false, status: 404, error: `agent not found: ${task.assigned_to_agent}` };
   }
-  const r = await fetch(`${SUPABASE_URL}/functions/v1/run-agent`, {
+  // Heartbeat every 60s so the reaper doesn't free a healthy run.
+  const beat = setInterval(() => {
+    supa.from("agent_tasks")
+      .update({ heartbeat_at: new Date().toISOString() })
+      .eq("id", task.id)
+      .then(() => {}, () => {});
+  }, 60_000);
+  let r: Response;
+  try {
+    r = await fetch(`${SUPABASE_URL}/functions/v1/run-agent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -101,6 +110,9 @@ async function executeTask(task: AgentTask): Promise<{ ok: boolean; status: numb
       task_payload: task.payload,
     }),
   });
+  } finally {
+    clearInterval(beat);
+  }
   if (!r.ok) {
     let body = "";
     try { body = (await r.text()).slice(0, 500); } catch {}
