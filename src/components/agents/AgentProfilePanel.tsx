@@ -71,7 +71,7 @@ export function AgentProfilePanel({
     setClientInstr(clientOverride?.instructions_md || "");
   }, [clientOverride?.client_id, clientOverride?.agent_id, agent.id]);
 
-  const saveClientOverride = (patch: Partial<ClientAgentOverrideShape>) => {
+  const saveClientOverride = (patch: { memory_md?: string; instructions_md?: string }) => {
     if (!isClientView) return;
     upsertOverride.mutate({
       client_id: clientId!,
