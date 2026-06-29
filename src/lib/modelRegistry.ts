@@ -56,7 +56,7 @@ export type VideoModelSpec = {
   supportsResolutions?: string[];
   defaultDuration?: number;
   durations?: number[];
-  maxRes?: string;
+  maxRes?: "720p" | "1080p" | "4k";
 };
 
 export const VIDEO_MODELS: VideoModelSpec[] = [
