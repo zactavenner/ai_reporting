@@ -51,6 +51,53 @@ async function verifyDashboardToken(token: string | null): Promise<string | null
 const extractDocId = (u: string) => u.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
 const extractSheetId = (u: string) => u.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? null;
 
+// Wave B #4 — Auto-deliver completed assets to any queued Hermes task for this
+// client whose task_type matches. Works for video, static_ad, copy, etc.
+async function deliverHermesTaskIfPending(opts: {
+  supa: any;
+  clientId: string;
+  taskType: "video" | "static_ad" | "copy" | string;
+  assets: any[];
+}) {
+  try {
+    const { data: pending } = await opts.supa
+      .from("hermes_tasks")
+      .select("id, hermes_callback_url, hermes_external_id, task_type")
+      .eq("client_id", opts.clientId)
+      .eq("task_type", opts.taskType)
+      .in("status", ["queued", "in_progress"])
+      .order("created_at", { ascending: true })
+      .limit(1);
+    const task = pending?.[0];
+    if (!task) return false;
+    await opts.supa.from("hermes_tasks").update({
+      status: "completed",
+      result_assets: opts.assets,
+      completed_at: new Date().toISOString(),
+      delivered_at: new Date().toISOString(),
+    }).eq("id", task.id);
+    if (task.hermes_callback_url) {
+      fetch(task.hermes_callback_url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: "task.completed",
+          task_id: task.id,
+          hermes_external_id: task.hermes_external_id,
+          client_id: opts.clientId,
+          task_type: opts.taskType,
+          status: "completed",
+          assets: opts.assets,
+        }),
+      }).catch((e) => console.warn("hermes callback failed", e));
+    }
+    return true;
+  } catch (e) {
+    console.warn(`hermes auto-deliver (${opts.taskType}) failed (non-fatal)`, e);
+    return false;
+  }
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -418,6 +465,12 @@ async function generateStaticAd(opts: {
         prompt: opts.prompt.slice(0, 1000),
       },
     });
+    await deliverHermesTaskIfPending({
+      supa,
+      clientId: opts.clientId,
+      taskType: "static_ad",
+      assets: [{ type: "image", title: opts.prompt.slice(0, 120), url: pub.publicUrl, aspect_ratio: aspect }],
+    });
   }
 
   return { url: pub.publicUrl, mime, storage_path: path, model: modelUsed, aspect_ratio: aspect };
@@ -544,6 +597,12 @@ async function editStaticAd(opts: {
         new_colors: opts.newColors || null,
         new_disclaimer: opts.newDisclaimer || null,
       },
+    });
+    await deliverHermesTaskIfPending({
+      supa,
+      clientId: opts.clientId,
+      taskType: "static_ad",
+      assets: [{ type: "image", title: `Edit: ${opts.editInstruction.slice(0, 100)}`, url: pub.publicUrl, aspect_ratio: aspect, parent_image_url: opts.sourceImageUrl }],
     });
   }
 
@@ -2290,43 +2349,12 @@ async function generateSeedanceVideo(opts: {
       console.warn("client_videos insert failed (non-fatal)", e);
     }
     // Auto-deliver to any queued Hermes task expecting a video for this client.
-    try {
-      const { data: pending } = await supa
-        .from("hermes_tasks")
-        .select("id, hermes_callback_url, hermes_external_id, task_type")
-        .eq("client_id", opts.clientId)
-        .eq("task_type", "video")
-        .in("status", ["queued", "in_progress"])
-        .order("created_at", { ascending: true })
-        .limit(1);
-      const task = pending?.[0];
-      if (task) {
-        const assets = [{ type: "video", title: `${modelLabel} ${opts.aspectRatio}`, url: storedUrl, poster_url: opts.imageUrl || null, duration: body.duration }];
-        await supa.from("hermes_tasks").update({
-          status: "completed",
-          result_assets: assets,
-          completed_at: new Date().toISOString(),
-          delivered_at: new Date().toISOString(),
-        }).eq("id", task.id);
-        if (task.hermes_callback_url) {
-          fetch(task.hermes_callback_url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              event: "task.completed",
-              task_id: task.id,
-              hermes_external_id: task.hermes_external_id,
-              client_id: opts.clientId,
-              task_type: "video",
-              status: "completed",
-              assets,
-            }),
-          }).catch((e) => console.warn("hermes callback failed", e));
-        }
-      }
-    } catch (e) {
-      console.warn("hermes auto-deliver failed (non-fatal)", e);
-    }
+    await deliverHermesTaskIfPending({
+      supa,
+      clientId: opts.clientId,
+      taskType: "video",
+      assets: [{ type: "video", title: `${modelLabel} ${opts.aspectRatio}`, url: storedUrl, poster_url: opts.imageUrl || null, duration: body.duration }],
+    });
   }
 
   return {

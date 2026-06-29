@@ -1043,6 +1043,7 @@ export type Database = {
           created_at: string | null
           created_by_agent: string
           due_at: string | null
+          heartbeat_at: string | null
           id: string
           max_attempts: number | null
           payload: Json
@@ -1061,6 +1062,7 @@ export type Database = {
           created_at?: string | null
           created_by_agent: string
           due_at?: string | null
+          heartbeat_at?: string | null
           id?: string
           max_attempts?: number | null
           payload?: Json
@@ -1079,6 +1081,7 @@ export type Database = {
           created_at?: string | null
           created_by_agent?: string
           due_at?: string | null
+          heartbeat_at?: string | null
           id?: string
           max_attempts?: number | null
           payload?: Json
@@ -1092,6 +1095,7 @@ export type Database = {
       }
       agents: {
         Row: {
+          budget_usd_monthly: number | null
           client_id: string | null
           config: Json
           connectors: Json | null
@@ -1113,12 +1117,14 @@ export type Database = {
           role: string | null
           schedule_cron: string | null
           schedule_timezone: string | null
+          shadow_mode: boolean
           temperature: number | null
           template_key: string | null
           updated_at: string
           whatsapp_recipients: string[]
         }
         Insert: {
+          budget_usd_monthly?: number | null
           client_id?: string | null
           config?: Json
           connectors?: Json | null
@@ -1140,12 +1146,14 @@ export type Database = {
           role?: string | null
           schedule_cron?: string | null
           schedule_timezone?: string | null
+          shadow_mode?: boolean
           temperature?: number | null
           template_key?: string | null
           updated_at?: string
           whatsapp_recipients?: string[]
         }
         Update: {
+          budget_usd_monthly?: number | null
           client_id?: string | null
           config?: Json
           connectors?: Json | null
@@ -1167,6 +1175,7 @@ export type Database = {
           role?: string | null
           schedule_cron?: string | null
           schedule_timezone?: string | null
+          shadow_mode?: boolean
           temperature?: number | null
           template_key?: string | null
           updated_at?: string
@@ -2815,6 +2824,7 @@ export type Database = {
           model: string | null
           name: string
           reference_files: Json | null
+          shadow_mode: boolean
           system_prompt: string | null
           updated_at: string
         }
@@ -2830,6 +2840,7 @@ export type Database = {
           model?: string | null
           name: string
           reference_files?: Json | null
+          shadow_mode?: boolean
           system_prompt?: string | null
           updated_at?: string
         }
@@ -2845,6 +2856,7 @@ export type Database = {
           model?: string | null
           name?: string
           reference_files?: Json | null
+          shadow_mode?: boolean
           system_prompt?: string | null
           updated_at?: string
         }
@@ -13686,6 +13698,7 @@ export type Database = {
       }
     }
     Functions: {
+      agent_cost_mtd: { Args: { p_agent_id: string }; Returns: number }
       find_unenriched_leads: {
         Args: { p_client_id: string; p_limit?: number }
         Returns: {
@@ -13767,6 +13780,7 @@ export type Database = {
         Args: { p_days_back?: number }
         Returns: number
       }
+      reap_stale_agent_tasks: { Args: { p_minutes?: number }; Returns: number }
     }
     Enums: {
       email_classification:
