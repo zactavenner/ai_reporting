@@ -5271,7 +5271,19 @@ Deno.serve(async (req) => {
 
   const stream = new ReadableStream({
     start(controller) {
+      // Wave C #10: SSE heartbeat. Long video jobs (HappyHorse 20 min poll
+      // budget) can sit idle between progress events; some proxies/browsers
+      // tear down the connection after ~30s of silence. Emit an SSE comment
+      // every 15s while the turn is running so the pipe stays warm.
+      let alive = true;
+      const enc = new TextEncoder();
+      const heartbeat = setInterval(() => {
+        if (!alive) return;
+        try { controller.enqueue(enc.encode(`: heartbeat ${Date.now()}\n\n`)); }
+        catch { alive = false; clearInterval(heartbeat); }
+      }, 15_000);
       const turnPromise = runStudioTurn(controller);
+      turnPromise.finally(() => { alive = false; clearInterval(heartbeat); });
       const edgeRuntime = (globalThis as any).EdgeRuntime;
       if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
         edgeRuntime.waitUntil(turnPromise.catch((e: any) => {
