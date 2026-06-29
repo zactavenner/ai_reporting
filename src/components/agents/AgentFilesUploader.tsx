@@ -64,7 +64,14 @@ export function AgentFilesUploader({
         <Button size="sm" variant="outline" onClick={onPick} disabled={upload.isPending}>
           <Upload className="h-3.5 w-3.5 mr-1" /> Upload
         </Button>
-        <input ref={inputRef} type="file" multiple hidden onChange={(e) => onFiles(e.target.files)} />
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          hidden
+          accept=".pdf,.md,.docx,.txt,.json,.csv,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp4,.mov,image/*"
+          onChange={(e) => onFiles(e.target.files)}
+        />
       </div>
 
       <div>
@@ -82,7 +89,7 @@ export function AgentFilesUploader({
           onClick={onPick}
           className="border border-dashed rounded-lg p-6 text-center text-xs text-muted-foreground cursor-pointer hover:border-primary/40"
         >
-          Drop or click to upload knowledge files (PDF, MD, DOCX, TXT, JSON).
+          Drop or click to upload knowledge files & creative references (PDF, MD, DOCX, TXT, JSON, CSV, PNG, JPG, MP4).
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

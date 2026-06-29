@@ -9,6 +9,7 @@ export type AgencyAgent = {
   role: string;
   icon: string | null;
   default_model: string;
+  fallback_models?: string[] | null;
   system_prompt: string;
   allowed_creative_types: string[];
   is_active: boolean;
@@ -55,6 +56,8 @@ export const AGENCY_AGENT_MODELS = [
   { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
   { value: "openai/gpt-5", label: "GPT-5" },
   { value: "openai/gpt-5-mini", label: "GPT-5 Mini" },
+  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (vision)" },
+  { value: "anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet" },
 ];
 
 export const CREATIVE_TYPES = ["static", "video", "copy", "reporting", "media_buying"] as const;

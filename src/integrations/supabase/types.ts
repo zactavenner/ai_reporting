@@ -514,6 +514,7 @@ export type Database = {
           connectors: Json
           created_at: string
           default_model: string
+          fallback_models: string[]
           icon: string | null
           id: string
           instructions_md: string | null
@@ -532,6 +533,7 @@ export type Database = {
           connectors?: Json
           created_at?: string
           default_model?: string
+          fallback_models?: string[]
           icon?: string | null
           id?: string
           instructions_md?: string | null
@@ -550,6 +552,7 @@ export type Database = {
           connectors?: Json
           created_at?: string
           default_model?: string
+          fallback_models?: string[]
           icon?: string | null
           id?: string
           instructions_md?: string | null

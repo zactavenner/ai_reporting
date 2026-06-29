@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Crown, User as UserIcon, Save, Edit3, Cable, Sparkles } from "lucide-react";
+import { Crown, User as UserIcon, Save, Edit3, Cable, Sparkles, Plus, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -35,12 +36,23 @@ export function AgentProfilePanel({
   const [model, setModel] = useState(agent.default_model || "openrouter/owl-alpha");
   const [editingMemory, setEditingMemory] = useState(false);
   const [editingInstr, setEditingInstr] = useState(false);
+  const [editingIdentity, setEditingIdentity] = useState(false);
+  const [nameDraft, setNameDraft] = useState(agent.name);
+  const [iconDraft, setIconDraft] = useState(agent.icon || "🤖");
+  const [roleDraft, setRoleDraft] = useState(agent.role);
+  const [fallback1, setFallback1] = useState<string>(agent.fallback_models?.[0] || "");
+  const [fallback2, setFallback2] = useState<string>(agent.fallback_models?.[1] || "");
 
   useEffect(() => {
     setMemory(agent.memory_md || "");
     setInstructions(agent.instructions_md || "");
     setModel(agent.default_model || "openrouter/owl-alpha");
-  }, [agent.id, agent.memory_md, agent.instructions_md, agent.default_model]);
+    setNameDraft(agent.name);
+    setIconDraft(agent.icon || "🤖");
+    setRoleDraft(agent.role);
+    setFallback1(agent.fallback_models?.[0] || "");
+    setFallback2(agent.fallback_models?.[1] || "");
+  }, [agent.id]);
 
   const isClientView = mode === "client" && !!clientId;
 
@@ -68,29 +80,72 @@ export function AgentProfilePanel({
     update.mutate({ id: agent.id, ...patch });
   };
 
+  const toggleConnector = (key: string) => {
+    if (mode !== "master") return;
+    const set = new Set(connectors);
+    if (set.has(key)) set.delete(key); else set.add(key);
+    saveMaster({ connectors: Array.from(set) });
+  };
+
+  const saveFallbacks = (a?: string, b?: string) => {
+    const next = [a ?? fallback1, b ?? fallback2].filter(Boolean) as string[];
+    saveMaster({ fallback_models: next });
+  };
+
+  const availableConnectorsToAdd = Object.keys(CONNECTOR_REGISTRY).filter(
+    (k) => !connectors.includes(k)
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
       {/* LEFT — identity + scope */}
       <Card className="p-4 lg:col-span-2 space-y-3 h-fit">
         <div className="flex items-start gap-3">
-          <span className="text-3xl">{agent.icon || "🤖"}</span>
-          <div className="flex-1 min-w-0">
+          {editingIdentity && mode === "master" ? (
+            <Input value={iconDraft} onChange={(e) => setIconDraft(e.target.value)} className="w-12 h-10 text-center text-2xl px-1" />
+          ) : (
+            <span className="text-3xl">{agent.icon || "🤖"}</span>
+          )}
+          <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold truncate">{agent.name}</h3>
+              {editingIdentity && mode === "master" ? (
+                <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} className="h-7 text-sm font-bold" />
+              ) : (
+                <h3 className="text-base font-bold truncate">{agent.name}</h3>
+              )}
               {mode === "master" ? (
                 <Badge className="text-[10px]"><Crown className="h-2.5 w-2.5 mr-0.5" /> Master</Badge>
               ) : (
                 <Badge variant="secondary" className="text-[10px]"><UserIcon className="h-2.5 w-2.5 mr-0.5" /> {clientName || "Client"}</Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">{agent.role}</p>
+            {editingIdentity && mode === "master" ? (
+              <Textarea value={roleDraft} onChange={(e) => setRoleDraft(e.target.value)} rows={2} className="text-xs" />
+            ) : (
+              <p className="text-xs text-muted-foreground">{agent.role}</p>
+            )}
+            {mode === "master" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-[11px]"
+                onClick={() => {
+                  if (editingIdentity) {
+                    saveMaster({ name: nameDraft, icon: iconDraft, role: roleDraft });
+                  }
+                  setEditingIdentity(!editingIdentity);
+                }}
+              >
+                {editingIdentity ? <><Save className="h-3 w-3 mr-1" /> Save</> : <><Edit3 className="h-3 w-3 mr-1" /> Edit identity</>}
+              </Button>
+            )}
           </div>
         </div>
 
         <Separator />
 
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Model</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Primary model</p>
           {mode === "master" ? (
             <Select value={model} onValueChange={(v) => { setModel(v); saveMaster({ default_model: v }); }}>
               <SelectTrigger className="h-8 text-xs">
@@ -112,6 +167,40 @@ export function AgentProfilePanel({
           )}
         </div>
 
+        {mode === "master" && (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+              Fallback models <span className="text-muted-foreground/70 normal-case">(used for vision / overflow)</span>
+            </p>
+            <div className="space-y-1.5">
+              {[
+                { val: fallback1, set: setFallback1, idx: 0 },
+                { val: fallback2, set: setFallback2, idx: 1 },
+              ].map(({ val, set, idx }) => (
+                <div key={idx} className="flex items-center gap-1">
+                  <Select
+                    value={val || "__none__"}
+                    onValueChange={(v) => {
+                      const next = v === "__none__" ? "" : v;
+                      set(next);
+                      if (idx === 0) saveFallbacks(next, fallback2);
+                      else saveFallbacks(fallback1, next);
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder={`Fallback ${idx + 1}`} /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-xs">— None —</SelectItem>
+                      {AGENCY_AGENT_MODELS.filter((m) => m.value !== model).map((m) => (
+                        <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
             <Cable className="h-3 w-3" /> Connectors
@@ -121,12 +210,42 @@ export function AgentProfilePanel({
             {connectors.map((c) => {
               const meta = CONNECTOR_REGISTRY[c];
               return (
-                <Badge key={c} variant="outline" className="text-[10px]">
+                <Badge key={c} variant="outline" className="text-[10px] group/conn">
                   {meta ? `${meta.emoji} ${meta.label}` : c}
+                  {mode === "master" && (
+                    <button
+                      onClick={() => toggleConnector(c)}
+                      className="ml-1 opacity-60 hover:opacity-100"
+                      title="Remove connector"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
                 </Badge>
               );
             })}
           </div>
+          {mode === "master" && availableConnectorsToAdd.length > 0 && (
+            <div className="mt-2">
+              <Select value="" onValueChange={(v) => v && toggleConnector(v)}>
+                <SelectTrigger className="h-7 text-[11px] w-full">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Plus className="h-3 w-3" /> Add connector
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableConnectorsToAdd.map((k) => {
+                    const meta = CONNECTOR_REGISTRY[k];
+                    return (
+                      <SelectItem key={k} value={k} className="text-xs">
+                        {meta.emoji} {meta.label}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {capabilityModels.length > 0 && (
