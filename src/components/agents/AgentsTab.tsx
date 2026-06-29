@@ -17,6 +17,7 @@ import { ClientScopePicker } from './ClientScopePicker';
 import { AIAgentGenerator } from './AIAgentGenerator';
 import { AgentReferenceLibrary } from './AgentReferenceLibrary';
 import { AgencyAgentsManager } from './AgencyAgentsManager';
+import { AgentWorkforceV3 } from './AgentWorkforceV3';
 import { AgentChannelPane } from './AgentChannelPane';
 import { AllChannelsInbox } from './AllChannelsInbox';
 
@@ -146,8 +147,8 @@ export function AgentsTab({ clients }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Phase 2: Shared Agency Agents with 3-layer knowledge */}
-      <AgencyAgentsManager clients={clients} />
+      {/* Agent Workforce v3 — Claude-style profiles with Memory / Instructions / Files / Connectors / Models */}
+      <AgentWorkforceV3 />
 
       {/* Agency-wide unified inbox across all agent channels (agency + client) */}
       <AllChannelsInbox clients={clients} />
