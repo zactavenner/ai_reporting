@@ -164,12 +164,25 @@ async function handleCreateTask(body: any, cfg: any) {
   const agent = await pickDefaultAgent(client.id, taskType);
   const callbackUrl = body.callback_url || cfg.hermes_callback_url || null;
 
+  // Idempotency: if Hermes retries with the same external id, return the existing task
+  // instead of creating a duplicate row.
+  const externalId = body.hermes_external_id || null;
+  if (externalId) {
+    const { data: dup } = await supa
+      .from("hermes_tasks")
+      .select("*")
+      .eq("client_id", client.id)
+      .eq("hermes_external_id", externalId)
+      .maybeSingle();
+    if (dup) return json({ ok: true, task: dup, deduped: true });
+  }
+
   const { data: task, error } = await supa
     .from("hermes_tasks")
     .insert({
       client_id: client.id,
       conversation_id: conversationId,
-      hermes_external_id: body.hermes_external_id || null,
+      hermes_external_id: externalId,
       task_type: taskType,
       instructions,
       status: "queued",
