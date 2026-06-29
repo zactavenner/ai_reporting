@@ -42,3 +42,29 @@ export function getModelInfo(id: string): ModelInfo | undefined {
 export function bytesToTokensApprox(bytes: number): number {
   return Math.ceil(bytes / 4);
 }
+
+// ----- Legacy exports kept for video batch + offer UI ------------------------
+
+export type VideoModelSpec = {
+  value: string;
+  label: string;
+  hint: string;
+  maxSeconds: number;
+  pricePerSecond: number;
+  supportsResolutions?: string[];
+};
+
+export const VIDEO_MODELS: VideoModelSpec[] = [
+  { value: "bytedance/seedance-2.0-fast", label: "Seedance 2.0 Fast", hint: "Fast text/image-to-video", maxSeconds: 15, pricePerSecond: 0.0538, supportsResolutions: ["480p", "720p"] },
+  { value: "x-ai/grok-imagine-video", label: "Grok Imagine", hint: "xAI cinematic video", maxSeconds: 15, pricePerSecond: 0.05, supportsResolutions: ["480p", "720p"] },
+  { value: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", hint: "Identity-locked avatar video", maxSeconds: 15, pricePerSecond: 0.1278, supportsResolutions: ["720p", "1080p"] },
+];
+
+export const OFFER_IMAGE_ROLES = [
+  { key: "reference", label: "Reference" },
+  { key: "product", label: "Product" },
+  { key: "logo", label: "Logo" },
+  { key: "lifestyle", label: "Lifestyle" },
+  { key: "testimonial", label: "Testimonial" },
+  { key: "avatar", label: "Avatar" },
+] as const;
