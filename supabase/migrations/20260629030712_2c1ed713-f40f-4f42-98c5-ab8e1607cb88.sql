@@ -1,0 +1,1 @@
+ALTER TABLE public.client_agents ADD COLUMN IF NOT EXISTS is_customized BOOLEAN NOT NULL DEFAULT false;

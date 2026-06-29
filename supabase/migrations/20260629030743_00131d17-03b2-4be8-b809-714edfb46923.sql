@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS hermes_tasks_client_external_uidx ON public.hermes_tasks (client_id, hermes_external_id) WHERE hermes_external_id IS NOT NULL;

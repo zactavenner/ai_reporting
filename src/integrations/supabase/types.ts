@@ -2810,6 +2810,7 @@ export type Database = {
           enabled: boolean
           handle: string
           id: string
+          is_customized: boolean
           knowledge_md: string | null
           model: string | null
           name: string
@@ -2824,6 +2825,7 @@ export type Database = {
           enabled?: boolean
           handle: string
           id?: string
+          is_customized?: boolean
           knowledge_md?: string | null
           model?: string | null
           name: string
@@ -2838,6 +2840,7 @@ export type Database = {
           enabled?: boolean
           handle?: string
           id?: string
+          is_customized?: boolean
           knowledge_md?: string | null
           model?: string | null
           name?: string
