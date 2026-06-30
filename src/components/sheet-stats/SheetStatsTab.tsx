@@ -334,6 +334,11 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   const [preset, setPreset] = useState<Preset>('7d');
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
+  const { toast } = useToast();
+  const reportRef = useRef<HTMLDivElement | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
   // Launch date = client created_at
   const { data: clientMeta } = useQuery({
     queryKey: ['client-launch-date', clientId],
