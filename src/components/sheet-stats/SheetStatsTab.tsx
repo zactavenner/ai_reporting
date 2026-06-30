@@ -405,7 +405,9 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   });
 
   const investorProfile = useMemo(() => {
-    const valid = (leadProfiles as any[]).filter(
+    // Pipeline value uses ALL leads (per spec), but disposition rollups use valid only.
+    const all = leadProfiles as any[];
+    const valid = all.filter(
       (l) => !l.is_spam && l.email && l.phone && Array.isArray(l.questions)
     );
     const rangeBuckets: Record<string, number> = {};
@@ -418,18 +420,17 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     const isTimelineQ = (q: string) =>
       /how soon|when.*plan|deploy.*capital|timeline|ready.*three months/i.test(q);
 
-    for (const lead of valid) {
+    // Pipeline sum across ALL leads with parseable answers
+    for (const lead of all) {
+      if (!Array.isArray(lead.questions)) continue;
       let leadLow = 0;
       for (const q of lead.questions as any[]) {
-        const question = String(q?.question || '');
         const answer = String(q?.answer || '').trim();
         if (!answer) continue;
+        const question = String(q?.question || '');
         if (isRangeQ(question)) {
-          rangeBuckets[answer] = (rangeBuckets[answer] || 0) + 1;
           const low = parseLowestDollar(answer);
           if (low > 0 && (leadLow === 0 || low < leadLow)) leadLow = low;
-        } else if (isTimelineQ(question)) {
-          timelineBuckets[answer] = (timelineBuckets[answer] || 0) + 1;
         }
       }
       if (leadLow > 0) {
@@ -438,16 +439,80 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       }
     }
 
+    for (const lead of valid) {
+      let leadLow = 0;
+      for (const q of lead.questions as any[]) {
+        const question = String(q?.question || '');
+        const answer = String(q?.answer || '').trim();
+        if (!answer) continue;
+        if (isRangeQ(question)) {
+          rangeBuckets[answer] = (rangeBuckets[answer] || 0) + 1;
+        } else if (isTimelineQ(question)) {
+          timelineBuckets[answer] = (timelineBuckets[answer] || 0) + 1;
+        }
+      }
+    }
+
     const topRange = Object.entries(rangeBuckets).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const topTimeline = Object.entries(timelineBuckets).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+    // Lead disposition rollup across ALL leads in range
+    const dispositionBuckets: Record<string, number> = {
+      Qualified: 0,
+      Spam: 0,
+      'Missing Contact': 0,
+    };
+    for (const l of all) {
+      if (l.is_spam) dispositionBuckets.Spam += 1;
+      else if (l.email && l.phone) dispositionBuckets.Qualified += 1;
+      else dispositionBuckets['Missing Contact'] += 1;
+    }
+    const dispositionEntries = Object.entries(dispositionBuckets)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+
     return {
       pipelineSum,
       pipelineCount,
       totalValid: valid.length,
+      totalLeads: all.length,
+      dispositionEntries,
       topRange,
       topTimeline,
     };
   }, [leadProfiles]);
+
+  // Time to Funded: avg days from discovery call booked → funded, per investor
+  const { data: timeToFund } = useQuery({
+    queryKey: ['time-to-fund', clientId, from, to],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('funded_investors')
+        .select('time_to_fund_days, funded_at, first_contact_at, calls_to_fund')
+        .eq('client_id', clientId)
+        .gte('funded_at', `${from}T00:00:00.000Z`)
+        .lte('funded_at', `${to}T23:59:59.999Z`)
+        .limit(5000);
+      if (error) throw error;
+      const rows = (data || []) as any[];
+      const days = rows
+        .map((r) => {
+          if (r.time_to_fund_days != null) return Number(r.time_to_fund_days);
+          if (r.funded_at && r.first_contact_at) {
+            return differenceInDays(new Date(r.funded_at), new Date(r.first_contact_at));
+          }
+          return null;
+        })
+        .filter((v): v is number => v != null && isFinite(v) && v >= 0);
+      const calls = rows.map((r) => Number(r.calls_to_fund || 0)).filter((v) => v > 0);
+      const avg = days.length ? days.reduce((a, b) => a + b, 0) / days.length : 0;
+      const median = days.length ? [...days].sort((a, b) => a - b)[Math.floor(days.length / 2)] : 0;
+      const avgCalls = calls.length ? calls.reduce((a, b) => a + b, 0) / calls.length : 0;
+      return { avg, median, avgCalls, count: days.length };
+    },
+    enabled: !!clientId,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const funnelData = useMemo(() => {
     if (!agg) return [];
