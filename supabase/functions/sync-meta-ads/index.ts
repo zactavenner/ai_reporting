@@ -1063,10 +1063,17 @@ Deno.serve(async (req) => {
 
       try {
         const insightsFields = "campaign_id,impressions,clicks,spend,ctr,cpc,cpm,actions,action_values";
-        checkCallBudget("campaign-insights");
-        const insights = await fetchAllPages(
-          `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${insightsFields}&level=campaign&${getTimeRange(startDate, endDate, accountTz)}&time_increment=all_days&action_attribution_windows=${attrWindowsParam}`,
-          accessToken, 50, "campaign-insights"
+        const campRange = resolveDateRange(startDate, endDate, accountTz);
+        const insights = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${insightsFields}` +
+            `&level=campaign&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=all_days&action_attribution_windows=${attrWindowsParam}`,
+          accessToken,
+          campRange.since,
+          campRange.until,
+          "campaign-insights",
+          14, 1, 50,
         );
         for (const ins of insights) {
           const m = extractMetaReported(ins.actions, ins.action_values);
@@ -1084,10 +1091,18 @@ Deno.serve(async (req) => {
           }).eq("client_id", clientId).eq("meta_campaign_id", ins.campaign_id);
         }
 
-        checkCallBudget("adset-insights");
-        const adSetInsights = await fetchAllPages(
-          `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=adset_id,impressions,clicks,spend,ctr,cpc,cpm,reach,frequency,actions,action_values&level=adset&${getTimeRange(startDate, endDate, accountTz)}&time_increment=all_days&action_attribution_windows=${attrWindowsParam}&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
-          accessToken, 50, "adset-insights"
+        const adsetRange = resolveDateRange(startDate, endDate, accountTz);
+        const adSetInsights = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=adset_id,impressions,clicks,spend,ctr,cpc,cpm,reach,frequency,actions,action_values` +
+            `&level=adset&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=all_days&action_attribution_windows=${attrWindowsParam}` +
+            `&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
+          accessToken,
+          adsetRange.since,
+          adsetRange.until,
+          "adset-insights",
+          7, 1, 50,
         );
         for (const ins of adSetInsights) {
           const m = extractMetaReported(ins.actions, ins.action_values);
@@ -1107,19 +1122,23 @@ Deno.serve(async (req) => {
           }).eq("client_id", clientId).eq("meta_adset_id", ins.adset_id);
         }
 
-        // Ad-level insights in 7-day chunks (now includes actions for Meta-reported conversions)
-        const adChunks = getDateChunks(startDate, endDate, 7, accountTz);
+        // Ad-level insights — adaptive 3-day chunks (shrinks further on data-cap errors)
+        const adRange = resolveDateRange(startDate, endDate, accountTz);
         const adSpendAccum = new Map<string, { spend: number; impressions: number; clicks: number; reach: number; leads: number; purchases: number; conversions: number; conversionValue: number }>();
 
-        for (const chunk of adChunks) {
-          checkCallBudget("ad-insights-chunk");
-          const chunkTimeRange = `time_range={"since":"${chunk.since}","until":"${chunk.until}"}`;
-          try {
-            const adInsights = await fetchAllPages(
-              `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=ad_id,impressions,clicks,spend,ctr,cpc,cpm,reach,actions,action_values&level=ad&${chunkTimeRange}&time_increment=all_days&action_attribution_windows=${attrWindowsParam}&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
-              accessToken, 50, `ad-insights ${chunk.since}-${chunk.until}`
-            );
-            for (const ins of adInsights) {
+        const adInsightsAll = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=ad_id,impressions,clicks,spend,ctr,cpc,cpm,reach,actions,action_values` +
+            `&level=ad&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=all_days&action_attribution_windows=${attrWindowsParam}` +
+            `&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
+          accessToken,
+          adRange.since,
+          adRange.until,
+          "ad-insights",
+          3, 1, 50,
+        );
+        for (const ins of adInsightsAll) {
               const existing = adSpendAccum.get(ins.ad_id) || { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, purchases: 0, conversions: 0, conversionValue: 0 };
               existing.spend += Number(ins.spend) || 0;
               existing.impressions += Number(ins.impressions) || 0;
@@ -1131,11 +1150,6 @@ Deno.serve(async (req) => {
               existing.conversions += m.conversions;
               existing.conversionValue += m.conversionValue;
               adSpendAccum.set(ins.ad_id, existing);
-            }
-          } catch (chunkErr) {
-            console.warn(`Ad insights chunk ${chunk.since}-${chunk.until} failed:`, chunkErr);
-            break;
-          }
         }
 
         for (const [adId, stats] of adSpendAccum) {
