@@ -1005,8 +1005,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               <Wallet className="h-4 w-4 text-[hsl(40_45%_55%)]" />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Stated Pipeline</p>
-                <p className="text-lg font-semibold tabular-nums">{fmtMoneyFull(investorProfile.pipelineSum)}</p>
-                <p className="text-[10px] text-muted-foreground">{fmtInt(investorProfile.pipelineCount)} of {fmtInt(investorProfile.totalValid)} leads disclosed</p>
+                <p className="text-lg font-semibold tabular-nums">{fmtMoneyFull(effectivePipeline.value)}</p>
+                <p className="text-[10px] text-muted-foreground">{effectivePipeline.sub}</p>
               </div>
             </div>
 
