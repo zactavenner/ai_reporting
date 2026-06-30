@@ -382,17 +382,82 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       useCORS: true,
       logging: false,
     });
-    const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-    const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
-    const imgW = canvas.width * ratio;
-    const imgH = canvas.height * ratio;
-    pdf.addImage(imgData, 'PNG', (pageW - imgW) / 2, 20, imgW, imgH);
+    const margin = 32;
+    const dateRangeLabel = `${format(range.from, 'MMM d, yyyy')} – ${format(range.to, 'MMM d, yyyy')}`;
+    const title = `${clientName} — ${dateRangeLabel}`;
+    const generatedAt = `Generated ${format(new Date(), 'MMM d, yyyy h:mm a')}`;
+
+    // --- Cover header (drawn on every page) ---
+    const drawHeader = (pageIdx: number) => {
+      // accent bar
+      pdf.setFillColor(11, 43, 38); // deep green
+      pdf.rect(0, 0, pageW, 6, 'F');
+      // title
+      pdf.setTextColor(11, 43, 38);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.text(title, margin, 34);
+      // subtitle
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(11);
+      pdf.setTextColor(90, 90, 90);
+      pdf.text('Executive Scorecard', margin, 52);
+      // generated timestamp + page number (right)
+      pdf.setFontSize(9);
+      pdf.setTextColor(140, 140, 140);
+      pdf.text(generatedAt, pageW - margin, 34, { align: 'right' });
+      pdf.text(`Page ${pageIdx}`, pageW - margin, 52, { align: 'right' });
+      // hairline divider
+      pdf.setDrawColor(220, 220, 220);
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, 64, pageW - margin, 64);
+    };
+
+    const headerH = 78; // reserved space above body on each page
+    const footerH = 24;
+    const usableW = pageW - margin * 2;
+    const usableH = pageH - headerH - footerH;
+
+    // Fit width to usable width, then paginate the tall image across pages.
+    const renderW = usableW;
+    const scale = renderW / canvas.width;
+    const renderH = canvas.height * scale;
+    const sliceHpx = usableH / scale; // pixels of source per page
+
+    let yPx = 0;
+    let pageIdx = 1;
+    while (yPx < canvas.height) {
+      const sliceH = Math.min(sliceHpx, canvas.height - yPx);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceH;
+      const sctx = sliceCanvas.getContext('2d');
+      if (!sctx) break;
+      sctx.fillStyle = '#ffffff';
+      sctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      sctx.drawImage(canvas, 0, -yPx);
+      const sliceData = sliceCanvas.toDataURL('image/png');
+
+      if (pageIdx > 1) pdf.addPage();
+      drawHeader(pageIdx);
+      pdf.addImage(sliceData, 'PNG', margin, headerH, renderW, sliceH * scale);
+
+      // footer
+      pdf.setFontSize(8);
+      pdf.setTextColor(160, 160, 160);
+      pdf.text(`${clientName} · ${dateRangeLabel}`, margin, pageH - 12);
+      pdf.text('High Performance Ads', pageW - margin, pageH - 12, { align: 'right' });
+
+      yPx += sliceH;
+      pageIdx += 1;
+    }
+
     const base64 = pdf.output('datauristring').split(',')[1] || '';
     const safeName = (clientName || 'client').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const filename = `${safeName}-stat-sheet-${format(range.from, 'yyyyMMdd')}-${format(range.to, 'yyyyMMdd')}.pdf`;
+    const filename = `${safeName}-${format(range.from, 'yyyyMMdd')}-${format(range.to, 'yyyyMMdd')}.pdf`;
     return { base64, filename };
   }
 
