@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { format, subDays, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, subYears, differenceInDays, parseISO } from 'date-fns';
 import {
   Calendar as CalendarIcon,
@@ -22,6 +22,9 @@ import {
   ShieldAlert,
   CheckCircle2,
   Timer,
+  Mail,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -48,6 +51,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { SheetStatsReportDialog, type StatHighlight } from './SheetStatsReportDialog';
+import { useToast } from '@/hooks/use-toast';
 
 function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } | null {
   if (!url) return null;
