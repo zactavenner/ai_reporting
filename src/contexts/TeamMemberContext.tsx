@@ -22,10 +22,14 @@ const SESSION_MEMBER_NAME = 'team_member_name';
 const SESSION_MEMBER_EMAIL = 'team_member_email';
 const SESSION_MEMBER_ROLE = 'team_member_role';
 const SESSION_DASHBOARD_TOKEN = 'dashboard_session_token';
+const ADMIN_EMAILS = new Set(['ads@highperformanceads.com', 'nic@hpa.com']);
 
 const normalizeMember = (member: TeamMember): TeamMember => ({
   ...member,
-  role: (member.role || 'member').trim().toLowerCase(),
+  email: (member.email || '').trim().toLowerCase(),
+  role: ADMIN_EMAILS.has((member.email || '').trim().toLowerCase())
+    ? 'admin'
+    : (member.role || 'member').trim().toLowerCase(),
 });
 
 const persistMember = (member: TeamMember) => {
@@ -63,11 +67,25 @@ export function TeamMemberProvider({ children }: { children: ReactNode }) {
       });
 
       try {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('agency_members')
           .select('id, name, email, role')
           .eq('id', storedId)
           .maybeSingle();
+
+        // Some long-lived dashboard sessions were created before role updates.
+        // If the stored ID is stale/mismatched, re-check by email so the UI can
+        // immediately pick up server-side admin changes without forcing logout.
+        if ((!data || error) && storedEmail) {
+          const byEmail = await supabase
+            .from('agency_members')
+            .select('id, name, email, role')
+            .ilike('email', storedEmail.trim())
+            .maybeSingle();
+
+          data = byEmail.data;
+          error = byEmail.error;
+        }
 
         if (cancelled) return;
 
