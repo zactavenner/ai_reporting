@@ -538,7 +538,7 @@ Deno.serve(async (req) => {
           // pipelineValue if present. We track the minimum non-zero positive
           // value because the user explicitly wants the lowest.
           let capitalToDeployMin: number | null = null;
-          for (const { title, rows } of fetched) {
+          for (const { title, rows } of fetchedForDaily) {
             let part: DailyMetric[] = parseColumnMajor(rows, mapping);
             let layoutForTab: 'column-major' | 'row-major' = 'column-major';
             if (part.length === 0 && rows.length >= 2) {
