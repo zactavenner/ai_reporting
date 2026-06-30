@@ -378,14 +378,17 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     const jsPDF = (jsPDFMod as any).jsPDF || (jsPDFMod as any).default;
     const canvas = await html2canvas(node, {
       backgroundColor: '#ffffff',
-      scale: Math.min(2, window.devicePixelRatio || 1),
+      scale: 3,
       useCORS: true,
       logging: false,
     });
-    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    // Landscape A3 — gives ~1190pt of usable width so the dashboard text
+    // (KPI numbers especially) renders large and readable instead of being
+    // shrunk into a portrait A4 column.
+    const pdf = new jsPDF({ orientation: 'l', unit: 'pt', format: 'a3' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 32;
+    const margin = 36;
     const dateRangeLabel = `${format(range.from, 'MMM d, yyyy')} – ${format(range.to, 'MMM d, yyyy')}`;
     const title = `${clientName} — ${dateRangeLabel}`;
     const generatedAt = `Generated ${format(new Date(), 'MMM d, yyyy h:mm a')}`;
@@ -394,30 +397,30 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     const drawHeader = (pageIdx: number) => {
       // accent bar
       pdf.setFillColor(11, 43, 38); // deep green
-      pdf.rect(0, 0, pageW, 6, 'F');
+      pdf.rect(0, 0, pageW, 8, 'F');
       // title
       pdf.setTextColor(11, 43, 38);
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(16);
-      pdf.text(title, margin, 34);
+      pdf.setFontSize(22);
+      pdf.text(title, margin, 44);
       // subtitle
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(11);
+      pdf.setFontSize(13);
       pdf.setTextColor(90, 90, 90);
-      pdf.text('Executive Scorecard', margin, 52);
+      pdf.text('Executive Scorecard', margin, 66);
       // generated timestamp + page number (right)
-      pdf.setFontSize(9);
+      pdf.setFontSize(10);
       pdf.setTextColor(140, 140, 140);
-      pdf.text(generatedAt, pageW - margin, 34, { align: 'right' });
-      pdf.text(`Page ${pageIdx}`, pageW - margin, 52, { align: 'right' });
+      pdf.text(generatedAt, pageW - margin, 44, { align: 'right' });
+      pdf.text(`Page ${pageIdx}`, pageW - margin, 66, { align: 'right' });
       // hairline divider
       pdf.setDrawColor(220, 220, 220);
       pdf.setLineWidth(0.5);
-      pdf.line(margin, 64, pageW - margin, 64);
+      pdf.line(margin, 80, pageW - margin, 80);
     };
 
-    const headerH = 78; // reserved space above body on each page
-    const footerH = 24;
+    const headerH = 96; // reserved space above body on each page
+    const footerH = 28;
     const usableW = pageW - margin * 2;
     const usableH = pageH - headerH - footerH;
 
