@@ -649,7 +649,16 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       ) : agg ? (
         <>
           {/* Hero row — what a CEO cares about */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <KpiTile
+              label="Pipeline Value"
+              value={fmtMoneyFull(investorProfile.pipelineSum)}
+              sub={`${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads · lowest stated range`}
+              delta={null}
+              icon={Briefcase}
+              hero
+              accent="gold"
+            />
             <KpiTile
               label="Committed Capital"
               value={fmtMoneyFull(agg.commitmentDollars)}
@@ -678,13 +687,13 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               invert
             />
             <KpiTile
-              label="Pipeline Value"
-              value={fmtMoneyFull(investorProfile.pipelineSum)}
-              sub={`Sum of ${fmtInt(investorProfile.pipelineCount)} stated minimums`}
-              delta={null}
-              icon={Briefcase}
+              label="Total Ad Spend"
+              value={fmtMoneyFull(agg.totalAdSpend)}
+              sub="In selected range"
+              delta={pctDelta(agg.totalAdSpend, aggPrior?.totalAdSpend ?? 0)}
+              icon={DollarSign}
               hero
-              accent="gold"
+              invert
             />
           </div>
 
