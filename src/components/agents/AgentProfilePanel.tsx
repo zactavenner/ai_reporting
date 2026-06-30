@@ -14,6 +14,8 @@ import {
 } from "@/hooks/useAgencyAgents";
 import { useClientBrain, useUpsertClientBrain, useClientAgentOverride, useUpsertClientAgentOverride } from "@/hooks/useAgencyAgents";
 import { useClientOffers } from "@/hooks/useClientOffers";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { AgentFilesUploader } from "./AgentFilesUploader";
 import { CONNECTOR_REGISTRY, MODEL_REGISTRY, getModelInfo } from "@/lib/modelRegistry";
 
