@@ -1033,8 +1033,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               </div>
             </div>
 
-            <ProfileBuckets title="Ideal Investment Range" icon={Wallet} entries={investorProfile.topRange} total={investorProfile.totalValid} />
-            <ProfileBuckets title="Deployment Timeline" icon={Clock} entries={investorProfile.topTimeline} total={investorProfile.totalValid} />
+            <ProfileBuckets title="Ideal Investment Range" icon={Wallet} entries={effectiveProfile.topRange} total={effectiveProfile.totalValid} />
+            <ProfileBuckets title="Deployment Timeline" icon={Clock} entries={effectiveProfile.topTimeline} total={effectiveProfile.totalValid} />
           </div>
         </Card>
 
@@ -1042,14 +1042,14 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <div className="mb-3">
             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Lead Disposition</p>
             <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Outcome Mix</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{fmtInt(investorProfile.totalLeads)} leads in range</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{fmtInt(effectiveProfile.totalLeads)} leads in range</p>
           </div>
           <div className="space-y-4">
             <ProfileBuckets
               title="Disposition"
               icon={CheckCircle2}
-              entries={investorProfile.dispositionEntries}
-              total={investorProfile.totalLeads}
+              entries={effectiveProfile.dispositionEntries}
+              total={effectiveProfile.totalLeads}
             />
           </div>
         </Card>
