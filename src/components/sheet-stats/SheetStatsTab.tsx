@@ -376,15 +376,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       import('jspdf'),
     ]);
     const jsPDF = (jsPDFMod as any).jsPDF || (jsPDFMod as any).default;
-    const canvas = await html2canvas(node, {
-      backgroundColor: '#ffffff',
-      scale: 3,
-      useCORS: true,
-      logging: false,
-    });
-    // Landscape A3 — gives ~1190pt of usable width so the dashboard text
-    // (KPI numbers especially) renders large and readable instead of being
-    // shrunk into a portrait A4 column.
+    // Landscape A3 — wide canvas keeps KPI numbers large and readable.
     const pdf = new jsPDF({ orientation: 'l', unit: 'pt', format: 'a3' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
@@ -395,68 +387,106 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
     // --- Cover header (drawn on every page) ---
     const drawHeader = (pageIdx: number) => {
-      // accent bar
       pdf.setFillColor(11, 43, 38); // deep green
       pdf.rect(0, 0, pageW, 8, 'F');
-      // title
       pdf.setTextColor(11, 43, 38);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(22);
       pdf.text(title, margin, 44);
-      // subtitle
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(13);
       pdf.setTextColor(90, 90, 90);
       pdf.text('Executive Scorecard', margin, 66);
-      // generated timestamp + page number (right)
       pdf.setFontSize(10);
       pdf.setTextColor(140, 140, 140);
       pdf.text(generatedAt, pageW - margin, 44, { align: 'right' });
       pdf.text(`Page ${pageIdx}`, pageW - margin, 66, { align: 'right' });
-      // hairline divider
       pdf.setDrawColor(220, 220, 220);
       pdf.setLineWidth(0.5);
       pdf.line(margin, 80, pageW - margin, 80);
     };
+    const drawFooter = () => {
+      pdf.setFontSize(8);
+      pdf.setTextColor(160, 160, 160);
+      pdf.text(`${clientName} · ${dateRangeLabel}`, margin, pageH - 14);
+      pdf.text('High Performance Ads', pageW - margin, pageH - 14, { align: 'right' });
+    };
 
-    const headerH = 96; // reserved space above body on each page
+    const headerH = 96;
     const footerH = 28;
     const usableW = pageW - margin * 2;
     const usableH = pageH - headerH - footerH;
+    // Treat each direct child of the report container as an atomic section
+    // so we never split a KPI grid or a chart across pages (which previously
+    // sliced labels away from their numbers).
+    const sections = Array.from(node.children).filter(
+      (el): el is HTMLElement => el instanceof HTMLElement && el.offsetHeight > 0,
+    );
 
-    // Fit width to usable width, then paginate the tall image across pages.
-    const renderW = usableW;
-    const scale = renderW / canvas.width;
-    const renderH = canvas.height * scale;
-    const sliceHpx = usableH / scale; // pixels of source per page
-
-    let yPx = 0;
+    const CAPTURE_SCALE = 2.5;
+    const SECTION_GAP = 14;
     let pageIdx = 1;
-    while (yPx < canvas.height) {
-      const sliceH = Math.min(sliceHpx, canvas.height - yPx);
-      const sliceCanvas = document.createElement('canvas');
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = sliceH;
-      const sctx = sliceCanvas.getContext('2d');
-      if (!sctx) break;
-      sctx.fillStyle = '#ffffff';
-      sctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-      sctx.drawImage(canvas, 0, -yPx);
-      const sliceData = sliceCanvas.toDataURL('image/png');
+    let cursorY = headerH;
+    drawHeader(pageIdx);
 
-      if (pageIdx > 1) pdf.addPage();
-      drawHeader(pageIdx);
-      pdf.addImage(sliceData, 'PNG', margin, headerH, renderW, sliceH * scale);
+    for (const section of sections) {
+      const sectionCanvas = await html2canvas(section, {
+        backgroundColor: '#ffffff',
+        scale: CAPTURE_SCALE,
+        useCORS: true,
+        logging: false,
+      });
+      const scale = usableW / sectionCanvas.width;
+      const renderH = sectionCanvas.height * scale;
 
-      // footer
-      pdf.setFontSize(8);
-      pdf.setTextColor(160, 160, 160);
-      pdf.text(`${clientName} · ${dateRangeLabel}`, margin, pageH - 12);
-      pdf.text('High Performance Ads', pageW - margin, pageH - 12, { align: 'right' });
+      // If the section itself is taller than a full page, fall back to
+      // slicing JUST this section (rare — only oversized chart grids).
+      if (renderH > usableH) {
+        if (cursorY > headerH) {
+          drawFooter();
+          pdf.addPage();
+          pageIdx += 1;
+          drawHeader(pageIdx);
+          cursorY = headerH;
+        }
+        const sliceHpx = usableH / scale;
+        let yPx = 0;
+        while (yPx < sectionCanvas.height) {
+          const sliceH = Math.min(sliceHpx, sectionCanvas.height - yPx);
+          const slice = document.createElement('canvas');
+          slice.width = sectionCanvas.width;
+          slice.height = sliceH;
+          const sctx = slice.getContext('2d');
+          if (!sctx) break;
+          sctx.fillStyle = '#ffffff';
+          sctx.fillRect(0, 0, slice.width, slice.height);
+          sctx.drawImage(sectionCanvas, 0, -yPx);
+          pdf.addImage(slice.toDataURL('image/png'), 'PNG', margin, headerH, usableW, sliceH * scale);
+          yPx += sliceH;
+          if (yPx < sectionCanvas.height) {
+            drawFooter();
+            pdf.addPage();
+            pageIdx += 1;
+            drawHeader(pageIdx);
+          }
+        }
+        cursorY = headerH + Math.min(renderH, usableH);
+        continue;
+      }
 
-      yPx += sliceH;
-      pageIdx += 1;
+      // Start a new page if the whole block won't fit in remaining space.
+      if (cursorY + renderH > pageH - footerH) {
+        drawFooter();
+        pdf.addPage();
+        pageIdx += 1;
+        drawHeader(pageIdx);
+        cursorY = headerH;
+      }
+
+      pdf.addImage(sectionCanvas.toDataURL('image/png'), 'PNG', margin, cursorY, usableW, renderH);
+      cursorY += renderH + SECTION_GAP;
     }
+    drawFooter();
 
     const base64 = pdf.output('datauristring').split(',')[1] || '';
     const safeName = (clientName || 'client').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
