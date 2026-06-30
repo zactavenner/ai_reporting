@@ -816,10 +816,17 @@ Deno.serve(async (req) => {
       try {
         const dailyFields = "spend,impressions,clicks,ctr,actions,action_values,reach,frequency,date_start,date_stop";
         const attrWindows = encodeURIComponent('["7d_click","1d_view"]');
-        checkCallBudget("daily-insights");
-        const dailyInsights = await fetchAllPages(
-          `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${dailyFields}&${getTimeRange(startDate, endDate, accountTz)}&time_increment=1&level=account&action_attribution_windows=${attrWindows}`,
-          accessToken, 100, "daily-insights"
+        const dailyRange = resolveDateRange(startDate, endDate, accountTz);
+        const dailyInsights = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${dailyFields}` +
+            `&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=1&level=account&action_attribution_windows=${attrWindows}`,
+          accessToken,
+          dailyRange.since,
+          dailyRange.until,
+          "daily-insights",
+          14, 1, 100,
         );
         console.log(`Fetched ${dailyInsights.length} daily insight rows`);
 
