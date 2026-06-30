@@ -755,32 +755,21 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         </Card>
       )}
 
-      {/* Trend Analysis — separate dual-axis charts so spend doesn't dominate */}
-      {/* Time to Funded */}
+      {/* Time to Funded — single number: first booked call → funded */}
       <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
         <div className="flex items-end justify-between mb-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Investor Velocity</p>
             <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Time to Funded</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Discovery call booked → funded, averaged across investors</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Average days from first booked call to funded</p>
           </div>
           <Timer className="h-5 w-5 text-[hsl(40_45%_55%)]" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <RatioPill
-            label="Avg Days to Fund"
+            label="First Booked Call → Funded"
             value={timeToFund && timeToFund.count > 0 ? `${timeToFund.avg.toFixed(1)} d` : '—'}
-            sub={timeToFund && timeToFund.count > 0 ? `${fmtInt(timeToFund.count)} funded investors` : 'No funded investors in range'}
-          />
-          <RatioPill
-            label="Median Days"
-            value={timeToFund && timeToFund.count > 0 ? `${fmtInt(timeToFund.median)} d` : '—'}
-            sub="Middle of the distribution"
-          />
-          <RatioPill
-            label="Avg Calls to Fund"
-            value={timeToFund && timeToFund.avgCalls > 0 ? timeToFund.avgCalls.toFixed(1) : '—'}
-            sub="Touchpoints per investor"
+            sub={timeToFund && timeToFund.count > 0 ? `Average across ${fmtInt(timeToFund.count)} funded investor${timeToFund.count === 1 ? '' : 's'}` : 'No funded investors in range'}
           />
           <RatioPill
             label="Funded Investors"
