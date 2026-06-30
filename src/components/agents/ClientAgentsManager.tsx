@@ -2,9 +2,10 @@ import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Bot, BookOpen, Crown, User as UserIcon, ChevronRight } from "lucide-react";
+import { Bot, BookOpen, Crown, User as UserIcon, ChevronRight, Layers } from "lucide-react";
 import { useAgencyAgents } from "@/hooks/useAgencyAgents";
 import { AgentProfilePanel } from "./AgentProfilePanel";
+import { EffectiveAgentView } from "./EffectiveAgentView";
 
 /**
  * Per-client agent surface.
@@ -33,9 +34,10 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
         <TabsList>
           <TabsTrigger value="agents"><Crown className="h-3.5 w-3.5 mr-1" />Agents</TabsTrigger>
           <TabsTrigger value="folder"><BookOpen className="h-3.5 w-3.5 mr-1" />Client Folder</TabsTrigger>
+          <TabsTrigger value="effective"><Layers className="h-3.5 w-3.5 mr-1" />Effective Config</TabsTrigger>
         </TabsList>
 
-        {(["agents", "folder"] as const).map((tab) => {
+        {(["agents", "folder", "effective"] as const).map((tab) => {
           const mode: "master" | "client" = tab === "agents" ? "master" : "client";
           return (
             <TabsContent key={tab} value={tab} className="mt-3">
@@ -49,7 +51,11 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="md:col-span-1 space-y-2">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground px-1">
-                      {mode === "master" ? "Master agency profile" : `Client folder · ${clientName}`}
+                      {tab === "agents"
+                        ? "Master agency profile"
+                        : tab === "folder"
+                        ? `Client folder · ${clientName}`
+                        : `Effective config · ${clientName}`}
                     </p>
                     {coreAgents.map((a) => (
                       <Card
@@ -65,10 +71,12 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
                             <div className="flex items-center gap-1">
                               <p className="text-sm font-semibold truncate">{a.name}</p>
                               <Badge variant="outline" className="text-[9px] h-4">
-                                {mode === "master" ? (
+                                {tab === "agents" ? (
                                   <><Crown className="h-2.5 w-2.5 mr-0.5" />Master</>
-                                ) : (
+                                ) : tab === "folder" ? (
                                   <><UserIcon className="h-2.5 w-2.5 mr-0.5" />Client</>
+                                ) : (
+                                  <><Layers className="h-2.5 w-2.5 mr-0.5" />Effective</>
                                 )}
                               </Badge>
                             </div>
@@ -80,7 +88,14 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
                     ))}
                   </div>
                   <div className="md:col-span-3">
-                    {selected && (
+                    {selected && tab === "effective" ? (
+                      <EffectiveAgentView
+                        key={`effective:${selected.id}`}
+                        agent={selected}
+                        clientId={clientId}
+                        clientName={clientName}
+                      />
+                    ) : selected ? (
                       <AgentProfilePanel
                         key={`${tab}:${selected.id}`}
                         agent={selected}
@@ -88,7 +103,7 @@ export function ClientAgentsManager({ clientId, clientName }: { clientId: string
                         clientId={mode === "client" ? clientId : null}
                         clientName={clientName}
                       />
-                    )}
+                    ) : null}
                   </div>
                 </div>
               )}
