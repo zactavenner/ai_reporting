@@ -433,6 +433,10 @@ Deno.serve(async (req) => {
           // of the client's data without re-pointing gids every quarter.
           let sheetTitle: string;
           let extraTitles: string[] = [];
+          // Tabs that are denylisted for daily-metric aggregation but that we
+          // still need to read for the Investor Profile / Lead Disposition
+          // panels (per-lead row scans, not daily roll-ups).
+          const dispositionTitles: string[] = [];
           const tabsSkipped: { title: string; reason: string }[] = [];
           if (range && typeof range === 'string') {
             sheetTitle = range;
@@ -461,6 +465,9 @@ Deno.serve(async (req) => {
               if (!title || title === sheetTitle) continue;
               if (isDenylistedTab(title)) {
                 tabsSkipped.push({ title, reason: 'denylist' });
+                // Always grab Lead Disposition-style tabs for the investor
+                // profile panel even though we exclude them from KPI totals.
+                if (/disposition/i.test(title)) dispositionTitles.push(title);
                 if (title.toLowerCase().includes('scorecard')) {
                   console.log(`[scorecard] sheet=${sheet_id} tab="${title}" gid=${s?.properties?.sheetId} skipped from aggregation (rollup)`);
                 }
