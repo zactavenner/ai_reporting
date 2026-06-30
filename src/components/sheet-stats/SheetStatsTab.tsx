@@ -818,8 +818,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <KpiTile
               label="Pipeline Value"
-              value={fmtMoneyFull(investorProfile.pipelineSum)}
-              sub={`${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads · lowest stated range`}
+              value={fmtMoneyFull(effectivePipeline.value)}
+              sub={effectivePipeline.sub}
               delta={null}
               icon={Briefcase}
               hero
