@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "nvidia/nemotron-3-ultra:free";
+const MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 async function ai(prompt: string, system: string) {

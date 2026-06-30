@@ -83,7 +83,7 @@ suggest the TOP 3 concrete next actions in order of impact. Be specific (audienc
 funnel tweak). Use "targeted returns" language — never "guaranteed".`;
 
       const { data, error } = await supabase.functions.invoke('ai-analysis', {
-        body: { prompt, model: 'nvidia/nemotron-3-ultra:free' },
+        body: { prompt, model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
       });
       if (error) throw error;
       setAiSuggestion(data?.text ?? data?.response ?? JSON.stringify(data));

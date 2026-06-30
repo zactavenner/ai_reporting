@@ -39,7 +39,7 @@ CTA: ${cta || '(none)'}` }];
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-ultra:free",
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
         messages: [{ role: 'user', content: userContent }],
         response_format: { type: 'json_object' },
       }),

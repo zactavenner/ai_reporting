@@ -34,13 +34,13 @@ CREATE INDEX IF NOT EXISTS idx_agency_agent_files_client ON public.agency_agent_
 
 -- Seed default capabilities for the 5 master agents (overwrites only when null/empty)
 UPDATE public.agency_agents SET capabilities = jsonb_build_object(
-  'chat', jsonb_build_array('nvidia/nemotron-3-ultra:free','openrouter/deepseek/deepseek-v4-flash','openai/gpt-5'),
+  'chat', jsonb_build_array('nvidia/nemotron-3-ultra-550b-a55b:free','openrouter/deepseek/deepseek-v4-flash','openai/gpt-5'),
   'image', jsonb_build_array('openai/gpt-image-2','google/gemini-3.1-flash-image'),
   'video', jsonb_build_array('bytedance/seedance-2.0-fast','x-ai/grok-imagine-video','alibaba/happyhorse-1.1')
 ) WHERE slug = 'creative' AND (capabilities IS NULL OR capabilities = '{}'::jsonb);
 
 UPDATE public.agency_agents SET capabilities = jsonb_build_object(
-  'chat', jsonb_build_array('nvidia/nemotron-3-ultra:free','openai/gpt-5')
+  'chat', jsonb_build_array('nvidia/nemotron-3-ultra-550b-a55b:free','openai/gpt-5')
 ) WHERE slug IN ('jarvis','media_buyer','reporting','qa') AND (capabilities IS NULL OR capabilities = '{}'::jsonb);
 
 UPDATE public.agency_agents SET connectors = jsonb_build_array('meta','ghl','stripe','google-sheets')

@@ -62,8 +62,8 @@ Respond ONLY with valid JSON: { "scenes": [...] }`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-ultra:free",
-        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+        models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Break this script into ~${segmentDuration}-second scenes:\n\n${script}` },

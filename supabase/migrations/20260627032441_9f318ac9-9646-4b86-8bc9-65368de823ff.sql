@@ -1,6 +1,6 @@
-UPDATE public.agents SET model = 'nvidia/nemotron-3-ultra:free' WHERE model IS DISTINCT FROM 'nvidia/nemotron-3-ultra:free';
-UPDATE public.agency_agents SET default_model = 'nvidia/nemotron-3-ultra:free' WHERE default_model IS DISTINCT FROM 'nvidia/nemotron-3-ultra:free';
-UPDATE public.client_agents SET model = 'nvidia/nemotron-3-ultra:free' WHERE model IS DISTINCT FROM 'nvidia/nemotron-3-ultra:free';
+UPDATE public.agents SET model = 'nvidia/nemotron-3-ultra-550b-a55b:free' WHERE model IS DISTINCT FROM 'nvidia/nemotron-3-ultra-550b-a55b:free';
+UPDATE public.agency_agents SET default_model = 'nvidia/nemotron-3-ultra-550b-a55b:free' WHERE default_model IS DISTINCT FROM 'nvidia/nemotron-3-ultra-550b-a55b:free';
+UPDATE public.client_agents SET model = 'nvidia/nemotron-3-ultra-550b-a55b:free' WHERE model IS DISTINCT FROM 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 DO $$
 DECLARE jarvis_id uuid;

@@ -40,11 +40,11 @@ Available connectors (pick only relevant ones):
 - "claude_code" — Connect to Claude Code Desktop for automations via MCP
 
 Available models:
-- "nvidia/nemotron-3-ultra:free" — Best for complex reasoning, analysis, multi-step tasks
-- "nvidia/nemotron-3-ultra:free" — Good balance of speed and quality
-- "nvidia/nemotron-3-ultra:free" — Fast, cheap, for simple checks
-- "nvidia/nemotron-3-ultra:free" — Latest balanced model
-- "nvidia/nemotron-3-ultra:free" — Latest premium model
+- "nvidia/nemotron-3-ultra-550b-a55b:free" — Best for complex reasoning, analysis, multi-step tasks
+- "nvidia/nemotron-3-ultra-550b-a55b:free" — Good balance of speed and quality
+- "nvidia/nemotron-3-ultra-550b-a55b:free" — Fast, cheap, for simple checks
+- "nvidia/nemotron-3-ultra-550b-a55b:free" — Latest balanced model
+- "nvidia/nemotron-3-ultra-550b-a55b:free" — Latest premium model
 - "openai/gpt-5" — Strong reasoning, expensive
 - "openai/gpt-5-mini" — Good mid-tier
 
@@ -92,8 +92,8 @@ Make the prompt_template detailed and specific. Include:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-ultra:free",
-        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+        models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: description },

@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json().catch(() => ({}));
-    const forceModel: string | undefined = body?.forceModel; // e.g. "nvidia/nemotron-3-ultra:free"
+    const forceModel: string | undefined = body?.forceModel; // e.g. "nvidia/nemotron-3-ultra-550b-a55b:free"
     const onlyClientIds: string[] | undefined = body?.clientIds;
 
     const { data: agencyAgents, error: aErr } = await supabase
@@ -47,8 +47,8 @@ Deno.serve(async (req) => {
           agent_type: ["static", "video", "copy"].includes(a.role) ? "creatives" : "custom",
           // Preserve customized model/prompt; only overwrite when not customized.
           model: isCustomized
-            ? (prev?.model || forceModel || a.default_model || "nvidia/nemotron-3-ultra:free")
-            : (forceModel || a.default_model || "nvidia/nemotron-3-ultra:free"),
+            ? (prev?.model || forceModel || a.default_model || "nvidia/nemotron-3-ultra-550b-a55b:free")
+            : (forceModel || a.default_model || "nvidia/nemotron-3-ultra-550b-a55b:free"),
           system_prompt: isCustomized ? (prev?.system_prompt ?? "") : (a.system_prompt || ""),
           enabled: true,
           is_customized: isCustomized,
