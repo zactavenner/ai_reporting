@@ -141,3 +141,6 @@ verify_jwt = false
 
 [functions.dispatch-scheduled-agents]
 verify_jwt = false
+
+[functions.jarvis-chat]
+verify_jwt = false
