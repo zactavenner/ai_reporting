@@ -52,6 +52,7 @@ serve(async (req) => {
       { data: meetings },
       { data: pipelines },
       { data: agencySettings },
+      { data: offers },
     ] = await Promise.all([
       clientQuery,
       supabase
@@ -93,6 +94,10 @@ serve(async (req) => {
         .select("ai_prompt_agency, selected_openai_model, selected_gemini_model, selected_grok_model, xai_api_key")
         .limit(1)
         .single(),
+      supabase
+        .from("client_offers")
+        .select("id, client_id, title, offer_type, fund_type, raise_amount, min_investment, description")
+        .limit(500),
     ]);
 
     // Build comprehensive context per client
@@ -108,6 +113,7 @@ serve(async (req) => {
       const cTasks = (tasks || []).filter((t: any) => t.client_id === cId);
       const cMeetings = (meetings || []).filter((m: any) => m.client_id === cId);
       const cPipelines = (pipelines || []).filter((p: any) => p.client_id === cId);
+      const cOffers = (offers || []).filter((o: any) => o.client_id === cId);
 
       // Aggregate metrics
       const totalAdSpend = cMetrics.reduce((s: number, m: any) => s + (m.ad_spend || 0), 0);
@@ -158,6 +164,15 @@ serve(async (req) => {
 
       if (cPipelines.length > 0) {
         block += `\n**Pipelines:** ${cPipelines.map((p: any) => p.name).join(", ")}`;
+      }
+
+      if (cOffers.length > 0) {
+        block += `\n**Offers (source of truth — tailor every recommendation, ad, script, email to these):**`;
+        cOffers.slice(0, 5).forEach((o: any) => {
+          const meta = [o.offer_type, o.fund_type, o.raise_amount ? `raise $${Number(o.raise_amount).toLocaleString()}` : null, o.min_investment ? `min $${Number(o.min_investment).toLocaleString()}` : null].filter(Boolean).join(" · ");
+          block += `\n  • ${o.title}${meta ? ` (${meta})` : ""}${o.description ? `\n    ↳ ${String(o.description).slice(0, 400)}` : ""}`;
+        });
+        if (cOffers.length > 5) block += `\n  …and ${cOffers.length - 5} more offer(s).`;
       }
 
       clientDataBlocks.push(block);
