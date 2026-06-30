@@ -616,6 +616,30 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     };
   }, [leadProfiles]);
 
+  // Effective pipeline value — falls back to the Google Sheet's "Capital to
+  // Deploy" per-lead lowest * leads-in-range when the DB has no per-lead
+  // questions data (typical for sheet-only clients like InjuryPro Capital).
+  const sheetPerLeadLow = Number((current.data as any)?.pipelineValue || (agg as any)?.pipelineValue || 0);
+  const effectivePipeline = useMemo(() => {
+    if (investorProfile.pipelineSum > 0) {
+      return {
+        value: investorProfile.pipelineSum,
+        sub: `${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads · lowest stated range`,
+      };
+    }
+    const leadsInRange = agg?.totalLeads || 0;
+    if (sheetPerLeadLow > 0 && leadsInRange > 0) {
+      return {
+        value: sheetPerLeadLow * leadsInRange,
+        sub: `${fmtInt(leadsInRange)} leads × ${fmtMoneyFull(sheetPerLeadLow)} lowest stated range`,
+      };
+    }
+    return {
+      value: 0,
+      sub: `${fmtInt(leadsInRange)} leads · no stated range yet`,
+    };
+  }, [investorProfile, sheetPerLeadLow, agg?.totalLeads]);
+
   // Time to Funded: avg days from discovery call booked → funded, per investor
   const { data: timeToFund } = useQuery({
     queryKey: ['time-to-fund', clientId, from, to],
@@ -794,8 +818,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <KpiTile
               label="Pipeline Value"
-              value={fmtMoneyFull(investorProfile.pipelineSum)}
-              sub={`${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads · lowest stated range`}
+              value={fmtMoneyFull(effectivePipeline.value)}
+              sub={effectivePipeline.sub}
               delta={null}
               icon={Briefcase}
               hero
@@ -981,8 +1005,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               <Wallet className="h-4 w-4 text-[hsl(40_45%_55%)]" />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Stated Pipeline</p>
-                <p className="text-lg font-semibold tabular-nums">{fmtMoneyFull(investorProfile.pipelineSum)}</p>
-                <p className="text-[10px] text-muted-foreground">{fmtInt(investorProfile.pipelineCount)} of {fmtInt(investorProfile.totalValid)} leads disclosed</p>
+                <p className="text-lg font-semibold tabular-nums">{fmtMoneyFull(effectivePipeline.value)}</p>
+                <p className="text-[10px] text-muted-foreground">{effectivePipeline.sub}</p>
               </div>
             </div>
 
@@ -1036,7 +1060,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         clientName={clientName}
         rangeLabel={`${format(range.from, 'MMM d, yyyy')} – ${format(range.to, 'MMM d, yyyy')}`}
         highlights={agg ? [
-          { label: 'Pipeline Value', value: fmtMoneyFull(investorProfile.pipelineSum), sub: `${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads` },
+          { label: 'Pipeline Value', value: fmtMoneyFull(effectivePipeline.value), sub: effectivePipeline.sub },
           { label: 'Committed Capital', value: fmtMoneyFull(agg.commitmentDollars), sub: `${fmtInt(agg.totalCommitments)} committed` },
           { label: 'Funded Capital', value: fmtMoneyFull(agg.fundedDollars), sub: `${fmtInt(agg.fundedInvestors)} funded` },
           { label: 'Total Ad Spend', value: fmtMoneyFull(agg.totalAdSpend) },
