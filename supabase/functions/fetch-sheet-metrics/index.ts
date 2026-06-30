@@ -126,6 +126,36 @@ function normalize(s: string): string {
   return (s || '').toString().trim().toLowerCase().replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ');
 }
 
+// Bucket a free-text investment-range string into a canonical label so the
+// dashboard's "Ideal Investment Range" chart aggregates cleanly across tabs.
+function canonicalRangeBucket(raw: string): string | null {
+  const s = (raw || '').toString().trim();
+  if (!s) return null;
+  const t = s.toLowerCase().replace(/\s+/g, ' ');
+  if (/(^|\b)(n\/?a|none|tbd|unknown|—|-)$/.test(t)) return null;
+  // If the cell already looks like a labeled bucket ("$50,000 - $100,000",
+  // "$1M+"), keep it verbatim — sheet owners curate these labels.
+  if (/\$|\bk\b|\bm\b/i.test(s)) return s;
+  // Bare number → coerce to a $-prefixed label so it groups with the rest.
+  const n = parseFloat(s.replace(/[,\s]/g, ''));
+  if (Number.isFinite(n) && n > 0) return `$${n.toLocaleString()}`;
+  return s;
+}
+
+function canonicalTimelineBucket(raw: string): string | null {
+  const s = (raw || '').toString().trim();
+  if (!s) return null;
+  const t = s.toLowerCase();
+  if (/(^|\b)(n\/?a|none|tbd|unknown|—|-)$/.test(t)) return null;
+  return s;
+}
+
+function canonicalDispositionBucket(raw: string): string | null {
+  const s = (raw || '').toString().trim();
+  if (!s) return null;
+  return s;
+}
+
 function parseNumber(v: any): number {
   if (v === null || v === undefined || v === '') return 0;
   if (typeof v === 'number') return v;
@@ -403,6 +433,10 @@ Deno.serve(async (req) => {
           // of the client's data without re-pointing gids every quarter.
           let sheetTitle: string;
           let extraTitles: string[] = [];
+          // Tabs that are denylisted for daily-metric aggregation but that we
+          // still need to read for the Investor Profile / Lead Disposition
+          // panels (per-lead row scans, not daily roll-ups).
+          const dispositionTitles: string[] = [];
           const tabsSkipped: { title: string; reason: string }[] = [];
           if (range && typeof range === 'string') {
             sheetTitle = range;
@@ -431,6 +465,9 @@ Deno.serve(async (req) => {
               if (!title || title === sheetTitle) continue;
               if (isDenylistedTab(title)) {
                 tabsSkipped.push({ title, reason: 'denylist' });
+                // Always grab Lead Disposition-style tabs for the investor
+                // profile panel even though we exclude them from KPI totals.
+                if (/disposition/i.test(title)) dispositionTitles.push(title);
                 if (title.toLowerCase().includes('scorecard')) {
                   console.log(`[scorecard] sheet=${sheet_id} tab="${title}" gid=${s?.properties?.sheetId} skipped from aggregation (rollup)`);
                 }
@@ -449,13 +486,16 @@ Deno.serve(async (req) => {
           const titlesToFetch = primaryAllowed
             ? [sheetTitle, ...extraTitles]
             : [...extraTitles];
+          // Fetch disposition tabs in the same batch but tag them so they
+          // skip daily-metric parsing and only feed the bucket scan.
+          const allTitles = [...titlesToFetch, ...dispositionTitles];
           if (!primaryAllowed) {
             tabsSkipped.push({ title: sheetTitle, reason: 'year/rollup tab — skipped' });
           }
           const fetched: { title: string; rows: any[][] }[] = [];
           const CHUNK = 8;
-          for (let i = 0; i < titlesToFetch.length; i += CHUNK) {
-            const batch = titlesToFetch.slice(i, i + CHUNK);
+          for (let i = 0; i < allTitles.length; i += CHUNK) {
+            const batch = allTitles.slice(i, i + CHUNK);
             const results = await Promise.all(batch.map(async (title) => {
               try {
                 const vr = await fetchWithRetry(
@@ -482,6 +522,10 @@ Deno.serve(async (req) => {
             fetched.push(...results);
           }
 
+          // Split: daily-metric parsing only consumes the non-disposition tabs.
+          const dispositionSet = new Set(dispositionTitles);
+          const fetchedForDaily = fetched.filter((f) => !dispositionSet.has(f.title));
+
           // 3. Parse each tab and merge daily metrics by date.
           // De-dupe strategy: take MAX per (date, metric) across tabs so that
           // overlapping tabs (e.g. a "Q1" sheet and a "2025" sheet) don't
@@ -494,7 +538,7 @@ Deno.serve(async (req) => {
           // pipelineValue if present. We track the minimum non-zero positive
           // value because the user explicitly wants the lowest.
           let capitalToDeployMin: number | null = null;
-          for (const { title, rows } of fetched) {
+          for (const { title, rows } of fetchedForDaily) {
             let part: DailyMetric[] = parseColumnMajor(rows, mapping);
             let layoutForTab: 'column-major' | 'row-major' = 'column-major';
             if (part.length === 0 && rows.length >= 2) {
@@ -674,6 +718,50 @@ Deno.serve(async (req) => {
             }
           }
           const daily: DailyMetric[] = Object.values(mergedByDate).sort((a, b) => a.date.localeCompare(b.date));
+
+          // ---- Investor Profile / Lead Disposition row scan -----------------
+          // Walk lead-style and disposition-style tabs to extract per-lead
+          // {date, range, timeline, disposition} so the dashboard can bucket
+          // them by date range later. This is independent from KPI totals.
+          type LeadRow = { date: string | null; range: string | null; timeline: string | null; disposition: string | null };
+          const leadRows: LeadRow[] = [];
+          const scanForBuckets = (rows: any[][]) => {
+            if (!rows || rows.length < 2) return;
+            // Find the header row (first row containing a date-ish label).
+            let headerRowIdx = -1;
+            for (let i = 0; i < Math.min(5, rows.length); i++) {
+              const norm = (rows[i] || []).map((c) => normalize(String(c ?? '')));
+              if (norm.some((h) => /^(date|current date|created|submitted)/.test(h))) {
+                headerRowIdx = i; break;
+              }
+            }
+            if (headerRowIdx < 0) return;
+            const header = (rows[headerRowIdx] || []).map((c) => normalize(String(c ?? '')));
+            const dateCol = header.findIndex((h) => /^(date|current date|created|submitted)/.test(h));
+            const rangeCol = header.findIndex((h) =>
+              /investment\s*range|capital\s*to\s*deploy|ideal\s*investment|investable\s*capital|investment\s*amount/.test(h)
+            );
+            const timelineCol = header.findIndex((h) =>
+              /deployment\s*timeline|deploy\s*(your\s*)?capital|how\s*soon|time(line)?\s*to\s*deploy/.test(h)
+            );
+            const dispCol = header.findIndex((h) => /^(lead\s*)?disposition$|outcome|status/.test(h));
+            if (dateCol < 0 && rangeCol < 0 && timelineCol < 0 && dispCol < 0) return;
+            for (let i = headerRowIdx + 1; i < rows.length; i++) {
+              const row = rows[i] || [];
+              if (!row.length) continue;
+              const date = dateCol >= 0 ? parseDate(row[dateCol]) : null;
+              const range = rangeCol >= 0 ? canonicalRangeBucket(String(row[rangeCol] ?? '')) : null;
+              const timeline = timelineCol >= 0 ? canonicalTimelineBucket(String(row[timelineCol] ?? '')) : null;
+              const disposition = dispCol >= 0 ? canonicalDispositionBucket(String(row[dispCol] ?? '')) : null;
+              if (!date && !range && !timeline && !disposition) continue;
+              leadRows.push({ date, range, timeline, disposition });
+            }
+          };
+          for (const { title, rows } of fetched) {
+            const t = title.toLowerCase();
+            if (/lead/.test(t) || /disposition/.test(t)) scanForBuckets(rows);
+          }
+
           const payload = {
             sheetTitle, daily, layout,
             tabsScanned: titlesToFetch,
@@ -681,6 +769,7 @@ Deno.serve(async (req) => {
             tabsSkipped,
             partsByTab,
             pipelineValue: capitalToDeployMin || 0,
+            leadRows,
             fetchedAt: new Date().toISOString(),
           };
           parsedCache.set(cacheKey, { at: Date.now(), payload });
@@ -808,6 +897,35 @@ Deno.serve(async (req) => {
       costPerReconnectShowed: t.reconnectShowed > 0 ? t.totalAdSpend / t.reconnectShowed : 0,
     };
 
+    // ---- Bucket the per-lead rows for the active date range ----------------
+    const leadRowsAll: Array<{ date: string | null; range: string | null; timeline: string | null; disposition: string | null }> =
+      (baseParsed as any).leadRows || [];
+    const leadRowsInRange = leadRowsAll.filter((r) => {
+      if (!r.date) return false; // require a date to belong to a range
+      const dt = new Date(r.date);
+      if (startD && dt < startD) return false;
+      if (endD && dt > endD) return false;
+      return true;
+    });
+    const bucketize = (
+      arr: Array<string | null>
+    ): { label: string; count: number }[] => {
+      const m = new Map<string, number>();
+      for (const v of arr) {
+        if (!v) continue;
+        m.set(v, (m.get(v) || 0) + 1);
+      }
+      return Array.from(m.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+    const investorBuckets = {
+      totalRows: leadRowsInRange.length,
+      range: bucketize(leadRowsInRange.map((r) => r.range)),
+      timeline: bucketize(leadRowsInRange.map((r) => r.timeline)),
+      disposition: bucketize(leadRowsInRange.map((r) => r.disposition)),
+    };
+
     return new Response(JSON.stringify({
       daily,
       aggregated,
@@ -819,6 +937,7 @@ Deno.serve(async (req) => {
       tabsUsed: (baseParsed as any).tabsUsed ?? [],
       tabsSkipped: (baseParsed as any).tabsSkipped ?? [],
       tabsBreakdown,
+      investorBuckets,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

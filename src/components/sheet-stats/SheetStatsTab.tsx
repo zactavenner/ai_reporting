@@ -616,6 +616,29 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     };
   }, [leadProfiles]);
 
+  // Sheet-derived investor buckets fallback. Populated by fetch-sheet-metrics
+  // by row-scanning the Leads + Lead Disposition tabs. Used when the DB has
+  // no per-lead question rows (sheet-only clients like InjuryPro Capital).
+  const sheetBuckets: any = (current.data as any)?.investorBuckets || (agg as any)?.investorBuckets || null;
+  const effectiveProfile = useMemo(() => {
+    const topRange = investorProfile.topRange.length > 0
+      ? investorProfile.topRange
+      : (sheetBuckets?.range || []).slice(0, 6).map((b: any) => [b.label, b.count] as [string, number]);
+    const topTimeline = investorProfile.topTimeline.length > 0
+      ? investorProfile.topTimeline
+      : (sheetBuckets?.timeline || []).slice(0, 6).map((b: any) => [b.label, b.count] as [string, number]);
+    const dispositionEntries = investorProfile.dispositionEntries.length > 0
+      ? investorProfile.dispositionEntries
+      : (sheetBuckets?.disposition || []).slice(0, 8).map((b: any) => [b.label, b.count] as [string, number]);
+    const totalValid = investorProfile.totalValid > 0
+      ? investorProfile.totalValid
+      : ((sheetBuckets?.range || []) as any[]).reduce((s, b: any) => s + (b.count || 0), 0);
+    const totalLeads = investorProfile.totalLeads > 0
+      ? investorProfile.totalLeads
+      : Number(sheetBuckets?.totalRows || 0) || (agg?.totalLeads || 0);
+    return { topRange, topTimeline, dispositionEntries, totalValid, totalLeads };
+  }, [investorProfile, sheetBuckets, agg?.totalLeads]);
+
   // Effective pipeline value — falls back to the Google Sheet's "Capital to
   // Deploy" per-lead lowest * leads-in-range when the DB has no per-lead
   // questions data (typical for sheet-only clients like InjuryPro Capital).
@@ -1010,8 +1033,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               </div>
             </div>
 
-            <ProfileBuckets title="Ideal Investment Range" icon={Wallet} entries={investorProfile.topRange} total={investorProfile.totalValid} />
-            <ProfileBuckets title="Deployment Timeline" icon={Clock} entries={investorProfile.topTimeline} total={investorProfile.totalValid} />
+            <ProfileBuckets title="Ideal Investment Range" icon={Wallet} entries={effectiveProfile.topRange} total={effectiveProfile.totalValid} />
+            <ProfileBuckets title="Deployment Timeline" icon={Clock} entries={effectiveProfile.topTimeline} total={effectiveProfile.totalValid} />
           </div>
         </Card>
 
@@ -1019,14 +1042,14 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <div className="mb-3">
             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Lead Disposition</p>
             <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Outcome Mix</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{fmtInt(investorProfile.totalLeads)} leads in range</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{fmtInt(effectiveProfile.totalLeads)} leads in range</p>
           </div>
           <div className="space-y-4">
             <ProfileBuckets
               title="Disposition"
               icon={CheckCircle2}
-              entries={investorProfile.dispositionEntries}
-              total={investorProfile.totalLeads}
+              entries={effectiveProfile.dispositionEntries}
+              total={effectiveProfile.totalLeads}
             />
           </div>
         </Card>
