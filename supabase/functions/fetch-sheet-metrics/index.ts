@@ -897,6 +897,35 @@ Deno.serve(async (req) => {
       costPerReconnectShowed: t.reconnectShowed > 0 ? t.totalAdSpend / t.reconnectShowed : 0,
     };
 
+    // ---- Bucket the per-lead rows for the active date range ----------------
+    const leadRowsAll: Array<{ date: string | null; range: string | null; timeline: string | null; disposition: string | null }> =
+      (baseParsed as any).leadRows || [];
+    const leadRowsInRange = leadRowsAll.filter((r) => {
+      if (!r.date) return false; // require a date to belong to a range
+      const dt = new Date(r.date);
+      if (startD && dt < startD) return false;
+      if (endD && dt > endD) return false;
+      return true;
+    });
+    const bucketize = (
+      arr: Array<string | null>
+    ): { label: string; count: number }[] => {
+      const m = new Map<string, number>();
+      for (const v of arr) {
+        if (!v) continue;
+        m.set(v, (m.get(v) || 0) + 1);
+      }
+      return Array.from(m.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+    const investorBuckets = {
+      totalRows: leadRowsInRange.length,
+      range: bucketize(leadRowsInRange.map((r) => r.range)),
+      timeline: bucketize(leadRowsInRange.map((r) => r.timeline)),
+      disposition: bucketize(leadRowsInRange.map((r) => r.disposition)),
+    };
+
     return new Response(JSON.stringify({
       daily,
       aggregated,
@@ -908,6 +937,7 @@ Deno.serve(async (req) => {
       tabsUsed: (baseParsed as any).tabsUsed ?? [],
       tabsSkipped: (baseParsed as any).tabsSkipped ?? [],
       tabsBreakdown,
+      investorBuckets,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
