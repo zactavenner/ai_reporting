@@ -300,18 +300,18 @@ function ProfileBuckets({ title, icon: Icon, entries, total }: { title: string; 
         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
         <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{title}</p>
       </div>
-      <div className="space-y-1.5">
+      <div>
         {entries.map(([label, count]) => {
           const pctOfTotal = total > 0 ? (count / total) * 100 : 0;
           const widthPct = max > 0 ? (count / max) * 100 : 0;
           return (
-            <div key={label} className="text-[11px]">
-              <div className="flex items-center justify-between gap-2 mb-0.5">
-                <span className="truncate text-foreground/90" title={label}>{label}</span>
+            <div key={label} className="text-[12px]" style={{ marginBottom: 10 }}>
+              <div className="flex items-center justify-between gap-2" style={{ marginBottom: 4 }}>
+                <span className="truncate text-foreground/90 font-medium" title={label}>{label}</span>
                 <span className="tabular-nums text-muted-foreground shrink-0">{fmtInt(count)} · {fmtPct(pctOfTotal, 0)}</span>
               </div>
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full bg-primary/70" style={{ width: `${widthPct}%` }} />
+              <div style={{ height: 6, borderRadius: 9999, background: 'hsl(var(--muted))', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 9999, background: 'hsl(var(--primary) / 0.7)', width: `${widthPct}%` }} />
               </div>
             </div>
           );
