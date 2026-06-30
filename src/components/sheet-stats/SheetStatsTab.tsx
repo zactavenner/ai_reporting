@@ -633,6 +633,13 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           </Popover>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Button size="sm" variant="outline" onClick={() => setReportDialogOpen(true)} className="gap-1.5">
+            <Mail className="h-3.5 w-3.5" /> Email report
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => handleDownloadPdf()} disabled={downloadingPdf} className="gap-1.5">
+            {downloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+            Download PDF
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => { current.refetch(); prior.refetch(); }} disabled={current.isFetching}>
             <RefreshCw className={cn('h-3 w-3', current.isFetching && 'animate-spin')} />
           </Button>
