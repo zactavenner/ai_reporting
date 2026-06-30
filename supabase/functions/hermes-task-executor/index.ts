@@ -119,7 +119,7 @@ async function invokeAiStudioForCreative(opts: {
     clientId: client.id,
     conversationId: task.conversation_id,
     userText: guard,
-    chatModel: agent?.model || "openrouter/owl-alpha",
+    chatModel: agent?.model || "nvidia/nemotron-3-ultra:free",
     quality: "pro",
     agentMode: true,
     adFormat: isVideo ? "reel_9x16" : "static_1x1",
@@ -357,7 +357,7 @@ async function runAgentInference(opts: {
     );
   }
 
-  const model = opts.agent?.model || "openrouter/owl-alpha";
+  const model = opts.agent?.model || "nvidia/nemotron-3-ultra:free";
   const messages: any[] = [
     { role: "system", content: sysParts.join("\n\n") },
     { role: "user", content: `${opts.instructions}\n\nMetadata: ${JSON.stringify(opts.metadata || {})}` },
@@ -417,7 +417,7 @@ async function hermesAutoReply(question: string, client: { name: string }, taskB
       "X-Title": "Hermes Coordinator",
     },
     body: JSON.stringify({
-      model: "openrouter/owl-alpha",
+      model: "nvidia/nemotron-3-ultra:free",
       messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
       temperature: 0.3,
       max_tokens: 400,
@@ -430,7 +430,7 @@ async function hermesAutoReply(question: string, client: { name: string }, taskB
 
 // Rough per-1k-token pricing for cost_usd estimation. Update as new models ship.
 const PRICING: Record<string, { in: number; out: number }> = {
-  "openrouter/owl-alpha": { in: 0, out: 0 },
+  "nvidia/nemotron-3-ultra:free": { in: 0, out: 0 },
   "google/gemini-2.5-flash": { in: 0.000075, out: 0.0003 },
   "google/gemini-2.5-pro":   { in: 0.00125, out: 0.005 },
   "google/gemini-3-flash-preview": { in: 0.000075, out: 0.0003 },
@@ -438,7 +438,7 @@ const PRICING: Record<string, { in: number; out: number }> = {
   "openai/gpt-5-mini":       { in: 0.00025, out: 0.002 },
 };
 function estimateCost(model: string, usage: { prompt_tokens?: number; completion_tokens?: number }) {
-  const p = PRICING[model] || PRICING["openrouter/owl-alpha"];
+  const p = PRICING[model] || PRICING["nvidia/nemotron-3-ultra:free"];
   const inK = (usage.prompt_tokens || 0) / 1000;
   const outK = (usage.completion_tokens || 0) / 1000;
   return +(inK * p.in + outK * p.out).toFixed(6);

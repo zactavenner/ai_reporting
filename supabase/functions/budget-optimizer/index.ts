@@ -44,7 +44,7 @@ Return: { "recommendations": [ { "campaign_id": "...", "name": "...", "current_d
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
       body: JSON.stringify({
-        model: "openrouter/owl-alpha",
+        model: "nvidia/nemotron-3-ultra:free",
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
       }),

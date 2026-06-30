@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
         body: JSON.stringify({
-          model: "openrouter/owl-alpha",
+          model: "nvidia/nemotron-3-ultra:free",
           messages: [{ role: 'user', content: `Return JSON {"keywords": ["..."]} of 3–6 alternative phrasings and synonyms for: ${query}` }],
           response_format: { type: 'json_object' },
         }),
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
         body: JSON.stringify({
-          model: "openrouter/owl-alpha",
+          model: "nvidia/nemotron-3-ultra:free",
           messages: [
             { role: 'system', content: 'You answer questions using only the JSON evidence provided. Cite source IDs.' },
             { role: 'user', content: `Question: ${query}\n\nEvidence:\n${JSON.stringify(results).slice(0, 30000)}` },

@@ -6,7 +6,7 @@ CREATE INDEX IF NOT EXISTS idx_canvas_items_job_id ON public.ai_studio_canvas_it
 CREATE INDEX IF NOT EXISTS idx_canvas_items_placeholder_until ON public.ai_studio_canvas_items(placeholder_until) WHERE placeholder_until IS NOT NULL;
 
 ALTER TABLE public.agency_settings
-  ADD COLUMN IF NOT EXISTS default_chat_model TEXT NOT NULL DEFAULT 'openrouter/owl-alpha',
+  ADD COLUMN IF NOT EXISTS default_chat_model TEXT NOT NULL DEFAULT 'nvidia/nemotron-3-ultra:free',
   ADD COLUMN IF NOT EXISTS default_image_model TEXT NOT NULL DEFAULT 'google/gemini-3.1-flash-image',
   ADD COLUMN IF NOT EXISTS default_video_model TEXT NOT NULL DEFAULT 'bytedance/seedance-2.0-fast';
 

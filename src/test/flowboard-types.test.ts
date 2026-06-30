@@ -33,7 +33,7 @@ describe('Flowboard node data factories', () => {
 
   it('createPromptGeneratorData returns correct defaults', () => {
     const data = createPromptGeneratorData();
-    expect(data.model).toBe('openrouter/owl-alpha');
+    expect(data.model).toBe('nvidia/nemotron-3-ultra:free');
     expect(data.context).toBe('');
     expect(data.inputPrompt).toBe('');
     expect(data.outputPrompt).toBeUndefined();

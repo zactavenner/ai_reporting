@@ -42,7 +42,7 @@ interface Message {
   content: string;
 }
 
-type AIModel = 'openrouter/owl-alpha' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5' | 'grok';
+type AIModel = 'nvidia/nemotron-3-ultra:free' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5' | 'grok';
 
 const QUICK_ACTIONS = [
   { label: 'Compare all clients', prompt: 'Compare the performance of all active clients and identify the top performer.' },
@@ -55,7 +55,7 @@ export function AIHubChat({ selectedGPT, onClearGPT, clients, clientMetrics, age
   const [input, setInput] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [model, setModel] = useState<AIModel>('openrouter/owl-alpha');
+  const [model, setModel] = useState<AIModel>('nvidia/nemotron-3-ultra:free');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [activeTool, setActiveTool] = useState<ToolMode | null>(null);

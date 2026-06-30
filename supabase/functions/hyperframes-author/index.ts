@@ -68,7 +68,7 @@ Rules:
         "X-Title": "Hyperframes Author",
       },
       body: JSON.stringify({
-        model: "openrouter/owl-alpha",
+        model: "nvidia/nemotron-3-ultra:free",
         messages: [
           { role: "system", content: sys },
           { role: "user", content: userMsg },

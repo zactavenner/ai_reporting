@@ -1,6 +1,6 @@
-UPDATE public.agents SET model = 'openrouter/owl-alpha' WHERE model IS DISTINCT FROM 'openrouter/owl-alpha';
-UPDATE public.agency_agents SET default_model = 'openrouter/owl-alpha' WHERE default_model IS DISTINCT FROM 'openrouter/owl-alpha';
-UPDATE public.client_agents SET model = 'openrouter/owl-alpha' WHERE model IS DISTINCT FROM 'openrouter/owl-alpha';
+UPDATE public.agents SET model = 'nvidia/nemotron-3-ultra:free' WHERE model IS DISTINCT FROM 'nvidia/nemotron-3-ultra:free';
+UPDATE public.agency_agents SET default_model = 'nvidia/nemotron-3-ultra:free' WHERE default_model IS DISTINCT FROM 'nvidia/nemotron-3-ultra:free';
+UPDATE public.client_agents SET model = 'nvidia/nemotron-3-ultra:free' WHERE model IS DISTINCT FROM 'nvidia/nemotron-3-ultra:free';
 
 DO $$
 DECLARE jarvis_id uuid;

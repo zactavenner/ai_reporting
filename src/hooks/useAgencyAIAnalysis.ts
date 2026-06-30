@@ -37,7 +37,7 @@ interface AgencyContext {
 }
 
 type AIModel = 'gemini' | 'openai';
-type FullModel = 'openrouter/owl-alpha' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5' | 'grok' | 'grok-4-reasoning';
+type FullModel = 'nvidia/nemotron-3-ultra:free' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5' | 'grok' | 'grok-4-reasoning';
 
 export function useAgencyAIAnalysis() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -159,7 +159,7 @@ export function useAgencyAIAnalysis() {
   const sendFullContextMessage = useCallback(async (
     input: string,
     existingMessages: Message[],
-    fullModel: FullModel = 'openrouter/owl-alpha',
+    fullModel: FullModel = 'nvidia/nemotron-3-ultra:free',
     clientFilter: string = 'all',
     onTokenUsage?: (used: number, system: number) => void,
   ) => {

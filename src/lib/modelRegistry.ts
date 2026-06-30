@@ -12,7 +12,7 @@ export type ModelInfo = {
 };
 
 export const MODEL_REGISTRY: Record<string, ModelInfo> = {
-  "openrouter/owl-alpha": { id: "openrouter/owl-alpha", label: "Owl Alpha", provider: "OpenRouter", contextTokens: 1_000_000, capability: "chat" },
+  "nvidia/nemotron-3-ultra:free": { id: "nvidia/nemotron-3-ultra:free", label: "Nemotron 3 Ultra", provider: "OpenRouter", contextTokens: 1_000_000, capability: "chat" },
   "openrouter/deepseek/deepseek-v4-flash": { id: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "DeepSeek", contextTokens: 128_000, capability: "chat" },
   "openai/gpt-5": { id: "openai/gpt-5", label: "GPT-5", provider: "OpenAI", contextTokens: 400_000, capability: "chat" },
   "openai/gpt-5-mini": { id: "openai/gpt-5-mini", label: "GPT-5 Mini", provider: "OpenAI", contextTokens: 200_000, capability: "chat" },

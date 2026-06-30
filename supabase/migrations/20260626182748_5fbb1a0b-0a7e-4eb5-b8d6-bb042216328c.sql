@@ -10,7 +10,7 @@ CREATE TABLE public.agency_agents (
   name text NOT NULL,
   role text NOT NULL,
   icon text DEFAULT '🤖',
-  default_model text NOT NULL DEFAULT 'openrouter/owl-alpha',
+  default_model text NOT NULL DEFAULT 'nvidia/nemotron-3-ultra:free',
   system_prompt text NOT NULL DEFAULT '',
   allowed_creative_types text[] NOT NULL DEFAULT ARRAY[]::text[],
   is_active boolean NOT NULL DEFAULT true,
@@ -124,21 +124,21 @@ CREATE TRIGGER client_offer_training_set_updated_at
 
 
 -- =========================================================
--- Seed: 5 default agency agents (Owl Alpha as default model)
+-- Seed: 5 default agency agents (Nemotron 3 Ultra as default model)
 -- =========================================================
 INSERT INTO public.agency_agents (slug, name, role, icon, default_model, system_prompt, allowed_creative_types, sort_order) VALUES
-  ('media_buyer', 'Media Buyer', 'Plans, launches, and optimizes paid media across Meta. Owns budget, targeting, scaling, and kill decisions.', '📈', 'openrouter/owl-alpha',
+  ('media_buyer', 'Media Buyer', 'Plans, launches, and optimizes paid media across Meta. Owns budget, targeting, scaling, and kill decisions.', '📈', 'nvidia/nemotron-3-ultra:free',
    'You are the agency Media Buyer. You optimize spend, CPL, CPA, and ROAS across Meta. Use the Client Brain for voice/ICP and the Offer context for funnel + target CPA. Be specific, numeric, and decisive.',
    ARRAY['media_buying','reporting'], 10),
-  ('reporting', 'Reporting Analyst', 'Pulls metrics, explains trends, and writes weekly/monthly performance reports.', '📊', 'openrouter/owl-alpha',
+  ('reporting', 'Reporting Analyst', 'Pulls metrics, explains trends, and writes weekly/monthly performance reports.', '📊', 'nvidia/nemotron-3-ultra:free',
    'You are the agency Reporting Analyst. You read live metrics from the database and explain what changed, why, and what to do next. Always cite numbers and date ranges.',
    ARRAY['reporting'], 20),
-  ('static_ads', 'Static Ads Specialist', 'Designs and iterates static image ads — hooks, headlines, layouts, formats.', '🖼️', 'openrouter/owl-alpha',
+  ('static_ads', 'Static Ads Specialist', 'Designs and iterates static image ads — hooks, headlines, layouts, formats.', '🖼️', 'nvidia/nemotron-3-ultra:free',
    'You are the agency Static Ads Specialist. Use the Client Brain and Offer context to produce on-brand static creative concepts and direction. Reference past winning statics from training when available.',
    ARRAY['static','copy'], 30),
-  ('video_ads', 'Video Ads Specialist', 'Writes scripts, storyboards, and directs short-form video ads (Reels, UGC, VSLs).', '🎬', 'openrouter/owl-alpha',
+  ('video_ads', 'Video Ads Specialist', 'Writes scripts, storyboards, and directs short-form video ads (Reels, UGC, VSLs).', '🎬', 'nvidia/nemotron-3-ultra:free',
    'You are the agency Video Ads Specialist. Produce scripts and shot direction tuned to the offer. Reference past winning video ads from training. Default to 15s vertical unless told otherwise.',
    ARRAY['video','copy'], 40),
-  ('copywriter', 'Copywriter', 'Writes ad copy, hooks, headlines, captions, and long-form sales copy.', '✍️', 'openrouter/owl-alpha',
+  ('copywriter', 'Copywriter', 'Writes ad copy, hooks, headlines, captions, and long-form sales copy.', '✍️', 'nvidia/nemotron-3-ultra:free',
    'You are the agency Copywriter. Write in the Client Brain voice. Match the Offer''s positioning, CTAs, and compliance rules. Never use the word "guaranteed" for investment offers.',
    ARRAY['copy','static','video'], 50);

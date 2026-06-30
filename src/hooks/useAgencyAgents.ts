@@ -52,7 +52,7 @@ export type OfferTraining = {
 };
 
 export const AGENCY_AGENT_MODELS = [
-  { value: "openrouter/owl-alpha", label: "Owl Alpha (default)" },
+  { value: "nvidia/nemotron-3-ultra:free", label: "Nemotron 3 Ultra (default)" },
   { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
   { value: "openai/gpt-5", label: "GPT-5" },
   { value: "openai/gpt-5-mini", label: "GPT-5 Mini" },

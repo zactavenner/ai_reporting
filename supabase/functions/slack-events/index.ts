@@ -165,8 +165,8 @@ async function detectIntent(text: string, apiKey: string): Promise<{ action: str
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "openrouter/owl-alpha",
-        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+      model: "nvidia/nemotron-3-ultra:free",
+        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [
         {
           role: "system",
@@ -483,8 +483,8 @@ async function handleCreateTask(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "openrouter/owl-alpha",
-        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+          model: "nvidia/nemotron-3-ultra:free",
+        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
           messages: [
             {
               role: "system",
@@ -544,8 +544,8 @@ Clients: ${clientNames}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "openrouter/owl-alpha",
-        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+      model: "nvidia/nemotron-3-ultra:free",
+        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [
         {
           role: "system",

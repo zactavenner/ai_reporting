@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
     // 1) Refine the prompt with Lovable AI Gateway
     const refinePayload = {
-      model: "openrouter/owl-alpha",
+      model: "nvidia/nemotron-3-ultra:free",
       messages: [
         {
           role: "system",

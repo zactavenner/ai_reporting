@@ -37,11 +37,11 @@ export function AgencyAgentsManager({ clients }: Props) {
   const [propagating, setPropagating] = useState(false);
 
   const handlePropagate = async () => {
-    if (!confirm(`Push ${agents.length} master agents (with OWL Alpha) to all ${clients.length} clients? This will upsert per-client agent rows.`)) return;
+    if (!confirm(`Push ${agents.length} master agents (with Nemotron 3 Ultra) to all ${clients.length} clients? This will upsert per-client agent rows.`)) return;
     setPropagating(true);
     try {
       const { data, error } = await supabase.functions.invoke("propagate-agency-agents", {
-        body: { forceModel: "openrouter/owl-alpha" },
+        body: { forceModel: "nvidia/nemotron-3-ultra:free" },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || "Propagation failed");

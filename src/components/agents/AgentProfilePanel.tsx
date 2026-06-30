@@ -35,7 +35,7 @@ export function AgentProfilePanel({
   const update = useUpdateAgencyAgent();
   const [memory, setMemory] = useState(agent.memory_md || "");
   const [instructions, setInstructions] = useState(agent.instructions_md || "");
-  const [model, setModel] = useState(agent.default_model || "openrouter/owl-alpha");
+  const [model, setModel] = useState(agent.default_model || "nvidia/nemotron-3-ultra:free");
   const [editingMemory, setEditingMemory] = useState(false);
   const [editingInstr, setEditingInstr] = useState(false);
   const [editingIdentity, setEditingIdentity] = useState(false);
@@ -48,7 +48,7 @@ export function AgentProfilePanel({
   useEffect(() => {
     setMemory(agent.memory_md || "");
     setInstructions(agent.instructions_md || "");
-    setModel(agent.default_model || "openrouter/owl-alpha");
+    setModel(agent.default_model || "nvidia/nemotron-3-ultra:free");
     setNameDraft(agent.name);
     setIconDraft(agent.icon || "🤖");
     setRoleDraft(agent.role);
