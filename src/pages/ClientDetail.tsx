@@ -54,6 +54,7 @@ const ClientFolderTab = lazy(() => import('@/components/folder/ClientFolderTab')
 const ConnectionsTab = lazy(() => import('@/components/client/ConnectionsTab'));
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
+import { ClientOffersSection } from '@/components/offers/ClientOffersSection';
 import { useClient } from '@/hooks/useClients';
 import { useDailyMetrics, useFundedInvestors } from '@/hooks/useMetrics';
 import { useSourceAggregatedMetrics } from '@/hooks/useSourceMetrics';
@@ -544,6 +545,27 @@ export default function ClientDetail() {
                   </p>
                 </div>
                 <BrandGuideSection client={client} />
+                <div className="mt-8">
+                  <div className="mb-3">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                      Offers
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Offers, brand template, and files for this client. Edits here sync live with the AI Studio Offers panel and feed into every agent's context for {client.name}.
+                    </p>
+                  </div>
+                  <ClientOffersSection
+                    clientId={clientId}
+                    clientName={client.name}
+                    brandColors={(client as any)?.brand_colors ?? null}
+                    brandFonts={(client as any)?.brand_fonts ?? null}
+                    clientDescription={(client as any)?.description ?? null}
+                    websiteUrl={(client as any)?.website ?? null}
+                    industry={(client as any)?.industry ?? null}
+                    clientType={(client as any)?.client_type ?? null}
+                  />
+                </div>
                 <ClientTeamSection clientId={clientId} />
                 <div className="mt-10 pt-8 border-t border-border">
                   <div className="mb-4">
