@@ -19,6 +19,9 @@ import {
   Percent,
   Clock,
   Wallet,
+  ShieldAlert,
+  CheckCircle2,
+  Timer,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -402,7 +405,9 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   });
 
   const investorProfile = useMemo(() => {
-    const valid = (leadProfiles as any[]).filter(
+    // Pipeline value uses ALL leads (per spec), but disposition rollups use valid only.
+    const all = leadProfiles as any[];
+    const valid = all.filter(
       (l) => !l.is_spam && l.email && l.phone && Array.isArray(l.questions)
     );
     const rangeBuckets: Record<string, number> = {};
@@ -415,18 +420,17 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     const isTimelineQ = (q: string) =>
       /how soon|when.*plan|deploy.*capital|timeline|ready.*three months/i.test(q);
 
-    for (const lead of valid) {
+    // Pipeline sum across ALL leads with parseable answers
+    for (const lead of all) {
+      if (!Array.isArray(lead.questions)) continue;
       let leadLow = 0;
       for (const q of lead.questions as any[]) {
-        const question = String(q?.question || '');
         const answer = String(q?.answer || '').trim();
         if (!answer) continue;
+        const question = String(q?.question || '');
         if (isRangeQ(question)) {
-          rangeBuckets[answer] = (rangeBuckets[answer] || 0) + 1;
           const low = parseLowestDollar(answer);
           if (low > 0 && (leadLow === 0 || low < leadLow)) leadLow = low;
-        } else if (isTimelineQ(question)) {
-          timelineBuckets[answer] = (timelineBuckets[answer] || 0) + 1;
         }
       }
       if (leadLow > 0) {
@@ -435,16 +439,80 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       }
     }
 
+    for (const lead of valid) {
+      let leadLow = 0;
+      for (const q of lead.questions as any[]) {
+        const question = String(q?.question || '');
+        const answer = String(q?.answer || '').trim();
+        if (!answer) continue;
+        if (isRangeQ(question)) {
+          rangeBuckets[answer] = (rangeBuckets[answer] || 0) + 1;
+        } else if (isTimelineQ(question)) {
+          timelineBuckets[answer] = (timelineBuckets[answer] || 0) + 1;
+        }
+      }
+    }
+
     const topRange = Object.entries(rangeBuckets).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const topTimeline = Object.entries(timelineBuckets).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+    // Lead disposition rollup across ALL leads in range
+    const dispositionBuckets: Record<string, number> = {
+      Qualified: 0,
+      Spam: 0,
+      'Missing Contact': 0,
+    };
+    for (const l of all) {
+      if (l.is_spam) dispositionBuckets.Spam += 1;
+      else if (l.email && l.phone) dispositionBuckets.Qualified += 1;
+      else dispositionBuckets['Missing Contact'] += 1;
+    }
+    const dispositionEntries = Object.entries(dispositionBuckets)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+
     return {
       pipelineSum,
       pipelineCount,
       totalValid: valid.length,
+      totalLeads: all.length,
+      dispositionEntries,
       topRange,
       topTimeline,
     };
   }, [leadProfiles]);
+
+  // Time to Funded: avg days from discovery call booked → funded, per investor
+  const { data: timeToFund } = useQuery({
+    queryKey: ['time-to-fund', clientId, from, to],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('funded_investors')
+        .select('time_to_fund_days, funded_at, first_contact_at, calls_to_fund')
+        .eq('client_id', clientId)
+        .gte('funded_at', `${from}T00:00:00.000Z`)
+        .lte('funded_at', `${to}T23:59:59.999Z`)
+        .limit(5000);
+      if (error) throw error;
+      const rows = (data || []) as any[];
+      const days = rows
+        .map((r) => {
+          if (r.time_to_fund_days != null) return Number(r.time_to_fund_days);
+          if (r.funded_at && r.first_contact_at) {
+            return differenceInDays(new Date(r.funded_at), new Date(r.first_contact_at));
+          }
+          return null;
+        })
+        .filter((v): v is number => v != null && isFinite(v) && v >= 0);
+      const calls = rows.map((r) => Number(r.calls_to_fund || 0)).filter((v) => v > 0);
+      const avg = days.length ? days.reduce((a, b) => a + b, 0) / days.length : 0;
+      const median = days.length ? [...days].sort((a, b) => a - b)[Math.floor(days.length / 2)] : 0;
+      const avgCalls = calls.length ? calls.reduce((a, b) => a + b, 0) / calls.length : 0;
+      return { avg, median, avgCalls, count: days.length };
+    },
+    enabled: !!clientId,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const funnelData = useMemo(() => {
     if (!agg) return [];
@@ -581,7 +649,16 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       ) : agg ? (
         <>
           {/* Hero row — what a CEO cares about */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <KpiTile
+              label="Pipeline Value"
+              value={fmtMoneyFull(investorProfile.pipelineSum)}
+              sub={`${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads · lowest stated range`}
+              delta={null}
+              icon={Briefcase}
+              hero
+              accent="gold"
+            />
             <KpiTile
               label="Committed Capital"
               value={fmtMoneyFull(agg.commitmentDollars)}
@@ -610,13 +687,13 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
               invert
             />
             <KpiTile
-              label="Pipeline Value"
-              value={fmtMoneyFull(investorProfile.pipelineSum)}
-              sub={`Sum of ${fmtInt(investorProfile.pipelineCount)} stated minimums`}
-              delta={null}
-              icon={Briefcase}
+              label="Total Ad Spend"
+              value={fmtMoneyFull(agg.totalAdSpend)}
+              sub="In selected range"
+              delta={pctDelta(agg.totalAdSpend, aggPrior?.totalAdSpend ?? 0)}
+              icon={DollarSign}
               hero
-              accent="gold"
+              invert
             />
           </div>
 
@@ -652,6 +729,40 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       )}
 
       {/* Trend Analysis — separate dual-axis charts so spend doesn't dominate */}
+      {/* Time to Funded */}
+      <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+        <div className="flex items-end justify-between mb-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Investor Velocity</p>
+            <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Time to Funded</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Discovery call booked → funded, averaged across investors</p>
+          </div>
+          <Timer className="h-5 w-5 text-[hsl(40_45%_55%)]" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <RatioPill
+            label="Avg Days to Fund"
+            value={timeToFund && timeToFund.count > 0 ? `${timeToFund.avg.toFixed(1)} d` : '—'}
+            sub={timeToFund && timeToFund.count > 0 ? `${fmtInt(timeToFund.count)} funded investors` : 'No funded investors in range'}
+          />
+          <RatioPill
+            label="Median Days"
+            value={timeToFund && timeToFund.count > 0 ? `${fmtInt(timeToFund.median)} d` : '—'}
+            sub="Middle of the distribution"
+          />
+          <RatioPill
+            label="Avg Calls to Fund"
+            value={timeToFund && timeToFund.avgCalls > 0 ? timeToFund.avgCalls.toFixed(1) : '—'}
+            sub="Touchpoints per investor"
+          />
+          <RatioPill
+            label="Funded Investors"
+            value={fmtInt(agg?.fundedInvestors || 0)}
+            sub="In selected range"
+          />
+        </div>
+      </Card>
+
       <div>
         <div className="mb-3 flex items-end justify-between">
           <div>
@@ -669,7 +780,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       </div>
 
       {/* Funnel + Investor profile */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <Card className="p-5 lg:col-span-2 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
           <div className="mb-4">
             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Pipeline</p>
@@ -729,6 +840,22 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
             <ProfileBuckets title="Ideal Investment Range" icon={Wallet} entries={investorProfile.topRange} total={investorProfile.totalValid} />
             <ProfileBuckets title="Deployment Timeline" icon={Clock} entries={investorProfile.topTimeline} total={investorProfile.totalValid} />
+          </div>
+        </Card>
+
+        <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+          <div className="mb-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Lead Disposition</p>
+            <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Outcome Mix</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{fmtInt(investorProfile.totalLeads)} leads in range</p>
+          </div>
+          <div className="space-y-4">
+            <ProfileBuckets
+              title="Disposition"
+              icon={CheckCircle2}
+              entries={investorProfile.dispositionEntries}
+              total={investorProfile.totalLeads}
+            />
           </div>
         </Card>
       </div>
