@@ -109,6 +109,64 @@ async function fetchAllPages(url: string, accessToken: string, limit = 100, labe
   return all;
 }
 
+// ── Adaptive insights fetcher ──
+// Wraps an insights URL builder and auto-shrinks the date window when Meta
+// returns the "Please reduce the amount of data you're asking for" error
+// (code:1 / HTTP 500) or rate-limits us. Always respects the global call budget.
+async function fetchInsightsAdaptive(
+  builder: (since: string, until: string) => string,
+  accessToken: string,
+  startDate: string,
+  endDate: string,
+  label: string,
+  initialChunkDays = 14,
+  minChunkDays = 1,
+  pageLimit = 50,
+): Promise<any[]> {
+  const out: any[] = [];
+  const cursor = new Date(startDate);
+  const end = new Date(endDate);
+  let chunkDays = initialChunkDays;
+
+  while (cursor <= end) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + chunkDays - 1);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    const since = cursor.toISOString().split("T")[0];
+    const until = chunkEnd.toISOString().split("T")[0];
+
+    try {
+      const url = builder(since, until);
+      const rows = await fetchAllPages(url, accessToken, pageLimit, `${label} ${since}→${until}`);
+      out.push(...rows);
+      // success → advance cursor; gently grow back toward initial size
+      cursor.setUTCDate(cursor.getUTCDate() + chunkDays);
+      if (chunkDays < initialChunkDays) chunkDays = Math.min(initialChunkDays, chunkDays * 2);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTooMuch = /reduce the amount of data|code"?:\s*1\b|"code":1/i.test(msg);
+      const isRateLimit = /\(#(4|17|32|613|80000|80001|80002|80003|80004|80008|80014)\)|2446079/.test(msg);
+      if ((isTooMuch || isRateLimit) && chunkDays > minChunkDays) {
+        const next = Math.max(minChunkDays, Math.floor(chunkDays / 2));
+        console.warn(`[insights] ${label} ${since}→${until} hit ${isTooMuch ? "data cap" : "rate limit"}; shrinking ${chunkDays}d → ${next}d`);
+        chunkDays = next;
+        if (isRateLimit) await new Promise((r) => setTimeout(r, 3000));
+        continue; // retry same cursor with smaller chunk
+      }
+      console.warn(`[insights] ${label} ${since}→${until} failed, skipping chunk:`, msg.slice(0, 200));
+      cursor.setUTCDate(cursor.getUTCDate() + chunkDays); // skip & continue so one bad window doesn't kill the run
+    }
+  }
+  return out;
+}
+
+// Resolve a usable since/until pair (same defaults as getTimeRange) for the adaptive fetcher.
+function resolveDateRange(startDate?: string, endDate?: string, tz?: string): { since: string; until: string } {
+  const until = endDate || (tz ? getDateInTimezone(tz) : new Date().toISOString().split("T")[0]);
+  const since = startDate || (tz ? getDateInTimezone(tz, -30) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
+  return { since, until };
+}
+
 // ── Timezone helper with 24h cache ──
 const tzCache = new Map<string, { tz: string; fetchedAt: number }>();
 
