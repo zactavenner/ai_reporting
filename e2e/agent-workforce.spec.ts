@@ -307,3 +307,116 @@ test.describe("Agent Workforce v3 — persistence", () => {
     }
   });
 });
+
+test.describe("Agent Workforce v3 — effective config merge & scope isolation", () => {
+  let token: string;
+  let headers: Record<string, string>;
+  let agent: Agent;
+  let clientId: string;
+
+  test.beforeAll(async ({ request }) => {
+    token = getAccessToken();
+    headers = {
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    };
+
+    const agentsRes = await request.get(
+      `${SUPABASE_URL}/rest/v1/agency_agents?select=id,slug,name,default_model,fallback_models,connectors,memory_md,instructions_md&order=sort_order.asc&limit=1`,
+      { headers }
+    );
+    expect(agentsRes.status()).toBe(200);
+    const arr = await agentsRes.json();
+    expect(arr.length).toBeGreaterThan(0);
+    agent = arr[0];
+
+    const clientsRes = await request.get(
+      `${SUPABASE_URL}/rest/v1/clients?select=id&limit=1`,
+      { headers }
+    );
+    const clients = await clientsRes.json();
+    test.skip(!clients?.length, "no clients available for effective-config test");
+    clientId = clients[0].id;
+  });
+
+  test("editing master memory leaves the client override untouched", async ({ request }) => {
+    const stamp = `master-only-${Date.now()}`;
+    const overrideStamp = `client-only-${Date.now()}`;
+
+    // seed override
+    const seed = await request.post(`${SUPABASE_URL}/rest/v1/client_agent_overrides`, {
+      headers: { ...headers, Prefer: "return=representation,resolution=merge-duplicates" },
+      data: {
+        client_id: clientId,
+        agent_id: agent.id,
+        memory_md: overrideStamp,
+        instructions_md: `${overrideStamp}-instr`,
+      },
+    });
+    expect(seed.status()).toBeLessThan(300);
+
+    const original = { memory_md: agent.memory_md, instructions_md: agent.instructions_md };
+    const patch = await request.patch(
+      `${SUPABASE_URL}/rest/v1/agency_agents?id=eq.${agent.id}`,
+      { headers, data: { memory_md: stamp } }
+    );
+    expect(patch.status()).toBe(200);
+
+    const overrideAfter = await request.get(
+      `${SUPABASE_URL}/rest/v1/client_agent_overrides?client_id=eq.${clientId}&agent_id=eq.${agent.id}&select=memory_md,instructions_md`,
+      { headers }
+    );
+    const [row] = await overrideAfter.json();
+    expect(row.memory_md).toBe(overrideStamp);
+    expect(row.instructions_md).toBe(`${overrideStamp}-instr`);
+
+    // restore master & cleanup override
+    await request.patch(
+      `${SUPABASE_URL}/rest/v1/agency_agents?id=eq.${agent.id}`,
+      { headers, data: original }
+    );
+    await request.delete(
+      `${SUPABASE_URL}/rest/v1/client_agent_overrides?client_id=eq.${clientId}&agent_id=eq.${agent.id}`,
+      { headers }
+    );
+  });
+
+  test("effective memory = master + client addendum (UI merge contract)", async ({ request }) => {
+    const masterMemory = `MASTER-${Date.now()}`;
+    const clientMemory = `CLIENT-${Date.now()}`;
+    const original = { memory_md: agent.memory_md };
+
+    await request.patch(
+      `${SUPABASE_URL}/rest/v1/agency_agents?id=eq.${agent.id}`,
+      { headers, data: { memory_md: masterMemory } }
+    );
+    await request.post(`${SUPABASE_URL}/rest/v1/client_agent_overrides`, {
+      headers: { ...headers, Prefer: "return=representation,resolution=merge-duplicates" },
+      data: { client_id: clientId, agent_id: agent.id, memory_md: clientMemory, instructions_md: null },
+    });
+
+    const masterRes = await request.get(
+      `${SUPABASE_URL}/rest/v1/agency_agents?id=eq.${agent.id}&select=memory_md`,
+      { headers }
+    );
+    const overrideRes = await request.get(
+      `${SUPABASE_URL}/rest/v1/client_agent_overrides?client_id=eq.${clientId}&agent_id=eq.${agent.id}&select=memory_md`,
+      { headers }
+    );
+    const [m] = await masterRes.json();
+    const [o] = await overrideRes.json();
+    const effective = [m.memory_md, o.memory_md].filter(Boolean).join("\n\n");
+    expect(effective).toBe(`${masterMemory}\n\n${clientMemory}`);
+
+    await request.patch(
+      `${SUPABASE_URL}/rest/v1/agency_agents?id=eq.${agent.id}`,
+      { headers, data: original }
+    );
+    await request.delete(
+      `${SUPABASE_URL}/rest/v1/client_agent_overrides?client_id=eq.${clientId}&agent_id=eq.${agent.id}`,
+      { headers }
+    );
+  });
+});
