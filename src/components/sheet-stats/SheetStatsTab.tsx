@@ -723,13 +723,30 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
             </Card>
           )}
 
-          {/* Secondary KPI grid */}
+          {/* Secondary KPI grid — counts row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiTile label="Leads" value={fmtInt(agg.totalLeads)} delta={pctDelta(agg.totalLeads, aggPrior?.totalLeads ?? 0)} icon={Users} />
             <KpiTile label="Calls Booked" value={fmtInt(agg.totalCalls)} delta={pctDelta(agg.totalCalls, aggPrior?.totalCalls ?? 0)} icon={PhoneCall} />
             <KpiTile label="Shows" value={fmtInt(agg.showedCalls)} delta={pctDelta(agg.showedCalls, aggPrior?.showedCalls ?? 0)} icon={CalendarCheck} />
+            <KpiTile label="Committed Investors" value={fmtInt(agg.totalCommitments)} delta={pctDelta(agg.totalCommitments, aggPrior?.totalCommitments ?? 0)} icon={Handshake} />
+            <KpiTile label="Funded Investors" value={fmtInt(agg.fundedInvestors)} delta={pctDelta(agg.fundedInvestors, aggPrior?.fundedInvestors ?? 0)} icon={Banknote} />
+          </div>
+
+          {/* Secondary KPI grid — cost row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiTile label="Cost / Lead" value={fmtMoney(agg.costPerLead)} delta={pctDelta(agg.costPerLead, aggPrior?.costPerLead ?? 0)} invert />
             <KpiTile label="Cost / Booked" value={fmtMoney(agg.costPerCall)} delta={pctDelta(agg.costPerCall, aggPrior?.costPerCall ?? 0)} invert />
+            <KpiTile label="Cost / Show" value={fmtMoney(agg.costPerShow)} delta={pctDelta(agg.costPerShow, aggPrior?.costPerShow ?? 0)} invert />
+            <KpiTile
+              label="Cost / Committed"
+              value={fmtMoney(agg.totalCommitments > 0 ? agg.totalAdSpend / agg.totalCommitments : 0)}
+              delta={pctDelta(
+                agg.totalCommitments > 0 ? agg.totalAdSpend / agg.totalCommitments : 0,
+                aggPrior && aggPrior.totalCommitments > 0 ? aggPrior.totalAdSpend / aggPrior.totalCommitments : 0,
+              )}
+              invert
+            />
+            <KpiTile label="Cost / Funded" value={fmtMoney(agg.costPerInvestor)} delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)} invert />
           </div>
         </>
       ) : (
