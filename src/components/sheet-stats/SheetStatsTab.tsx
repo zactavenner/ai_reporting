@@ -712,6 +712,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         </div>
       </div>
 
+      <div ref={reportRef} className="space-y-6 bg-background p-1">
       {/* Hero KPIs */}
       {current.isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -961,6 +962,29 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           )}
         </div>
       )}
+      </div>
+
+      <SheetStatsReportDialog
+        open={reportDialogOpen}
+        onOpenChange={setReportDialogOpen}
+        clientId={clientId}
+        clientName={clientName}
+        rangeLabel={`${format(range.from, 'MMM d, yyyy')} – ${format(range.to, 'MMM d, yyyy')}`}
+        highlights={agg ? [
+          { label: 'Pipeline Value', value: fmtMoneyFull(investorProfile.pipelineSum), sub: `${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads` },
+          { label: 'Committed Capital', value: fmtMoneyFull(agg.commitmentDollars), sub: `${fmtInt(agg.totalCommitments)} committed` },
+          { label: 'Funded Capital', value: fmtMoneyFull(agg.fundedDollars), sub: `${fmtInt(agg.fundedInvestors)} funded` },
+          { label: 'Total Ad Spend', value: fmtMoneyFull(agg.totalAdSpend) },
+          { label: 'Cost of Capital', value: fmtPct(agg.costOfCapital, 2) },
+          { label: 'Cost / Funded', value: fmtMoney(agg.costPerInvestor) },
+          { label: 'Leads', value: fmtInt(agg.totalLeads) },
+          { label: 'Calls Booked', value: fmtInt(agg.totalCalls) },
+          { label: 'Shows', value: fmtInt(agg.showedCalls) },
+        ] : []}
+        initialRecipients={(settings as any)?.stats_report_recipients ?? []}
+        initialWeeklyEnabled={!!(settings as any)?.stats_report_weekly_enabled}
+        capturePdf={capturePdf}
+      />
     </div>
   );
 }
