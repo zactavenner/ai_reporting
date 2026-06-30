@@ -39,7 +39,12 @@ function isDenylistedTab(title: string): boolean {
 // Cache parsed daily metrics by sheet_id+gid for 90s so repeated requests
 // (current + prior period, multi-client dashboards) coalesce into one
 // upstream call and stay under Google's 60 req/min/user quota.
-const PARSED_TTL_MS = 90_000;
+// Fresh window: serve cached payload without touching upstream.
+const PARSED_TTL_MS = 5 * 60_000;
+// Stale window: if upstream errors (429 / 5xx), still serve cached payload
+// up to this age before failing the request. Prevents the dashboard from
+// going blank during Google Sheets rate-limit windows.
+const PARSED_STALE_TTL_MS = 30 * 60_000;
 const META_TTL_MS = 10 * 60_000;
 const parsedCache = new Map<string, { at: number; payload: any }>();
 const metaCache = new Map<string, { at: number; title: string }>();
@@ -778,7 +783,21 @@ Deno.serve(async (req) => {
         inflight.set(cacheKey, pending);
         pending.finally(() => inflight.delete(cacheKey));
       }
-      baseParsed = await pending;
+      try {
+        baseParsed = await pending;
+      } catch (err) {
+        // Upstream failed (often 429 from the Sheets gateway). If we still
+        // have a not-too-stale parsed payload cached, serve it instead of
+        // breaking the dashboard.
+        if (cached && now - cached.at < PARSED_STALE_TTL_MS) {
+          console.warn(
+            `[fetch-sheet-metrics] upstream failed, serving STALE cache (age=${Math.round((now - cached.at) / 1000)}s): ${err instanceof Error ? err.message : String(err)}`,
+          );
+          baseParsed = cached.payload;
+        } else {
+          throw err;
+        }
+      }
     }
 
     const sheetTitle = baseParsed!.sheetTitle;
