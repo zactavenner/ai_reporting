@@ -486,13 +486,16 @@ Deno.serve(async (req) => {
           const titlesToFetch = primaryAllowed
             ? [sheetTitle, ...extraTitles]
             : [...extraTitles];
+          // Fetch disposition tabs in the same batch but tag them so they
+          // skip daily-metric parsing and only feed the bucket scan.
+          const allTitles = [...titlesToFetch, ...dispositionTitles];
           if (!primaryAllowed) {
             tabsSkipped.push({ title: sheetTitle, reason: 'year/rollup tab — skipped' });
           }
           const fetched: { title: string; rows: any[][] }[] = [];
           const CHUNK = 8;
-          for (let i = 0; i < titlesToFetch.length; i += CHUNK) {
-            const batch = titlesToFetch.slice(i, i + CHUNK);
+          for (let i = 0; i < allTitles.length; i += CHUNK) {
+            const batch = allTitles.slice(i, i + CHUNK);
             const results = await Promise.all(batch.map(async (title) => {
               try {
                 const vr = await fetchWithRetry(
@@ -518,6 +521,10 @@ Deno.serve(async (req) => {
             }));
             fetched.push(...results);
           }
+
+          // Split: daily-metric parsing only consumes the non-disposition tabs.
+          const dispositionSet = new Set(dispositionTitles);
+          const fetchedForDaily = fetched.filter((f) => !dispositionSet.has(f.title));
 
           // 3. Parse each tab and merge daily metrics by date.
           // De-dupe strategy: take MAX per (date, metric) across tabs so that
