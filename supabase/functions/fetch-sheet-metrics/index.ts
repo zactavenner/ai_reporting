@@ -718,6 +718,50 @@ Deno.serve(async (req) => {
             }
           }
           const daily: DailyMetric[] = Object.values(mergedByDate).sort((a, b) => a.date.localeCompare(b.date));
+
+          // ---- Investor Profile / Lead Disposition row scan -----------------
+          // Walk lead-style and disposition-style tabs to extract per-lead
+          // {date, range, timeline, disposition} so the dashboard can bucket
+          // them by date range later. This is independent from KPI totals.
+          type LeadRow = { date: string | null; range: string | null; timeline: string | null; disposition: string | null };
+          const leadRows: LeadRow[] = [];
+          const scanForBuckets = (rows: any[][]) => {
+            if (!rows || rows.length < 2) return;
+            // Find the header row (first row containing a date-ish label).
+            let headerRowIdx = -1;
+            for (let i = 0; i < Math.min(5, rows.length); i++) {
+              const norm = (rows[i] || []).map((c) => normalize(String(c ?? '')));
+              if (norm.some((h) => /^(date|current date|created|submitted)/.test(h))) {
+                headerRowIdx = i; break;
+              }
+            }
+            if (headerRowIdx < 0) return;
+            const header = (rows[headerRowIdx] || []).map((c) => normalize(String(c ?? '')));
+            const dateCol = header.findIndex((h) => /^(date|current date|created|submitted)/.test(h));
+            const rangeCol = header.findIndex((h) =>
+              /investment\s*range|capital\s*to\s*deploy|ideal\s*investment|investable\s*capital|investment\s*amount/.test(h)
+            );
+            const timelineCol = header.findIndex((h) =>
+              /deployment\s*timeline|deploy\s*(your\s*)?capital|how\s*soon|time(line)?\s*to\s*deploy/.test(h)
+            );
+            const dispCol = header.findIndex((h) => /^(lead\s*)?disposition$|outcome|status/.test(h));
+            if (dateCol < 0 && rangeCol < 0 && timelineCol < 0 && dispCol < 0) return;
+            for (let i = headerRowIdx + 1; i < rows.length; i++) {
+              const row = rows[i] || [];
+              if (!row.length) continue;
+              const date = dateCol >= 0 ? parseDate(row[dateCol]) : null;
+              const range = rangeCol >= 0 ? canonicalRangeBucket(String(row[rangeCol] ?? '')) : null;
+              const timeline = timelineCol >= 0 ? canonicalTimelineBucket(String(row[timelineCol] ?? '')) : null;
+              const disposition = dispCol >= 0 ? canonicalDispositionBucket(String(row[dispCol] ?? '')) : null;
+              if (!date && !range && !timeline && !disposition) continue;
+              leadRows.push({ date, range, timeline, disposition });
+            }
+          };
+          for (const { title, rows } of fetched) {
+            const t = title.toLowerCase();
+            if (/lead/.test(t) || /disposition/.test(t)) scanForBuckets(rows);
+          }
+
           const payload = {
             sheetTitle, daily, layout,
             tabsScanned: titlesToFetch,
@@ -725,6 +769,7 @@ Deno.serve(async (req) => {
             tabsSkipped,
             partsByTab,
             pipelineValue: capitalToDeployMin || 0,
+            leadRows,
             fetchedAt: new Date().toISOString(),
           };
           parsedCache.set(cacheKey, { at: Date.now(), payload });
