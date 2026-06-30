@@ -356,6 +356,65 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   });
   const launchDate = clientMeta?.created_at ? new Date(clientMeta.created_at) : undefined;
 
+  // Client display name for emails / PDF filename
+  const { data: clientNameRow } = useQuery({
+    queryKey: ['client-name', clientId],
+    queryFn: async () => {
+      const { data } = await supabase.from('clients').select('name').eq('id', clientId).maybeSingle();
+      return data?.name as string | undefined;
+    },
+    enabled: !!clientId,
+    staleTime: 60 * 60 * 1000,
+  });
+  const clientName = clientNameRow || 'Client';
+
+  async function capturePdf(): Promise<{ base64: string; filename: string } | null> {
+    const node = reportRef.current;
+    if (!node) return null;
+    const [{ default: html2canvas }, jsPDFMod] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ]);
+    const jsPDF = (jsPDFMod as any).jsPDF || (jsPDFMod as any).default;
+    const canvas = await html2canvas(node, {
+      backgroundColor: '#ffffff',
+      scale: Math.min(2, window.devicePixelRatio || 1),
+      useCORS: true,
+      logging: false,
+    });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
+    const imgW = canvas.width * ratio;
+    const imgH = canvas.height * ratio;
+    pdf.addImage(imgData, 'PNG', (pageW - imgW) / 2, 20, imgW, imgH);
+    const base64 = pdf.output('datauristring').split(',')[1] || '';
+    const safeName = (clientName || 'client').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const filename = `${safeName}-stat-sheet-${format(range.from, 'yyyyMMdd')}-${format(range.to, 'yyyyMMdd')}.pdf`;
+    return { base64, filename };
+  }
+
+  async function handleDownloadPdf() {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const result = await capturePdf();
+      if (!result) throw new Error('Nothing to capture');
+      const link = document.createElement('a');
+      link.href = `data:application/pdf;base64,${result.base64}`;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'PDF failed', description: e?.message || String(e) });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   const range = preset === 'custom'
     ? { from: customRange.from ?? subDays(new Date(), 29), to: customRange.to ?? new Date() }
     : presetRange(preset, launchDate);
