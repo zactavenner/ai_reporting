@@ -1060,7 +1060,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         clientName={clientName}
         rangeLabel={`${format(range.from, 'MMM d, yyyy')} – ${format(range.to, 'MMM d, yyyy')}`}
         highlights={agg ? [
-          { label: 'Pipeline Value', value: fmtMoneyFull(investorProfile.pipelineSum), sub: `${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads` },
+          { label: 'Pipeline Value', value: fmtMoneyFull(effectivePipeline.value), sub: effectivePipeline.sub },
           { label: 'Committed Capital', value: fmtMoneyFull(agg.commitmentDollars), sub: `${fmtInt(agg.totalCommitments)} committed` },
           { label: 'Funded Capital', value: fmtMoneyFull(agg.fundedDollars), sub: `${fmtInt(agg.fundedInvestors)} funded` },
           { label: 'Total Ad Spend', value: fmtMoneyFull(agg.totalAdSpend) },
