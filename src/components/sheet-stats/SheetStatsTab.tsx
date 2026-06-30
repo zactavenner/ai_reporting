@@ -19,6 +19,9 @@ import {
   Percent,
   Clock,
   Wallet,
+  ShieldAlert,
+  CheckCircle2,
+  Timer,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
