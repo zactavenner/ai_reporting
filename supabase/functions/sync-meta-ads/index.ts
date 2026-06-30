@@ -109,6 +109,64 @@ async function fetchAllPages(url: string, accessToken: string, limit = 100, labe
   return all;
 }
 
+// ── Adaptive insights fetcher ──
+// Wraps an insights URL builder and auto-shrinks the date window when Meta
+// returns the "Please reduce the amount of data you're asking for" error
+// (code:1 / HTTP 500) or rate-limits us. Always respects the global call budget.
+async function fetchInsightsAdaptive(
+  builder: (since: string, until: string) => string,
+  accessToken: string,
+  startDate: string,
+  endDate: string,
+  label: string,
+  initialChunkDays = 14,
+  minChunkDays = 1,
+  pageLimit = 50,
+): Promise<any[]> {
+  const out: any[] = [];
+  const cursor = new Date(startDate);
+  const end = new Date(endDate);
+  let chunkDays = initialChunkDays;
+
+  while (cursor <= end) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + chunkDays - 1);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    const since = cursor.toISOString().split("T")[0];
+    const until = chunkEnd.toISOString().split("T")[0];
+
+    try {
+      const url = builder(since, until);
+      const rows = await fetchAllPages(url, accessToken, pageLimit, `${label} ${since}→${until}`);
+      out.push(...rows);
+      // success → advance cursor; gently grow back toward initial size
+      cursor.setUTCDate(cursor.getUTCDate() + chunkDays);
+      if (chunkDays < initialChunkDays) chunkDays = Math.min(initialChunkDays, chunkDays * 2);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTooMuch = /reduce the amount of data|code"?:\s*1\b|"code":1/i.test(msg);
+      const isRateLimit = /\(#(4|17|32|613|80000|80001|80002|80003|80004|80008|80014)\)|2446079/.test(msg);
+      if ((isTooMuch || isRateLimit) && chunkDays > minChunkDays) {
+        const next = Math.max(minChunkDays, Math.floor(chunkDays / 2));
+        console.warn(`[insights] ${label} ${since}→${until} hit ${isTooMuch ? "data cap" : "rate limit"}; shrinking ${chunkDays}d → ${next}d`);
+        chunkDays = next;
+        if (isRateLimit) await new Promise((r) => setTimeout(r, 3000));
+        continue; // retry same cursor with smaller chunk
+      }
+      console.warn(`[insights] ${label} ${since}→${until} failed, skipping chunk:`, msg.slice(0, 200));
+      cursor.setUTCDate(cursor.getUTCDate() + chunkDays); // skip & continue so one bad window doesn't kill the run
+    }
+  }
+  return out;
+}
+
+// Resolve a usable since/until pair (same defaults as getTimeRange) for the adaptive fetcher.
+function resolveDateRange(startDate?: string, endDate?: string, tz?: string): { since: string; until: string } {
+  const until = endDate || (tz ? getDateInTimezone(tz) : new Date().toISOString().split("T")[0]);
+  const since = startDate || (tz ? getDateInTimezone(tz, -30) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
+  return { since, until };
+}
+
 // ── Timezone helper with 24h cache ──
 const tzCache = new Map<string, { tz: string; fetchedAt: number }>();
 
@@ -758,10 +816,17 @@ Deno.serve(async (req) => {
       try {
         const dailyFields = "spend,impressions,clicks,ctr,actions,action_values,reach,frequency,date_start,date_stop";
         const attrWindows = encodeURIComponent('["7d_click","1d_view"]');
-        checkCallBudget("daily-insights");
-        const dailyInsights = await fetchAllPages(
-          `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${dailyFields}&${getTimeRange(startDate, endDate, accountTz)}&time_increment=1&level=account&action_attribution_windows=${attrWindows}`,
-          accessToken, 100, "daily-insights"
+        const dailyRange = resolveDateRange(startDate, endDate, accountTz);
+        const dailyInsights = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${dailyFields}` +
+            `&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=1&level=account&action_attribution_windows=${attrWindows}`,
+          accessToken,
+          dailyRange.since,
+          dailyRange.until,
+          "daily-insights",
+          14, 1, 100,
         );
         console.log(`Fetched ${dailyInsights.length} daily insight rows`);
 
@@ -998,10 +1063,17 @@ Deno.serve(async (req) => {
 
       try {
         const insightsFields = "campaign_id,impressions,clicks,spend,ctr,cpc,cpm,actions,action_values";
-        checkCallBudget("campaign-insights");
-        const insights = await fetchAllPages(
-          `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${insightsFields}&level=campaign&${getTimeRange(startDate, endDate, accountTz)}&time_increment=all_days&action_attribution_windows=${attrWindowsParam}`,
-          accessToken, 50, "campaign-insights"
+        const campRange = resolveDateRange(startDate, endDate, accountTz);
+        const insights = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=${insightsFields}` +
+            `&level=campaign&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=all_days&action_attribution_windows=${attrWindowsParam}`,
+          accessToken,
+          campRange.since,
+          campRange.until,
+          "campaign-insights",
+          14, 1, 50,
         );
         for (const ins of insights) {
           const m = extractMetaReported(ins.actions, ins.action_values);
@@ -1019,10 +1091,18 @@ Deno.serve(async (req) => {
           }).eq("client_id", clientId).eq("meta_campaign_id", ins.campaign_id);
         }
 
-        checkCallBudget("adset-insights");
-        const adSetInsights = await fetchAllPages(
-          `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=adset_id,impressions,clicks,spend,ctr,cpc,cpm,reach,frequency,actions,action_values&level=adset&${getTimeRange(startDate, endDate, accountTz)}&time_increment=all_days&action_attribution_windows=${attrWindowsParam}&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
-          accessToken, 50, "adset-insights"
+        const adsetRange = resolveDateRange(startDate, endDate, accountTz);
+        const adSetInsights = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=adset_id,impressions,clicks,spend,ctr,cpc,cpm,reach,frequency,actions,action_values` +
+            `&level=adset&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=all_days&action_attribution_windows=${attrWindowsParam}` +
+            `&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
+          accessToken,
+          adsetRange.since,
+          adsetRange.until,
+          "adset-insights",
+          7, 1, 50,
         );
         for (const ins of adSetInsights) {
           const m = extractMetaReported(ins.actions, ins.action_values);
@@ -1042,19 +1122,23 @@ Deno.serve(async (req) => {
           }).eq("client_id", clientId).eq("meta_adset_id", ins.adset_id);
         }
 
-        // Ad-level insights in 7-day chunks (now includes actions for Meta-reported conversions)
-        const adChunks = getDateChunks(startDate, endDate, 7, accountTz);
+        // Ad-level insights — adaptive 3-day chunks (shrinks further on data-cap errors)
+        const adRange = resolveDateRange(startDate, endDate, accountTz);
         const adSpendAccum = new Map<string, { spend: number; impressions: number; clicks: number; reach: number; leads: number; purchases: number; conversions: number; conversionValue: number }>();
 
-        for (const chunk of adChunks) {
-          checkCallBudget("ad-insights-chunk");
-          const chunkTimeRange = `time_range={"since":"${chunk.since}","until":"${chunk.until}"}`;
-          try {
-            const adInsights = await fetchAllPages(
-              `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=ad_id,impressions,clicks,spend,ctr,cpc,cpm,reach,actions,action_values&level=ad&${chunkTimeRange}&time_increment=all_days&action_attribution_windows=${attrWindowsParam}&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
-              accessToken, 50, `ad-insights ${chunk.since}-${chunk.until}`
-            );
-            for (const ins of adInsights) {
+        const adInsightsAll = await fetchInsightsAdaptive(
+          (since, until) =>
+            `${META_GRAPH_API_URL}/${adAccountId}/insights?fields=ad_id,impressions,clicks,spend,ctr,cpc,cpm,reach,actions,action_values` +
+            `&level=ad&time_range={"since":"${since}","until":"${until}"}` +
+            `&time_increment=all_days&action_attribution_windows=${attrWindowsParam}` +
+            `&filtering=[{"field":"spend","operator":"GREATER_THAN","value":"0"}]`,
+          accessToken,
+          adRange.since,
+          adRange.until,
+          "ad-insights",
+          3, 1, 50,
+        );
+        for (const ins of adInsightsAll) {
               const existing = adSpendAccum.get(ins.ad_id) || { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, purchases: 0, conversions: 0, conversionValue: 0 };
               existing.spend += Number(ins.spend) || 0;
               existing.impressions += Number(ins.impressions) || 0;
@@ -1066,11 +1150,6 @@ Deno.serve(async (req) => {
               existing.conversions += m.conversions;
               existing.conversionValue += m.conversionValue;
               adSpendAccum.set(ins.ad_id, existing);
-            }
-          } catch (chunkErr) {
-            console.warn(`Ad insights chunk ${chunk.since}-${chunk.until} failed:`, chunkErr);
-            break;
-          }
         }
 
         for (const [adId, stats] of adSpendAccum) {
