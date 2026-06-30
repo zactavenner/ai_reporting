@@ -72,7 +72,7 @@ type ChatVideo = {
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
 
 const CHAT_MODELS = [
-  { value: "openrouter/owl-alpha", label: "Owl Alpha (default)" },
+  { value: "nvidia/nemotron-3-ultra:free", label: "Nemotron 3 Ultra (default)" },
   { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
 ];
 
@@ -889,7 +889,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       const v = localStorage.getItem("ai-studio:chat-model");
       if (v && typeof v === "string") return v;
     } catch {}
-    return "openrouter/owl-alpha";
+    return "nvidia/nemotron-3-ultra:free";
   });
   useEffect(() => {
     try { localStorage.setItem("ai-studio:chat-model", chatModel); } catch {}
@@ -1414,7 +1414,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // We approximate tokens from char counts and price using public-ish per-1M rates.
   const usageStats = (() => {
     const RATES: Record<string, { in: number; out: number }> = {
-      "openrouter/owl-alpha": { in: 0, out: 0 },
+      "nvidia/nemotron-3-ultra:free": { in: 0, out: 0 },
       "google/gemini-2.5-pro": { in: 1.25, out: 5 },
       "google/gemini-3-flash-preview": { in: 0.3, out: 2.5 },
       "openai/gpt-5": { in: 1.25, out: 10 },

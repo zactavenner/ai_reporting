@@ -16,8 +16,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const JARVIS_MODEL = "openrouter/owl-alpha";
-const HERMES_MODEL = "openrouter/owl-alpha";
+const JARVIS_MODEL = "nvidia/nemotron-3-ultra:free";
+const HERMES_MODEL = "nvidia/nemotron-3-ultra:free";
 
 function j(b: unknown, s = 200) {
   return new Response(JSON.stringify(b), {

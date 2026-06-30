@@ -3,7 +3,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 
 export const MODEL_LIMITS: Record<string, number> = {
-  'openrouter/owl-alpha': 128_000,
+  'nvidia/nemotron-3-ultra:free': 128_000,
   'gemini-2.5-pro': 1_048_576,
   'gemini-3-pro': 1_048_576,
   'gemini-3-flash': 1_048_576,
@@ -13,7 +13,7 @@ export const MODEL_LIMITS: Record<string, number> = {
 };
 
 export const FULL_MODEL_OPTIONS = [
-  { value: 'openrouter/owl-alpha', label: 'Owl Alpha', context: '128K', badge: 'Free' },
+  { value: 'nvidia/nemotron-3-ultra:free', label: 'Nemotron 3 Ultra', context: '128K', badge: 'Free' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', context: '1M', badge: '1M' },
   { value: 'gemini-3-flash', label: 'Gemini 3 Flash', context: '1M', badge: 'Fast' },
   { value: 'gemini-3-pro', label: 'Gemini 3 Pro', context: '1M', badge: 'Pro' },

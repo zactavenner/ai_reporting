@@ -47,7 +47,7 @@ type Agent = {
   instructions_md: string | null;
 };
 
-const TEST_MODEL_A = "openrouter/owl-alpha";
+const TEST_MODEL_A = "nvidia/nemotron-3-ultra:free";
 const TEST_MODEL_B = "google/gemini-2.5-pro";
 const TEST_CONNECTOR = "seedance";
 

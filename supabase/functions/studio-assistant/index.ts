@@ -495,7 +495,7 @@ Deno.serve(async (req) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LOVABLE_API_KEY}` },
           body: JSON.stringify({
-            model: 'openrouter/owl-alpha',
+            model: 'nvidia/nemotron-3-ultra:free',
             messages: [
               { role: 'system', content: 'You compress chat history into a dense, factual running summary. Preserve: user goals, key facts, decisions, names/IDs, file references (mention which images/PDFs were shared and what they contained), pending actions, tool results. Output plain text, no preamble. Under 400 words.' },
               { role: 'user', content: `Previous summary:\n${runningSummary || '(none)'}\n\nNew transcript to fold in:\n${transcript}` },
@@ -545,8 +545,8 @@ Deno.serve(async (req) => {
           'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "openrouter/owl-alpha",
-        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+          model: "nvidia/nemotron-3-ultra:free",
+        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
           messages: convo,
           tools,
           tool_choice: 'auto',

@@ -74,7 +74,7 @@ Synthesize from the patterns visible across the examples. Be specific and prescr
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'openrouter/owl-alpha',
+        model: 'nvidia/nemotron-3-ultra:free',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },

@@ -130,7 +130,7 @@ const TOOLS = [
         icon: { type: 'string', description: 'Emoji icon for the agent' },
         prompt_template: { type: 'string', description: 'System prompt with {{client_name}}, {{date}}, {{yesterday}}, {{data}} variables' },
         schedule_cron: { type: 'string', description: 'Cron schedule e.g. "0 6 * * *"' },
-        model: { type: 'string', description: 'AI model e.g. "openrouter/owl-alpha"' },
+        model: { type: 'string', description: 'AI model e.g. "nvidia/nemotron-3-ultra:free"' },
         client_id: { type: 'string', description: 'Optional client UUID to scope to' },
         connectors: { type: 'array', items: { type: 'string' }, description: 'Data connectors: database, meta_ads, ghl_crm, slack' },
         enabled: { type: 'boolean', description: 'Whether the agent is enabled' },

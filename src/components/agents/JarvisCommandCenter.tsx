@@ -150,7 +150,7 @@ export function JarvisCommandCenter() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />Owl Alpha</Badge>
+          <Badge variant="outline" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />Nemotron 3 Ultra</Badge>
           <Button size="sm" variant="ghost" onClick={() => setShowInterAgent((s) => !s)}>
             {showInterAgent ? <><ChevronRight className="h-3.5 w-3.5 mr-1" />Hide Hermes feed</> : <><ChevronLeft className="h-3.5 w-3.5 mr-1" />Show Hermes feed</>}
           </Button>

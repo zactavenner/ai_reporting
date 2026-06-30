@@ -733,8 +733,8 @@ No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?
     method: "POST",
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "openrouter/owl-alpha",
-        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+      model: "nvidia/nemotron-3-ultra:free",
+        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages: [
         { role: "system", content: sys },
         { role: "user", content: opts.brief },
@@ -3155,7 +3155,7 @@ Deno.serve(async (req) => {
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
   }
 
-  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "openrouter/owl-alpha";
+  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "nvidia/nemotron-3-ultra:free";
 
   // Load selected avatar (if any) for system-prompt context + auto-injection into video tools
   let selectedAvatar: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null = null;
@@ -4085,7 +4085,7 @@ Deno.serve(async (req) => {
 
           // Run one LLM streaming pass. Returns { stepText, toolCallsAcc }.
           // Internal helper so we can retry with a fallback model when the
-          // primary returns nothing (which happens with owl-alpha on heavy
+          // primary returns nothing (which happens with nemotron-3-ultra on heavy
           // prompts + tool schemas — we'd otherwise silently save an empty
           // assistant message and the user sees nothing happen).
           const runStreamingStep = async (apiUrl: string, apiKey: string, modelId: string, useOR: boolean) => {
@@ -5325,8 +5325,8 @@ Deno.serve(async (req) => {
               method: "POST",
               headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
               body: JSON.stringify({
-                model: "openrouter/owl-alpha",
-        models: ["openrouter/owl-alpha", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+                model: "nvidia/nemotron-3-ultra:free",
+        models: ["nvidia/nemotron-3-ultra:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
                 messages: [
                   { role: "system", content: "Given the user's last request and the assistant's reply, propose 3 short, concrete next-step prompts the user is most likely to want next. Reply with ONLY a JSON array of 3 strings, max 70 chars each. No prose." },
                   { role: "user", content: `USER: ${(userText || "").slice(0, 800)}\n\nASSISTANT: ${cleaned.slice(0, 1500)}` },

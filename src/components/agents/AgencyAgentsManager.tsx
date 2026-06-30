@@ -41,7 +41,7 @@ export function AgencyAgentsManager({ clients }: Props) {
     setPropagating(true);
     try {
       const { data, error } = await supabase.functions.invoke("propagate-agency-agents", {
-        body: { forceModel: "openrouter/owl-alpha" },
+        body: { forceModel: "nvidia/nemotron-3-ultra:free" },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || "Propagation failed");
