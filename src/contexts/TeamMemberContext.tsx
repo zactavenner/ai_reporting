@@ -23,36 +23,77 @@ const SESSION_MEMBER_EMAIL = 'team_member_email';
 const SESSION_MEMBER_ROLE = 'team_member_role';
 const SESSION_DASHBOARD_TOKEN = 'dashboard_session_token';
 
+const normalizeMember = (member: TeamMember): TeamMember => ({
+  ...member,
+  role: (member.role || 'member').trim().toLowerCase(),
+});
+
+const persistMember = (member: TeamMember) => {
+  const normalized = normalizeMember(member);
+  localStorage.setItem(SESSION_MEMBER_ID, normalized.id);
+  localStorage.setItem(SESSION_MEMBER_NAME, normalized.name);
+  localStorage.setItem(SESSION_MEMBER_EMAIL, normalized.email);
+  localStorage.setItem(SESSION_MEMBER_ROLE, normalized.role);
+  return normalized;
+};
+
 export function TeamMemberProvider({ children }: { children: ReactNode }) {
   const [currentMember, setCurrentMember] = useState<TeamMember | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Restore session on mount
-    const storedId = localStorage.getItem(SESSION_MEMBER_ID);
-    const storedName = localStorage.getItem(SESSION_MEMBER_NAME);
-    const storedEmail = localStorage.getItem(SESSION_MEMBER_EMAIL);
-    const storedRole = localStorage.getItem(SESSION_MEMBER_ROLE);
-    
-    if (storedId && storedName && storedEmail) {
-      setCurrentMember({
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      const storedId = localStorage.getItem(SESSION_MEMBER_ID);
+      const storedName = localStorage.getItem(SESSION_MEMBER_NAME);
+      const storedEmail = localStorage.getItem(SESSION_MEMBER_EMAIL);
+      const storedRole = localStorage.getItem(SESSION_MEMBER_ROLE);
+
+      if (!storedId || !storedName || !storedEmail) {
+        if (!cancelled) setIsLoading(false);
+        return;
+      }
+
+      const storedMember = normalizeMember({
         id: storedId,
         name: storedName,
         email: storedEmail,
         role: storedRole || 'member',
       });
-    }
-    setIsLoading(false);
+
+      try {
+        const { data, error } = await supabase
+          .from('agency_members')
+          .select('id, name, email, role')
+          .eq('id', storedId)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (error || !data) {
+          setCurrentMember(storedMember);
+          return;
+        }
+
+        const freshMember = persistMember(data as TeamMember);
+        setCurrentMember(freshMember);
+      } catch (error) {
+        if (!cancelled) setCurrentMember(storedMember);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (member: TeamMember) => {
-    // Store in session
-    localStorage.setItem(SESSION_MEMBER_ID, member.id);
-    localStorage.setItem(SESSION_MEMBER_NAME, member.name);
-    localStorage.setItem(SESSION_MEMBER_EMAIL, member.email);
-    localStorage.setItem(SESSION_MEMBER_ROLE, member.role);
-    
-    setCurrentMember(member);
+    const normalizedMember = persistMember(member);
+    setCurrentMember(normalizedMember);
     
     // Update last_login_at in database
     await supabase
