@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { format, subDays, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, subYears, differenceInDays, parseISO } from 'date-fns';
 import {
   Calendar as CalendarIcon,
@@ -22,6 +22,9 @@ import {
   ShieldAlert,
   CheckCircle2,
   Timer,
+  Mail,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -48,6 +51,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { SheetStatsReportDialog, type StatHighlight } from './SheetStatsReportDialog';
+import { useToast } from '@/hooks/use-toast';
 
 function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } | null {
   if (!url) return null;
@@ -329,6 +334,11 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   const [preset, setPreset] = useState<Preset>('7d');
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
+  const { toast } = useToast();
+  const reportRef = useRef<HTMLDivElement | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
   // Launch date = client created_at
   const { data: clientMeta } = useQuery({
     queryKey: ['client-launch-date', clientId],
@@ -345,6 +355,65 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     staleTime: 60 * 60 * 1000,
   });
   const launchDate = clientMeta?.created_at ? new Date(clientMeta.created_at) : undefined;
+
+  // Client display name for emails / PDF filename
+  const { data: clientNameRow } = useQuery({
+    queryKey: ['client-name', clientId],
+    queryFn: async () => {
+      const { data } = await supabase.from('clients').select('name').eq('id', clientId).maybeSingle();
+      return data?.name as string | undefined;
+    },
+    enabled: !!clientId,
+    staleTime: 60 * 60 * 1000,
+  });
+  const clientName = clientNameRow || 'Client';
+
+  async function capturePdf(): Promise<{ base64: string; filename: string } | null> {
+    const node = reportRef.current;
+    if (!node) return null;
+    const [{ default: html2canvas }, jsPDFMod] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ]);
+    const jsPDF = (jsPDFMod as any).jsPDF || (jsPDFMod as any).default;
+    const canvas = await html2canvas(node, {
+      backgroundColor: '#ffffff',
+      scale: Math.min(2, window.devicePixelRatio || 1),
+      useCORS: true,
+      logging: false,
+    });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
+    const imgW = canvas.width * ratio;
+    const imgH = canvas.height * ratio;
+    pdf.addImage(imgData, 'PNG', (pageW - imgW) / 2, 20, imgW, imgH);
+    const base64 = pdf.output('datauristring').split(',')[1] || '';
+    const safeName = (clientName || 'client').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const filename = `${safeName}-stat-sheet-${format(range.from, 'yyyyMMdd')}-${format(range.to, 'yyyyMMdd')}.pdf`;
+    return { base64, filename };
+  }
+
+  async function handleDownloadPdf() {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const result = await capturePdf();
+      if (!result) throw new Error('Nothing to capture');
+      const link = document.createElement('a');
+      link.href = `data:application/pdf;base64,${result.base64}`;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'PDF failed', description: e?.message || String(e) });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   const range = preset === 'custom'
     ? { from: customRange.from ?? subDays(new Date(), 29), to: customRange.to ?? new Date() }
@@ -623,6 +692,13 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           </Popover>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Button size="sm" variant="outline" onClick={() => setReportDialogOpen(true)} className="gap-1.5">
+            <Mail className="h-3.5 w-3.5" /> Email report
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => handleDownloadPdf()} disabled={downloadingPdf} className="gap-1.5">
+            {downloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+            Download PDF
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => { current.refetch(); prior.refetch(); }} disabled={current.isFetching}>
             <RefreshCw className={cn('h-3 w-3', current.isFetching && 'animate-spin')} />
           </Button>
@@ -636,6 +712,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         </div>
       </div>
 
+      <div ref={reportRef} className="space-y-6 bg-background p-1">
       {/* Hero KPIs */}
       {current.isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -713,13 +790,30 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
             </Card>
           )}
 
-          {/* Secondary KPI grid */}
+          {/* Secondary KPI grid — counts row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiTile label="Leads" value={fmtInt(agg.totalLeads)} delta={pctDelta(agg.totalLeads, aggPrior?.totalLeads ?? 0)} icon={Users} />
             <KpiTile label="Calls Booked" value={fmtInt(agg.totalCalls)} delta={pctDelta(agg.totalCalls, aggPrior?.totalCalls ?? 0)} icon={PhoneCall} />
             <KpiTile label="Shows" value={fmtInt(agg.showedCalls)} delta={pctDelta(agg.showedCalls, aggPrior?.showedCalls ?? 0)} icon={CalendarCheck} />
+            <KpiTile label="Committed Investors" value={fmtInt(agg.totalCommitments)} delta={pctDelta(agg.totalCommitments, aggPrior?.totalCommitments ?? 0)} icon={Handshake} />
+            <KpiTile label="Funded Investors" value={fmtInt(agg.fundedInvestors)} delta={pctDelta(agg.fundedInvestors, aggPrior?.fundedInvestors ?? 0)} icon={Banknote} />
+          </div>
+
+          {/* Secondary KPI grid — cost row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiTile label="Cost / Lead" value={fmtMoney(agg.costPerLead)} delta={pctDelta(agg.costPerLead, aggPrior?.costPerLead ?? 0)} invert />
             <KpiTile label="Cost / Booked" value={fmtMoney(agg.costPerCall)} delta={pctDelta(agg.costPerCall, aggPrior?.costPerCall ?? 0)} invert />
+            <KpiTile label="Cost / Show" value={fmtMoney(agg.costPerShow)} delta={pctDelta(agg.costPerShow, aggPrior?.costPerShow ?? 0)} invert />
+            <KpiTile
+              label="Cost / Committed"
+              value={fmtMoney(agg.totalCommitments > 0 ? agg.totalAdSpend / agg.totalCommitments : 0)}
+              delta={pctDelta(
+                agg.totalCommitments > 0 ? agg.totalAdSpend / agg.totalCommitments : 0,
+                aggPrior && aggPrior.totalCommitments > 0 ? aggPrior.totalAdSpend / aggPrior.totalCommitments : 0,
+              )}
+              invert
+            />
+            <KpiTile label="Cost / Funded" value={fmtMoney(agg.costPerInvestor)} delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)} invert />
           </div>
         </>
       ) : (
@@ -728,32 +822,21 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         </Card>
       )}
 
-      {/* Trend Analysis — separate dual-axis charts so spend doesn't dominate */}
-      {/* Time to Funded */}
+      {/* Time to Funded — single number: first booked call → funded */}
       <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
         <div className="flex items-end justify-between mb-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Investor Velocity</p>
             <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Time to Funded</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Discovery call booked → funded, averaged across investors</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Average days from first booked call to funded</p>
           </div>
           <Timer className="h-5 w-5 text-[hsl(40_45%_55%)]" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <RatioPill
-            label="Avg Days to Fund"
+            label="First Booked Call → Funded"
             value={timeToFund && timeToFund.count > 0 ? `${timeToFund.avg.toFixed(1)} d` : '—'}
-            sub={timeToFund && timeToFund.count > 0 ? `${fmtInt(timeToFund.count)} funded investors` : 'No funded investors in range'}
-          />
-          <RatioPill
-            label="Median Days"
-            value={timeToFund && timeToFund.count > 0 ? `${fmtInt(timeToFund.median)} d` : '—'}
-            sub="Middle of the distribution"
-          />
-          <RatioPill
-            label="Avg Calls to Fund"
-            value={timeToFund && timeToFund.avgCalls > 0 ? timeToFund.avgCalls.toFixed(1) : '—'}
-            sub="Touchpoints per investor"
+            sub={timeToFund && timeToFund.count > 0 ? `Average across ${fmtInt(timeToFund.count)} funded investor${timeToFund.count === 1 ? '' : 's'}` : 'No funded investors in range'}
           />
           <RatioPill
             label="Funded Investors"
@@ -879,6 +962,29 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           )}
         </div>
       )}
+      </div>
+
+      <SheetStatsReportDialog
+        open={reportDialogOpen}
+        onOpenChange={setReportDialogOpen}
+        clientId={clientId}
+        clientName={clientName}
+        rangeLabel={`${format(range.from, 'MMM d, yyyy')} – ${format(range.to, 'MMM d, yyyy')}`}
+        highlights={agg ? [
+          { label: 'Pipeline Value', value: fmtMoneyFull(investorProfile.pipelineSum), sub: `${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads` },
+          { label: 'Committed Capital', value: fmtMoneyFull(agg.commitmentDollars), sub: `${fmtInt(agg.totalCommitments)} committed` },
+          { label: 'Funded Capital', value: fmtMoneyFull(agg.fundedDollars), sub: `${fmtInt(agg.fundedInvestors)} funded` },
+          { label: 'Total Ad Spend', value: fmtMoneyFull(agg.totalAdSpend) },
+          { label: 'Cost of Capital', value: fmtPct(agg.costOfCapital, 2) },
+          { label: 'Cost / Funded', value: fmtMoney(agg.costPerInvestor) },
+          { label: 'Leads', value: fmtInt(agg.totalLeads) },
+          { label: 'Calls Booked', value: fmtInt(agg.totalCalls) },
+          { label: 'Shows', value: fmtInt(agg.showedCalls) },
+        ] : []}
+        initialRecipients={(settings as any)?.stats_report_recipients ?? []}
+        initialWeeklyEnabled={!!(settings as any)?.stats_report_weekly_enabled}
+        capturePdf={capturePdf}
+      />
     </div>
   );
 }

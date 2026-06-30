@@ -56,6 +56,9 @@ export interface ClientSettings {
   stripe_last_sync_customer_id?: string | null;
   stripe_last_sync_total_paid?: number | null;
   stripe_last_sync_mrr?: number | null;
+  // Stat sheet weekly report
+  stats_report_recipients?: string[] | null;
+  stats_report_weekly_enabled?: boolean | null;
 }
 
 export interface KPIThresholds {

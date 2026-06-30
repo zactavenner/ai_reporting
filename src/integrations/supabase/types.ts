@@ -4870,6 +4870,8 @@ export type Database = {
           retargetiq_website_slug: string | null
           slack_channel_id: string | null
           slack_review_channel_id: string | null
+          stats_report_recipients: string[] | null
+          stats_report_weekly_enabled: boolean | null
           stripe_customer_id: string | null
           stripe_email: string | null
           stripe_last_sync_at: string | null
@@ -4964,6 +4966,8 @@ export type Database = {
           retargetiq_website_slug?: string | null
           slack_channel_id?: string | null
           slack_review_channel_id?: string | null
+          stats_report_recipients?: string[] | null
+          stats_report_weekly_enabled?: boolean | null
           stripe_customer_id?: string | null
           stripe_email?: string | null
           stripe_last_sync_at?: string | null
@@ -5058,6 +5062,8 @@ export type Database = {
           retargetiq_website_slug?: string | null
           slack_channel_id?: string | null
           slack_review_channel_id?: string | null
+          stats_report_recipients?: string[] | null
+          stats_report_weekly_enabled?: boolean | null
           stripe_customer_id?: string | null
           stripe_email?: string | null
           stripe_last_sync_at?: string | null
