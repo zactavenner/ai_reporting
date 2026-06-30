@@ -126,6 +126,36 @@ function normalize(s: string): string {
   return (s || '').toString().trim().toLowerCase().replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ');
 }
 
+// Bucket a free-text investment-range string into a canonical label so the
+// dashboard's "Ideal Investment Range" chart aggregates cleanly across tabs.
+function canonicalRangeBucket(raw: string): string | null {
+  const s = (raw || '').toString().trim();
+  if (!s) return null;
+  const t = s.toLowerCase().replace(/\s+/g, ' ');
+  if (/(^|\b)(n\/?a|none|tbd|unknown|—|-)$/.test(t)) return null;
+  // If the cell already looks like a labeled bucket ("$50,000 - $100,000",
+  // "$1M+"), keep it verbatim — sheet owners curate these labels.
+  if (/\$|\bk\b|\bm\b/i.test(s)) return s;
+  // Bare number → coerce to a $-prefixed label so it groups with the rest.
+  const n = parseFloat(s.replace(/[,\s]/g, ''));
+  if (Number.isFinite(n) && n > 0) return `$${n.toLocaleString()}`;
+  return s;
+}
+
+function canonicalTimelineBucket(raw: string): string | null {
+  const s = (raw || '').toString().trim();
+  if (!s) return null;
+  const t = s.toLowerCase();
+  if (/(^|\b)(n\/?a|none|tbd|unknown|—|-)$/.test(t)) return null;
+  return s;
+}
+
+function canonicalDispositionBucket(raw: string): string | null {
+  const s = (raw || '').toString().trim();
+  if (!s) return null;
+  return s;
+}
+
 function parseNumber(v: any): number {
   if (v === null || v === undefined || v === '') return 0;
   if (typeof v === 'number') return v;
