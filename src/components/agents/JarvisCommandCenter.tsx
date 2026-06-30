@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sparkles, Send, Plus, MessageSquare, Trash2, Bot, Zap, ChevronRight, ChevronLeft } from "lucide-react";
+import { Sparkles, Send, Plus, MessageSquare, Trash2, Bot, Zap, ChevronRight, ChevronLeft, Mic } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { JarvisVoiceMode } from "./JarvisVoiceMode";
 
 type Conversation = { id: string; title: string; updated_at: string };
 type Msg = {
@@ -60,6 +61,7 @@ export function JarvisCommandCenter() {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [showInterAgent, setShowInterAgent] = useState(true);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -151,6 +153,13 @@ export function JarvisCommandCenter() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />Nemotron 3 Ultra</Badge>
+          <Button
+            size="sm"
+            onClick={() => setVoiceOpen(true)}
+            className="h-7 gap-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-[0_0_18px_rgba(34,211,238,0.45)]"
+          >
+            <Mic className="h-3.5 w-3.5" /> Voice mode
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setShowInterAgent((s) => !s)}>
             {showInterAgent ? <><ChevronRight className="h-3.5 w-3.5 mr-1" />Hide Hermes feed</> : <><ChevronLeft className="h-3.5 w-3.5 mr-1" />Show Hermes feed</>}
           </Button>
@@ -299,6 +308,16 @@ export function JarvisCommandCenter() {
           </aside>
         )}
       </div>
+      <JarvisVoiceMode
+        open={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        conversationId={activeId}
+        onConversationCreated={(id) => {
+          setActiveId(id);
+          qc.invalidateQueries({ queryKey: ["jarvis_conversations"] });
+          qc.invalidateQueries({ queryKey: ["jarvis_messages", id] });
+        }}
+      />
     </Card>
   );
 }
