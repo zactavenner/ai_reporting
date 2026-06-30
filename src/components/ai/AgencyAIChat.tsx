@@ -32,7 +32,7 @@ import { useMeetings } from '@/hooks/useMeetings';
 import { TokenUsageBar, FULL_MODEL_OPTIONS, MODEL_LIMITS } from './TokenUsageBar';
 import ReactMarkdown from 'react-markdown';
 
-type AIModel = 'nvidia/nemotron-3-ultra:free' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5';
+type AIModel = 'nvidia/nemotron-3-ultra-550b-a55b:free' | 'gemini-2.5-pro' | 'gemini-3-flash' | 'gemini-3-pro' | 'gpt-5';
 
 interface AgencyAIChatProps {
   clients: Client[];
@@ -41,7 +41,7 @@ interface AgencyAIChatProps {
 }
 
 const modelLabels: Record<AIModel, string> = {
-  'nvidia/nemotron-3-ultra:free': 'Nemotron 3 Ultra',
+  'nvidia/nemotron-3-ultra-550b-a55b:free': 'Nemotron 3 Ultra',
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
   'gemini-3-flash': 'Gemini 3 Flash',
   'gemini-3-pro': 'Gemini 3 Pro',
@@ -65,7 +65,7 @@ const clientQuickQuestions = [
 export function AgencyAIChat({ clients, clientMetrics, agencyMetrics }: AgencyAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [model, setModel] = useState<AIModel>('nvidia/nemotron-3-ultra:free');
+  const [model, setModel] = useState<AIModel>('nvidia/nemotron-3-ultra-550b-a55b:free');
   const [isRecording, setIsRecording] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);

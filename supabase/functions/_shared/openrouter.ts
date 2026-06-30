@@ -14,7 +14,7 @@ export type ORMessage = {
 
 // Default fallback chains. Listed best-quality first; auto-falls back on 429/402/5xx/timeouts.
 export const TEXT_MODELS = [
-  "nvidia/nemotron-3-ultra:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
   "google/gemini-2.0-flash-001",
   "openai/gpt-4o-mini",
 ];

@@ -21,7 +21,7 @@ export type VideoAspectRatio = '16:9' | '9:16';
 export type OutputFormat = 'png' | 'jpg';
 export type VideoDuration = 4 | 6 | 8;
 export type CameraMotion = 'none' | 'pan-left' | 'pan-right' | 'zoom-in' | 'zoom-out' | 'orbit';
-export type PromptModel = 'nvidia/nemotron-3-ultra:free' | 'gpt-5-mini' | 'gpt-5' | 'gemini-2.5-flash';
+export type PromptModel = 'nvidia/nemotron-3-ultra-550b-a55b:free' | 'gpt-5-mini' | 'gpt-5' | 'gemini-2.5-flash';
 export type VideoModel = 'veo3' | 'grok';
 export type TransitionType = 'cut' | 'crossfade' | 'wipe-left' | 'wipe-right' | 'zoom-in' | 'zoom-out';
 export type CombineMode = 'blend' | 'replace-background' | 'side-by-side' | 'overlay';
@@ -234,7 +234,7 @@ export const createVideoGeneratorData = (): VideoGeneratorData => ({
 export const createPromptGeneratorData = (): PromptGeneratorData => ({
   label: 'Prompt Generator',
   status: 'idle',
-  model: 'nvidia/nemotron-3-ultra:free',
+  model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
   context: '',
   inputPrompt: '',
 });

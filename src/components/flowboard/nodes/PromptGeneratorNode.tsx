@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 type PromptGeneratorNodeProps = NodeProps<PromptGeneratorNodeType>;
 
 const MODELS: { value: PromptModel; label: string }[] = [
-  { value: 'nvidia/nemotron-3-ultra:free', label: 'Nemotron 3 Ultra' },
+  { value: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra' },
   { value: 'gpt-5-mini', label: 'GPT 5 Mini' },
   { value: 'gpt-5', label: 'GPT 5' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },

@@ -79,7 +79,7 @@ async function callGateway(messages: any[]) {
     },
     body: JSON.stringify({
       model: 'google/gemini-2.5-pro',
-        models: ['nvidia/nemotron-3-ultra:free', 'google/gemini-2.5-pro', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+        models: ['nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemini-2.5-pro', "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
       messages,
       response_format: { type: 'json_object' },
     }),

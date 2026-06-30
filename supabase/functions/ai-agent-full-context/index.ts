@@ -9,9 +9,9 @@ const corsHeaders = {
 };
 
 const MODEL_MAP: Record<string, string> = {
-  "gemini-2.5-pro": "nvidia/nemotron-3-ultra:free",
+  "gemini-2.5-pro": "nvidia/nemotron-3-ultra-550b-a55b:free",
   "gemini-3-pro": "google/gemini-3-pro-preview",
-  "gemini-3-flash": "nvidia/nemotron-3-ultra:free",
+  "gemini-3-flash": "nvidia/nemotron-3-ultra-550b-a55b:free",
   "gpt-5": "openai/gpt-5",
   "grok": "xai-grok",  // handled separately
   "grok-4-reasoning": "xai-grok-4-reasoning",  // handled separately

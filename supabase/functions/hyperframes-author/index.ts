@@ -68,7 +68,7 @@ Rules:
         "X-Title": "Hyperframes Author",
       },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-ultra:free",
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
         messages: [
           { role: "system", content: sys },
           { role: "user", content: userMsg },

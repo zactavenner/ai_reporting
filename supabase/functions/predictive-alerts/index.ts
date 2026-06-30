@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
         body: JSON.stringify({
-          model: "nvidia/nemotron-3-ultra:free",
+          model: "nvidia/nemotron-3-ultra-550b-a55b:free",
           messages: [
             { role: 'system', content: 'You are an investment marketing analyst. Be terse and executive.' },
             { role: 'user', content: `Summarize these predictive risks in 4 bullet points for the CEO:\n${JSON.stringify(alerts, null, 2)}` },

@@ -44,7 +44,7 @@ Return: { "recommendations": [ { "campaign_id": "...", "name": "...", "current_d
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-ultra:free",
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
       }),

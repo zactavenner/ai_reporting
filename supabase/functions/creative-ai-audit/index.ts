@@ -16,7 +16,7 @@ async function callAI(apiKey: string, prompt: string, options?: { temperature?: 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: options?.model || "nvidia/nemotron-3-ultra:free",
+      model: options?.model || "nvidia/nemotron-3-ultra-550b-a55b:free",
       messages: [{ role: "user", content: prompt }],
       temperature: options?.temperature ?? 0.3,
       max_tokens: options?.maxTokens ?? 4096,

@@ -42,7 +42,7 @@ export function ScriptStep() {
       const prompt = buildScriptPrompt(deal);
 
       const { data, error } = await supabase.functions.invoke('generate-ad-script', {
-        body: { prompt, model: 'nvidia/nemotron-3-ultra:free' },
+        body: { prompt, model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
       });
 
       if (error) throw error;

@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
     // 1) Refine the prompt with Lovable AI Gateway
     const refinePayload = {
-      model: "nvidia/nemotron-3-ultra:free",
+      model: "nvidia/nemotron-3-ultra-550b-a55b:free",
       messages: [
         {
           role: "system",

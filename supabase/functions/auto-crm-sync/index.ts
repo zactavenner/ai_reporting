@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
         body: JSON.stringify({
-          model: "nvidia/nemotron-3-ultra:free",
+          model: "nvidia/nemotron-3-ultra-550b-a55b:free",
           messages: [{ role: 'user', content: `Summarize this sales call into a CRM note (≤120 words). Include: pain points, objections, next step, urgency level (low/med/high). Plain text.\n\nTranscript:\n${(c.transcript || c.summary || '').slice(0, 12000)}` }],
         }),
       });

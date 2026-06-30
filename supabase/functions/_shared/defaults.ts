@@ -1,12 +1,12 @@
 // Wave C #11: single source of truth for default chat / image / video models.
-// Edge functions previously hard-coded "nvidia/nemotron-3-ultra:free" in 30+ places;
+// Edge functions previously hard-coded "nvidia/nemotron-3-ultra-550b-a55b:free" in 30+ places;
 // now they call getAgencyDefaults() and read the live values from
 // public.agency_settings. The constants below are last-resort fallbacks used
 // when the row is missing or the lookup fails (e.g. during boot).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-export const FALLBACK_CHAT_MODEL = "nvidia/nemotron-3-ultra:free";
+export const FALLBACK_CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 export const FALLBACK_IMAGE_MODEL = "google/gemini-3.1-flash-image";
 export const FALLBACK_VIDEO_MODEL = "bytedance/seedance-2.0-fast";
 
