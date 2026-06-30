@@ -780,7 +780,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       </div>
 
       {/* Funnel + Investor profile */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <Card className="p-5 lg:col-span-2 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
           <div className="mb-4">
             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Pipeline</p>
@@ -840,6 +840,22 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
             <ProfileBuckets title="Ideal Investment Range" icon={Wallet} entries={investorProfile.topRange} total={investorProfile.totalValid} />
             <ProfileBuckets title="Deployment Timeline" icon={Clock} entries={investorProfile.topTimeline} total={investorProfile.totalValid} />
+          </div>
+        </Card>
+
+        <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+          <div className="mb-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Lead Disposition</p>
+            <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Outcome Mix</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{fmtInt(investorProfile.totalLeads)} leads in range</p>
+          </div>
+          <div className="space-y-4">
+            <ProfileBuckets
+              title="Disposition"
+              icon={CheckCircle2}
+              entries={investorProfile.dispositionEntries}
+              total={investorProfile.totalLeads}
+            />
           </div>
         </Card>
       </div>
