@@ -616,6 +616,30 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
     };
   }, [leadProfiles]);
 
+  // Effective pipeline value — falls back to the Google Sheet's "Capital to
+  // Deploy" per-lead lowest * leads-in-range when the DB has no per-lead
+  // questions data (typical for sheet-only clients like InjuryPro Capital).
+  const sheetPerLeadLow = Number((current.data as any)?.pipelineValue || (agg as any)?.pipelineValue || 0);
+  const effectivePipeline = useMemo(() => {
+    if (investorProfile.pipelineSum > 0) {
+      return {
+        value: investorProfile.pipelineSum,
+        sub: `${fmtInt(investorProfile.pipelineCount)} of ${fmtInt(investorProfile.totalLeads)} leads · lowest stated range`,
+      };
+    }
+    const leadsInRange = agg?.totalLeads || 0;
+    if (sheetPerLeadLow > 0 && leadsInRange > 0) {
+      return {
+        value: sheetPerLeadLow * leadsInRange,
+        sub: `${fmtInt(leadsInRange)} leads × ${fmtMoneyFull(sheetPerLeadLow)} lowest stated range`,
+      };
+    }
+    return {
+      value: 0,
+      sub: `${fmtInt(leadsInRange)} leads · no stated range yet`,
+    };
+  }, [investorProfile, sheetPerLeadLow, agg?.totalLeads]);
+
   // Time to Funded: avg days from discovery call booked → funded, per investor
   const { data: timeToFund } = useQuery({
     queryKey: ['time-to-fund', clientId, from, to],
