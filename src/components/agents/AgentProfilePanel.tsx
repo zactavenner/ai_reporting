@@ -62,6 +62,19 @@ export function AgentProfilePanel({
   const { data: brain } = useClientBrain(isClientView ? clientId : null);
   const upsertBrain = useUpsertClientBrain();
   const { data: offers = [] } = useClientOffers(isClientView ? clientId! : "");
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!isClientView || !clientId) return;
+    const ch = supabase
+      .channel(`offers-sync:${clientId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "client_offers", filter: `client_id=eq.${clientId}` },
+        () => qc.invalidateQueries({ queryKey: ["client-offers", clientId] }),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [isClientView, clientId, qc]);
   const { data: clientOverride } = useClientAgentOverride(isClientView ? clientId : null, isClientView ? agent.id : null);
   const upsertOverride = useUpsertClientAgentOverride();
   const [clientMemory, setClientMemory] = useState("");
