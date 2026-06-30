@@ -1,4 +1,4 @@
-import { test, expect } from "../playwright-fixture";
+import { test, expect } from "@playwright/test";
 
 /**
  * Agent Workforce v3 — end-to-end persistence tests.
