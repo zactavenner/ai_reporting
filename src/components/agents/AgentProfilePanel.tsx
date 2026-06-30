@@ -306,13 +306,16 @@ export function AgentProfilePanel({
             <Separator />
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                Client offers ({offers.length})
+                Client offers ({offers.length}) <span className="font-normal normal-case text-muted-foreground">· auto-synced into agent context</span>
               </p>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
+              <div className="space-y-1 max-h-56 overflow-y-auto">
                 {offers.length === 0 && <p className="text-[11px] text-muted-foreground">No offers for this client yet.</p>}
                 {offers.map((o: any) => (
-                  <div key={o.id} className="text-[11px] px-2 py-1 rounded bg-muted/40 truncate">
-                    {o.name || o.title || "Untitled offer"}
+                  <div key={o.id} className="text-[11px] px-2 py-1 rounded bg-muted/40">
+                    <p className="font-medium truncate">{o.title || o.name || "Untitled offer"}</p>
+                    {o.description && (
+                      <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">{o.description}</p>
+                    )}
                   </div>
                 ))}
               </div>
