@@ -1,7 +1,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const OPENROUTER_API_KEY = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
@@ -67,11 +67,14 @@ Synthesize from the patterns visible across the examples. Be specific and prescr
 
     const userPrompt = `Style name: ${style.name}\nCurrent prompt (may be empty or stale, use only as weak prior):\n${style.prompt || '(none)'}\n\nReference examples to learn from:\n\n${examplesBlock}\n\nWrite the new STYLE prompt block now.`;
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    if (!OPENROUTER_API_KEY.startsWith('sk-or-')) return json({ error: 'OPENROUTER_API_KEY missing or invalid' }, 500);
+    const aiResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://reporting.highperformanceads.com',
+        'X-Title': 'HPA Style Training',
       },
       body: JSON.stringify({
         model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -84,7 +87,7 @@ Synthesize from the patterns visible across the examples. Be specific and prescr
 
     if (!aiResp.ok) {
       const text = await aiResp.text().catch(() => '');
-      return json({ error: `ai gateway ${aiResp.status}: ${text.slice(0, 400)}` }, 502);
+      return json({ error: `OpenRouter ${aiResp.status}: ${text.slice(0, 400)}` }, 502);
     }
     const aiJson = await aiResp.json();
     const trained = String(aiJson?.choices?.[0]?.message?.content ?? '').trim();
