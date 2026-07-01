@@ -4978,6 +4978,7 @@ export type Database = {
           id: string
           kpi_google_doc_url: string | null
           kpi_google_sheet_url: string | null
+          manual_mrr: number
           meetgeek_api_key: string | null
           meetgeek_enabled: boolean | null
           meetgeek_last_sync: string | null
@@ -5074,6 +5075,7 @@ export type Database = {
           id?: string
           kpi_google_doc_url?: string | null
           kpi_google_sheet_url?: string | null
+          manual_mrr?: number
           meetgeek_api_key?: string | null
           meetgeek_enabled?: boolean | null
           meetgeek_last_sync?: string | null
@@ -5170,6 +5172,7 @@ export type Database = {
           id?: string
           kpi_google_doc_url?: string | null
           kpi_google_sheet_url?: string | null
+          manual_mrr?: number
           meetgeek_api_key?: string | null
           meetgeek_enabled?: boolean | null
           meetgeek_last_sync?: string | null
