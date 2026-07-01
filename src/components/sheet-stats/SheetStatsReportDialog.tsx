@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Mail, Download, Loader2, Send, Eye } from 'lucide-react';
+import { Mail, Download, Loader2, Send, Eye, Pencil } from 'lucide-react';
 import { format, startOfMonth, subMonths, endOfMonth, subDays } from 'date-fns';
 import {
   Dialog,
@@ -230,6 +230,7 @@ export function SheetStatsReportDialog({
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  const [editingSchedule, setEditingSchedule] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -239,8 +240,9 @@ export function SheetStatsReportDialog({
         dayOfWeek: initialSchedule?.dayOfWeek ?? 1,
         dayOfMonth: initialSchedule?.dayOfMonth ?? 1,
         hourLocal: initialSchedule?.hourLocal ?? 8,
-        timezone: initialSchedule?.timezone || s.timezone,
+        timezone: 'America/Los_Angeles',
       }));
+      setEditingSchedule(false);
     }
   }, [open, initialRecipients, initialSchedule]);
 
@@ -258,7 +260,8 @@ export function SheetStatsReportDialog({
     [clientName, rangeLabel, highlights, trends],
   );
 
-  async function persistSettings() {
+  async function persistSettings(overrideSchedule?: ScheduleConfig) {
+    const sched = overrideSchedule ?? schedule;
     setSaving(true);
     try {
       const { error } = await supabase
@@ -267,19 +270,19 @@ export function SheetStatsReportDialog({
           {
             client_id: clientId,
             stats_report_recipients: recipients,
-            stats_report_weekly_enabled: schedule.frequency !== 'off',
-            stats_report_frequency: schedule.frequency,
-            stats_report_day_of_week: schedule.dayOfWeek,
-            stats_report_day_of_month: schedule.dayOfMonth,
-            stats_report_hour_local: schedule.hourLocal,
-            stats_report_timezone: schedule.timezone,
+            stats_report_weekly_enabled: sched.frequency !== 'off',
+            stats_report_frequency: sched.frequency,
+            stats_report_day_of_week: sched.dayOfWeek,
+            stats_report_day_of_month: sched.dayOfMonth,
+            stats_report_hour_local: sched.hourLocal,
+            stats_report_timezone: sched.timezone,
           },
           { onConflict: 'client_id' },
         );
       if (error) throw error;
       toast({
         title: 'Saved',
-        description: `${recipients.length} recipient${recipients.length === 1 ? '' : 's'} · ${describeSchedule(schedule)}`,
+        description: `${recipients.length} recipient${recipients.length === 1 ? '' : 's'} · ${describeSchedule(sched)}`,
       });
     } catch (e: any) {
       toast({ variant: 'destructive', title: 'Could not save', description: e?.message || String(e) });
@@ -309,7 +312,13 @@ export function SheetStatsReportDialog({
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast({ title: 'Sent', description: `Report emailed to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}.` });
-      await persistSettings();
+      // Auto-start the weekly cadence when sending manually if no schedule set yet.
+      let schedToSave = schedule;
+      if (schedule.frequency === 'off') {
+        schedToSave = { ...schedule, frequency: 'weekly', dayOfWeek: 1, hourLocal: 8, timezone: 'America/Los_Angeles' };
+        setSchedule(schedToSave);
+      }
+      await persistSettings(schedToSave);
     } catch (e: any) {
       const msg = e?.message || String(e);
       toast({
