@@ -996,10 +996,70 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
             />
             <KpiTile label="Cost / Funded" value={fmtMoney(agg.costPerInvestor)} delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)} invert />
           </div>
+
+          {/* Deal Economics row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <KpiTile
+              label="Commit → Fund %"
+              value={fmtPct(agg.totalCommitments > 0 ? (agg.fundedInvestors / agg.totalCommitments) * 100 : 0, 1)}
+              sub={`${fmtInt(agg.fundedInvestors)} funded of ${fmtInt(agg.totalCommitments)} committed`}
+              delta={pctDelta(
+                agg.totalCommitments > 0 ? (agg.fundedInvestors / agg.totalCommitments) * 100 : 0,
+                aggPrior && aggPrior.totalCommitments > 0 ? (aggPrior.fundedInvestors / aggPrior.totalCommitments) * 100 : 0,
+              )}
+              icon={Handshake}
+            />
+            <KpiTile
+              label="Avg Commitment Size"
+              value={fmtMoney(agg.totalCommitments > 0 ? agg.commitmentDollars / agg.totalCommitments : 0)}
+              sub="Committed $ ÷ committed investors"
+              delta={pctDelta(
+                agg.totalCommitments > 0 ? agg.commitmentDollars / agg.totalCommitments : 0,
+                aggPrior && aggPrior.totalCommitments > 0 ? aggPrior.commitmentDollars / aggPrior.totalCommitments : 0,
+              )}
+              icon={Wallet}
+            />
+            <KpiTile
+              label="Avg Funded Check Size"
+              value={fmtMoney(agg.fundedInvestors > 0 ? agg.fundedDollars / agg.fundedInvestors : 0)}
+              sub="Funded $ ÷ funded investors"
+              delta={pctDelta(
+                agg.fundedInvestors > 0 ? agg.fundedDollars / agg.fundedInvestors : 0,
+                aggPrior && aggPrior.fundedInvestors > 0 ? aggPrior.fundedDollars / aggPrior.fundedInvestors : 0,
+              )}
+              icon={Banknote}
+            />
+          </div>
         </>
       ) : (
         <Card className="p-6 rounded-2xl">
           <p className="text-sm text-muted-foreground">No data in the selected range.</p>
+        </Card>
+      )}
+
+      {/* Velocity trend — WoW / MoM funded $ */}
+      {velocity && (
+        <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+          <div className="flex items-end justify-between mb-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Capital Velocity</p>
+              <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Funded $ Momentum</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Rolling 7d and 30d funded capital vs the prior equal window</p>
+            </div>
+            <Timer className="h-5 w-5 text-[hsl(40_45%_55%)]" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <RatioPill
+              label="Week over Week"
+              value={fmtMoneyFull(velocity.wowCurrent)}
+              sub={`Prior 7d: ${fmtMoneyFull(velocity.wowPrior)} · ${velocity.wowDelta >= 0 ? '+' : ''}${velocity.wowDelta.toFixed(1)}%`}
+            />
+            <RatioPill
+              label="Month over Month"
+              value={fmtMoneyFull(velocity.momCurrent)}
+              sub={`Prior 30d: ${fmtMoneyFull(velocity.momPrior)} · ${velocity.momDelta >= 0 ? '+' : ''}${velocity.momDelta.toFixed(1)}%`}
+            />
+          </div>
         </Card>
       )}
 
