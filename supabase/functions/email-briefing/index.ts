@@ -30,12 +30,18 @@ Deno.serve(async (req) => {
     priority: e.priority, classification: e.classification,
   }));
 
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
+  const openRouterKey = (Deno.env.get("OPENROUTER_API_KEY") || "").trim().replace(/^[']|[']$/g, "").replace(/^[\"]|[\"]$/g, "");
   let summary = "";
   try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    if (!openRouterKey.startsWith("sk-or-")) throw new Error("OPENROUTER_API_KEY missing or invalid");
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${openRouterKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://reporting.highperformanceads.com",
+        "X-Title": "HPA Email Briefing",
+      },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
