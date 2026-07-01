@@ -3,6 +3,7 @@ import { Client } from '@/hooks/useClients';
 import { useAllClientFullSettings } from '@/hooks/useAllClientSettings';
 import { useAllClientsStripePayments, StripeCustomerData } from '@/hooks/useStripePayments';
 import { useUpdateClientSettings } from '@/hooks/useClientSettings';
+import { useClientMonthAdSpend } from '@/hooks/useClientMonthAdSpend';
 import { BillingForecastChart } from './BillingForecastChart';
 import { BillingTargetsPanel } from './BillingTargetsPanel';
 import { Sparkline } from '@/components/dashboard/Sparkline';
@@ -19,8 +20,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { DollarSign, TrendingUp, Calendar, CreditCard, Send, Zap, Loader2, RefreshCw, ExternalLink, Link2, Check } from 'lucide-react';
-import { format, startOfMonth, startOfYear, subMonths, differenceInMonths, addDays, differenceInCalendarDays } from 'date-fns';
+import { DollarSign, TrendingUp, Calendar, CreditCard, Send, Zap, Loader2, RefreshCw, ExternalLink, Link2, Check, CheckCircle2, XCircle } from 'lucide-react';
+import { format, startOfMonth, startOfYear, subMonths, differenceInMonths, addDays, differenceInCalendarDays, endOfMonth } from 'date-fns';
 import { Users, AlertTriangle } from 'lucide-react';
 
 interface AgencyBillingTabProps {
@@ -63,6 +64,7 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
   }, [clients, clientFullSettings]);
 
   const { data: stripeDataMap = {}, isLoading, refetch } = useAllClientsStripePayments(clientEmails);
+  const { data: mtdSpendMap = {} } = useClientMonthAdSpend(clientIds);
 
   // Auto-persist successful auto-matches so future loads are stable + cached.
   const autoPersistedRef = useRef<Set<string>>(new Set());
@@ -158,7 +160,7 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
     let noSubscription = 0;
 
     for (const row of clientRows) {
-      if (row.subStatus === 'active') activeSubscriptions++;
+      if (row.subStatus === 'active' || row.subStatus === 'trialing' || row.subStatus === 'past_due') activeSubscriptions++;
       else if (row.isConnected && !row.subStatus) noSubscription++;
     }
 
@@ -241,9 +243,28 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       }
     }
 
-    // Outstanding / overdue / failed from internal tables
+    // Outstanding = capital due THIS MONTH that hasn't been paid yet.
+    // Combines: (a) expected recurring revenue per active client minus what they've already paid this month,
+    // and (b) open invoices scheduled to be due this month.
     const today = new Date();
-    const outstanding = billingInvoices.reduce((s, i) => s + Number(i.amount_outstanding || 0), 0);
+    const monthEnd = endOfMonth(today);
+    let outstanding = 0;
+    for (const c of clients) {
+      if (c.status !== 'active') continue;
+      const data = stripeDataMap[c.id];
+      const paidThisMonth = (data?.payments || [])
+        .filter((p: any) => p.status === 'succeeded' && !p.refunded && new Date(p.created) >= monthStart)
+        .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+      const stripeMrr = Number(data?.mrr || 0);
+      const manual = Number((clientFullSettings[c.id] as any)?.manual_mrr || 0);
+      const contracted = Number((clientFullSettings[c.id] as any)?.mrr || 0);
+      const expected = stripeMrr || manual || contracted;
+      if (expected > paidThisMonth) outstanding += (expected - paidThisMonth);
+    }
+    // Add invoice balances due in the current month
+    outstanding += billingInvoices
+      .filter(i => i.due_date && new Date(i.due_date) >= monthStart && new Date(i.due_date) <= monthEnd && Number(i.amount_outstanding) > 0)
+      .reduce((s, i) => s + Number(i.amount_outstanding || 0), 0);
     const overdue = billingInvoices
       .filter(i => i.due_date && new Date(i.due_date) < today && Number(i.amount_outstanding) > 0)
       .reduce((s, i) => s + Number(i.amount_outstanding || 0), 0);
@@ -253,8 +274,13 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
     let activeSubs = 0;
     let noSubConnected = 0;
     for (const row of clientRows) {
-      if (row.subStatus === 'active') activeSubs++;
+      if (row.subStatus === 'active' || row.subStatus === 'trialing' || row.subStatus === 'past_due') activeSubs++;
       else if (row.isConnected && !row.subStatus) noSubConnected++;
+    }
+    // Also treat manual-MRR clients as having a subscription equivalent
+    for (const c of clients) {
+      const manual = Number((clientFullSettings[c.id] as any)?.manual_mrr || 0);
+      if (manual > 0 && !stripeDataMap[c.id]?.subscriptions?.length) activeSubs++;
     }
     const activeClients = clients.filter(c => c.status === 'active').length;
 
@@ -295,7 +321,7 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       mtdPriorChange: mtdChg,
       mrrPriorChange: null,
     };
-  }, [stripeDataMap, billingInvoices, billingPayments, billingAgreements, clients, clientRows, totalMRR, effectiveMRR, targetAttainment, kpis, now]);
+  }, [stripeDataMap, billingInvoices, billingPayments, billingAgreements, clients, clientRows, totalMRR, effectiveMRR, targetAttainment, kpis, now, clientFullSettings, monthStart]);
 
   // ============ Action queue (derived + stored) ============
   const clientNameById = useMemo(() => new Map(clients.map(c => [c.id, c.name] as const)), [clients]);
@@ -588,6 +614,26 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       {/* Expanded KPI grid (13 cards) */}
       <BillingKpiGrid kpis={expandedKpis} />
 
+      {/* Prominent Cash Collected callout */}
+      <Card className="border-l-4 border-l-emerald-500 bg-emerald-500/5">
+        <CardContent className="p-5 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-emerald-500/15 p-2.5">
+              <DollarSign className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Collected · Month to Date</p>
+              <p className="text-3xl font-bold tabular-nums leading-tight">{formatCurrency(kpis.monthToDate)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Live from Stripe · {format(now, 'MMMM yyyy')}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">YTD</p>
+            <p className="text-xl font-semibold tabular-nums">{formatCurrency(kpis.totalRevThisYear)}</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Action queue */}
       <BillingActionQueue items={queueItems} onAct={handleActOnItem} />
 
@@ -623,7 +669,8 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                   <TableHead>Client</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Monthly Sub</TableHead>
-                  <TableHead className="text-right">Target / Actual</TableHead>
+                  <TableHead className="text-right">% of Ad Spend Fee (MTD)</TableHead>
+                  <TableHead className="text-center">Paid This Month</TableHead>
                   <TableHead className="text-right">Total Paid</TableHead>
                   <TableHead>Next Billing</TableHead>
                   <TableHead>Client Since</TableHead>
@@ -634,9 +681,29 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                 {clientRowsWithMonths.map(({ client, isConnected, customerId, customerEmail, mrr, totalPaid, nextBilling, subStatus, interval, monthsSinceFirstCharge }) => (
                   (() => {
                     const settings = clientFullSettings[client.id] as any;
-                    const target = Number(settings?.mrr) || 0;
-                    const attain = target > 0 ? (mrr / target) * 100 : 0;
-                    const attainColor = attain >= 100 ? 'text-chart-2' : attain >= 75 ? 'text-amber-500' : target > 0 ? 'text-destructive' : 'text-muted-foreground';
+                    const feePct = Number(settings?.ad_spend_fee_percent) || 0;
+                    const feeThreshold = Number(settings?.ad_spend_fee_threshold) || 0;
+                    const mtdSpend = Number(mtdSpendMap[client.id] || 0);
+                    const feeBase = Math.max(0, mtdSpend - feeThreshold);
+                    const feeDue = feeBase * (feePct / 100);
+                    const stripeData = stripeDataMap[client.id];
+                    const paidThisMonth = (stripeData?.payments || [])
+                      .filter((p: any) => p.status === 'succeeded' && !p.refunded && new Date(p.created) >= monthStart)
+                      .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+                    const hasPaidThisMonth = paidThisMonth > 0;
+                    // Fallback next-billing date from active billing agreement's billing_day
+                    let effectiveNextBilling: string | Date | null = nextBilling || null;
+                    if (!effectiveNextBilling) {
+                      const agr = billingAgreements.find(a => a.client_id === client.id && a.active && a.billing_day);
+                      if (agr?.billing_day) {
+                        const y = now.getFullYear();
+                        const m = now.getMonth();
+                        const day = Math.min(Number(agr.billing_day), 28);
+                        let d = new Date(y, m, day);
+                        if (d < now) d = new Date(y, m + 1, day);
+                        effectiveNextBilling = d;
+                      }
+                    }
                     return (
                   <TableRow key={client.id}>
                     <TableCell>
@@ -701,46 +768,43 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {editingTargetId === client.id ? (
-                        <div className="flex gap-1 justify-end items-center">
-                          <Input
-                            autoFocus
-                            type="number"
-                            min="0"
-                            step="100"
-                            value={targetDraft}
-                            onChange={(e) => setTargetDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') saveTarget(client.id);
-                              if (e.key === 'Escape') setEditingTargetId(null);
-                            }}
-                            className="h-7 w-24 text-xs"
-                          />
-                          <Button size="sm" className="h-7 px-2" onClick={() => saveTarget(client.id)}>
-                            <Check className="h-3 w-3" />
-                          </Button>
+                      {feePct > 0 ? (
+                        <div title={`${feePct}% of ad spend over ${formatCurrency(feeThreshold)} threshold`}>
+                          <div className="text-xs text-muted-foreground">
+                            {feePct}% · spend {formatCurrency(mtdSpend)}
+                          </div>
+                          <div className={`text-sm font-semibold ${feeDue > 0 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                            {feeDue > 0 ? formatCurrency(feeDue) : '—'}
+                          </div>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          className="text-right hover:underline"
-                          onClick={() => { setEditingTargetId(client.id); setTargetDraft(String(target || '')); }}
-                          title="Click to edit monthly target"
-                        >
-                          <div className="text-xs text-muted-foreground">
-                            target {target > 0 ? formatCurrency(target) : '—'}
-                          </div>
-                          <div className={`text-sm font-semibold ${attainColor}`}>
-                            {target > 0 ? `${attain.toFixed(0)}%` : 'set target'}
-                          </div>
-                        </button>
+                        <span className="text-xs text-muted-foreground">n/a</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {hasPaidThisMonth ? (
+                        <div className="inline-flex items-center gap-1 text-emerald-600">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span className="text-xs font-medium tabular-nums">{formatCurrency(paidThisMonth)}</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 text-destructive">
+                          <XCircle className="h-4 w-4" />
+                          <span className="text-xs font-medium">Not paid</span>
+                        </div>
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {isConnected ? formatCurrency(totalPaid) : '—'}
                     </TableCell>
                     <TableCell>
-                      {nextBilling ? format(new Date(nextBilling), 'MMM d, yyyy') : '—'}
+                      {effectiveNextBilling ? (
+                        <span className="text-sm tabular-nums">
+                          {format(new Date(effectiveNextBilling), 'MMM d, yyyy')}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {monthsSinceFirstCharge !== null ? (
