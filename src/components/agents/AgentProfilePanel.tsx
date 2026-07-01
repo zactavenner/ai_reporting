@@ -93,9 +93,11 @@ export function AgentProfilePanel({
   const [editingClientMemory, setEditingClientMemory] = useState(false);
   const [editingClientInstr, setEditingClientInstr] = useState(false);
   useEffect(() => {
-    setClientMemory(clientOverride?.memory_md || "");
-    setClientInstr(clientOverride?.instructions_md || "");
-  }, [clientOverride?.client_id, clientOverride?.agent_id, agent.id]);
+    // Prefill from master so updates to the master profile flow into the
+    // client view. Editing here saves as a client-specific override.
+    setClientMemory(clientOverride?.memory_md || agent.memory_md || "");
+    setClientInstr(clientOverride?.instructions_md || agent.instructions_md || "");
+  }, [clientOverride?.client_id, clientOverride?.agent_id, agent.id, agent.memory_md, agent.instructions_md]);
 
   const saveClientOverride = (patch: { memory_md?: string; instructions_md?: string }) => {
     if (!isClientView) return;
@@ -377,7 +379,11 @@ export function AgentProfilePanel({
               <Textarea value={clientMemory} onChange={(e) => setClientMemory(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Client-specific memory that layers on top of master…" />
             ) : (
               <p className="text-xs whitespace-pre-wrap text-muted-foreground min-h-[3em]">
-                {clientMemory || "No client-specific memory yet."}
+                {clientOverride?.memory_md
+                  ? clientOverride.memory_md
+                  : agent.memory_md
+                  ? `${agent.memory_md}\n\n— Inherited from master. Edit to create a client-specific override.`
+                  : "No client-specific memory yet."}
               </p>
             )}
           </Card>
@@ -423,7 +429,11 @@ export function AgentProfilePanel({
               <Textarea value={clientInstr} onChange={(e) => setClientInstr(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Client-specific instructions that layer on top of master…" />
             ) : (
               <p className="text-xs whitespace-pre-wrap text-muted-foreground min-h-[3em]">
-                {clientInstr || "No client-specific instructions yet."}
+                {clientOverride?.instructions_md
+                  ? clientOverride.instructions_md
+                  : agent.instructions_md
+                  ? `${agent.instructions_md}\n\n— Inherited from master. Edit to create a client-specific override.`
+                  : "No client-specific instructions yet."}
               </p>
             )}
           </Card>

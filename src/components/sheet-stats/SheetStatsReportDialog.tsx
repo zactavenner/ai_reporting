@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Mail, Download, Loader2, Send, Eye } from 'lucide-react';
+import { Mail, Download, Loader2, Send, Eye, Pencil } from 'lucide-react';
 import { format, startOfMonth, subMonths, endOfMonth, subDays } from 'date-fns';
 import {
   Dialog,
@@ -194,8 +194,8 @@ const DAYS_OF_WEEK = [
 function describeSchedule(s: ScheduleConfig): string {
   const hour = s.hourLocal % 12 === 0 ? 12 : s.hourLocal % 12;
   const ampm = s.hourLocal < 12 ? 'AM' : 'PM';
-  const time = `${hour}:00 ${ampm}`;
-  if (s.frequency === 'off') return 'Automatic sending is off.';
+  const time = `${hour}:00 ${ampm} PST`;
+  if (s.frequency === 'off') return 'Automatic sending is off. Hit Send now to start the weekly cadence.';
   if (s.frequency === 'weekly') {
     const day = DAYS_OF_WEEK.find((d) => d.v === s.dayOfWeek)?.l || 'Monday';
     const from = subDays(new Date(), 7);
@@ -230,6 +230,7 @@ export function SheetStatsReportDialog({
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  const [editingSchedule, setEditingSchedule] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -239,8 +240,9 @@ export function SheetStatsReportDialog({
         dayOfWeek: initialSchedule?.dayOfWeek ?? 1,
         dayOfMonth: initialSchedule?.dayOfMonth ?? 1,
         hourLocal: initialSchedule?.hourLocal ?? 8,
-        timezone: initialSchedule?.timezone || s.timezone,
+        timezone: 'America/Los_Angeles',
       }));
+      setEditingSchedule(false);
     }
   }, [open, initialRecipients, initialSchedule]);
 
@@ -258,7 +260,8 @@ export function SheetStatsReportDialog({
     [clientName, rangeLabel, highlights, trends],
   );
 
-  async function persistSettings() {
+  async function persistSettings(overrideSchedule?: ScheduleConfig) {
+    const sched = overrideSchedule ?? schedule;
     setSaving(true);
     try {
       const { error } = await supabase
@@ -267,19 +270,19 @@ export function SheetStatsReportDialog({
           {
             client_id: clientId,
             stats_report_recipients: recipients,
-            stats_report_weekly_enabled: schedule.frequency !== 'off',
-            stats_report_frequency: schedule.frequency,
-            stats_report_day_of_week: schedule.dayOfWeek,
-            stats_report_day_of_month: schedule.dayOfMonth,
-            stats_report_hour_local: schedule.hourLocal,
-            stats_report_timezone: schedule.timezone,
+            stats_report_weekly_enabled: sched.frequency !== 'off',
+            stats_report_frequency: sched.frequency,
+            stats_report_day_of_week: sched.dayOfWeek,
+            stats_report_day_of_month: sched.dayOfMonth,
+            stats_report_hour_local: sched.hourLocal,
+            stats_report_timezone: sched.timezone,
           },
           { onConflict: 'client_id' },
         );
       if (error) throw error;
       toast({
         title: 'Saved',
-        description: `${recipients.length} recipient${recipients.length === 1 ? '' : 's'} · ${describeSchedule(schedule)}`,
+        description: `${recipients.length} recipient${recipients.length === 1 ? '' : 's'} · ${describeSchedule(sched)}`,
       });
     } catch (e: any) {
       toast({ variant: 'destructive', title: 'Could not save', description: e?.message || String(e) });
@@ -309,7 +312,13 @@ export function SheetStatsReportDialog({
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast({ title: 'Sent', description: `Report emailed to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}.` });
-      await persistSettings();
+      // Auto-start the weekly cadence when sending manually if no schedule set yet.
+      let schedToSave = schedule;
+      if (schedule.frequency === 'off') {
+        schedToSave = { ...schedule, frequency: 'weekly', dayOfWeek: 1, hourLocal: 8, timezone: 'America/Los_Angeles' };
+        setSchedule(schedToSave);
+      }
+      await persistSettings(schedToSave);
     } catch (e: any) {
       const msg = e?.message || String(e);
       toast({
@@ -353,24 +362,42 @@ export function SheetStatsReportDialog({
 
           <div className="rounded-xl border bg-muted/30 px-4 py-3 space-y-3">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Automatic schedule</p>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {schedule.frequency === 'off' ? 'Weekly email' : schedule.frequency === 'weekly' ? 'Weekly email' : 'Monthly email'}
+                </p>
                 <p className="text-xs text-muted-foreground">{describeSchedule(schedule)}</p>
               </div>
-              <Select
-                value={schedule.frequency}
-                onValueChange={(v) => setSchedule((s) => ({ ...s, frequency: v as ScheduleFrequency }))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => setEditingSchedule((v) => !v)}
+                title="Edit schedule"
               >
-                <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">Off</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                {editingSchedule ? 'Done' : 'Edit'}
+              </Button>
             </div>
 
-            {schedule.frequency !== 'off' && (
+            {editingSchedule && (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Frequency</Label>
+                  <Select
+                    value={schedule.frequency}
+                    onValueChange={(v) => setSchedule((s) => ({ ...s, frequency: v as ScheduleFrequency }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Off</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly (1st)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {schedule.frequency !== 'off' && (
               <div className="grid grid-cols-2 gap-3">
                 {schedule.frequency === 'weekly' ? (
                   <div className="space-y-1">
@@ -404,7 +431,7 @@ export function SheetStatsReportDialog({
                   </div>
                 )}
                 <div className="space-y-1">
-                  <Label className="text-xs">Time ({schedule.timezone})</Label>
+                  <Label className="text-xs">Time (PST)</Label>
                   <Select
                     value={String(schedule.hourLocal)}
                     onValueChange={(v) => setSchedule((s) => ({ ...s, hourLocal: Number(v) }))}
@@ -419,6 +446,8 @@ export function SheetStatsReportDialog({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+                )}
               </div>
             )}
           </div>
@@ -446,7 +475,7 @@ export function SheetStatsReportDialog({
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button variant="outline" onClick={persistSettings} disabled={saving}>
+          <Button variant="outline" onClick={() => persistSettings()} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Save
           </Button>
           <Button onClick={sendNow} disabled={sending || recipients.length === 0}>
