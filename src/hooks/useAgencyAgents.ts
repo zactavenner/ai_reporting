@@ -18,6 +18,13 @@ export type AgencyAgent = {
   instructions_md?: string | null;
   connectors?: string[] | null;
   capabilities?: { models?: string[] } | null;
+  is_custom?: boolean;
+  created_by?: string | null;
+  archived_at?: string | null;
+  schedule_cron?: string | null;
+  schedule_prompt?: string | null;
+  schedule_enabled?: boolean;
+  last_run_at?: string | null;
 };
 
 export type AgencyAgentTraining = {
@@ -69,6 +76,7 @@ export function useAgencyAgents() {
       const { data, error } = await (supabase as any)
         .from("agency_agents")
         .select("*")
+        .is("archived_at", null)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data || []) as AgencyAgent[];
@@ -89,6 +97,68 @@ export function useUpdateAgencyAgent() {
       toast.success("Agent updated");
     },
     onError: (e: any) => toast.error(`Update failed: ${e?.message || e}`),
+  });
+}
+
+export function useCreateCustomAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      name: string;
+      role: string;
+      icon?: string;
+      default_model?: string;
+      instructions_md?: string;
+      created_by?: string | null;
+    }) => {
+      const slug = `custom-${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}-${Date.now().toString(36).slice(-4)}`;
+      const payload = {
+        slug,
+        name: input.name,
+        role: input.role,
+        icon: input.icon || "🤖",
+        default_model: input.default_model || "nvidia/nemotron-3-ultra-550b-a55b:free",
+        system_prompt: input.instructions_md || `You are ${input.name}. ${input.role}`,
+        instructions_md: input.instructions_md || "",
+        allowed_creative_types: [],
+        is_active: true,
+        sort_order: 999,
+        is_custom: true,
+        created_by: input.created_by || null,
+        connectors: [],
+        capabilities: {},
+      };
+      const { data, error } = await (supabase as any)
+        .from("agency_agents")
+        .insert(payload)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as AgencyAgent;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["agency_agents"] });
+      toast.success("Custom agent created");
+    },
+    onError: (e: any) => toast.error(`Create failed: ${e?.message || e}`),
+  });
+}
+
+export function useArchiveAgencyAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from("agency_agents")
+        .update({ archived_at: new Date().toISOString(), is_active: false })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["agency_agents"] });
+      toast.success("Agent archived");
+    },
+    onError: (e: any) => toast.error(`Archive failed: ${e?.message || e}`),
   });
 }
 
