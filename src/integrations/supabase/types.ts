@@ -5005,7 +5005,12 @@ export type Database = {
           retargetiq_website_slug: string | null
           slack_channel_id: string | null
           slack_review_channel_id: string | null
+          stats_report_day_of_month: number
+          stats_report_day_of_week: number
+          stats_report_frequency: string
+          stats_report_hour_local: number
           stats_report_recipients: string[] | null
+          stats_report_timezone: string
           stats_report_weekly_enabled: boolean | null
           stripe_customer_id: string | null
           stripe_email: string | null
@@ -5102,7 +5107,12 @@ export type Database = {
           retargetiq_website_slug?: string | null
           slack_channel_id?: string | null
           slack_review_channel_id?: string | null
+          stats_report_day_of_month?: number
+          stats_report_day_of_week?: number
+          stats_report_frequency?: string
+          stats_report_hour_local?: number
           stats_report_recipients?: string[] | null
+          stats_report_timezone?: string
           stats_report_weekly_enabled?: boolean | null
           stripe_customer_id?: string | null
           stripe_email?: string | null
@@ -5199,7 +5209,12 @@ export type Database = {
           retargetiq_website_slug?: string | null
           slack_channel_id?: string | null
           slack_review_channel_id?: string | null
+          stats_report_day_of_month?: number
+          stats_report_day_of_week?: number
+          stats_report_frequency?: string
+          stats_report_hour_local?: number
           stats_report_recipients?: string[] | null
+          stats_report_timezone?: string
           stats_report_weekly_enabled?: boolean | null
           stripe_customer_id?: string | null
           stripe_email?: string | null

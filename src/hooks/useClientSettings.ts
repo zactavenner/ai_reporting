@@ -59,6 +59,11 @@ export interface ClientSettings {
   // Stat sheet weekly report
   stats_report_recipients?: string[] | null;
   stats_report_weekly_enabled?: boolean | null;
+  stats_report_frequency?: 'off' | 'weekly' | 'monthly' | null;
+  stats_report_day_of_week?: number | null;
+  stats_report_day_of_month?: number | null;
+  stats_report_hour_local?: number | null;
+  stats_report_timezone?: string | null;
 }
 
 export interface KPIThresholds {

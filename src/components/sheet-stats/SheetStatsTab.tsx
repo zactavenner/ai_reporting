@@ -1221,9 +1221,25 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           { label: 'Leads', value: fmtInt(agg.totalLeads) },
           { label: 'Calls Booked', value: fmtInt(agg.totalCalls) },
           { label: 'Shows', value: fmtInt(agg.showedCalls) },
+          { label: 'Cost Per Lead', value: fmtMoney(agg.totalLeads > 0 ? agg.totalAdSpend / agg.totalLeads : 0) },
+          { label: 'Cost Per Call', value: fmtMoney(agg.totalCalls > 0 ? agg.totalAdSpend / agg.totalCalls : 0) },
+          { label: 'Cost Per Show', value: fmtMoney(agg.showedCalls > 0 ? agg.totalAdSpend / agg.showedCalls : 0) },
+        ] : []}
+        trends={chartData.length > 1 ? [
+          { label: 'Ad Spend', color: '#0B2B26', prefix: '$', points: chartData.map((d) => ({ date: d.rawDate, value: d.spend })) },
+          { label: 'Leads', color: '#2563eb', points: chartData.map((d) => ({ date: d.rawDate, value: d.leads })) },
+          { label: 'Cost Per Lead', color: '#C5A55A', prefix: '$', points: chartData.map((d) => ({ date: d.rawDate, value: d.cpl })) },
+          { label: 'Cost Per Call', color: '#9333ea', prefix: '$', points: chartData.map((d) => ({ date: d.rawDate, value: d.cpBooked })) },
         ] : []}
         initialRecipients={(settings as any)?.stats_report_recipients ?? []}
-        initialWeeklyEnabled={!!(settings as any)?.stats_report_weekly_enabled}
+        initialSchedule={{
+          frequency: (settings as any)?.stats_report_frequency
+            || ((settings as any)?.stats_report_weekly_enabled ? 'weekly' : 'off'),
+          dayOfWeek: (settings as any)?.stats_report_day_of_week ?? 1,
+          dayOfMonth: (settings as any)?.stats_report_day_of_month ?? 1,
+          hourLocal: (settings as any)?.stats_report_hour_local ?? 8,
+          timezone: (settings as any)?.stats_report_timezone || 'America/Los_Angeles',
+        }}
         capturePdf={capturePdf}
       />
     </div>
