@@ -613,11 +613,17 @@ Deno.serve(async (req) => {
                   // populate one of them. We try them in priority order per row.
                   const headerNormForDate = (rows[headerRowIdx] || []).map((c) => normalize(String(c ?? '')));
                   const dateColCandidates: number[] = (() => {
-                    const priority: RegExp[] = recordMetric === 'funded_investors'
-                      ? [/funded\s*date/, /^current\s*date$/, /^date$/, /date\s*created/, /created/, /booked\s*(call\s*)?date/]
-                      : recordMetric === 'commitments'
-                        ? [/commit(?:ted|ment)?\s*date/, /^current\s*date$/, /^date$/, /date\s*created/, /created/, /booked\s*(call\s*)?date/]
-                        : [/^date$/, /^current\s*date$/, /booked\s*(call\s*)?date/, /scheduled/, /date\s*created/, /created/];
+                     // Prefer the tracker's "Current Date" (when the record was
+                     // logged) over event-specific dates like "Committed Date"
+                     // / "Funded Date". Client sheets consistently backdate the
+                     // event field to the original commitment date while
+                     // "Current Date" reflects when the row was added, which is
+                     // what users see when filtering the dashboard by date.
+                     const priority: RegExp[] = recordMetric === 'funded_investors'
+                       ? [/^current\s*date$/, /funded\s*date/, /^date$/, /date\s*created/, /created/, /booked\s*(call\s*)?date/]
+                       : recordMetric === 'commitments'
+                         ? [/^current\s*date$/, /commit(?:ted|ment)?\s*date/, /^date$/, /date\s*created/, /created/, /booked\s*(call\s*)?date/]
+                         : [/^date$/, /^current\s*date$/, /booked\s*(call\s*)?date/, /scheduled/, /date\s*created/, /created/];
                     const found: number[] = [];
                     for (const p of priority) {
                       for (let c = 0; c < headerNormForDate.length; c++) {
