@@ -123,6 +123,73 @@ export async function callOpenRouter(
 }
 
 /**
+ * Streaming variant. Yields text deltas as they arrive. Uses first working model.
+ */
+export async function* streamOpenRouter(
+  messages: ORMessage[],
+  opts: CallOpts = {},
+): AsyncGenerator<{ delta?: string; model?: string; done?: boolean }, void, void> {
+  const key = getKey();
+  const models = opts.models?.length ? opts.models : TEXT_MODELS;
+  let lastErr = "";
+
+  for (const model of models) {
+    try {
+      const res = await fetch(`${OPENROUTER_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://reporting.highperformanceads.com",
+          "X-Title": "HPA Reporting",
+        },
+        signal: opts.signal,
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: true,
+          ...(opts.temperature !== undefined && { temperature: opts.temperature }),
+          ...(opts.max_tokens !== undefined && { max_tokens: opts.max_tokens }),
+        }),
+      });
+      if (!res.ok || !res.body) {
+        lastErr = await res.text().catch(() => "");
+        if (shouldFallback(res.status)) continue;
+        throw new Error(`OpenRouter ${res.status}: ${lastErr}`);
+      }
+      yield { model };
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          const s = line.trim();
+          if (!s.startsWith("data:")) continue;
+          const payload = s.slice(5).trim();
+          if (payload === "[DONE]") { yield { done: true }; return; }
+          try {
+            const j = JSON.parse(payload);
+            const delta = j.choices?.[0]?.delta?.content;
+            if (delta) yield { delta };
+          } catch { /* keepalive/comment */ }
+        }
+      }
+      yield { done: true };
+      return;
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
+      continue;
+    }
+  }
+  throw new Error(`All OpenRouter models failed (stream): ${lastErr.slice(0, 500)}`);
+}
+
+/**
  * Convenience: ask for JSON output. Strips markdown fences and parses.
  */
 export async function callOpenRouterJSON<T = any>(
