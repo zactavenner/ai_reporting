@@ -510,18 +510,25 @@ export type Database = {
       agency_agents: {
         Row: {
           allowed_creative_types: string[]
+          archived_at: string | null
           capabilities: Json
           connectors: Json
           created_at: string
+          created_by: string | null
           default_model: string
           fallback_models: string[]
           icon: string | null
           id: string
           instructions_md: string | null
           is_active: boolean
+          is_custom: boolean
+          last_run_at: string | null
           memory_md: string | null
           name: string
           role: string
+          schedule_cron: string | null
+          schedule_enabled: boolean
+          schedule_prompt: string | null
           slug: string
           sort_order: number
           system_prompt: string
@@ -529,18 +536,25 @@ export type Database = {
         }
         Insert: {
           allowed_creative_types?: string[]
+          archived_at?: string | null
           capabilities?: Json
           connectors?: Json
           created_at?: string
+          created_by?: string | null
           default_model?: string
           fallback_models?: string[]
           icon?: string | null
           id?: string
           instructions_md?: string | null
           is_active?: boolean
+          is_custom?: boolean
+          last_run_at?: string | null
           memory_md?: string | null
           name: string
           role: string
+          schedule_cron?: string | null
+          schedule_enabled?: boolean
+          schedule_prompt?: string | null
           slug: string
           sort_order?: number
           system_prompt?: string
@@ -548,18 +562,25 @@ export type Database = {
         }
         Update: {
           allowed_creative_types?: string[]
+          archived_at?: string | null
           capabilities?: Json
           connectors?: Json
           created_at?: string
+          created_by?: string | null
           default_model?: string
           fallback_models?: string[]
           icon?: string | null
           id?: string
           instructions_md?: string | null
           is_active?: boolean
+          is_custom?: boolean
+          last_run_at?: string | null
           memory_md?: string | null
           name?: string
           role?: string
+          schedule_cron?: string | null
+          schedule_enabled?: boolean
+          schedule_prompt?: string | null
           slug?: string
           sort_order?: number
           system_prompt?: string
