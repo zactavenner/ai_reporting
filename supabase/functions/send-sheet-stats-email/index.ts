@@ -22,12 +22,14 @@ serve(async (req) => {
   try {
     const apiKey = Deno.env.get('RESEND_API_KEY');
     if (!apiKey) {
+      // Return 200 so the client-side supabase.functions.invoke surfaces the message
+      // instead of a generic "Failed to send a request to the Edge Function".
       return new Response(
         JSON.stringify({
-          error: 'Email provider not configured. Add a RESEND_API_KEY secret to enable Stat Sheet email reports.',
+          error: 'Email sending is not set up yet. Complete the Lovable Emails / sender domain setup, then try again.',
           code: 'email_not_configured',
         }),
-        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
