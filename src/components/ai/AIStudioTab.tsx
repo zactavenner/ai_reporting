@@ -1570,6 +1570,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             setContextUsage({ chars: evt.chars, tokens: evt.estimated_tokens });
           } else if (evt.type === "text") {
             updateAssistant(m => ({ ...m, content: stripImageMarkup((m.content || "") + evt.delta) }));
+          } else if (evt.type === "reasoning") {
+            updateAssistant(m => ({ ...m, reasoning: (m.reasoning || "") + (evt.delta || "") }));
           } else if (evt.type === "tool_start") {
             updateAssistant(m => ({
               ...m,
