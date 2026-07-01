@@ -1122,6 +1122,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   // --- Per-client agents (@mention support in AI Studio) ---
   const { data: clientAgents = [] } = useClientAgents(clientId);
+  useEffect(() => {
+    if (selectedAgentId === "off" || selectedAgentId === "master") return;
+    const selectedIsEnabled = (clientAgents as any[]).some((a) => a.id === selectedAgentId && a.enabled);
+    if ((clientAgents as any[]).length > 0 && !selectedIsEnabled) setSelectedAgentId("off");
+  }, [clientAgents, selectedAgentId]);
 
   // --- Auto-import the selected offer's image assets as references in the composer.
   // Whenever the offer picker changes, drop any previously-imported offer images and
@@ -1469,7 +1474,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const mentioned = agentEnabledForTurn ? extractAgentMentions(text, clientAgents as any) : [];
           // Explicit picker overrides @mentions when set to a specific agent.
           const pickedAgent = (agentEnabledForTurn && selectedAgentId !== "master")
-            ? (clientAgents as any[]).find(a => a.id === selectedAgentId)
+            ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
             : null;
           const agentBlock = pickedAgent
             ? buildAgentContextBlock([pickedAgent])
@@ -1505,7 +1510,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel: (() => {
           if (selectedAgentId !== "off" && selectedAgentId !== "master") {
-            const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
+            const a = (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled);
             if (a?.model) return a.model;
           }
           return chatModel;
@@ -2125,7 +2130,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               )}
               {(() => {
                 const pickedAgent = selectedAgentId !== "off" && selectedAgentId !== "master"
-                  ? (clientAgents as any[]).find(a => a.id === selectedAgentId)
+                  ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
                   : null;
                 const effectiveModel = pickedAgent?.model || chatModel;
                 const modelOverridden = !!(pickedAgent?.model && pickedAgent.model !== chatModel);
