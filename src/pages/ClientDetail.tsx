@@ -42,6 +42,7 @@ import { SlackChannelMappingSection } from '@/components/settings/SlackChannelMa
 import { RevenueAttributionPanel } from '@/components/dashboard/RevenueAttributionPanel';
 import CustomerJourneyPanel from '@/components/dashboard/CustomerJourneyPanel';
 import { GoalTrackerWidget } from '@/components/dashboard/GoalTrackerWidget';
+import { EndToEndFunnelPanel } from '@/components/dashboard/EndToEndFunnelPanel';
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
 import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { useClient } from '@/hooks/useClients';
@@ -345,9 +346,18 @@ export default function ClientDetail() {
               </CollapsibleContent>
             </Collapsible>
 
-            <SectionErrorBoundary sectionName="KPI Goals">
-              <GoalTrackerWidget clientId={clientId} />
-            </SectionErrorBoundary>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <SectionErrorBoundary sectionName="End-to-End Funnel">
+                <EndToEndFunnelPanel
+                  dailyMetrics={dailyMetrics}
+                  fundedInvestorLabel={fundedInvestorLabel}
+                  className="lg:col-span-2"
+                />
+              </SectionErrorBoundary>
+              <SectionErrorBoundary sectionName="KPI Goals">
+                <GoalTrackerWidget clientId={clientId} />
+              </SectionErrorBoundary>
+            </div>
 
             <SectionErrorBoundary sectionName="Performance Summary">
               <PeriodicStatsTable clientId={clientId} />

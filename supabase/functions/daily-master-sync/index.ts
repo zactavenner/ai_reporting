@@ -260,6 +260,25 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 2000));
     }
 
+    // ── Step 5c: Creative Performance Loop (scale winners, propose pausing losers) ──
+    if (!skipSteps.includes("creative_loop")) {
+      const start = Date.now();
+      console.log(`[daily-master-sync] Step 5c: creative-loop`);
+      const loopRes = await callFunction(supabaseUrl, supabaseKey, "creative-loop", {});
+      const duration = Date.now() - start;
+      const loopResults = loopRes.data?.results || [];
+      const totalVariants = loopResults.reduce((s: number, r: any) => s + (r.variantsQueued || 0), 0);
+      const totalPauses = loopResults.reduce((s: number, r: any) => s + (r.pausesProposed || 0), 0);
+      results.push({
+        step: "creative-loop",
+        success: loopRes.success,
+        duration_ms: duration,
+        details: `${totalVariants} variant generations triggered, ${totalPauses} pause proposals queued for approval`,
+        error: loopRes.error,
+      });
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
     // ── Step 6: Meta Token Expiry Check ──
     if (!skipSteps.includes("token_check")) {
       const start = Date.now();

@@ -212,13 +212,15 @@ Deno.serve(async (req) => {
         dailyRowsWritten++;
       }
 
-      // Also upsert campaign-level data into meta_campaigns
+      // Also upsert campaign-level data into meta_campaigns (platform-labeled:
+      // GHL's unified reporting covers both Meta and Google campaigns)
       for (const r of reports) {
         if (!r.campaignId) continue;
         await supabase.from("meta_campaigns").upsert({
           client_id: clientId,
           meta_campaign_id: r.campaignId,
           name: r.campaignName || r.campaignId,
+          platform: r.platform === "google" ? "google" : "meta",
           spend: Number(r.spend) || 0,
           impressions: Number(r.impressions) || 0,
           clicks: Number(r.clicks) || 0,
@@ -276,6 +278,7 @@ Deno.serve(async (req) => {
           meta_adset_id: r.adGroupId || null,
           meta_campaign_id: r.campaignId || null,
           name: r.adName || r.adId,
+          platform: r.platform === "google" ? "google" : "meta",
           spend: Number(r.spend) || 0,
           impressions: Number(r.impressions) || 0,
           clicks: Number(r.clicks) || 0,
