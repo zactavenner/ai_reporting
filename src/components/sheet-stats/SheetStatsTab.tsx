@@ -542,16 +542,52 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         const funded = d.funded_investors || 0;
         return {
           date: format(parseISO(d.date), 'MMM d'),
+          rawDate: d.date,
           leads,
           spend,
           booked,
           funded,
+          fundedDollars: Number(d.funded_dollars || 0),
           cpl: leads > 0 ? spend / leads : 0,
           cpBooked: booked > 0 ? spend / booked : 0,
           cpFunded: funded > 0 ? spend / funded : 0,
         };
       });
   }, [daily]);
+
+  // Velocity: funded $ WoW and MoM deltas
+  const velocity = useMemo(() => {
+    if (!chartData.length) return null;
+    const sorted = [...chartData].sort((a, b) => a.rawDate.localeCompare(b.rawDate));
+    const last = sorted[sorted.length - 1].rawDate;
+    const lastDate = parseISO(last);
+    const sumBetween = (fromD: Date, toD: Date) =>
+      sorted
+        .filter((r) => {
+          const t = parseISO(r.rawDate).getTime();
+          return t >= fromD.getTime() && t <= toD.getTime();
+        })
+        .reduce((s, r) => s + (r.fundedDollars || 0), 0);
+    const week1From = subDays(lastDate, 6);
+    const week2To = subDays(lastDate, 7);
+    const week2From = subDays(lastDate, 13);
+    const wowCurrent = sumBetween(week1From, lastDate);
+    const wowPrior = sumBetween(week2From, week2To);
+    const month1From = subDays(lastDate, 29);
+    const month2To = subDays(lastDate, 30);
+    const month2From = subDays(lastDate, 59);
+    const momCurrent = sumBetween(month1From, lastDate);
+    const momPrior = sumBetween(month2From, month2To);
+    const delta = (cur: number, prev: number) => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : 0);
+    return {
+      wowCurrent,
+      wowPrior,
+      wowDelta: delta(wowCurrent, wowPrior),
+      momCurrent,
+      momPrior,
+      momDelta: delta(momCurrent, momPrior),
+    };
+  }, [chartData]);
 
   // Fetch lead questions in range for investor profile + pipeline value
   const { data: leadProfiles = [] } = useQuery({
@@ -960,10 +996,70 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
             />
             <KpiTile label="Cost / Funded" value={fmtMoney(agg.costPerInvestor)} delta={pctDelta(agg.costPerInvestor, aggPrior?.costPerInvestor ?? 0)} invert />
           </div>
+
+          {/* Deal Economics row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <KpiTile
+              label="Commit → Fund %"
+              value={fmtPct(agg.totalCommitments > 0 ? (agg.fundedInvestors / agg.totalCommitments) * 100 : 0, 1)}
+              sub={`${fmtInt(agg.fundedInvestors)} funded of ${fmtInt(agg.totalCommitments)} committed`}
+              delta={pctDelta(
+                agg.totalCommitments > 0 ? (agg.fundedInvestors / agg.totalCommitments) * 100 : 0,
+                aggPrior && aggPrior.totalCommitments > 0 ? (aggPrior.fundedInvestors / aggPrior.totalCommitments) * 100 : 0,
+              )}
+              icon={Handshake}
+            />
+            <KpiTile
+              label="Avg Commitment Size"
+              value={fmtMoney(agg.totalCommitments > 0 ? agg.commitmentDollars / agg.totalCommitments : 0)}
+              sub="Committed $ ÷ committed investors"
+              delta={pctDelta(
+                agg.totalCommitments > 0 ? agg.commitmentDollars / agg.totalCommitments : 0,
+                aggPrior && aggPrior.totalCommitments > 0 ? aggPrior.commitmentDollars / aggPrior.totalCommitments : 0,
+              )}
+              icon={Wallet}
+            />
+            <KpiTile
+              label="Avg Funded Check Size"
+              value={fmtMoney(agg.fundedInvestors > 0 ? agg.fundedDollars / agg.fundedInvestors : 0)}
+              sub="Funded $ ÷ funded investors"
+              delta={pctDelta(
+                agg.fundedInvestors > 0 ? agg.fundedDollars / agg.fundedInvestors : 0,
+                aggPrior && aggPrior.fundedInvestors > 0 ? aggPrior.fundedDollars / aggPrior.fundedInvestors : 0,
+              )}
+              icon={Banknote}
+            />
+          </div>
         </>
       ) : (
         <Card className="p-6 rounded-2xl">
           <p className="text-sm text-muted-foreground">No data in the selected range.</p>
+        </Card>
+      )}
+
+      {/* Velocity trend — WoW / MoM funded $ */}
+      {velocity && (
+        <Card className="p-5 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
+          <div className="flex items-end justify-between mb-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Capital Velocity</p>
+              <h3 className="text-base font-semibold mt-0.5" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Funded $ Momentum</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Rolling 7d and 30d funded capital vs the prior equal window</p>
+            </div>
+            <Timer className="h-5 w-5 text-[hsl(40_45%_55%)]" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <RatioPill
+              label="Week over Week"
+              value={fmtMoneyFull(velocity.wowCurrent)}
+              sub={`Prior 7d: ${fmtMoneyFull(velocity.wowPrior)} · ${velocity.wowDelta >= 0 ? '+' : ''}${velocity.wowDelta.toFixed(1)}%`}
+            />
+            <RatioPill
+              label="Month over Month"
+              value={fmtMoneyFull(velocity.momCurrent)}
+              sub={`Prior 30d: ${fmtMoneyFull(velocity.momPrior)} · ${velocity.momDelta >= 0 ? '+' : ''}${velocity.momDelta.toFixed(1)}%`}
+            />
+          </div>
         </Card>
       )}
 
