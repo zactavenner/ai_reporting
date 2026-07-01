@@ -17,6 +17,14 @@ const GATEWAY = "https://connector-gateway.lovable.dev";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const DEFAULT_CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+
+function getOpenRouterKey(context = "OpenRouter") {
+  const key = (OPENROUTER_API_KEY || "").trim();
+  if (!key) throw new Error(`${context}: OPENROUTER_API_KEY is not configured.`);
+  if (!key.startsWith("sk")) throw new Error(`${context}: OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key, not a Lovable gateway key.`);
+  return key;
+}
 
 function base64UrlEncode(value: ArrayBuffer): string {
   const bytes = new Uint8Array(value);
@@ -3065,7 +3073,7 @@ Deno.serve(async (req) => {
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     compareModels?: string[] | null;
-    imageModels?: Array<"nano-banana" | "openai"> | null;
+    imageModels?: Array<"nano-banana" | "openai" | "riverflow"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
     videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
@@ -3092,7 +3100,7 @@ Deno.serve(async (req) => {
   const creativeRows: any[] | undefined = (body as any).creativeRows;
 
   const selectedImageModels = Array.isArray(imageModels)
-    ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
+    ? imageModels.filter((m) => m === "nano-banana" || m === "openai" || m === "riverflow")
     : [];
 
   const ALLOWED_VIDEO_MODELS = [
@@ -3155,7 +3163,7 @@ Deno.serve(async (req) => {
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
   }
 
-  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "nvidia/nemotron-3-ultra-550b-a55b:free";
+  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : DEFAULT_CHAT_MODEL;
 
   // Load selected avatar (if any) for system-prompt context + auto-injection into video tools
   let selectedAvatar: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null = null;
@@ -3170,19 +3178,9 @@ Deno.serve(async (req) => {
     } catch (e) { console.warn("avatar lookup failed", e); }
   }
 
-  // Route chat completions through OpenRouter when the model id is prefixed
-  // with "openrouter/" (e.g. "openrouter/anthropic/claude-3.5-sonnet").
-  const USE_OPENROUTER = CHAT_MODEL.startsWith("openrouter/");
-  const CHAT_API_URL = USE_OPENROUTER
-    ? "https://openrouter.ai/api/v1/chat/completions"
-    : "https://openrouter.ai/api/v1/chat/completions";
-  const CHAT_API_KEY = USE_OPENROUTER ? (OPENROUTER_API_KEY || "") : LOVABLE_API_KEY;
-  const CHAT_MODEL_ID = USE_OPENROUTER ? CHAT_MODEL.replace(/^openrouter\//, "") : CHAT_MODEL;
-  if (USE_OPENROUTER && !OPENROUTER_API_KEY) {
-    return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY is not configured on the server." }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  // Chat models are OpenRouter model IDs. We accept legacy UI values prefixed
+  // with "openrouter/", but never send chat to the Lovable gateway because that
+  // gateway rejects OpenRouter keys and causes the `sk_`/401 error.
 
   if (!clientId) {
     return new Response(JSON.stringify({ error: "clientId is required" }), {
@@ -4153,17 +4151,16 @@ Deno.serve(async (req) => {
           };
 
           // Build the model attempt chain: primary → agent fallback_models[] →
-          // final Gemini safety net. Each entry is { fullId, apiUrl, apiKey, modelId, useOR }.
+          // final Gemini safety net. Every chat attempt goes directly through
+          // OpenRouter using OPENROUTER_API_KEY; no Lovable gateway fallback.
           const buildAttempt = (fullId: string) => {
-            const useOR = fullId.startsWith("openrouter/");
+            const modelId = fullId.replace(/^openrouter\//, "");
             return {
               fullId,
-              useOR,
-              apiUrl: useOR
-                ? "https://openrouter.ai/api/v1/chat/completions"
-                : "https://ai.gateway.lovable.dev/v1/chat/completions",
-              apiKey: useOR ? (OPENROUTER_API_KEY || "") : LOVABLE_API_KEY,
-              modelId: useOR ? fullId.replace(/^openrouter\//, "") : fullId,
+              useOR: true,
+              apiUrl: "https://openrouter.ai/api/v1/chat/completions",
+              apiKey: getOpenRouterKey("AI Studio chat"),
+              modelId,
             };
           };
           const chainIds: string[] = [];
