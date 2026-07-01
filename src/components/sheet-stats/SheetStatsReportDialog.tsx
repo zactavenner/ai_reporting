@@ -194,8 +194,8 @@ const DAYS_OF_WEEK = [
 function describeSchedule(s: ScheduleConfig): string {
   const hour = s.hourLocal % 12 === 0 ? 12 : s.hourLocal % 12;
   const ampm = s.hourLocal < 12 ? 'AM' : 'PM';
-  const time = `${hour}:00 ${ampm}`;
-  if (s.frequency === 'off') return 'Automatic sending is off.';
+  const time = `${hour}:00 ${ampm} PST`;
+  if (s.frequency === 'off') return 'Automatic sending is off. Hit Send now to start the weekly cadence.';
   if (s.frequency === 'weekly') {
     const day = DAYS_OF_WEEK.find((d) => d.v === s.dayOfWeek)?.l || 'Monday';
     const from = subDays(new Date(), 7);
@@ -362,24 +362,42 @@ export function SheetStatsReportDialog({
 
           <div className="rounded-xl border bg-muted/30 px-4 py-3 space-y-3">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Automatic schedule</p>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {schedule.frequency === 'off' ? 'Weekly email' : schedule.frequency === 'weekly' ? 'Weekly email' : 'Monthly email'}
+                </p>
                 <p className="text-xs text-muted-foreground">{describeSchedule(schedule)}</p>
               </div>
-              <Select
-                value={schedule.frequency}
-                onValueChange={(v) => setSchedule((s) => ({ ...s, frequency: v as ScheduleFrequency }))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => setEditingSchedule((v) => !v)}
+                title="Edit schedule"
               >
-                <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">Off</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                {editingSchedule ? 'Done' : 'Edit'}
+              </Button>
             </div>
 
-            {schedule.frequency !== 'off' && (
+            {editingSchedule && (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Frequency</Label>
+                  <Select
+                    value={schedule.frequency}
+                    onValueChange={(v) => setSchedule((s) => ({ ...s, frequency: v as ScheduleFrequency }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Off</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly (1st)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {schedule.frequency !== 'off' && (
               <div className="grid grid-cols-2 gap-3">
                 {schedule.frequency === 'weekly' ? (
                   <div className="space-y-1">
@@ -413,7 +431,7 @@ export function SheetStatsReportDialog({
                   </div>
                 )}
                 <div className="space-y-1">
-                  <Label className="text-xs">Time ({schedule.timezone})</Label>
+                  <Label className="text-xs">Time (PST)</Label>
                   <Select
                     value={String(schedule.hourLocal)}
                     onValueChange={(v) => setSchedule((s) => ({ ...s, hourLocal: Number(v) }))}
@@ -428,6 +446,8 @@ export function SheetStatsReportDialog({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+                )}
               </div>
             )}
           </div>
