@@ -1,7 +1,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const OPENROUTER_API_KEY = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
@@ -46,11 +46,14 @@ Deno.serve(async (req) => {
     const ref = refs[refIndex];
     if (!ref?.url) return json({ error: 'reference not found' }, 404);
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    if (!OPENROUTER_API_KEY.startsWith('sk-or-')) return json({ error: 'OPENROUTER_API_KEY missing or invalid' }, 500);
+    const aiResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://reporting.highperformanceads.com',
+        'X-Title': 'HPA Style Reference Analysis',
       },
       body: JSON.stringify({
         model: 'google/gemini-3-flash-preview',
