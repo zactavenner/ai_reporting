@@ -3,7 +3,7 @@
 // agents. Persists every turn (including the Jarvis↔Hermes side-channel) to
 // public.jarvis_messages so the UI can replay the full transcript.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callOpenRouter, type ORMessage } from "../_shared/openrouter.ts";
+import { callOpenRouter, streamOpenRouter, type ORMessage } from "../_shared/openrouter.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
   try {
     const supa = createClient(SUPABASE_URL, SERVICE);
     const body = await req.json().catch(() => ({}));
-    const { conversation_id, message, team_member_id } = body || {};
+    const { conversation_id, message, team_member_id, stream: wantStream } = body || {};
     if (!message || typeof message !== "string") {
       return j({ error: "message required" }, 400);
     }
@@ -130,6 +130,110 @@ Deno.serve(async (req) => {
       })) as ORMessage[],
     ];
 
+    // ---- Streaming SSE path (default when wantStream !== false) ----
+    if (wantStream !== false) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (event: string, data: any) => {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          };
+          try {
+            send("meta", { conversation_id: convId });
+            send("thought", { stage: "thinking", text: "Analyzing your request…" });
+
+            // Stream first Jarvis turn
+            let jarvisFinal = "";
+            let modelUsed = "";
+            for await (const chunk of streamOpenRouter(baseMessages, {
+              models: [JARVIS_MODEL, "google/gemini-2.0-flash-001"],
+              temperature: 0.6,
+            })) {
+              if (chunk.model) { modelUsed = chunk.model; send("thought", { stage: "model", text: `Using ${chunk.model}` }); }
+              if (chunk.delta) { jarvisFinal += chunk.delta; send("delta", { text: chunk.delta }); }
+              if (chunk.done) break;
+            }
+
+            const hermesCall = parseHermesCall(jarvisFinal);
+            let consulted = false;
+            if (hermesCall) {
+              consulted = true;
+              const askText = `JARVIS → HERMES: ${hermesCall.ask}\n\nContext / reason: ${hermesCall.reason}`;
+              send("thought", { stage: "hermes_call", text: `Consulting Hermes: ${hermesCall.ask}` });
+              send("inter_agent", { speaker: "jarvis", content: askText });
+              await supa.from("jarvis_messages").insert({
+                conversation_id: convId, user_id: userId, channel: "inter_agent",
+                speaker: "jarvis", role: "assistant", content: askText,
+              });
+
+              // Stream Hermes reply
+              let hermesText = "";
+              for await (const chunk of streamOpenRouter(
+                [{ role: "system", content: HERMES_SYSTEM }, { role: "user", content: askText }],
+                { models: [HERMES_MODEL, "google/gemini-2.0-flash-001"], temperature: 0.4 },
+              )) {
+                if (chunk.delta) { hermesText += chunk.delta; send("hermes_delta", { text: chunk.delta }); }
+                if (chunk.done) break;
+              }
+              const hermesFull = `HERMES → JARVIS: ${hermesText.trim()}`;
+              send("inter_agent", { speaker: "hermes", content: hermesFull });
+              await supa.from("jarvis_messages").insert({
+                conversation_id: convId, user_id: userId, channel: "inter_agent",
+                speaker: "hermes", role: "assistant", content: hermesFull,
+              });
+
+              // Synthesize final answer (streamed, replacing prior draft)
+              send("thought", { stage: "synth", text: "Synthesizing final answer from Hermes input…" });
+              send("reset_main", {});
+              let synthText = "";
+              for await (const chunk of streamOpenRouter(
+                [
+                  { role: "system", content: JARVIS_SYSTEM },
+                  ...(hist || []).map((m: any) => ({
+                    role: m.role === "user" ? "user" : "assistant",
+                    content: m.content,
+                  })) as ORMessage[],
+                  { role: "assistant", content: stripHermesCall(jarvisFinal) || "Consulting Hermes…" },
+                  { role: "user", content: `Hermes responded:\n\n${hermesText.trim()}\n\nNow give the final answer to the user. Do NOT emit another @@HERMES_CALL@@.` },
+                ],
+                { models: [JARVIS_MODEL, "google/gemini-2.0-flash-001"], temperature: 0.5 },
+              )) {
+                if (chunk.delta) { synthText += chunk.delta; send("delta", { text: chunk.delta }); }
+                if (chunk.done) break;
+              }
+              jarvisFinal = stripHermesCall(synthText);
+            } else {
+              jarvisFinal = stripHermesCall(jarvisFinal);
+            }
+
+            const { data: assistantMsg } = await supa.from("jarvis_messages").insert({
+              conversation_id: convId, user_id: userId, channel: "main",
+              speaker: "jarvis", role: "assistant", content: jarvisFinal,
+              metadata: { model: modelUsed, consulted_hermes: consulted },
+            }).select("id").single();
+
+            send("done", { conversation_id: convId, message_id: assistantMsg?.id, consulted_hermes: consulted });
+            controller.close();
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error("[jarvis-chat:stream]", msg);
+            controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: msg })}\n\n`));
+            controller.close();
+          }
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          ...cors,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
+    // ---- Legacy non-streaming fallback ----
     // First Jarvis turn
     const first = await callOpenRouter(baseMessages, {
       models: [JARVIS_MODEL, "google/gemini-2.0-flash-001"],

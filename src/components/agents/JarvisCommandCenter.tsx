@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sparkles, Send, Plus, MessageSquare, Trash2, Bot, Zap, ChevronRight, ChevronLeft, Mic } from "lucide-react";
+import { Sparkles, Send, Plus, MessageSquare, Trash2, Bot, Zap, ChevronRight, ChevronLeft, Mic, Brain } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -66,6 +66,9 @@ export function JarvisCommandCenter() {
   const [pending, setPending] = useState(false);
   const [showInterAgent, setShowInterAgent] = useState(true);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [streamingReply, setStreamingReply] = useState("");
+  const [thoughts, setThoughts] = useState<Array<{ stage: string; text: string; ts: number }>>([]);
+  const [liveInter, setLiveInter] = useState<Array<{ speaker: string; content: string }>>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -77,8 +80,20 @@ export function JarvisCommandCenter() {
   const main = useMemo(() => msgs.filter((m) => m.channel === "main"), [msgs]);
   const inter = useMemo(() => msgs.filter((m) => m.channel === "inter_agent"), [msgs]);
 
-  const send = useMutation({
-    mutationFn: async (text: string) => {
+  const streamSend = async (text: string) => {
+    setPending(true);
+    setStreamingReply("");
+    setThoughts([]);
+    setLiveInter([]);
+    // Optimistic user message
+    const optimisticId = `tmp-${Date.now()}`;
+    if (activeId) {
+      qc.setQueryData<Msg[]>(["jarvis_messages", activeId], (old = []) => [
+        ...old,
+        { id: optimisticId, channel: "main", speaker: "user", role: "user", content: text, created_at: new Date().toISOString() },
+      ]);
+    }
+    try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-chat`;
       const res = await fetch(url, {
         method: "POST",
@@ -91,21 +106,56 @@ export function JarvisCommandCenter() {
           conversation_id: activeId,
           message: text,
           team_member_id: currentMember?.id || "anonymous",
+          stream: true,
         }),
       });
-      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
-      return res.json() as Promise<{ conversation_id: string }>;
-    },
-    onMutate: () => setPending(true),
-    onSettled: () => setPending(false),
-    onSuccess: (r) => {
-      setActiveId(r.conversation_id);
-      qc.invalidateQueries({ queryKey: ["jarvis_conversations"] });
-      qc.invalidateQueries({ queryKey: ["jarvis_messages", r.conversation_id] });
-      setTimeout(() => taRef.current?.focus(), 50);
-    },
-    onError: (e: any) => toast.error(e?.message || "Jarvis failed"),
-  });
+      if (!res.ok || !res.body) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      let convIdLocal = activeId;
+      let acc = "";
+      const process = (event: string, data: any) => {
+        if (event === "meta") { convIdLocal = data.conversation_id; setActiveId(data.conversation_id); }
+        else if (event === "thought") { setThoughts((t) => [...t, { stage: data.stage, text: data.text, ts: Date.now() }]); }
+        else if (event === "delta") { acc += data.text; setStreamingReply(acc); }
+        else if (event === "reset_main") { acc = ""; setStreamingReply(""); }
+        else if (event === "inter_agent") { setLiveInter((x) => [...x, { speaker: data.speaker, content: data.content }]); }
+        else if (event === "hermes_delta") {
+          setLiveInter((x) => {
+            const last = x[x.length - 1];
+            if (last?.speaker === "hermes_stream") return [...x.slice(0, -1), { ...last, content: last.content + data.text }];
+            return [...x, { speaker: "hermes_stream", content: data.text }];
+          });
+        }
+        else if (event === "done") {
+          qc.invalidateQueries({ queryKey: ["jarvis_conversations"] });
+          if (convIdLocal) qc.invalidateQueries({ queryKey: ["jarvis_messages", convIdLocal] });
+          setStreamingReply("");
+          setLiveInter([]);
+        }
+        else if (event === "error") { toast.error(data.error || "Jarvis failed"); }
+      };
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const p of parts) {
+          const evLine = p.split("\n").find((l) => l.startsWith("event:"));
+          const dtLine = p.split("\n").find((l) => l.startsWith("data:"));
+          if (!evLine || !dtLine) continue;
+          try { process(evLine.slice(6).trim(), JSON.parse(dtLine.slice(5).trim())); } catch { /* noop */ }
+        }
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Jarvis failed");
+    } finally {
+      setPending(false);
+      setTimeout(() => taRef.current?.focus(), 30);
+    }
+  };
 
   const newConv = () => {
     setActiveId(null);
@@ -129,7 +179,7 @@ export function JarvisCommandCenter() {
     const t = input.trim();
     if (!t || pending) return;
     setInput("");
-    send.mutate(t);
+    void streamSend(t);
   };
 
   // Realtime updates while Jarvis is working
@@ -236,7 +286,16 @@ export function JarvisCommandCenter() {
                     </div>
                   </div>
                 ))}
-                {pending && (
+                {pending && streamingReply && (
+                  <div className="flex gap-3">
+                    <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground flex items-center justify-center text-[11px] font-semibold">J</div>
+                    <div className="rounded-2xl px-3.5 py-2 text-sm bg-muted whitespace-pre-wrap break-words max-w-[80%]">
+                      {streamingReply}
+                      <span className="inline-block w-1.5 h-3 bg-foreground/60 align-middle ml-0.5 animate-pulse" />
+                    </div>
+                  </div>
+                )}
+                {pending && !streamingReply && (
                   <div className="flex gap-3">
                     <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground flex items-center justify-center text-[11px] font-semibold">J</div>
                     <div className="rounded-2xl px-3.5 py-2 text-sm bg-muted">
@@ -282,17 +341,25 @@ export function JarvisCommandCenter() {
         {showInterAgent && (
           <aside className="col-span-12 md:col-span-3 border-l bg-muted/10 flex flex-col">
             <div className="px-3 py-2 border-b flex items-center gap-2">
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
-              <p className="text-xs font-semibold">Jarvis ↔ Hermes</p>
-              <Badge variant="outline" className="ml-auto text-[9px]">{inter.length}</Badge>
+              <Brain className="h-3.5 w-3.5 text-amber-500" />
+              <p className="text-xs font-semibold">Thought Process</p>
+              <Badge variant="outline" className="ml-auto text-[9px]">{thoughts.length + inter.length + liveInter.length}</Badge>
             </div>
             <ScrollArea className="flex-1 p-3">
-              {inter.length === 0 ? (
+              {inter.length === 0 && thoughts.length === 0 && liveInter.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">
-                  No agent-to-agent traffic yet. Ask Jarvis to dispatch work, check Hermes status, or coordinate across clients — you'll see the exchange here in real time.
+                  Jarvis's live reasoning, model routing, and Hermes consultations will stream here in real time as he works.
                 </p>
               ) : (
                 <div className="space-y-2.5">
+                  {thoughts.map((t, i) => (
+                    <div key={`th-${i}`} className="rounded-lg p-2 text-[11px] border border-cyan-500/30 bg-cyan-500/5">
+                      <div className="text-[9px] font-bold uppercase tracking-wider mb-1 text-cyan-600 flex items-center gap-1">
+                        <Brain className="h-2.5 w-2.5" /> {t.stage}
+                      </div>
+                      {t.text}
+                    </div>
+                  ))}
                   {inter.map((m) => (
                     <div key={m.id} className={cn(
                       "rounded-lg p-2.5 text-[11px] leading-relaxed border whitespace-pre-wrap break-words",
@@ -304,6 +371,18 @@ export function JarvisCommandCenter() {
                         "text-[9px] font-bold uppercase tracking-wider mb-1",
                         m.speaker === "jarvis" ? "text-primary" : "text-amber-600",
                       )}>{m.speaker}</div>
+                      {m.content}
+                    </div>
+                  ))}
+                  {liveInter.map((m, i) => (
+                    <div key={`li-${i}`} className={cn(
+                      "rounded-lg p-2.5 text-[11px] leading-relaxed border whitespace-pre-wrap break-words",
+                      m.speaker === "jarvis" ? "bg-primary/5 border-primary/20" : "bg-amber-500/5 border-amber-500/20",
+                    )}>
+                      <div className={cn(
+                        "text-[9px] font-bold uppercase tracking-wider mb-1",
+                        m.speaker === "jarvis" ? "text-primary" : "text-amber-600",
+                      )}>{m.speaker.replace("_stream", " (streaming)")}</div>
                       {m.content}
                     </div>
                   ))}
