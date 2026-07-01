@@ -61,21 +61,27 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
   try {
-    const auth = req.headers.get("authorization") || "";
-    const token = auth.replace(/^Bearer\s+/i, "");
-    if (!token) return j({ error: "unauthorized" }, 401);
-
-    const userClient = createClient(SUPABASE_URL, ANON, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    });
-    const { data: ures } = await userClient.auth.getUser();
-    const userId = ures?.user?.id;
-    if (!userId) return j({ error: "unauthorized" }, 401);
-
     const supa = createClient(SUPABASE_URL, SERVICE);
-    const { conversation_id, message } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { conversation_id, message, team_member_id } = body || {};
     if (!message || typeof message !== "string") {
       return j({ error: "message required" }, 400);
+    }
+    // Team-member auth: identify by team_member_id from the dashboard.
+    // Falls back to Supabase auth token when present (legacy).
+    let userId: string = typeof team_member_id === "string" && team_member_id
+      ? team_member_id
+      : "anonymous";
+    if (userId === "anonymous") {
+      const auth = req.headers.get("authorization") || "";
+      const token = auth.replace(/^Bearer\s+/i, "");
+      if (token) {
+        const userClient = createClient(SUPABASE_URL, ANON, {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+        });
+        const { data: ures } = await userClient.auth.getUser();
+        if (ures?.user?.id) userId = ures.user.id;
+      }
     }
 
     // Resolve / create conversation
@@ -93,7 +99,6 @@ Deno.serve(async (req) => {
         .from("jarvis_conversations")
         .select("id")
         .eq("id", convId)
-        .eq("user_id", userId)
         .maybeSingle();
       if (!owned) return j({ error: "conversation not found" }, 404);
     }

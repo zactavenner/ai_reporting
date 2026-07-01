@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JarvisVoiceMode } from "./JarvisVoiceMode";
+import { useTeamMember } from "@/contexts/TeamMemberContext";
 
 type Conversation = { id: string; title: string; updated_at: string };
 type Msg = {
@@ -23,13 +24,15 @@ type Msg = {
   metadata?: any;
 };
 
-function useConversations() {
+function useConversations(memberId: string | undefined) {
   return useQuery({
-    queryKey: ["jarvis_conversations"],
+    queryKey: ["jarvis_conversations", memberId],
+    enabled: !!memberId,
     queryFn: async (): Promise<Conversation[]> => {
       const { data, error } = await (supabase as any)
         .from("jarvis_conversations")
         .select("id, title, updated_at")
+        .eq("user_id", memberId)
         .order("updated_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -56,7 +59,8 @@ function useMessages(convId: string | null) {
 
 export function JarvisCommandCenter() {
   const qc = useQueryClient();
-  const { data: convs = [] } = useConversations();
+  const { currentMember } = useTeamMember();
+  const { data: convs = [] } = useConversations(currentMember?.id);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -75,18 +79,19 @@ export function JarvisCommandCenter() {
 
   const send = useMutation({
     mutationFn: async (text: string) => {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess?.session?.access_token;
-      if (!token) throw new Error("Not signed in");
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-chat`;
       const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ conversation_id: activeId, message: text }),
+        body: JSON.stringify({
+          conversation_id: activeId,
+          message: text,
+          team_member_id: currentMember?.id || "anonymous",
+        }),
       });
       if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
       return res.json() as Promise<{ conversation_id: string }>;

@@ -4,6 +4,7 @@ import { Mic, MicOff, X, Loader2, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useTeamMember } from "@/contexts/TeamMemberContext";
 
 type Phase = "idle" | "listening" | "thinking" | "speaking";
 
@@ -22,6 +23,7 @@ interface JarvisVoiceModeProps {
  * - Animated arc-reactor that reacts to phase + mic input level
  */
 export function JarvisVoiceMode({ open, onClose, conversationId, onConversationCreated }: JarvisVoiceModeProps) {
+  const { currentMember } = useTeamMember();
   const [phase, setPhase] = useState<Phase>("idle");
   const [transcript, setTranscript] = useState("");
   const [reply, setReply] = useState("");
@@ -79,18 +81,19 @@ export function JarvisVoiceMode({ open, onClose, conversationId, onConversationC
     setPhase("thinking");
     setReply("");
     try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess?.session?.access_token;
-      if (!token) throw new Error("Not signed in");
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-chat`;
       const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ conversation_id: convIdRef.current, message: text }),
+        body: JSON.stringify({
+          conversation_id: convIdRef.current,
+          message: text,
+          team_member_id: currentMember?.id || "anonymous",
+        }),
       });
       if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
       const data = await res.json();
