@@ -2895,6 +2895,17 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "COMPLIANCE:",
   "- Never use the word 'guaranteed' for investments. Use 'targeted returns' and include risk disclaimers when writing investor copy.",
   "",
+  "VOICEOVER PRONUNCIATION (CRITICAL — applies to EVERY video script, VO, avatar dialogue, TTS line, and any create_text_artifact tagged as a script):",
+  "- The script will be read aloud by an AI voice (ElevenLabs / avatar TTS). Write it so the voice pronounces every word correctly the FIRST time — no retakes.",
+  "- Spell out numbers, currency, %, and units the way they should be spoken: '$1,250' → 'twelve hundred fifty dollars', '3.5%' → 'three point five percent', '2026' → 'twenty twenty-six', 'ROI' → 'R O I'.",
+  "- Expand acronyms/initialisms on first use ('HRT — Hormone Replacement Therapy'). For letter-by-letter reads, separate with spaces or periods ('A P R', 'C E O').",
+  "- Phoneticize brand names, drug names, doctor names, cities, and any non-English word that a TTS is likely to mangle. Use inline hints in parentheses right after the word, e.g. 'Semaglutide (sem-a-GLOO-tide)', 'Dr. Nguyen (WIN)', 'HappyHorse (Happy Horse)'. Keep the original spelling before the hint so on-screen captions stay correct.",
+  "- Replace symbols/emojis with words ('&' → 'and', '@' → 'at', '→' → 'to'). Strip markdown (**, _, #, backticks) — none of it should reach the TTS.",
+  "- Use punctuation for pacing: commas for short pauses, em-dashes ' — ' for beats, ellipses '…' sparingly for held pauses. End every sentence with . ! or ? so the voice lands the cadence.",
+  "- No stage directions inside the spoken line ('[excited]', '(pause)', '*laughs*'). Put direction as a SEPARATE line prefixed 'DIRECTION:' or in the scene/environment field — never mixed into the VO text the model will speak.",
+  "- Write in short, spoken-English sentences (max ~18 words). Contractions on ('we're', 'you'll'). Avoid parentheticals mid-sentence and avoid slashes ('and/or' → 'and or').",
+  "- When you emit a script via create_text_artifact OR pass a voiceover into generate_script_batch, the VO text MUST already follow every rule above. Do not rely on the TTS to 'figure it out'.",
+  "",
   `User's quality preference: ${ctx.quality}.`,
   (ctx.imageModels && ctx.imageModels.length === 1)
     ? `IMAGE MODEL PREFERENCE: The user selected a single image model "${ctx.imageModels[0]}". ALWAYS pass model: "${ctx.imageModels[0]}" to generate_static_ad (and edit_static_ad where applicable). Do NOT call compare_image_models unless the user explicitly asks.`
