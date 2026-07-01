@@ -14,14 +14,20 @@ const cors = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const OPENROUTER_KEY = Deno.env.get("OPENROUTER_API_KEY")!;
+const OPENROUTER_KEY = (Deno.env.get("OPENROUTER_API_KEY") || "").trim();
 
-// Tool-capable model chain. Gemini flash first (reliable tool calling), then
-// nemotron and gpt-4o-mini as fallbacks.
+function getOpenRouterKey() {
+  if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY is not configured.");
+  if (!OPENROUTER_KEY.startsWith("sk")) throw new Error("OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key.");
+  return OPENROUTER_KEY;
+}
+
+// Tool-capable model chain. Nemotron is the persistent default; fallbacks are
+// only used if OpenRouter rejects/limits that model.
 const TOOL_MODELS = [
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
   "google/gemini-2.0-flash-001",
   "openai/gpt-4o-mini",
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
 ];
 
 function j(b: unknown, s = 200) {
@@ -131,9 +137,9 @@ async function execTool(name: string, args: any, supa: any): Promise<any> {
         // Call mini-Jarvis LLM scoped to this client
         const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
-          headers: { Authorization: `Bearer ${OPENROUTER_KEY}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${getOpenRouterKey()}`, "Content-Type": "application/json", "HTTP-Referer": "https://reporting.highperformanceads.com", "X-Title": "HPA Jarvis AM" },
           body: JSON.stringify({
-            model: "google/gemini-2.0-flash-001",
+            model: "nvidia/nemotron-3-ultra-550b-a55b:free",
             temperature: 0.3,
             messages: [
               { role: "system", content: `You are the JARVIS ACCOUNT MANAGER for ${client.data?.name || "this client"}. You have this client's full context below. Answer Jarvis's (COO) question tightly and factually. Cite numbers from the context. Under 200 words.\n\nCLIENT CONTEXT (JSON):\n${JSON.stringify(ctx).slice(0, 12000)}` },
@@ -162,7 +168,7 @@ async function callWithTools(messages: any[], signal?: AbortSignal): Promise<Res
   for (const model of TOOL_MODELS) {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${OPENROUTER_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://reporting.highperformanceads.com", "X-Title": "HPA Jarvis" },
+      headers: { Authorization: `Bearer ${getOpenRouterKey()}`, "Content-Type": "application/json", "HTTP-Referer": "https://reporting.highperformanceads.com", "X-Title": "HPA Jarvis" },
       signal,
       body: JSON.stringify({ model, messages, tools: TOOLS, stream: true, temperature: 0.5 }),
     });
