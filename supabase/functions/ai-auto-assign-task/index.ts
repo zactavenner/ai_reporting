@@ -65,8 +65,8 @@ serve(async (req) => {
       description: p.description,
     }));
 
-    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
+    const OPENROUTER_API_KEY = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
+    if (!OPENROUTER_API_KEY.startsWith('sk-or-')) throw new Error("OPENROUTER_API_KEY not configured or invalid");
 
     const prompt = `You are a project manager routing a task to the right people.
 
@@ -97,8 +97,10 @@ At least one of member_ids or pod_ids must be non-empty unless nothing fits.`;
     const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://reporting.highperformanceads.com",
+        "X-Title": "HPA Auto Assign Task",
       },
       body: JSON.stringify({
         model: "nvidia/nemotron-3-ultra-550b-a55b:free",
