@@ -15,7 +15,8 @@ Deno.serve(async (req) => {
   const { data: email, error } = await supabase.from("emails").select("*").eq("id", email_id).single();
   if (error || !email) return json({ error: "email not found" }, 404);
 
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
+  const openRouterKey = (Deno.env.get("OPENROUTER_API_KEY") || "").trim().replace(/^[']|[']$/g, "").replace(/^[\"]|[\"]$/g, "");
+  if (!openRouterKey.startsWith("sk-or-")) return json({ error: "OPENROUTER_API_KEY missing or invalid" }, 500);
   const system = `You are an executive email assistant for High Performance Ads, a premium ad agency.
 Write professional, concise, warm replies. Match the recipient's formality. Get to the point.
 Sign off as "Best," (the team member will add their name). Never invent facts.
@@ -29,9 +30,14 @@ ${(email.body_text || email.snippet || "").slice(0, 4000)}
 
 Return: {"reply":"...","confidence":0-1,"urgency":"high|medium|low"}`;
 
-  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${openRouterKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://reporting.highperformanceads.com",
+      "X-Title": "HPA Email Draft",
+    },
     body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
