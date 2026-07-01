@@ -121,6 +121,12 @@ export function JarvisCommandCenter() {
         else if (event === "delta") { acc += data.text; setStreamingReply(acc); }
         else if (event === "reset_main") { acc = ""; setStreamingReply(""); }
         else if (event === "inter_agent") { setLiveInter((x) => [...x, { speaker: data.speaker, content: data.content }]); }
+        else if (event === "tool_call") {
+          setThoughts((t) => [...t, { stage: "tool_call", text: `→ ${data.name}(${JSON.stringify(data.args).slice(0, 120)})`, ts: Date.now() }]);
+        }
+        else if (event === "tool_result") {
+          setThoughts((t) => [...t, { stage: "tool_result", text: `← ${data.name}: ${data.preview}`, ts: Date.now() }]);
+        }
         else if (event === "hermes_delta") {
           setLiveInter((x) => {
             const last = x[x.length - 1];
