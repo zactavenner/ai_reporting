@@ -4110,7 +4110,7 @@ Deno.serve(async (req) => {
               const err = await llm.text();
               if (llm.status === 429) throw new Error("Rate limit exceeded. Try again shortly.");
               if (llm.status === 402) throw new Error("AI credits exhausted. Add credits in Settings.");
-              throw new Error(`AI gateway [${llm.status}]: ${err}`);
+              throw new Error(`OpenRouter [${llm.status}]: ${err}`);
             }
             const reader = llm.body!.getReader();
             const decoder = new TextDecoder();
