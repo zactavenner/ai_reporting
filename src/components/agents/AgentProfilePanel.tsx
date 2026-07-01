@@ -439,6 +439,95 @@ export function AgentProfilePanel({
           />
         </Card>
 
+        {/* Schedule (master only) */}
+        {mode === "master" && (
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-primary" /> Schedule
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground">
+                  {agent.last_run_at ? `Last ran ${new Date(agent.last_run_at).toLocaleString()}` : "Never run"}
+                </span>
+                <Switch
+                  checked={scheduleEnabled}
+                  onCheckedChange={(v) => {
+                    setScheduleEnabled(v);
+                    saveMaster({ schedule_enabled: v });
+                  }}
+                />
+              </div>
+            </div>
+            <CronSchedulePicker
+              value={scheduleCron}
+              onChange={(v) => setScheduleCron(v)}
+            />
+            <div>
+              <p className="text-[11px] text-muted-foreground mb-1">Task prompt to run on schedule</p>
+              <Textarea
+                rows={3}
+                className="text-xs font-mono"
+                placeholder="e.g. Review yesterday's ad performance and post a Slack summary."
+                value={schedulePrompt}
+                onChange={(e) => setSchedulePrompt(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const { error } = await (supabase as any).functions.invoke("run-agent", {
+                    body: { agent_id: agent.id, prompt: schedulePrompt || null },
+                  });
+                  if (error) toast.error(`Run failed: ${error.message || error}`);
+                  else toast.success("Agent run queued");
+                }}
+              >
+                <Play className="h-3.5 w-3.5 mr-1" /> Run now
+              </Button>
+              <Button
+                size="sm"
+                onClick={() =>
+                  saveMaster({
+                    schedule_cron: scheduleCron || null,
+                    schedule_prompt: schedulePrompt || null,
+                    schedule_enabled: scheduleEnabled,
+                  } as any)
+                }
+              >
+                <Save className="h-3.5 w-3.5 mr-1" /> Save schedule
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Archive (custom master agents only) */}
+        {mode === "master" && agent.is_custom && (
+          <Card className="p-4 border-destructive/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-destructive">Danger zone</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Archive removes this custom agent from every client. Seeded core agents cannot be archived.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  if (confirm(`Archive ${agent.name}? This removes it from all clients.`)) {
+                    archive.mutate(agent.id);
+                  }
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Archive
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* Client brain (client view only) */}
         {isClientView && (
           <Card className="p-4 space-y-3">
