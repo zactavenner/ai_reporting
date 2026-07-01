@@ -510,18 +510,25 @@ export type Database = {
       agency_agents: {
         Row: {
           allowed_creative_types: string[]
+          archived_at: string | null
           capabilities: Json
           connectors: Json
           created_at: string
+          created_by: string | null
           default_model: string
           fallback_models: string[]
           icon: string | null
           id: string
           instructions_md: string | null
           is_active: boolean
+          is_custom: boolean
+          last_run_at: string | null
           memory_md: string | null
           name: string
           role: string
+          schedule_cron: string | null
+          schedule_enabled: boolean
+          schedule_prompt: string | null
           slug: string
           sort_order: number
           system_prompt: string
@@ -529,18 +536,25 @@ export type Database = {
         }
         Insert: {
           allowed_creative_types?: string[]
+          archived_at?: string | null
           capabilities?: Json
           connectors?: Json
           created_at?: string
+          created_by?: string | null
           default_model?: string
           fallback_models?: string[]
           icon?: string | null
           id?: string
           instructions_md?: string | null
           is_active?: boolean
+          is_custom?: boolean
+          last_run_at?: string | null
           memory_md?: string | null
           name: string
           role: string
+          schedule_cron?: string | null
+          schedule_enabled?: boolean
+          schedule_prompt?: string | null
           slug: string
           sort_order?: number
           system_prompt?: string
@@ -548,18 +562,25 @@ export type Database = {
         }
         Update: {
           allowed_creative_types?: string[]
+          archived_at?: string | null
           capabilities?: Json
           connectors?: Json
           created_at?: string
+          created_by?: string | null
           default_model?: string
           fallback_models?: string[]
           icon?: string | null
           id?: string
           instructions_md?: string | null
           is_active?: boolean
+          is_custom?: boolean
+          last_run_at?: string | null
           memory_md?: string | null
           name?: string
           role?: string
+          schedule_cron?: string | null
+          schedule_enabled?: boolean
+          schedule_prompt?: string | null
           slug?: string
           sort_order?: number
           system_prompt?: string
@@ -1125,6 +1146,80 @@ export type Database = {
           },
         ]
       }
+      agent_schedules: {
+        Row: {
+          agent_id: string
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          cron: string
+          enabled: boolean
+          id: string
+          last_run_at: string | null
+          next_run_at: string | null
+          task_prompt: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          cron: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          next_run_at?: string | null
+          task_prompt: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          cron?: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          next_run_at?: string | null
+          task_prompt?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_schedules_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agent_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       agent_tasks: {
         Row: {
           assigned_to_agent: string
@@ -1187,17 +1282,20 @@ export type Database = {
       }
       agents: {
         Row: {
+          archived_at: string | null
           budget_usd_monthly: number | null
           client_id: string | null
           config: Json
           connectors: Json | null
           consecutive_failures: number | null
           created_at: string
+          created_by: string | null
           description: string | null
           enabled: boolean | null
           icon: string | null
           id: string
           is_core: boolean
+          is_custom: boolean
           last_run_at: string | null
           last_run_status: string | null
           max_tokens: number | null
@@ -1216,17 +1314,20 @@ export type Database = {
           whatsapp_recipients: string[]
         }
         Insert: {
+          archived_at?: string | null
           budget_usd_monthly?: number | null
           client_id?: string | null
           config?: Json
           connectors?: Json | null
           consecutive_failures?: number | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           enabled?: boolean | null
           icon?: string | null
           id?: string
           is_core?: boolean
+          is_custom?: boolean
           last_run_at?: string | null
           last_run_status?: string | null
           max_tokens?: number | null
@@ -1245,17 +1346,20 @@ export type Database = {
           whatsapp_recipients?: string[]
         }
         Update: {
+          archived_at?: string | null
           budget_usd_monthly?: number | null
           client_id?: string | null
           config?: Json
           connectors?: Json | null
           consecutive_failures?: number | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           enabled?: boolean | null
           icon?: string | null
           id?: string
           is_core?: boolean
+          is_custom?: boolean
           last_run_at?: string | null
           last_run_status?: string | null
           max_tokens?: number | null
@@ -8369,7 +8473,10 @@ export type Database = {
           hermes_external_id: string | null
           id: string
           instructions: string
+          jarvis_conversation_id: string | null
           metadata: Json
+          reply_to: string | null
+          requested_by: string | null
           result_assets: Json
           status: string
           task_type: string
@@ -8387,7 +8494,10 @@ export type Database = {
           hermes_external_id?: string | null
           id?: string
           instructions: string
+          jarvis_conversation_id?: string | null
           metadata?: Json
+          reply_to?: string | null
+          requested_by?: string | null
           result_assets?: Json
           status?: string
           task_type: string
@@ -8405,7 +8515,10 @@ export type Database = {
           hermes_external_id?: string | null
           id?: string
           instructions?: string
+          jarvis_conversation_id?: string | null
           metadata?: Json
+          reply_to?: string | null
+          requested_by?: string | null
           result_assets?: Json
           status?: string
           task_type?: string

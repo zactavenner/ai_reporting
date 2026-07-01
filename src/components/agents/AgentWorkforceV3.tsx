@@ -1,13 +1,18 @@
 import { useState, useMemo } from "react";
-import { Bot, Crown, ChevronRight } from "lucide-react";
+import { Bot, Crown, ChevronRight, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useAgencyAgents } from "@/hooks/useAgencyAgents";
+import { useAgencyAgents, useCreateCustomAgent, AGENCY_AGENT_MODELS } from "@/hooks/useAgencyAgents";
 import { AgentProfilePanel } from "./AgentProfilePanel";
 import { useAgencyAgentFiles, totalTokensForFiles } from "@/hooks/useAgencyAgentFiles";
 import { getModelInfo } from "@/lib/modelRegistry";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function AgentCard({
   agent,
@@ -52,12 +57,21 @@ function AgentCard({
 
 export function AgentWorkforceV3() {
   const { data: agents = [], isLoading } = useAgencyAgents();
+  const createCustom = useCreateCustomAgent();
   const coreAgents = useMemo(
-    () => agents.filter((a) => a.is_active !== false).slice(0, 8),
+    () => agents.filter((a) => a.is_active !== false && !a.archived_at),
     [agents]
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = coreAgents.find((a) => a.id === selectedId) || coreAgents[0] || null;
+  const [showNew, setShowNew] = useState(false);
+  const [newDraft, setNewDraft] = useState({
+    name: "",
+    role: "",
+    icon: "🤖",
+    default_model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    instructions_md: "",
+  });
 
   return (
     <Card className="p-5 bg-gradient-to-br from-primary/5 via-transparent to-transparent">
@@ -70,7 +84,12 @@ export function AgentWorkforceV3() {
             Master profiles below trickle into every client. Per-client overrides live in <strong>AI Studio → Agents</strong>.
           </p>
         </div>
-        <Badge variant="outline" className="text-[10px]">{coreAgents.length} agents</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px]">{coreAgents.length} agents</Badge>
+          <Button size="sm" variant="outline" onClick={() => setShowNew(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> New agent
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -111,6 +130,65 @@ export function AgentWorkforceV3() {
           </div>
         </Tabs>
       )}
+
+      <Dialog open={showNew} onOpenChange={setShowNew}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create custom master agent</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-[80px_1fr] gap-2">
+              <div>
+                <Label className="text-xs">Icon</Label>
+                <Input value={newDraft.icon} onChange={(e) => setNewDraft({ ...newDraft, icon: e.target.value })} className="text-center text-2xl" />
+              </div>
+              <div>
+                <Label className="text-xs">Name</Label>
+                <Input value={newDraft.name} onChange={(e) => setNewDraft({ ...newDraft, name: e.target.value })} placeholder="e.g. Athena (Research Analyst)" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Role / one-liner</Label>
+              <Input value={newDraft.role} onChange={(e) => setNewDraft({ ...newDraft, role: e.target.value })} placeholder="Deep research and competitor intel" />
+            </div>
+            <div>
+              <Label className="text-xs">Primary model</Label>
+              <Select value={newDraft.default_model} onValueChange={(v) => setNewDraft({ ...newDraft, default_model: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {AGENCY_AGENT_MODELS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Instructions</Label>
+              <Textarea
+                rows={5}
+                className="text-xs font-mono"
+                placeholder="How should this agent behave? What SOPs must it follow?"
+                value={newDraft.instructions_md}
+                onChange={(e) => setNewDraft({ ...newDraft, instructions_md: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowNew(false)}>Cancel</Button>
+            <Button
+              disabled={!newDraft.name.trim() || !newDraft.role.trim() || createCustom.isPending}
+              onClick={async () => {
+                const created = await createCustom.mutateAsync({ ...newDraft });
+                setShowNew(false);
+                setNewDraft({ name: "", role: "", icon: "🤖", default_model: newDraft.default_model, instructions_md: "" });
+                if (created?.id) setSelectedId(created.id);
+              }}
+            >
+              Create agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

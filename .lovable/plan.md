@@ -1,93 +1,68 @@
+# Agent Workforce v4 — Custom Agents, Schedules, Hermes Gateway
 
-# Agent Workforce v3 — Claude-Style Profiles
+Three waves, shipped in order. Each is independently useful.
 
-Rebuild the Agent Workforce section into a profile-based UI inspired by the reference screenshot. Five master agents live at the agency level; their config trickles into every client. Per-client view adds offer/client-specific extras only.
+## Wave 1 — Custom Master Agents
 
-## Visual layout (per agent profile)
+Let you create/edit/delete agents at the master (agency) level beyond the 6 seeded ones. Every custom master agent automatically becomes available in every client (same mapping the 6 seeded agents already use).
 
-Two-column layout, Apple-clean:
+Schema (migration):
+- `agents` already exists at master scope. Add:
+  - `is_custom boolean default false` (seeded=false, user-created=true)
+  - `created_by text` (team_member_id)
+  - `archived_at timestamptz`
+- Keep existing `client_agent_overrides` for per-client tweaks — custom agents inherit the same override mechanism for free.
 
-```text
-┌──────────────────────────────────────────┬──────────────────────────────┐
-│ Agent header (icon, name, role, model)   │  Memory          [edit]      │
-│ ── tabs: Conversations | Activity ──     │  short purpose/context note  │
-│                                          │  Last updated …              │
-│ Recent runs / chat threads list          │ ──────────────────────────── │
-│   - "Brief for HRT" — 2d ago             │  Instructions    [+]         │
-│   - "Weekly report" — 5d ago             │  (system prompt summary)     │
-│                                          │ ──────────────────────────── │
-│                                          │  Files           [+]         │
-│                                          │  [▓░░░] 12% capacity used    │
-│                                          │  • file cards (name, lines)  │
-│                                          │ ──────────────────────────── │
-│                                          │  Connectors                  │
-│                                          │  chips: Meta · GHL · Stripe  │
-│                                          │ ──────────────────────────── │
-│                                          │  Available Models            │
-│                                          │  chips per capability        │
-│                                          │   (Creative → GPT Image 2,   │
-│                                          │   Nano Banana Pro, Seedance) │
-└──────────────────────────────────────────┴──────────────────────────────┘
-```
+UI (`AgentProfilePanel` / workforce list):
+- "New Agent" button on master view → modal (name, role, primary model, fallbacks, instructions, connectors)
+- Edit/Archive controls on custom agents only (seeded 6 remain read-name)
+- Client view (`ClientAgentsManager`) auto-lists all non-archived master agents (seeded + custom) with the same dual-tab editor already built
 
-The agent list (left rail at agency view) shows the 5 masters with status dot, model, last run.
+## Wave 2 — Schedules / Cadences
 
-## Data model
+Give each agent an optional cron schedule. Master schedule runs the agent against agency scope; client-scoped schedule runs it inside that client's workspace.
 
-Reuse existing tables — add only what's missing:
+Schema:
+- New `agent_schedules` table:
+  - `id`, `agent_id`, `client_id nullable` (null = master), `cron text`, `timezone text default 'America/Los_Angeles'`, `task_prompt text`, `enabled bool`, `last_run_at`, `next_run_at`, `created_by`
+  - GRANTs + RLS (authenticated read/write, service_role all)
 
-1. `agency_agents` already exists → use as master profile. Add columns:
-   - `memory_md text` (the "Purpose & context" block)
-   - `instructions_md text` (extra tailoring on top of system_prompt)
-   - `connectors jsonb default '[]'` (list of connector slugs the agent may call)
-   - `capabilities jsonb default '{}'` (e.g. `{ "image": ["openai/gpt-image-2","google/gemini-3.1-flash-image"], "video": ["bytedance/seedance-2.0-fast"] }`)
+Backend:
+- New edge function `agent-schedule-tick` — every minute, pg_cron pings it; it selects rows where `enabled AND next_run_at <= now()`, enqueues an `agent_tasks` row per due schedule (client_id from row), updates `last_run_at` / `next_run_at` using cron parser
+- pg_cron: `select cron.schedule('agent-schedule-tick','* * * * *', $$ net.http_post(...) $$)`
 
-2. New `agency_agent_files` table for uploads:
-   ```
-   id uuid pk, agent_id uuid fk → agency_agents, client_id uuid null
-   (null = master, non-null = client-specific addendum),
-   name text, mime text, size_bytes bigint, lines int,
-   storage_path text, created_at timestamptz default now()
-   ```
-   With GRANTs + RLS (authenticated read/write).
+UI:
+- New "Schedule" section in `AgentProfilePanel` (master scope) and in `ClientAgentsManager` per-client tab
+- Cadence presets (Hourly / Daily 9am / Weekly Mon / Custom cron) + task prompt textarea + enable toggle
+- List of upcoming runs (next 5) computed from cron
 
-3. `client_agents` already exists per client — extend to read master profile and only override `instructions_md` / files when `is_customized=true`. Per-client extras = offer/client cards rendered from existing `client_brain` + `client_offers`.
+## Wave 3 — Hermes ↔ Jarvis Two-Way
 
-4. Capacity = `sum(size_bytes) / model_context_window`. Window taken from a small `MODEL_CONTEXT` map in `src/lib/modelRegistry.ts`.
+Hermes (external ops agent) can push a request → Jarvis routes to correct client + offer + specialist agent, executes, and reports back.
 
-## Files & storage
+Schema:
+- Reuse `hermes_tasks` (exists) + new `hermes_task_type_routes` (exists). Add:
+  - `hermes_tasks.requested_by text` (hermes|jarvis|user)
+  - `hermes_tasks.reply_to text` (webhook/thread id)
+  - `hermes_tasks.jarvis_conversation_id uuid` (link to jarvis thread when routed)
 
-- New bucket `agent-files` (public read off; signed URLs via edge function).
-- Upload component uses `supabase.storage.from('agent-files').upload(...)`, then inserts row, computing line count for `.md/.txt/.json` on the client.
+Backend:
+- Edit `jarvis-chat` edge function: when a Hermes-tagged message arrives (system role or `source:hermes` in body), Jarvis:
+  1. Parses target (client, offer, agent) — uses existing hermes_task_type_routes for routing
+  2. Creates `agent_tasks` row for target specialist
+  3. Streams progress back into the Jarvis↔Hermes side panel (already built)
+  4. On completion, POSTs summary back to `reply_to`
+- New edge function `hermes-inbound`: HMAC-verified webhook Hermes calls to push tasks → forwards into jarvis-chat with `source:hermes`
 
-## Trickle-down
+UI:
+- Jarvis Command Center already has the Jarvis↔Hermes panel — add badge "Inbound from Hermes" + "Route to…" quick action
+- Show which client/agent Jarvis routed to inline in the thread
 
-- Master-level memory/instructions/files = `client_id IS NULL`.
-- Each client view shows: master profile (read-only banner "Inherited from agency") + an "Additional for {client}" panel:
-  - extra files (insert with `client_id` set)
-  - offer cards (from `client_offers`)
-  - client brain summary (from `client_brain`)
-- No duplication — clients can't edit master fields; they can only append.
+---
 
-## Components to create
+## Order & verification
+1. Wave 1 migration + UI + smoke-test create/edit/delete + verify shows in a client
+2. Wave 2 migration + edge fn + pg_cron + smoke-test with a 1-min schedule
+3. Wave 3 schema tweak + edge fns + smoke-test Hermes-simulated inbound → task created → response
 
-- `src/components/agents/AgentWorkforceV3.tsx` — agency-level grid of 5 agent cards + selected agent profile.
-- `src/components/agents/AgentProfilePanel.tsx` — the two-column profile (Memory / Instructions / Files / Connectors / Models).
-- `src/components/agents/AgentFilesUploader.tsx` — drag-drop, capacity bar, file cards.
-- `src/components/agents/AgentConnectorsRow.tsx` — chips from `standard_connectors` list + each agent's allowed slugs.
-- `src/components/agents/AgentModelsRow.tsx` — chips grouped by capability (Chat / Image / Video) from `capabilities`.
-- `src/hooks/useAgencyAgentFiles.ts` — list/insert/delete with capacity calc.
-
-Mount `AgentWorkforceV3` at the top of the existing Agents tab (replacing the current "Agent Workforce" hero section). Update `AIStudioAgentsTab.tsx` so the per-client view renders the same `AgentProfilePanel` with `clientId` prop → shows inherited master block + per-client extras.
-
-## Backend changes
-
-- One migration: add 4 columns to `agency_agents`, create `agency_agent_files` (with grants + RLS), create `agent-files` storage bucket.
-- Seed the 5 master agents' `capabilities` JSON (Jarvis, Media Buyer, Creative, Reporting, QA).
-- No edge-function changes required — existing `ai-studio` / `hermes-task-executor` already read `agency_agents`.
-
-## Out of scope
-
-- No changes to Hermes routing logic.
-- No changes to AI Studio chat surface itself.
-- Existing `AgencyAgentsManager` remains as the underlying CRUD; new UI sits on top.
+I'll ship Wave 1 first, then confirm before Wave 2 & 3 to keep blast radius small.
