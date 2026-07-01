@@ -336,8 +336,31 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
       )}
       {(m.compare && m.compare.length > 0) || m.compareLoading ? (
         <CompareGrid primary={m.content} isStreaming={isStreaming} compare={m.compare || []} loading={!!m.compareLoading} />
-      ) : m.content ? (
+      ) : (m.content || m.reasoning) ? (
         <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-pre:my-2 prose-ul:my-2 prose-ol:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:text-foreground prose-strong:font-semibold prose-h1:text-base prose-h2:text-sm prose-h3:text-sm prose-blockquote:border-l-primary/50 prose-code:bg-muted prose-code:px-1 prose-code:rounded">
+          {m.reasoning ? (
+            <details
+              open={isStreaming && !m.content}
+              className="not-prose mb-2 rounded-lg border border-border/50 bg-muted/30 backdrop-blur px-3 py-2 group"
+            >
+              <summary className="cursor-pointer list-none flex items-center gap-2 text-[11px] font-medium text-muted-foreground hover:text-foreground select-none">
+                {isStreaming && !m.content ? (
+                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                ) : (
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/60" />
+                )}
+                <span>{isStreaming && !m.content ? "Thinking…" : "Thought process"}</span>
+                <span className="ml-auto text-[10px] opacity-60 group-open:hidden">show</span>
+                <span className="ml-auto text-[10px] opacity-60 hidden group-open:inline">hide</span>
+              </summary>
+              <div className="mt-2 text-[12px] leading-relaxed text-muted-foreground whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                {m.reasoning}
+                {isStreaming && !m.content && (
+                  <span className="inline-block ml-1 h-2 w-1 bg-primary/70 animate-pulse align-middle" />
+                )}
+              </div>
+            </details>
+          ) : null}
           <ReactMarkdown>{m.content}</ReactMarkdown>
           {isStreaming && (
             <span className="inline-flex items-center gap-1 ml-1 text-muted-foreground align-middle">
