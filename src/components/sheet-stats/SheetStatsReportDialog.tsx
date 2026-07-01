@@ -455,7 +455,7 @@ export function SheetStatsReportDialog({
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button variant="outline" onClick={persistSettings} disabled={saving}>
+          <Button variant="outline" onClick={() => persistSettings()} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Save
           </Button>
           <Button onClick={sendNow} disabled={sending || recipients.length === 0}>
