@@ -43,6 +43,8 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
   const [linkSubmitting, setLinkSubmitting] = useState(false);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const [targetDraft, setTargetDraft] = useState('');
+  const [editingManualMrrId, setEditingManualMrrId] = useState<string | null>(null);
+  const [manualMrrDraft, setManualMrrDraft] = useState('');
 
   // Build email map for Stripe lookup — auto-match via client's notification_email
   // when no explicit stripe_email is set yet.
@@ -185,6 +187,7 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       const stripeMrr = Number(stripeDataMap[c.id]?.mrr || 0);
       if (stripeMrr > 0) { sum += stripeMrr; continue; }
       const contracted =
+        Number((clientFullSettings[c.id] as any)?.manual_mrr || 0) ||
         Number((clientFullSettings[c.id] as any)?.mrr || 0) ||
         agreementByClient.get(c.id) ||
         0;
@@ -428,6 +431,21 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
     }
   };
 
+  const saveManualMrr = async (clientId: string) => {
+    const v = parseFloat(manualMrrDraft);
+    if (Number.isNaN(v) || v < 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+    try {
+      await updateSettings.mutateAsync({ client_id: clientId, manual_mrr: v } as any);
+      toast.success('Manual MRR saved');
+      setEditingManualMrrId(null);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save');
+    }
+  };
+
   const startLink = (clientId: string, clientName: string) => {
     const guess =
       (clients.find((c) => c.id === clientId) as any)?.notification_email || '';
@@ -635,8 +653,52 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right font-bold tabular-nums">
-                      {isConnected ? formatCurrency(mrr) : '—'}
-                      {interval && <span className="text-xs text-muted-foreground ml-1">/{interval}</span>}
+                      {isConnected ? (
+                        <>
+                          {formatCurrency(mrr)}
+                          {interval && <span className="text-xs text-muted-foreground ml-1">/{interval}</span>}
+                        </>
+                      ) : editingManualMrrId === client.id ? (
+                        <div className="flex gap-1 justify-end items-center">
+                          <Input
+                            autoFocus
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={manualMrrDraft}
+                            onChange={(e) => setManualMrrDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveManualMrr(client.id);
+                              if (e.key === 'Escape') setEditingManualMrrId(null);
+                            }}
+                            className="h-7 w-24 text-xs"
+                          />
+                          <Button size="sm" className="h-7 px-2" onClick={() => saveManualMrr(client.id)}>
+                            <Check className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        (() => {
+                          const manual = Number((clientFullSettings[client.id] as any)?.manual_mrr) || 0;
+                          return (
+                            <button
+                              type="button"
+                              className="text-right hover:underline"
+                              onClick={() => { setEditingManualMrrId(client.id); setManualMrrDraft(String(manual || '')); }}
+                              title="Click to set manual MRR (no Stripe link required)"
+                            >
+                              {manual > 0 ? (
+                                <>
+                                  {formatCurrency(manual)}
+                                  <span className="text-[10px] text-muted-foreground ml-1">manual</span>
+                                </>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">set MRR</span>
+                              )}
+                            </button>
+                          );
+                        })()
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {editingTargetId === client.id ? (
