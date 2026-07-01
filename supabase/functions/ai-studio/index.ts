@@ -20,9 +20,9 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const DEFAULT_CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 
 function getOpenRouterKey(context = "OpenRouter") {
-  const key = (OPENROUTER_API_KEY || "").trim();
+  const key = (OPENROUTER_API_KEY || "").trim().replace(/^['"]|['"]$/g, "");
   if (!key) throw new Error(`${context}: OPENROUTER_API_KEY is not configured.`);
-  if (!key.startsWith("sk")) throw new Error(`${context}: OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key, not a Lovable gateway key.`);
+  if (!key.startsWith("sk-or-")) throw new Error(`${context}: OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key (sk-or-...), not a Lovable gateway key.`);
   return key;
 }
 
