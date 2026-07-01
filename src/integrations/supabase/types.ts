@@ -1187,17 +1187,20 @@ export type Database = {
       }
       agents: {
         Row: {
+          archived_at: string | null
           budget_usd_monthly: number | null
           client_id: string | null
           config: Json
           connectors: Json | null
           consecutive_failures: number | null
           created_at: string
+          created_by: string | null
           description: string | null
           enabled: boolean | null
           icon: string | null
           id: string
           is_core: boolean
+          is_custom: boolean
           last_run_at: string | null
           last_run_status: string | null
           max_tokens: number | null
@@ -1216,17 +1219,20 @@ export type Database = {
           whatsapp_recipients: string[]
         }
         Insert: {
+          archived_at?: string | null
           budget_usd_monthly?: number | null
           client_id?: string | null
           config?: Json
           connectors?: Json | null
           consecutive_failures?: number | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           enabled?: boolean | null
           icon?: string | null
           id?: string
           is_core?: boolean
+          is_custom?: boolean
           last_run_at?: string | null
           last_run_status?: string | null
           max_tokens?: number | null
@@ -1245,17 +1251,20 @@ export type Database = {
           whatsapp_recipients?: string[]
         }
         Update: {
+          archived_at?: string | null
           budget_usd_monthly?: number | null
           client_id?: string | null
           config?: Json
           connectors?: Json | null
           consecutive_failures?: number | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           enabled?: boolean | null
           icon?: string | null
           id?: string
           is_core?: boolean
+          is_custom?: boolean
           last_run_at?: string | null
           last_run_status?: string | null
           max_tokens?: number | null
