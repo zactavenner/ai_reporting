@@ -542,16 +542,52 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
         const funded = d.funded_investors || 0;
         return {
           date: format(parseISO(d.date), 'MMM d'),
+          rawDate: d.date,
           leads,
           spend,
           booked,
           funded,
+          fundedDollars: Number(d.funded_dollars || 0),
           cpl: leads > 0 ? spend / leads : 0,
           cpBooked: booked > 0 ? spend / booked : 0,
           cpFunded: funded > 0 ? spend / funded : 0,
         };
       });
   }, [daily]);
+
+  // Velocity: funded $ WoW and MoM deltas
+  const velocity = useMemo(() => {
+    if (!chartData.length) return null;
+    const sorted = [...chartData].sort((a, b) => a.rawDate.localeCompare(b.rawDate));
+    const last = sorted[sorted.length - 1].rawDate;
+    const lastDate = parseISO(last);
+    const sumBetween = (fromD: Date, toD: Date) =>
+      sorted
+        .filter((r) => {
+          const t = parseISO(r.rawDate).getTime();
+          return t >= fromD.getTime() && t <= toD.getTime();
+        })
+        .reduce((s, r) => s + (r.fundedDollars || 0), 0);
+    const week1From = subDays(lastDate, 6);
+    const week2To = subDays(lastDate, 7);
+    const week2From = subDays(lastDate, 13);
+    const wowCurrent = sumBetween(week1From, lastDate);
+    const wowPrior = sumBetween(week2From, week2To);
+    const month1From = subDays(lastDate, 29);
+    const month2To = subDays(lastDate, 30);
+    const month2From = subDays(lastDate, 59);
+    const momCurrent = sumBetween(month1From, lastDate);
+    const momPrior = sumBetween(month2From, month2To);
+    const delta = (cur: number, prev: number) => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : 0);
+    return {
+      wowCurrent,
+      wowPrior,
+      wowDelta: delta(wowCurrent, wowPrior),
+      momCurrent,
+      momPrior,
+      momDelta: delta(momCurrent, momPrior),
+    };
+  }, [chartData]);
 
   // Fetch lead questions in range for investor profile + pipeline value
   const { data: leadProfiles = [] } = useQuery({
