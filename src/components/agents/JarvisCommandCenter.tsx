@@ -24,13 +24,15 @@ type Msg = {
   metadata?: any;
 };
 
-function useConversations() {
+function useConversations(memberId: string | undefined) {
   return useQuery({
-    queryKey: ["jarvis_conversations"],
+    queryKey: ["jarvis_conversations", memberId],
+    enabled: !!memberId,
     queryFn: async (): Promise<Conversation[]> => {
       const { data, error } = await (supabase as any)
         .from("jarvis_conversations")
         .select("id, title, updated_at")
+        .eq("user_id", memberId)
         .order("updated_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -58,7 +60,7 @@ function useMessages(convId: string | null) {
 export function JarvisCommandCenter() {
   const qc = useQueryClient();
   const { currentMember } = useTeamMember();
-  const { data: convs = [] } = useConversations();
+  const { data: convs = [] } = useConversations(currentMember?.id);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
