@@ -20,8 +20,8 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
-    if (!LOVABLE_API_KEY) {
+    const OPENROUTER_API_KEY = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
+    if (!OPENROUTER_API_KEY.startsWith('sk-or-')) {
       return new Response(JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -88,8 +88,10 @@ Make the prompt_template detailed and specific. Include:
     const aiRes = await fetch(AI_GATEWAY_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://reporting.highperformanceads.com',
+        'X-Title': 'HPA Agent Config Generator',
       },
       body: JSON.stringify({
         model: "nvidia/nemotron-3-ultra-550b-a55b:free",

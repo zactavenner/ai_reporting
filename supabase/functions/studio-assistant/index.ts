@@ -1,12 +1,25 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY')!;
+const OPENROUTER_API_KEY = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const GATEWAY_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
+
+function getOpenRouterKey() {
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured.');
+  if (!OPENROUTER_API_KEY.startsWith('sk-or-')) throw new Error('OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key (sk-or-...).');
+  return OPENROUTER_API_KEY;
+}
+
+const openRouterHeaders = (title = 'Studio Assistant') => ({
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${getOpenRouterKey()}`,
+  'HTTP-Referer': 'https://reporting.highperformanceads.com',
+  'X-Title': title,
+});
 
 // Safe read-only tables the assistant can query
 const ALLOWED_TABLES = new Set([
@@ -235,8 +248,7 @@ async function runGenerateImage(args: any) {
   const res = await fetch(GATEWAY_URL, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      ...openRouterHeaders('Studio Assistant Image'),
     },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash-image-preview',
@@ -493,7 +505,7 @@ Deno.serve(async (req) => {
       try {
         const sumRes = await fetch(GATEWAY_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LOVABLE_API_KEY}` },
+          headers: openRouterHeaders('Studio Assistant Summary'),
           body: JSON.stringify({
             model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
             messages: [
@@ -541,8 +553,7 @@ Deno.serve(async (req) => {
       const res = await fetch(GATEWAY_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          ...openRouterHeaders('Studio Assistant Chat'),
         },
         body: JSON.stringify({
           model: "nvidia/nemotron-3-ultra-550b-a55b:free",
@@ -564,7 +575,7 @@ Deno.serve(async (req) => {
       }
       if (!res.ok) {
         const txt = await res.text();
-        return new Response(JSON.stringify({ error: `Gateway error: ${res.status} ${txt}` }), {
+            return new Response(JSON.stringify({ error: `OpenRouter error: ${res.status} ${txt}` }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }

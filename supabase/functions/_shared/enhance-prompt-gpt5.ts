@@ -1,8 +1,8 @@
-// GPT-5 prompt enhancer via Lovable AI Gateway.
+// GPT-5 prompt enhancer via OpenRouter.
 // Takes a raw user idea + structured context and returns a hyper-detailed
 // image-generation prompt suitable for Gemini 3 Pro Image / GPT-Image-2.
 
-const GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const GATEWAY_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export interface EnhancePromptInput {
   kind: 'static-ad' | 'avatar' | 'avatar-look';
@@ -37,8 +37,8 @@ Output ONLY the final image prompt text. No preamble.`,
 };
 
 export async function enhancePromptWithGpt5(input: EnhancePromptInput): Promise<string | null> {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!apiKey) return null;
+  const apiKey = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
+  if (!apiKey.startsWith('sk-or-')) return null;
 
   const system = SYSTEMS[input.kind];
   const userPayload = JSON.stringify({
@@ -53,6 +53,8 @@ export async function enhancePromptWithGpt5(input: EnhancePromptInput): Promise<
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://reporting.highperformanceads.com',
+        'X-Title': 'HPA Prompt Enhancer',
       },
       body: JSON.stringify({
         model: 'openai/gpt-5',

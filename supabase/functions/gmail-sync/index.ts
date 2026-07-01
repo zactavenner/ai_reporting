@@ -134,7 +134,8 @@ async function syncAccount(supabase: any, acc: any) {
 }
 
 async function classifyAndArchive(supabase: any, email: any, acc: any, token: string) {
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
+  const openRouterKey = (Deno.env.get("OPENROUTER_API_KEY") || "").trim().replace(/^['"]|['"]$/g, "");
+  if (!openRouterKey.startsWith("sk-or-")) throw new Error("OPENROUTER_API_KEY missing or invalid");
   const prompt = `Classify this email and return JSON only.
 Categories: important_human, client, sales, partner_vendor, internal, newsletter, promotional, cold_outreach, spam
 Priority: high (existing clients, prospects, revenue, escalations, contracts, urgent), medium (general inquiries, vendors), low (newsletters, marketing, cold outreach)
@@ -146,9 +147,14 @@ ${(email.body_text || email.snippet || "").slice(0, 2000)}
 
 Return JSON: {"classification":"...","priority":"high|medium|low","requires_response":true|false,"reason":"short"}`;
 
-  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${openRouterKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://reporting.highperformanceads.com",
+      "X-Title": "HPA Gmail Sync",
+    },
     body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [

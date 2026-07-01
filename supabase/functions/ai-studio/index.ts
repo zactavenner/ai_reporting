@@ -7,9 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY')!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY') || "";
 const OPENAI_API_KEY_ENV = Deno.env.get("OPENAI_API_KEY");
 const GOOGLE_DOCS_API_KEY = Deno.env.get("GOOGLE_DOCS_API_KEY");
 const GOOGLE_SHEETS_API_KEY = Deno.env.get("GOOGLE_SHEETS_API_KEY");
@@ -17,6 +17,14 @@ const GATEWAY = "https://connector-gateway.lovable.dev";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const DEFAULT_CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+
+function getOpenRouterKey(context = "OpenRouter") {
+  const key = (OPENROUTER_API_KEY || "").trim().replace(/^['"]|['"]$/g, "");
+  if (!key) throw new Error(`${context}: OPENROUTER_API_KEY is not configured.`);
+  if (!key.startsWith("sk-or-")) throw new Error(`${context}: OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key (sk-or-...), not a Lovable gateway key.`);
+  return key;
+}
 
 function base64UrlEncode(value: ArrayBuffer): string {
   const bytes = new Uint8Array(value);
@@ -338,10 +346,10 @@ async function generateStaticAd(opts: {
     const content: any[] = [{ type: "text", text: textPrompt }];
     for (const u of cappedRefs) content.push({ type: "image_url", image_url: { url: u } });
 
-    if (!OPENROUTER_API_KEY) throw new Error("Riverflow requires OPENROUTER_API_KEY.");
+    const openRouterKey = getOpenRouterKey("Riverflow image");
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
+      headers: { Authorization: `Bearer ${openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
       body: JSON.stringify({
         model: modelUsed,
         messages: [{ role: "user", content: content.length === 1 ? textPrompt : content }],
@@ -426,7 +434,7 @@ async function generateStaticAd(opts: {
 
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${getOpenRouterKey("Nano Banana image")}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
       body: JSON.stringify({
         model: modelUsed,
         messages: [{ role: "user", content: content.length === 1 ? textPrompt : content }],
@@ -550,7 +558,7 @@ async function editStaticAd(opts: {
     modelUsed = "google/gemini-3.1-flash-image";
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${getOpenRouterKey("Image edit")}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
       body: JSON.stringify({
         model: modelUsed,
         messages: [{
@@ -651,7 +659,7 @@ async function generateOneVariation(opts: {
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${getOpenRouterKey("Image variations")}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
     body: JSON.stringify({ model: modelUsed, messages: [{ role: "user", content: userContent }], modalities: ["image", "text"] }),
   });
   if (!res.ok) throw new Error(`Variation [${res.status}]: ${(await res.text()).slice(0, 300)}`);
@@ -731,7 +739,7 @@ video_prompt = motion/animation that begins from that keyframe (camera move, sub
 No copy/text overlays unless explicitly asked. ${opts.brandContext?.brandColors?.length ? `Brand palette: ${opts.brandContext.brandColors.join(", ")}.` : ""} ${opts.styleNotes || ""}`;
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${getOpenRouterKey("Storyboard planning")}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
     body: JSON.stringify({
       model: "nvidia/nemotron-3-ultra-550b-a55b:free",
         models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
@@ -831,7 +839,7 @@ async function generateSceneImage(opts: {
     modelUsed = "google/gemini-3.1-flash-image";
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${getOpenRouterKey("Scene image")}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
       body: JSON.stringify({ model: modelUsed, messages: [{ role: "user", content: fullPrompt }], modalities: ["image", "text"] }),
     });
     if (!res.ok) throw new Error(`Scene image [${res.status}]: ${(await res.text()).slice(0, 300)}`);
@@ -3065,7 +3073,7 @@ Deno.serve(async (req) => {
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
     compareModels?: string[] | null;
-    imageModels?: Array<"nano-banana" | "openai"> | null;
+    imageModels?: Array<"nano-banana" | "openai" | "riverflow"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
     videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
@@ -3092,7 +3100,7 @@ Deno.serve(async (req) => {
   const creativeRows: any[] | undefined = (body as any).creativeRows;
 
   const selectedImageModels = Array.isArray(imageModels)
-    ? imageModels.filter((m) => m === "nano-banana" || m === "openai")
+    ? imageModels.filter((m) => m === "nano-banana" || m === "openai" || m === "riverflow")
     : [];
 
   const ALLOWED_VIDEO_MODELS = [
@@ -3155,7 +3163,7 @@ Deno.serve(async (req) => {
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
   }
 
-  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : "nvidia/nemotron-3-ultra-550b-a55b:free";
+  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : DEFAULT_CHAT_MODEL;
 
   // Load selected avatar (if any) for system-prompt context + auto-injection into video tools
   let selectedAvatar: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null = null;
@@ -3170,19 +3178,9 @@ Deno.serve(async (req) => {
     } catch (e) { console.warn("avatar lookup failed", e); }
   }
 
-  // Route chat completions through OpenRouter when the model id is prefixed
-  // with "openrouter/" (e.g. "openrouter/anthropic/claude-3.5-sonnet").
-  const USE_OPENROUTER = CHAT_MODEL.startsWith("openrouter/");
-  const CHAT_API_URL = USE_OPENROUTER
-    ? "https://openrouter.ai/api/v1/chat/completions"
-    : "https://openrouter.ai/api/v1/chat/completions";
-  const CHAT_API_KEY = USE_OPENROUTER ? (OPENROUTER_API_KEY || "") : LOVABLE_API_KEY;
-  const CHAT_MODEL_ID = USE_OPENROUTER ? CHAT_MODEL.replace(/^openrouter\//, "") : CHAT_MODEL;
-  if (USE_OPENROUTER && !OPENROUTER_API_KEY) {
-    return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY is not configured on the server." }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  // Chat models are OpenRouter model IDs. We accept legacy UI values prefixed
+  // with "openrouter/", but never send chat to the Lovable gateway because that
+  // gateway rejects OpenRouter keys and causes the `sk_`/401 error.
 
   if (!clientId) {
     return new Response(JSON.stringify({ error: "clientId is required" }), {
@@ -4112,7 +4110,7 @@ Deno.serve(async (req) => {
               const err = await llm.text();
               if (llm.status === 429) throw new Error("Rate limit exceeded. Try again shortly.");
               if (llm.status === 402) throw new Error("AI credits exhausted. Add credits in Settings.");
-              throw new Error(`AI gateway [${llm.status}]: ${err}`);
+              throw new Error(`OpenRouter [${llm.status}]: ${err}`);
             }
             const reader = llm.body!.getReader();
             const decoder = new TextDecoder();
@@ -4153,17 +4151,16 @@ Deno.serve(async (req) => {
           };
 
           // Build the model attempt chain: primary → agent fallback_models[] →
-          // final Gemini safety net. Each entry is { fullId, apiUrl, apiKey, modelId, useOR }.
+          // final Gemini safety net. Every chat attempt goes directly through
+          // OpenRouter using OPENROUTER_API_KEY; no Lovable gateway fallback.
           const buildAttempt = (fullId: string) => {
-            const useOR = fullId.startsWith("openrouter/");
+            const modelId = fullId.replace(/^openrouter\//, "");
             return {
               fullId,
-              useOR,
-              apiUrl: useOR
-                ? "https://openrouter.ai/api/v1/chat/completions"
-                : "https://ai.gateway.lovable.dev/v1/chat/completions",
-              apiKey: useOR ? (OPENROUTER_API_KEY || "") : LOVABLE_API_KEY,
-              modelId: useOR ? fullId.replace(/^openrouter\//, "") : fullId,
+              useOR: true,
+              apiUrl: "https://openrouter.ai/api/v1/chat/completions",
+              apiKey: getOpenRouterKey("AI Studio chat"),
+              modelId,
             };
           };
           const chainIds: string[] = [];
@@ -5323,7 +5320,7 @@ Deno.serve(async (req) => {
           if (cleaned && cleaned.length > 20) {
             const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST",
-              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              headers: { Authorization: `Bearer ${getOpenRouterKey("Suggested followups")}`, "Content-Type": "application/json", "HTTP-Referer": "https://lovable.dev", "X-Title": "AI Studio" },
               body: JSON.stringify({
                 model: "nvidia/nemotron-3-ultra-550b-a55b:free",
         models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],

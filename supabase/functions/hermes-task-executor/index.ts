@@ -16,11 +16,17 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || Deno.env.get("LOVABLE_API_KEY") || "";
+const OPENROUTER_API_KEY = (Deno.env.get("OPENROUTER_API_KEY") || "").trim().replace(/^['"]|['"]$/g, "");
 const HERMES_BOT_USER_ID = "00000000-0000-0000-0000-000000000001";
 const AI_GATEWAY_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+
+function getOpenRouterKey() {
+  if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not configured.");
+  if (!OPENROUTER_API_KEY.startsWith("sk-or-")) throw new Error("OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key (sk-or-...).");
+  return OPENROUTER_API_KEY;
+}
 
 // ------------------------------------------------------------------
 // Channel audit + back-and-forth helpers
@@ -377,7 +383,7 @@ async function runAgentInference(opts: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${getOpenRouterKey()}`,
       "HTTP-Referer": "https://reporting.highperformanceads.com",
       "X-Title": "Hermes Task Executor",
     },
@@ -385,7 +391,7 @@ async function runAgentInference(opts: {
   });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`AI gateway ${res.status}: ${t.slice(0, 400)}`);
+    throw new Error(`OpenRouter ${res.status}: ${t.slice(0, 400)}`);
   }
   const data = await res.json();
   const raw = data?.choices?.[0]?.message?.content || "";
@@ -412,7 +418,7 @@ async function hermesAutoReply(question: string, client: { name: string }, taskB
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${getOpenRouterKey()}`,
       "HTTP-Referer": "https://reporting.highperformanceads.com",
       "X-Title": "Hermes Coordinator",
     },

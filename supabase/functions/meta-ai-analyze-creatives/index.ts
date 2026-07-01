@@ -6,14 +6,16 @@ const corsHeaders = {
 };
 
 const MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const GATEWAY = "https://openrouter.ai/api/v1/chat/completions";
 
 async function ai(prompt: string, system: string) {
   const res = await fetch(GATEWAY, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Lovable-API-Key": Deno.env.get("LOVABLE_API_KEY") || "",
+      Authorization: `Bearer ${(Deno.env.get("OPENROUTER_API_KEY") || "").trim().replace(/^['\"]|['\"]$/g, "")}`,
+      "HTTP-Referer": "https://reporting.highperformanceads.com",
+      "X-Title": "HPA Creative Insights",
     },
     body: JSON.stringify({
       model: MODEL,

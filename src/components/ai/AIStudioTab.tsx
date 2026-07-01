@@ -71,8 +71,9 @@ type ChatVideo = {
 };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
 
+const DEFAULT_CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 const CHAT_MODELS = [
-  { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra (default)" },
+  { value: DEFAULT_CHAT_MODEL, label: "Nemotron 3 Ultra (default)" },
   { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
 ];
 
@@ -887,9 +888,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [chatModel, setChatModel] = useState<string>(() => {
     try {
       const v = localStorage.getItem("ai-studio:chat-model");
-      if (v && typeof v === "string") return v;
+      if (v && CHAT_MODELS.some((m) => m.value === v)) return v;
     } catch {}
-    return "nvidia/nemotron-3-ultra-550b-a55b:free";
+    return DEFAULT_CHAT_MODEL;
   });
   useEffect(() => {
     try { localStorage.setItem("ai-studio:chat-model", chatModel); } catch {}
@@ -1121,6 +1122,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   // --- Per-client agents (@mention support in AI Studio) ---
   const { data: clientAgents = [] } = useClientAgents(clientId);
+  useEffect(() => {
+    if (selectedAgentId === "off" || selectedAgentId === "master") return;
+    const selectedIsEnabled = (clientAgents as any[]).some((a) => a.id === selectedAgentId && a.enabled);
+    if ((clientAgents as any[]).length > 0 && !selectedIsEnabled) setSelectedAgentId("off");
+  }, [clientAgents, selectedAgentId]);
 
   // --- Auto-import the selected offer's image assets as references in the composer.
   // Whenever the offer picker changes, drop any previously-imported offer images and
@@ -1464,15 +1470,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         clientId,
         conversationId: conversationId || undefined,
         userText: (() => {
-          const mentioned = extractAgentMentions(text, clientAgents as any);
+          const agentEnabledForTurn = selectedAgentId !== "off";
+          const mentioned = agentEnabledForTurn ? extractAgentMentions(text, clientAgents as any) : [];
           // Explicit picker overrides @mentions when set to a specific agent.
-          const pickedAgent = (selectedAgentId !== "off" && selectedAgentId !== "master")
-            ? (clientAgents as any[]).find(a => a.id === selectedAgentId)
+          const pickedAgent = (agentEnabledForTurn && selectedAgentId !== "master")
+            ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
             : null;
           const agentBlock = pickedAgent
             ? buildAgentContextBlock([pickedAgent])
             : (mentioned.length ? buildAgentContextBlock(mentioned) : "");
-          const masterAgentBlock = selectedAgentId === "master" && (clientAgents as any[]).length > 0
+          const masterAgentBlock = selectedAgentId === "master" && agentEnabledForTurn && (clientAgents as any[]).length > 0
             ? `You are the MASTER AGENT. Inspect the user's request and silently delegate to the most appropriate specialist agent from the roster below. Adopt that specialist's role, knowledge and tone for this turn. Available specialists:\n${(clientAgents as any[]).filter(a => a.enabled).map(a => `- @${a.handle} (${a.agent_type}) — ${a.name}`).join("\n")}\n\n---\n`
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
@@ -1503,7 +1510,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         quality,
         chatModel: (() => {
           if (selectedAgentId !== "off" && selectedAgentId !== "master") {
-            const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
+            const a = (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled);
             if (a?.model) return a.model;
           }
           return chatModel;
@@ -1534,7 +1541,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         })(),
         activeReferenceIds,
         activeVideoReferenceIds,
-        agentMode,
+        agentMode: selectedAgentId !== "off",
         // Phase 5 wiring: pass offer scope so the edge function can load
         // 3-layer context (agency agent + client brain + offer training).
         offerIds: selectedOfferId && selectedOfferId !== "all" ? [selectedOfferId] : (clientOffers || []).map((o: any) => o.id),
@@ -2123,7 +2130,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               )}
               {(() => {
                 const pickedAgent = selectedAgentId !== "off" && selectedAgentId !== "master"
-                  ? (clientAgents as any[]).find(a => a.id === selectedAgentId)
+                  ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
                   : null;
                 const effectiveModel = pickedAgent?.model || chatModel;
                 const modelOverridden = !!(pickedAgent?.model && pickedAgent.model !== chatModel);

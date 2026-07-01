@@ -18,8 +18,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'agent_id required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
-    if (!LOVABLE_API_KEY) {
+    const OPENROUTER_API_KEY = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
+    if (!OPENROUTER_API_KEY.startsWith('sk-or-')) {
       return new Response(JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -450,7 +450,7 @@ serve(async (req) => {
 
         const inputSummary = `Client: ${client.name}. Connectors: ${connectors.join(', ')}. Data: ${Object.keys(dataContext).join(', ')}`;
 
-        // Call AI via Lovable AI Gateway
+        // Call AI via OpenRouter
         const aiBody: any = {
           model: agent.model || "nvidia/nemotron-3-ultra-550b-a55b:free",
           messages: [
@@ -464,8 +464,10 @@ serve(async (req) => {
         const aiRes = await fetch(AI_GATEWAY_URL, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://reporting.highperformanceads.com',
+            'X-Title': 'HPA Run Agent',
           },
           body: JSON.stringify(aiBody),
         });
@@ -474,7 +476,7 @@ serve(async (req) => {
           const errText = await aiRes.text();
           if (aiRes.status === 429) throw new Error('Rate limited — please try again later');
           if (aiRes.status === 402) throw new Error('AI credits exhausted');
-          throw new Error(`AI Gateway error ${aiRes.status}: ${errText}`);
+          throw new Error(`OpenRouter error ${aiRes.status}: ${errText}`);
         }
 
         const aiData = await aiRes.json();

@@ -31,9 +31,9 @@ serve(async (req) => {
 
   try {
     const { avatarId, imageUrl: rawImageUrl, persist = true } = await req.json();
-    const apiKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY missing' }), {
+    const apiKey = (Deno.env.get('OPENROUTER_API_KEY') || '').trim().replace(/^['"]|['"]$/g, '');
+    if (!apiKey.startsWith('sk-or-')) {
+      return new Response(JSON.stringify({ error: 'OPENROUTER_API_KEY missing or invalid' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -61,9 +61,14 @@ serve(async (req) => {
       });
     }
 
-    const gatewayRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const gatewayRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://reporting.highperformanceads.com',
+        'X-Title': 'HPA Avatar Style Analysis',
+      },
       body: JSON.stringify({
         model: 'openai/gpt-5',
         messages: [
