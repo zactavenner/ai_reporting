@@ -4102,6 +4102,11 @@ Deno.serve(async (req) => {
                   ? { type: "function", function: { name: forceToolName } }
                   : "auto",
                 stream: true,
+                // Ask OpenRouter to stream the model's reasoning tokens so the
+                // client can render a live "Thinking…" panel (Claude/Hermes
+                // style). Providers that don't support this ignore the field.
+                reasoning: { effort: "medium" },
+                include_reasoning: true,
               }),
               // No req.signal: the LLM step must keep running even if the
               // user disconnects so any tool_calls it emits still fire.
@@ -4135,6 +4140,15 @@ Deno.serve(async (req) => {
                 if (typeof delta.content === "string" && delta.content) {
                   stepText += delta.content;
                   send({ type: "text", delta: delta.content });
+                }
+                // OpenRouter surfaces chain-of-thought tokens as `delta.reasoning`
+                // (string) or `delta.reasoning_content` on some providers. Stream
+                // them separately so the UI can show a live thought panel.
+                const reasoningDelta = (typeof delta.reasoning === "string" && delta.reasoning)
+                  || (typeof delta.reasoning_content === "string" && delta.reasoning_content)
+                  || "";
+                if (reasoningDelta) {
+                  send({ type: "reasoning", delta: reasoningDelta });
                 }
                 if (Array.isArray(delta.tool_calls)) {
                   for (const tc of delta.tool_calls) {
