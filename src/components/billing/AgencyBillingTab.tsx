@@ -4,6 +4,7 @@ import { useAllClientFullSettings } from '@/hooks/useAllClientSettings';
 import { useAllClientsStripePayments, StripeCustomerData } from '@/hooks/useStripePayments';
 import { useUpdateClientSettings } from '@/hooks/useClientSettings';
 import { BillingForecastChart } from './BillingForecastChart';
+import { BillingTargetsPanel } from './BillingTargetsPanel';
 import { Sparkline } from '@/components/dashboard/Sparkline';
 import { BillingKpiGrid, type BillingKpis } from './BillingKpiGrid';
 import { BillingActionQueue, type QueueItem } from './BillingActionQueue';
@@ -167,6 +168,50 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
     [stripeDataMap]
   );
 
+  // Effective MRR: for every ACTIVE client, use Stripe MRR when present, else fall back
+  // to their contracted monthly (client_settings.mrr) or an active billing_agreement base fee.
+  // This gives a true agency MRR even when Stripe hasn't been linked yet.
+  const effectiveMRR = useMemo(() => {
+    const agreementByClient = new Map<string, number>();
+    for (const a of billingAgreements) {
+      if (!a.active) continue;
+      if (a.billing_frequency && a.billing_frequency !== 'monthly') continue;
+      const prev = agreementByClient.get(a.client_id) || 0;
+      agreementByClient.set(a.client_id, Math.max(prev, Number(a.base_fee || 0)));
+    }
+    let sum = 0;
+    for (const c of clients) {
+      if (c.status !== 'active') continue;
+      const stripeMrr = Number(stripeDataMap[c.id]?.mrr || 0);
+      if (stripeMrr > 0) { sum += stripeMrr; continue; }
+      const contracted =
+        Number((clientFullSettings[c.id] as any)?.mrr || 0) ||
+        agreementByClient.get(c.id) ||
+        0;
+      sum += contracted;
+    }
+    return sum;
+  }, [clients, stripeDataMap, clientFullSettings, billingAgreements]);
+
+  // Collected revenue by period key (year + year-Qn), for the Targets panel.
+  const actualByPeriodKey = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const data of Object.values(stripeDataMap) as any[]) {
+      if (!data?.payments) continue;
+      for (const p of data.payments) {
+        if (p.status !== 'succeeded' || p.refunded) continue;
+        const d = new Date(p.created);
+        const y = d.getFullYear();
+        const q = Math.floor(d.getMonth() / 3) + 1;
+        const yKey = String(y);
+        const qKey = `${y}-Q${q}`;
+        map[yKey] = (map[yKey] || 0) + (p.amount || 0);
+        map[qKey] = (map[qKey] || 0) + (p.amount || 0);
+      }
+    }
+    return map;
+  }, [stripeDataMap]);
+
   const totalMonthlyTarget = useMemo(() => {
     return Object.values(clientFullSettings).reduce((sum: number, s: any) => sum + (Number(s?.mrr) || 0), 0);
   }, [clientFullSettings]);
@@ -231,8 +276,8 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
     return {
       collectedYTD: kpis.totalRevThisYear,
       collectedMTD: kpis.monthToDate,
-      activeMRR: totalMRR,
-      projectedMRR,
+      activeMRR: effectiveMRR,
+      projectedMRR: Math.max(projectedMRR, effectiveMRR),
       arpu,
       outstanding,
       overdue,
@@ -241,13 +286,13 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       activeSubscriptions: activeSubs,
       noSubscription: noSubConnected,
       targetAttainmentPct: targetAttainment,
-      forecast30d,
+      forecast30d: effectiveMRR + scheduledInvoiceCash,
       monthlySpark: kpis.monthlyTotals.slice(0, now.getMonth() + 1),
       ytdPriorChange: ytdChg,
       mtdPriorChange: mtdChg,
       mrrPriorChange: null,
     };
-  }, [stripeDataMap, billingInvoices, billingPayments, billingAgreements, clients, clientRows, totalMRR, targetAttainment, kpis, now]);
+  }, [stripeDataMap, billingInvoices, billingPayments, billingAgreements, clients, clientRows, totalMRR, effectiveMRR, targetAttainment, kpis, now]);
 
   // ============ Action queue (derived + stored) ============
   const clientNameById = useMemo(() => new Map(clients.map(c => [c.id, c.name] as const)), [clients]);
@@ -531,9 +576,12 @@ export function AgencyBillingTab({ clients }: AgencyBillingTabProps) {
       {/* Forecast & graphs */}
       <BillingForecastChart
         stripeDataMap={stripeDataMap}
-        totalMRR={totalMRR}
+        totalMRR={effectiveMRR}
         clientNameMap={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
       />
+
+      {/* Revenue targets — quarterly + yearly with pace tracking */}
+      <BillingTargetsPanel actualByKey={actualByPeriodKey} activeMRR={effectiveMRR} />
 
       {/* Client billing overview */}
       <div className="flex items-center justify-between">

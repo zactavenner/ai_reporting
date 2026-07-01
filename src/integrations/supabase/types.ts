@@ -2953,6 +2953,36 @@ export type Database = {
           },
         ]
       }
+      billing_targets: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          period_key: string
+          period_type: string
+          target_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_key: string
+          period_type: string
+          target_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_key?: string
+          period_type?: string
+          target_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       browser_tasks: {
         Row: {
           claimed_at: string | null
