@@ -613,10 +613,6 @@ export default function ClientDetail() {
           </TabsContent>
 
           {/* ─── SETTINGS TAB ─── */}
-          <TabsContent value="client-settings" className="space-y-6">
-            {/* placeholder to keep structure */}
-          </TabsContent>
-
           {/* ─── DATABASE TAB ─── */}
           <TabsContent value="database" className="space-y-6">
             <SectionErrorBoundary sectionName="Database">
@@ -624,7 +620,7 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
-          <TabsContent value="client-settings-real" className="space-y-6">
+          <TabsContent value="client-settings" className="space-y-6">
             {/* Connections (moved from separate tab) */}
             <SectionErrorBoundary sectionName="Connections">
               <ConnectionsTab clientId={client.id} />
