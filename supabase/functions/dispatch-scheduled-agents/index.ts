@@ -120,16 +120,69 @@ Deno.serve(async (req) => {
       const res = await invokeAgent(a.id as string, (a.name as string) || a.id);
       dispatched.push({ id: a.id, name: a.name, cron: a.schedule_cron, ...res });
     }
+
+    // Also sweep master workforce agents (agency_agents) — Workforce v4 schedules
+    const { data: masters, error: mErr } = await supa
+      .from("agency_agents")
+      .select("id, name, slug, schedule_cron, schedule_prompt, schedule_enabled, last_run_at")
+      .eq("schedule_enabled", true)
+      .is("archived_at", null)
+      .not("schedule_cron", "is", null);
+    if (mErr) throw mErr;
+
+    for (const m of masters || []) {
+      if (!m.schedule_cron || !isDue(m.schedule_cron as string, m.last_run_at as string | null)) continue;
+      const startedAt = Date.now();
+      try {
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/jarvis-chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            apikey: SERVICE_KEY,
+          },
+          body: JSON.stringify({
+            team_member_id: "scheduler",
+            message: `[Scheduled run: ${m.name}]\n\n${m.schedule_prompt || "Run your standard cadence and report back."}`,
+            source: "scheduler",
+            agent_slug: m.slug,
+          }),
+        });
+        await supa
+          .from("agency_agents")
+          .update({ last_run_at: new Date().toISOString() })
+          .eq("id", m.id);
+        await supa.rpc("log_cron_run", {
+          p_job_name: `agency-agent:${m.slug}`,
+          p_status: r.ok ? "success" : "failed",
+          p_status_code: r.status,
+          p_response_body: null,
+          p_error_message: r.ok ? null : (await r.text()).slice(0, 500),
+          p_duration_ms: Date.now() - startedAt,
+        });
+        dispatched.push({ id: m.id, name: m.name, slug: m.slug, cron: m.schedule_cron, status: r.status, scope: "agency_agent" });
+      } catch (e) {
+        await supa.rpc("log_cron_run", {
+          p_job_name: `agency-agent:${m.slug}`,
+          p_status: "failed",
+          p_status_code: 0,
+          p_response_body: null,
+          p_error_message: e instanceof Error ? e.message : String(e),
+          p_duration_ms: Date.now() - startedAt,
+        });
+      }
+    }
+
     // Sweep-level log so we can confirm the cron itself is firing.
     await supa.rpc("log_cron_run", {
       p_job_name: "dispatch-scheduled-agents",
       p_status: "success",
       p_status_code: 200,
-      p_response_body: JSON.stringify({ checked: agents?.length || 0, dispatched: dispatched.length }),
+      p_response_body: JSON.stringify({ checked: (agents?.length || 0) + (masters?.length || 0), dispatched: dispatched.length }),
       p_error_message: null,
       p_duration_ms: Date.now() - sweepStart,
     });
-    return new Response(JSON.stringify({ ok: true, checked: agents?.length || 0, dispatched }), {
+    return new Response(JSON.stringify({ ok: true, checked: (agents?.length || 0) + (masters?.length || 0), dispatched }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
