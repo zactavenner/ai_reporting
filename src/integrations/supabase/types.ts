@@ -1125,6 +1125,80 @@ export type Database = {
           },
         ]
       }
+      agent_schedules: {
+        Row: {
+          agent_id: string
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          cron: string
+          enabled: boolean
+          id: string
+          last_run_at: string | null
+          next_run_at: string | null
+          task_prompt: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          cron: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          next_run_at?: string | null
+          task_prompt: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          cron?: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          next_run_at?: string | null
+          task_prompt?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_schedules_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agent_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_schedules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       agent_tasks: {
         Row: {
           assigned_to_agent: string
@@ -8378,7 +8452,10 @@ export type Database = {
           hermes_external_id: string | null
           id: string
           instructions: string
+          jarvis_conversation_id: string | null
           metadata: Json
+          reply_to: string | null
+          requested_by: string | null
           result_assets: Json
           status: string
           task_type: string
@@ -8396,7 +8473,10 @@ export type Database = {
           hermes_external_id?: string | null
           id?: string
           instructions: string
+          jarvis_conversation_id?: string | null
           metadata?: Json
+          reply_to?: string | null
+          requested_by?: string | null
           result_assets?: Json
           status?: string
           task_type: string
@@ -8414,7 +8494,10 @@ export type Database = {
           hermes_external_id?: string | null
           id?: string
           instructions?: string
+          jarvis_conversation_id?: string | null
           metadata?: Json
+          reply_to?: string | null
+          requested_by?: string | null
           result_assets?: Json
           status?: string
           task_type?: string
