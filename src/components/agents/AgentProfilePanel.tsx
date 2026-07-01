@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Crown, User as UserIcon, Save, Edit3, Cable, Sparkles, Plus, X } from "lucide-react";
+import { Crown, User as UserIcon, Save, Edit3, Cable, Sparkles, Plus, X, Trash2, Clock, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   type AgencyAgent,
   useUpdateAgencyAgent,
+  useArchiveAgencyAgent,
   AGENCY_AGENT_MODELS,
 } from "@/hooks/useAgencyAgents";
 import { useClientBrain, useUpsertClientBrain, useClientAgentOverride, useUpsertClientAgentOverride } from "@/hooks/useAgencyAgents";
@@ -17,7 +19,9 @@ import { useClientOffers } from "@/hooks/useClientOffers";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { AgentFilesUploader } from "./AgentFilesUploader";
+import { CronSchedulePicker } from "./CronSchedulePicker";
 import { CONNECTOR_REGISTRY, MODEL_REGISTRY, getModelInfo } from "@/lib/modelRegistry";
+import { toast } from "sonner";
 
 type Mode = "master" | "client";
 
@@ -33,6 +37,7 @@ export function AgentProfilePanel({
   clientName?: string;
 }) {
   const update = useUpdateAgencyAgent();
+  const archive = useArchiveAgencyAgent();
   const [memory, setMemory] = useState(agent.memory_md || "");
   const [instructions, setInstructions] = useState(agent.instructions_md || "");
   const [model, setModel] = useState(agent.default_model || "nvidia/nemotron-3-ultra-550b-a55b:free");
@@ -44,6 +49,9 @@ export function AgentProfilePanel({
   const [roleDraft, setRoleDraft] = useState(agent.role);
   const [fallback1, setFallback1] = useState<string>(agent.fallback_models?.[0] || "");
   const [fallback2, setFallback2] = useState<string>(agent.fallback_models?.[1] || "");
+  const [scheduleCron, setScheduleCron] = useState<string>(agent.schedule_cron || "");
+  const [schedulePrompt, setSchedulePrompt] = useState<string>(agent.schedule_prompt || "");
+  const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(!!agent.schedule_enabled);
 
   useEffect(() => {
     setMemory(agent.memory_md || "");
@@ -54,6 +62,9 @@ export function AgentProfilePanel({
     setRoleDraft(agent.role);
     setFallback1(agent.fallback_models?.[0] || "");
     setFallback2(agent.fallback_models?.[1] || "");
+    setScheduleCron(agent.schedule_cron || "");
+    setSchedulePrompt(agent.schedule_prompt || "");
+    setScheduleEnabled(!!agent.schedule_enabled);
   }, [agent.id]);
 
   const isClientView = mode === "client" && !!clientId;
