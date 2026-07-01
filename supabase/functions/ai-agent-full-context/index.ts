@@ -206,13 +206,14 @@ Provide specific, data-driven insights. Reference exact numbers. Compare clients
     const selectedGeminiModel = agencySettings?.selected_gemini_model || "gemini-2.5-pro";
 
     const GATEWAY_MODEL_MAP: Record<string, string> = {
+      "nvidia/nemotron-3-ultra-550b-a55b:free": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "gemini-2.5-pro": `google/${selectedGeminiModel === "gemini-2.5-pro" ? "gemini-2.5-pro" : selectedGeminiModel.replace("gemini-3-pro", "gemini-3-pro-preview").replace("gemini-3-flash", "gemini-3-flash-preview")}`,
       "gemini-3-pro": `google/${selectedGeminiModel.replace("gemini-3-pro", "gemini-3-pro-preview").replace("gemini-3-flash", "gemini-3-flash-preview")}`,
       "gemini-3-flash": `google/${selectedGeminiModel.replace("gemini-3-pro", "gemini-3-pro-preview").replace("gemini-3-flash", "gemini-3-flash-preview")}`,
       "gpt-5": `openai/${selectedOpenaiModel}`,
     };
 
-    const resolvedModel = GATEWAY_MODEL_MAP[model] || `google/${selectedGeminiModel}`;
+    const resolvedModel = GATEWAY_MODEL_MAP[model] || "nvidia/nemotron-3-ultra-550b-a55b:free";
     const isGrok = model === "grok" || model === "grok-4-reasoning";
 
     let response: Response;
