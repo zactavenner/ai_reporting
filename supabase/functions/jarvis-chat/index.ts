@@ -14,11 +14,11 @@ const cors = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const OPENROUTER_KEY = (Deno.env.get("OPENROUTER_API_KEY") || "").trim();
+const OPENROUTER_KEY = (Deno.env.get("OPENROUTER_API_KEY") || "").trim().replace(/^['"]|['"]$/g, "");
 
 function getOpenRouterKey() {
   if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY is not configured.");
-  if (!OPENROUTER_KEY.startsWith("sk")) throw new Error("OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key.");
+  if (!OPENROUTER_KEY.startsWith("sk-or-")) throw new Error("OPENROUTER_API_KEY has an invalid format. It must be an OpenRouter key (sk-or-...).");
   return OPENROUTER_KEY;
 }
 
