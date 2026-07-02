@@ -91,10 +91,19 @@ export function useUpdateAgencyAgent() {
       const { id, ...patch } = input;
       const { error } = await (supabase as any).from("agency_agents").update(patch).eq("id", id);
       if (error) throw error;
+      // Auto-propagate master changes (memory, instructions, schedule, model,
+      // files, connectors) to every client_agents row so client views stay in
+      // sync without a manual "Propagate" click.
+      try {
+        await (supabase as any).functions.invoke("propagate-agency-agents", { body: {} });
+      } catch (err) {
+        console.warn("[useUpdateAgencyAgent] propagate skipped:", err);
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agency_agents"] });
-      toast.success("Agent updated");
+      qc.invalidateQueries({ queryKey: ["client-agents"] });
+      toast.success("Agent updated — synced to all clients");
     },
     onError: (e: any) => toast.error(`Update failed: ${e?.message || e}`),
   });
