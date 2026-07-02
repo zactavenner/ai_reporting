@@ -1,0 +1,1 @@
+INSERT INTO public.agency_members (name, email, role) VALUES ('Bil', 'bil@hpa.com', 'member') ON CONFLICT (email) DO NOTHING;
