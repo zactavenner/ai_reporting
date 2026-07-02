@@ -147,6 +147,27 @@ serve(async (req) => {
       failed: a.failed + (r.failed || 0),
     }), { processed: 0, succeeded: 0, failed: 0 });
 
+    // After enrichment, immediately propagate to Google Sheets for any client
+    // that had at least one successful enrichment this run. This closes the loop:
+    // new lead -> RetargetIQ -> lead_enrichment (DB) -> GHL note -> Google Sheet row.
+    const writebackClients = results
+      .filter((r: any) => (r.succeeded || 0) > 0)
+      .map((r: any) => eligible.find((c: any) => c.name === r.client)?.id)
+      .filter(Boolean);
+    for (const cid of writebackClients) {
+      try {
+        // Fire-and-forget: don't await response body, but do await request start
+        // so the worker keeps running until the sub-invocation is scheduled.
+        fetch(`${supabaseUrl}/functions/v1/enrich-sheet-writeback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+          body: JSON.stringify({ client_id: cid }),
+        }).catch((e) => console.error('[AUTO-ENRICH-ALL] writeback fire-and-forget error:', e));
+      } catch (e) {
+        console.error('[AUTO-ENRICH-ALL] writeback invoke failed:', e);
+      }
+    }
+
     return new Response(JSON.stringify({ success: true, clients: eligible.length, totals, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
