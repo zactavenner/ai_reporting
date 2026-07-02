@@ -3174,7 +3174,18 @@ Deno.serve(async (req) => {
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
   }
 
-  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim()) ? chatModel.trim() : DEFAULT_CHAT_MODEL;
+  // Pure-chat mode detection: agent is OFF and the user has NOT selected any
+  // image or video model in the composer. In this case AI Studio should behave
+  // like a normal ChatGPT-style assistant — reply conversationally, no
+  // generative tools, and use a reliable multimodal chat model (gemini-2.5-flash)
+  // instead of the heavy nemotron primary that frequently returns empty on
+  // large system prompts + tool schemas.
+  const _hasImageSel = Array.isArray(imageModels) && imageModels.length > 0;
+  const _hasVideoSel = !!videoModel || (Array.isArray(videoModels) && videoModels.length > 0);
+  const PURE_CHAT_MODE = !agentMode && !_hasImageSel && !_hasVideoSel;
+  const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim())
+    ? chatModel.trim()
+    : (PURE_CHAT_MODE ? "google/gemini-2.5-flash" : DEFAULT_CHAT_MODEL);
 
   // Load selected avatar (if any) for system-prompt context + auto-injection into video tools
   let selectedAvatar: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null = null;
@@ -4082,7 +4093,7 @@ Deno.serve(async (req) => {
           const STORYBOARD_TOOL_NAMES = new Set([
             "plan_storyboard", "generate_scene_image", "generate_scene_video",
           ]);
-          const gatedTools = (tools as any[]).filter((t: any) => {
+          const gatedTools = PURE_CHAT_MODE ? [] : (tools as any[]).filter((t: any) => {
             const n = t?.function?.name || t?.name;
             if (!n) return true;
             if (STORYBOARD_TOOL_NAMES.has(n)) return false;
@@ -4108,10 +4119,12 @@ Deno.serve(async (req) => {
               body: JSON.stringify({
                 model: modelId,
                 messages: convo,
-                tools: gatedTools,
-                tool_choice: forceToolName && gatedTools.some((t: any) => (t?.function?.name || t?.name) === forceToolName)
-                  ? { type: "function", function: { name: forceToolName } }
-                  : "auto",
+                ...(gatedTools.length ? {
+                  tools: gatedTools,
+                  tool_choice: forceToolName && gatedTools.some((t: any) => (t?.function?.name || t?.name) === forceToolName)
+                    ? { type: "function", function: { name: forceToolName } }
+                    : "auto",
+                } : {}),
                 stream: true,
                 // Ask OpenRouter to stream the model's reasoning tokens so the
                 // client can render a live "Thinking…" panel (Claude/Hermes
