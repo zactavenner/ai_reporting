@@ -4119,10 +4119,12 @@ Deno.serve(async (req) => {
               body: JSON.stringify({
                 model: modelId,
                 messages: convo,
-                tools: gatedTools,
-                tool_choice: forceToolName && gatedTools.some((t: any) => (t?.function?.name || t?.name) === forceToolName)
-                  ? { type: "function", function: { name: forceToolName } }
-                  : "auto",
+                ...(gatedTools.length ? {
+                  tools: gatedTools,
+                  tool_choice: forceToolName && gatedTools.some((t: any) => (t?.function?.name || t?.name) === forceToolName)
+                    ? { type: "function", function: { name: forceToolName } }
+                    : "auto",
+                } : {}),
                 stream: true,
                 // Ask OpenRouter to stream the model's reasoning tokens so the
                 // client can render a live "Thinking…" panel (Claude/Hermes
