@@ -207,6 +207,47 @@ async function loadAgent(agentId: string | null) {
   return data;
 }
 
+// Load APPROVED reference material for a client so Hermes-routed creative
+// generation is grounded in real winners instead of hallucinated concepts.
+// Pulls approved/launched static creatives + approved client_videos.
+async function loadApprovedReferences(clientId: string, isVideo: boolean) {
+  const refs: Array<{ kind: "image" | "video"; title: string | null; url: string; headline?: string | null; body?: string | null }> = [];
+  if (isVideo) {
+    const { data: vids } = await supa
+      .from("client_videos")
+      .select("id, title, storage_url, source_url, prompt, status, created_at")
+      .eq("client_id", clientId)
+      .in("status", ["approved", "launched", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(10);
+    for (const v of vids || []) {
+      const url = v.storage_url || v.source_url;
+      if (!url) continue;
+      refs.push({ kind: "video", title: v.title, url, body: v.prompt || null });
+    }
+  }
+  // Always include approved static creatives — even for video tasks they
+  // establish brand/hook language.
+  const { data: creatives } = await supa
+    .from("creatives")
+    .select("id, title, type, file_url, headline, body_copy, status, created_at")
+    .eq("client_id", clientId)
+    .in("status", ["approved", "launched"])
+    .order("created_at", { ascending: false })
+    .limit(10);
+  for (const c of creatives || []) {
+    if (!c.file_url) continue;
+    refs.push({
+      kind: c.type === "video" ? "video" : "image",
+      title: c.title,
+      url: c.file_url,
+      headline: c.headline,
+      body: c.body_copy,
+    });
+  }
+  return refs;
+}
+
 // Load open-task triage context for a client: open tasks (+ current assignees),
 // every agency member with their pod, and pod list. Returns a compact payload
 // suitable for embedding in the task_triage system prompt.
