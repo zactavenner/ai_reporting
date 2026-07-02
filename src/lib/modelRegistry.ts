@@ -29,21 +29,8 @@ export const MODEL_REGISTRY: Record<string, ModelInfo> = {
 export const CONNECTOR_REGISTRY: Record<string, { label: string; emoji: string }> = {
   meta: { label: "Meta Ads", emoji: "📘" },
   ghl: { label: "GoHighLevel", emoji: "📞" },
-  stripe: { label: "Stripe", emoji: "💳" },
   "google-sheets": { label: "Google Sheets", emoji: "📊" },
-  "google-drive": { label: "Google Drive", emoji: "📁" },
-  notion: { label: "Notion", emoji: "📝" },
-  slack: { label: "Slack", emoji: "💬" },
-  whatsapp: { label: "WhatsApp", emoji: "🟢" },
-  openrouter: { label: "OpenRouter", emoji: "🛰️" },
   fathom: { label: "Fathom", emoji: "🎙️" },
-  seedance: { label: "Seedance", emoji: "🎬" },
-  happyhorse: { label: "HappyHorse", emoji: "🐴" },
-  grok: { label: "Grok Imagine", emoji: "✨" },
-  "gpt-image": { label: "GPT Image", emoji: "🖼️" },
-  "nano-banana": { label: "Nano Banana", emoji: "🍌" },
-  database: { label: "Database", emoji: "🗄️" },
-  wave: { label: "Wave Accounting", emoji: "🌊" },
 };
 
 export function getModelInfo(id: string): ModelInfo | undefined {
