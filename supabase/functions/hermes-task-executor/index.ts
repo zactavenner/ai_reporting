@@ -541,11 +541,53 @@ async function executeTask(taskId: string) {
     const ttype = (task.task_type || "").toLowerCase();
     if (IMAGE_TASK_TYPES.has(ttype) || VIDEO_TASK_TYPES.has(ttype)) {
       const isVideo = VIDEO_TASK_TYPES.has(ttype);
+      const approvedReferences = await loadApprovedReferences(task.client_id, isVideo);
+
+      // Guardrail: never generate a random creative for a client with no
+      // approved reference material. Surface it to HPA instead so a human
+      // can seed winners before the agent generates.
+      if (approvedReferences.length === 0) {
+        const warn = `⚠️ HPA REVIEW NEEDED — Cannot generate ${isVideo ? "video" : "static"} for **${client.name}**. No APPROVED creatives or videos exist for this client, so I refuse to invent a random one. Approve at least one reference in the Creatives section (or upload a winner) and re-dispatch the task.`;
+        await postChannel({
+          channelId, role: "system", kind: "message", taskId: taskId, toAgentId: task.agent_id,
+          body: warn,
+          payload: { blocked: true, reason: "no_approved_references" },
+        });
+        const nowIso = new Date().toISOString();
+        await supa.from("hermes_tasks").update({
+          status: "completed",
+          result_assets: [],
+          completed_at: nowIso,
+          delivered_at: nowIso,
+          metadata: {
+            ...(task.metadata || {}),
+            summary: warn,
+            blocked: true,
+            reason: "no_approved_references",
+            duration_ms: Date.now() - startedAt,
+          },
+        }).eq("id", taskId).is("delivered_at", null);
+        await callbackHermes(task.hermes_callback_url, {
+          event: "task.completed",
+          task_id: taskId,
+          hermes_external_id: task.hermes_external_id,
+          client_id: task.client_id,
+          task_type: task.task_type,
+          status: "completed",
+          assets: [],
+          summary: warn,
+          blocked: true,
+          reason: "no_approved_references",
+        });
+        return { ok: true, blocked: "no_approved_references" };
+      }
+
       const { summary } = await invokeAiStudioForCreative({
         task,
         client: { id: client.id, name: client.name },
         agent,
         isVideo,
+        approvedReferences,
       });
       await postChannel({
         channelId, role: "agent", kind: "tool-call", taskId: taskId, fromAgentId: task.agent_id,
