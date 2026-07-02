@@ -97,13 +97,26 @@ async function invokeAiStudioForCreative(opts: {
   client: { id: string; name: string };
   agent: any | null;
   isVideo: boolean;
+  approvedReferences: Array<{ kind: "image" | "video"; title: string | null; url: string; headline?: string | null; body?: string | null }>;
 }): Promise<{ summary: string }> {
-  const { task, client, agent, isVideo } = opts;
+  const { task, client, agent, isVideo, approvedReferences } = opts;
   // Lock the model + resolution. Hermes never picks anything else — this
   // guarantees the agent cannot drift to other providers or sizes.
   const lockedImageModels = isVideo ? null : ["openai"]; // openai => GPT Image 2
   const lockedVideoModel = isVideo ? "bytedance/seedance-2.0-fast" : null;
   const lockedVideoResolution = isVideo ? "720p" : null;
+
+  const refBlock = approvedReferences.length
+    ? [
+        ``,
+        `APPROVED REFERENCE CREATIVES (mandatory grounding — you MUST base the new creative on these winners; do NOT invent unrelated concepts):`,
+        ...approvedReferences.slice(0, 8).map(
+          (r, i) =>
+            `${i + 1}. [${r.kind}] ${r.title || "(untitled)"}${r.headline ? ` — headline: ${r.headline}` : ""}${r.body ? ` — body: ${String(r.body).slice(0, 200)}` : ""}\n   URL: ${r.url}`,
+        ),
+        `Rules: replicate the winning format, tone, hook style, and visual language of the references. Preserve the offer, brand, and value prop. Vary only enough to create a fresh iteration.`,
+      ].join("\n")
+    : "";
 
   const guard = [
     `🔒 HERMES HARD-LOCK — generate ${isVideo ? "a 15s 720p video" : "a static ad image"} for **${client.name}** now.`,
@@ -114,6 +127,7 @@ async function invokeAiStudioForCreative(opts: {
     `Ground every creative choice in this client's offers, brand kit, and best-performing references. NEVER reference or pull data from any other client.`,
     `Drop the result on the canvas and post the asset URL in chat so the team can audit it.`,
     `Hermes task: ${task.task_type}`,
+    refBlock,
     ``,
     `Brief:`,
     task.instructions || "(no instructions)",
@@ -191,6 +205,47 @@ async function loadAgent(agentId: string | null) {
     .eq("id", agentId)
     .maybeSingle();
   return data;
+}
+
+// Load APPROVED reference material for a client so Hermes-routed creative
+// generation is grounded in real winners instead of hallucinated concepts.
+// Pulls approved/launched static creatives + approved client_videos.
+async function loadApprovedReferences(clientId: string, isVideo: boolean) {
+  const refs: Array<{ kind: "image" | "video"; title: string | null; url: string; headline?: string | null; body?: string | null }> = [];
+  if (isVideo) {
+    const { data: vids } = await supa
+      .from("client_videos")
+      .select("id, title, storage_url, source_url, prompt, status, created_at")
+      .eq("client_id", clientId)
+      .in("status", ["approved", "launched", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(10);
+    for (const v of vids || []) {
+      const url = v.storage_url || v.source_url;
+      if (!url) continue;
+      refs.push({ kind: "video", title: v.title, url, body: v.prompt || null });
+    }
+  }
+  // Always include approved static creatives — even for video tasks they
+  // establish brand/hook language.
+  const { data: creatives } = await supa
+    .from("creatives")
+    .select("id, title, type, file_url, headline, body_copy, status, created_at")
+    .eq("client_id", clientId)
+    .in("status", ["approved", "launched"])
+    .order("created_at", { ascending: false })
+    .limit(10);
+  for (const c of creatives || []) {
+    if (!c.file_url) continue;
+    refs.push({
+      kind: c.type === "video" ? "video" : "image",
+      title: c.title,
+      url: c.file_url,
+      headline: c.headline,
+      body: c.body_copy,
+    });
+  }
+  return refs;
 }
 
 // Load open-task triage context for a client: open tasks (+ current assignees),
@@ -486,11 +541,53 @@ async function executeTask(taskId: string) {
     const ttype = (task.task_type || "").toLowerCase();
     if (IMAGE_TASK_TYPES.has(ttype) || VIDEO_TASK_TYPES.has(ttype)) {
       const isVideo = VIDEO_TASK_TYPES.has(ttype);
+      const approvedReferences = await loadApprovedReferences(task.client_id, isVideo);
+
+      // Guardrail: never generate a random creative for a client with no
+      // approved reference material. Surface it to HPA instead so a human
+      // can seed winners before the agent generates.
+      if (approvedReferences.length === 0) {
+        const warn = `⚠️ HPA REVIEW NEEDED — Cannot generate ${isVideo ? "video" : "static"} for **${client.name}**. No APPROVED creatives or videos exist for this client, so I refuse to invent a random one. Approve at least one reference in the Creatives section (or upload a winner) and re-dispatch the task.`;
+        await postChannel({
+          channelId, role: "system", kind: "message", taskId: taskId, toAgentId: task.agent_id,
+          body: warn,
+          payload: { blocked: true, reason: "no_approved_references" },
+        });
+        const nowIso = new Date().toISOString();
+        await supa.from("hermes_tasks").update({
+          status: "completed",
+          result_assets: [],
+          completed_at: nowIso,
+          delivered_at: nowIso,
+          metadata: {
+            ...(task.metadata || {}),
+            summary: warn,
+            blocked: true,
+            reason: "no_approved_references",
+            duration_ms: Date.now() - startedAt,
+          },
+        }).eq("id", taskId).is("delivered_at", null);
+        await callbackHermes(task.hermes_callback_url, {
+          event: "task.completed",
+          task_id: taskId,
+          hermes_external_id: task.hermes_external_id,
+          client_id: task.client_id,
+          task_type: task.task_type,
+          status: "completed",
+          assets: [],
+          summary: warn,
+          blocked: true,
+          reason: "no_approved_references",
+        });
+        return { ok: true, blocked: "no_approved_references" };
+      }
+
       const { summary } = await invokeAiStudioForCreative({
         task,
         client: { id: client.id, name: client.name },
         agent,
         isVideo,
+        approvedReferences,
       });
       await postChannel({
         channelId, role: "agent", kind: "tool-call", taskId: taskId, fromAgentId: task.agent_id,
