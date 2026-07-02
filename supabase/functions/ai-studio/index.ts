@@ -4093,7 +4093,7 @@ Deno.serve(async (req) => {
           const STORYBOARD_TOOL_NAMES = new Set([
             "plan_storyboard", "generate_scene_image", "generate_scene_video",
           ]);
-          const gatedTools = (tools as any[]).filter((t: any) => {
+          const gatedTools = PURE_CHAT_MODE ? [] : (tools as any[]).filter((t: any) => {
             const n = t?.function?.name || t?.name;
             if (!n) return true;
             if (STORYBOARD_TOOL_NAMES.has(n)) return false;
