@@ -97,13 +97,26 @@ async function invokeAiStudioForCreative(opts: {
   client: { id: string; name: string };
   agent: any | null;
   isVideo: boolean;
+  approvedReferences: Array<{ kind: "image" | "video"; title: string | null; url: string; headline?: string | null; body?: string | null }>;
 }): Promise<{ summary: string }> {
-  const { task, client, agent, isVideo } = opts;
+  const { task, client, agent, isVideo, approvedReferences } = opts;
   // Lock the model + resolution. Hermes never picks anything else — this
   // guarantees the agent cannot drift to other providers or sizes.
   const lockedImageModels = isVideo ? null : ["openai"]; // openai => GPT Image 2
   const lockedVideoModel = isVideo ? "bytedance/seedance-2.0-fast" : null;
   const lockedVideoResolution = isVideo ? "720p" : null;
+
+  const refBlock = approvedReferences.length
+    ? [
+        ``,
+        `APPROVED REFERENCE CREATIVES (mandatory grounding — you MUST base the new creative on these winners; do NOT invent unrelated concepts):`,
+        ...approvedReferences.slice(0, 8).map(
+          (r, i) =>
+            `${i + 1}. [${r.kind}] ${r.title || "(untitled)"}${r.headline ? ` — headline: ${r.headline}` : ""}${r.body ? ` — body: ${String(r.body).slice(0, 200)}` : ""}\n   URL: ${r.url}`,
+        ),
+        `Rules: replicate the winning format, tone, hook style, and visual language of the references. Preserve the offer, brand, and value prop. Vary only enough to create a fresh iteration.`,
+      ].join("\n")
+    : "";
 
   const guard = [
     `🔒 HERMES HARD-LOCK — generate ${isVideo ? "a 15s 720p video" : "a static ad image"} for **${client.name}** now.`,
@@ -114,6 +127,7 @@ async function invokeAiStudioForCreative(opts: {
     `Ground every creative choice in this client's offers, brand kit, and best-performing references. NEVER reference or pull data from any other client.`,
     `Drop the result on the canvas and post the asset URL in chat so the team can audit it.`,
     `Hermes task: ${task.task_type}`,
+    refBlock,
     ``,
     `Brief:`,
     task.instructions || "(no instructions)",
