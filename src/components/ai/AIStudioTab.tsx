@@ -1583,7 +1583,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (files.length > 0) {
               parts.push(`Attached files (${files.length}) — review each PDF / asset:`);
               files.forEach((f: any, idx: number) => {
-                parts.push(`  ${idx + 1}. ${f.file_name}${f.file_type ? ` [${f.file_type}]` : ""} → ${f.file_url}`);
+                const roleLabel = f.role && f.role !== "reference" ? ` {role: ${f.role}}` : "";
+                parts.push(`  ${idx + 1}. ${f.file_name}${f.file_type ? ` [${f.file_type}]` : ""}${roleLabel} → ${f.file_url}`);
               });
             }
             return parts.join("\n");
