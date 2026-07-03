@@ -5,13 +5,27 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sparkles, Send, Plus, MessageSquare, Trash2, Bot, Zap, ChevronRight, ChevronLeft, Mic, Brain } from "lucide-react";
+import { Sparkles, Send, Plus, MessageSquare, Trash2, Bot, Zap, ChevronRight, ChevronLeft, Mic, Brain, Settings } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JarvisVoiceMode } from "./JarvisVoiceMode";
 import { useTeamMember } from "@/contexts/TeamMemberContext";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { useAgencySettings, useUpdateAgencySettings } from "@/hooks/useAgencySettings";
+
+const JARVIS_MODEL_OPTIONS = [
+  { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra (default)" },
+  { value: "openai/gpt-5", label: "GPT-5" },
+  { value: "openai/gpt-5-mini", label: "GPT-5 Mini" },
+  { value: "anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet" },
+  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+];
 
 type Conversation = { id: string; title: string; updated_at: string };
 type Msg = {
@@ -66,10 +80,27 @@ export function JarvisCommandCenter() {
   const [pending, setPending] = useState(false);
   const [showInterAgent, setShowInterAgent] = useState(true);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [streamingReply, setStreamingReply] = useState("");
   const [thoughts, setThoughts] = useState<Array<{ stage: string; text: string; ts: number }>>([]);
   const [liveInter, setLiveInter] = useState<Array<{ speaker: string; content: string }>>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: settings } = useAgencySettings();
+  const updateSettings = useUpdateAgencySettings();
+  const [draftName, setDraftName] = useState("");
+  const [draftModel, setDraftModel] = useState("");
+  const [draftTraining, setDraftTraining] = useState("");
+  useEffect(() => {
+    if (settingsOpen) {
+      setDraftName((settings as any)?.jarvis_display_name || "Jarvis Ironman");
+      setDraftModel((settings as any)?.jarvis_model || "nvidia/nemotron-3-ultra-550b-a55b:free");
+      setDraftTraining((settings as any)?.jarvis_training_md || "");
+    }
+  }, [settingsOpen, settings]);
+  const displayName = (settings as any)?.jarvis_display_name || "Jarvis Ironman";
+  const activeModel = (settings as any)?.jarvis_model || "nvidia/nemotron-3-ultra-550b-a55b:free";
+  const activeModelLabel = JARVIS_MODEL_OPTIONS.find((m) => m.value === activeModel)?.label || activeModel;
 
   useEffect(() => {
     if (!activeId && convs[0]) setActiveId(convs[0].id);
@@ -208,12 +239,15 @@ export function JarvisCommandCenter() {
             <Sparkles className="h-4 w-4 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-base font-bold tracking-tight">Jarvis · Command Center</h2>
-            <p className="text-[11px] text-muted-foreground">Talk to your COO. He coordinates with Hermes and the full agent workforce.</p>
+            <h2 className="text-base font-bold tracking-tight">{displayName} · Command Center</h2>
+            <p className="text-[11px] text-muted-foreground">Autonomous COO. Full agency access — every client, every specialist agent, GHL SMS.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />Nemotron 3 Ultra</Badge>
+          <Badge variant="outline" className="text-[10px]"><Bot className="h-3 w-3 mr-1" />{activeModelLabel}</Badge>
+          <Button size="sm" variant="ghost" className="h-7 gap-1.5" onClick={() => setSettingsOpen(true)}>
+            <Settings className="h-3.5 w-3.5" /> Settings
+          </Button>
           <Button
             size="sm"
             onClick={() => setVoiceOpen(true)}
@@ -408,6 +442,61 @@ export function JarvisCommandCenter() {
           qc.invalidateQueries({ queryKey: ["jarvis_messages", id] });
         }}
       />
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{displayName} · Settings</DialogTitle>
+            <DialogDescription>
+              Choose the model powering Jarvis Ironman and train him on your team, SOPs, and agency context. Applied across every conversation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Display name</Label>
+              <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="Jarvis Ironman" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Model</Label>
+              <Select value={draftModel} onValueChange={setDraftModel}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {JARVIS_MODEL_OPTIONS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Persists across sessions. Falls back to Nemotron/Gemini if the chosen model is unavailable.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Training · Team, SOPs, agency context</Label>
+              <Textarea
+                value={draftTraining}
+                onChange={(e) => setDraftTraining(e.target.value)}
+                rows={12}
+                placeholder={"Team roster (name — role — phone/email)\nSOPs Jarvis must follow\nEscalation rules\nTone / voice / no-go language\nAnything else Ironman needs to run the agency autonomously"}
+                className="font-mono text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                await updateSettings.mutateAsync({
+                  jarvis_display_name: draftName.trim() || "Jarvis Ironman",
+                  jarvis_model: draftModel,
+                  jarvis_training_md: draftTraining,
+                } as any);
+                toast.success("Jarvis Ironman updated");
+                setSettingsOpen(false);
+              }}
+              disabled={updateSettings.isPending}
+            >
+              {updateSettings.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
