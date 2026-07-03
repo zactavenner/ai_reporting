@@ -34,20 +34,24 @@ function j(b: unknown, s = 200) {
   return new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-const JARVIS_SYSTEM = `You are JARVIS — Chief of Staff / COO for High Performance Ads. Calm, sharp, executive.
+const JARVIS_BASE_SYSTEM = `You are JARVIS IRONMAN — autonomous Chief of Staff / COO for High Performance Ads. Calm, sharp, executive. You command the ENTIRE agent workforce and act with full authority across the agency.
 
 YOU HAVE DIRECT PLATFORM ACCESS via tools:
  - list_clients / get_client — every client in the roster
  - list_offers / get_offer — every active offer per client
  - list_active_ads — live Meta ads with spend/leads/CPL
  - get_client_metrics — 30-day performance rollups
- - ask_account_manager — talk to the per-client Jarvis Account Manager (mini-Jarvis) who owns that client's full context (offers, brain, live ads, agents)
+ - list_client_agents(client_id) — every specialist agent configured under a client
+ - ask_client_agent(client_id, agent_handle, question, loops?) — talk to ANY specialist agent under ANY client, optionally looping N times (self-critique passes) to squeeze the best possible answer
+ - ask_account_manager(client_id, question) — talk to the per-client Jarvis AM (fastest path for client-wide context)
+ - send_agency_sms(phone, message) — send an SMS from the agency GHL number (e.g. to Zac, sales managers, team)
  - web_search — pull external info when needed
 
 RULES:
  - Use tools FIRST for any factual question about clients / offers / ads / links / performance. Never say "I don't have that data" — call a tool.
- - You are ABOVE Hermes. Hermes is inbound only (he sends you requests). You do NOT ask Hermes for data.
- - For anything client-specific, prefer ask_account_manager(client_id, question) — the AM has the deepest context for that client.
+ - You are ABOVE Hermes and above every specialist agent. Delegate freely, aggregate answers, and drive quality loops when a first answer is weak.
+ - For anything client-specific, prefer ask_account_manager or ask_client_agent — they hold the deepest context.
+ - When the user asks you to "call", "text", "SMS" or "notify" someone, use send_agency_sms — do not just describe what you would send.
  - Answer concisely, executive-style. Markdown is fine. Cite counts / IDs where useful.`;
 
 // ---------- Tool definitions ----------
@@ -59,6 +63,9 @@ const TOOLS = [
   { type: "function", function: { name: "list_active_ads", description: "List live Meta ads for a client with spend, leads, CPL.", parameters: { type: "object", properties: { client_id: { type: "string" }, limit: { type: "number" } }, required: ["client_id"] } } },
   { type: "function", function: { name: "get_client_metrics", description: "Get 30-day performance rollup for a client (spend, leads, calls, funded).", parameters: { type: "object", properties: { client_id: { type: "string" }, days: { type: "number" } }, required: ["client_id"] } } },
   { type: "function", function: { name: "ask_account_manager", description: "Ask the per-client Jarvis Account Manager (mini-Jarvis) a question. They have that client's full context (brain, offers, live ads, agents). Use for anything client-specific requiring judgment.", parameters: { type: "object", properties: { client_id: { type: "string" }, question: { type: "string" } }, required: ["client_id", "question"] } } },
+  { type: "function", function: { name: "list_client_agents", description: "List every specialist agent configured under a client (handle, name, type, model, enabled).", parameters: { type: "object", properties: { client_id: { type: "string" } }, required: ["client_id"] } } },
+  { type: "function", function: { name: "ask_client_agent", description: "Ask a specific specialist agent under a client a question. Optionally run quality loops (self-critique passes 1-5) to force the agent to improve their answer.", parameters: { type: "object", properties: { client_id: { type: "string" }, agent_handle: { type: "string", description: "Agent handle or name substring" }, question: { type: "string" }, loops: { type: "number", description: "1-5. Number of self-critique + rewrite loops. Default 1." } }, required: ["client_id", "agent_handle", "question"] } } },
+  { type: "function", function: { name: "send_agency_sms", description: "Send an SMS from the agency GHL number to a phone number (e.g. Zac +19167097345, sales managers, team). Use for real notifications the user asks you to send.", parameters: { type: "object", properties: { phone: { type: "string", description: "E.164 phone, e.g. +19167097345" }, message: { type: "string" }, name: { type: "string", description: "Optional contact name" } }, required: ["phone", "message"] } } },
   { type: "function", function: { name: "web_search", description: "Search the web for external / current info.", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } } },
 ];
 
@@ -150,6 +157,52 @@ async function execTool(name: string, args: any, supa: any): Promise<any> {
         const jr = await res.json();
         return { answer: jr.choices?.[0]?.message?.content || "(no reply)", client_name: client.data?.name };
       }
+      case "list_client_agents": {
+        const { data, error } = await supa.from("client_agents")
+          .select("id,handle,name,agent_type,model,enabled")
+          .eq("client_id", args.client_id).order("created_at");
+        if (error) throw error;
+        return { count: data?.length || 0, agents: data };
+      }
+      case "ask_client_agent": {
+        const cid = args.client_id;
+        const handle = String(args.agent_handle || "");
+        const loops = Math.max(1, Math.min(5, Number(args.loops) || 1));
+        const { data: agents } = await supa.from("client_agents").select("*").eq("client_id", cid);
+        const agent = (agents || []).find((a: any) =>
+          a.handle === handle || a.name === handle || a.handle?.toLowerCase().includes(handle.toLowerCase()) || a.name?.toLowerCase().includes(handle.toLowerCase())
+        );
+        if (!agent) return { error: `agent '${handle}' not found for client` };
+        const { data: client } = await supa.from("clients").select("name,industry,description").eq("id", cid).maybeSingle();
+        const sys = `You are ${agent.name} (${agent.agent_type}) for client ${client?.name || cid}.\n\nAGENT INSTRUCTIONS:\n${agent.system_prompt || "(none)"}\n\nKNOWLEDGE:\n${(agent.knowledge_md || "").slice(0, 8000)}`;
+        const model = agent.model || "nvidia/nemotron-3-ultra-550b-a55b:free";
+        let answer = "";
+        const history: any[] = [{ role: "system", content: sys }, { role: "user", content: args.question }];
+        for (let i = 0; i < loops; i++) {
+          const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${getOpenRouterKey()}`, "Content-Type": "application/json", "HTTP-Referer": "https://reporting.highperformanceads.com", "X-Title": "HPA Jarvis Ironman" },
+            body: JSON.stringify({ model, temperature: 0.4, messages: history }),
+          });
+          const jr = await r.json();
+          answer = jr.choices?.[0]?.message?.content || "(no reply)";
+          history.push({ role: "assistant", content: answer });
+          if (i < loops - 1) {
+            history.push({ role: "user", content: "Critique your previous answer harshly. Identify weaknesses, missing data, unclear points. Then rewrite it stronger, more specific, more actionable. Return ONLY the improved final answer." });
+          }
+        }
+        return { agent: agent.name, handle: agent.handle, model, loops, answer };
+      }
+      case "send_agency_sms": {
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/send-ghl-message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+          body: JSON.stringify({ password: "HPA1234$", channel: "sms", to_phone: args.phone, name: args.name || undefined, text: args.message }),
+        });
+        const jr = await r.json().catch(() => ({}));
+        if (!r.ok) return { error: jr?.error || `send-ghl-message ${r.status}` };
+        return { ok: true, to: args.phone, messageId: jr?.messageId };
+      }
       case "web_search": {
         const res = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(args.query)}&format=json&no_html=1`, { headers: { "User-Agent": "JarvisBot/1.0" } });
         const text = await res.text();
@@ -163,9 +216,12 @@ async function execTool(name: string, args: any, supa: any): Promise<any> {
   }
 }
 
-async function callWithTools(messages: any[], signal?: AbortSignal): Promise<Response> {
+async function callWithTools(messages: any[], preferredModel: string | null, signal?: AbortSignal): Promise<Response> {
   let lastErr = "";
-  for (const model of TOOL_MODELS) {
+  const chain = preferredModel
+    ? [preferredModel, ...TOOL_MODELS.filter((m) => m !== preferredModel)]
+    : TOOL_MODELS;
+  for (const model of chain) {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${getOpenRouterKey()}`, "Content-Type": "application/json", "HTTP-Referer": "https://reporting.highperformanceads.com", "X-Title": "HPA Jarvis" },
@@ -246,6 +302,15 @@ Deno.serve(async (req) => {
       conversation_id: convId, user_id: userId, channel: "main", speaker: "user", role: "user", content: message,
     });
 
+    // Load Jarvis Ironman configuration (model + training) from agency_settings.
+    const { data: settings } = await supa.from("agency_settings")
+      .select("jarvis_model, jarvis_training_md, jarvis_display_name")
+      .limit(1).maybeSingle();
+    const preferredModel: string | null = settings?.jarvis_model || null;
+    const trainingMd: string = (settings?.jarvis_training_md || "").trim();
+    const displayName: string = settings?.jarvis_display_name || "Jarvis Ironman";
+    const JARVIS_SYSTEM = `${JARVIS_BASE_SYSTEM.replace(/JARVIS IRONMAN/g, displayName.toUpperCase())}${trainingMd ? `\n\n# AGENCY TRAINING / SOPs / TEAM CONTEXT\n${trainingMd}` : ""}`;
+
     const { data: hist } = await supa.from("jarvis_messages")
       .select("speaker, role, content").eq("conversation_id", convId).eq("channel", "main")
       .order("created_at", { ascending: true }).limit(40);
@@ -265,7 +330,7 @@ Deno.serve(async (req) => {
           let finalContent = "";
           for (let step = 0; step < 6; step++) {
             send("thought", { stage: "thinking", text: step === 0 ? "Analyzing…" : `Continuing (step ${step + 1})…` });
-            const res = await callWithTools(messages);
+            const res = await callWithTools(messages, preferredModel);
             let stepContent = "";
             const { content, tool_calls } = await readStream(res, (d) => { stepContent += d; send("delta", { text: d }); });
             finalContent = content;
