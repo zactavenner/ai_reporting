@@ -2181,19 +2181,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
               )}
               {(() => {
-                const pickedAgent = selectedAgentId !== "off" && selectedAgentId !== "master"
+                const pickedAgent = selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")
                   ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
                   : null;
-                const effectiveModel = pickedAgent?.model || chatModel;
-                const modelOverridden = !!(pickedAgent?.model && pickedAgent.model !== chatModel);
+                const effectiveModel = pickedAgencyAgent?.default_model || pickedAgent?.model || chatModel;
+                const modelOverridden = !!((pickedAgencyAgent?.default_model && pickedAgencyAgent.default_model !== chatModel) || (pickedAgent?.model && pickedAgent.model !== chatModel));
                 const modelShort = (CHAT_MODELS.find(m => m.value === effectiveModel)?.label) || effectiveModel.split("/").pop() || effectiveModel;
                 const agentLabel = selectedAgentId === "off"
                   ? null
                   : selectedAgentId === "master"
-                    ? "Master Agent"
-                    : pickedAgent
-                      ? `@${pickedAgent.handle}`
-                      : null;
+                    ? "Jarvis (AM)"
+                    : pickedAgencyAgent
+                      ? `@${pickedAgencyAgent.slug}`
+                      : pickedAgent
+                        ? `@${pickedAgent.handle}`
+                        : null;
                 if (!agentLabel && !modelOverridden) return null;
                 return (
                   <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2 text-[10px]">
