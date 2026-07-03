@@ -71,10 +71,10 @@ type ChatVideo = {
 };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
 
-const DEFAULT_CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+const DEFAULT_CHAT_MODEL = "openrouter/deepseek/deepseek-v4-flash";
 const CHAT_MODELS = [
-  { value: DEFAULT_CHAT_MODEL, label: "Nemotron 3 Ultra (default)" },
-  { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+  { value: DEFAULT_CHAT_MODEL, label: "DeepSeek V4 Flash (default)" },
+  { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra" },
 ];
 
 // Image models the AI can use when generating ad creatives.
