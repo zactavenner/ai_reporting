@@ -207,6 +207,28 @@ async function execTool(name: string, args: any, supa: any): Promise<any> {
         if (!r.ok) return { error: jr?.error || `send-ghl-message ${r.status}` };
         return { ok: true, to: args.phone, messageId: jr?.messageId };
       }
+      case "get_lead_status": {
+        const payload: any = { mode: "single", client_id: args.client_id };
+        for (const k of ["lead_id", "external_id", "email", "phone"]) if (args[k]) payload[k] = args[k];
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/lead-status-sync-v2`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+          body: JSON.stringify(payload),
+        });
+        const jr = await r.json().catch(() => ({}));
+        if (!r.ok) return { error: jr?.error || `lead-status-sync-v2 ${r.status}` };
+        return jr.results?.[0] || jr;
+      }
+      case "refresh_client_leads": {
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/lead-status-sync-v2`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+          body: JSON.stringify({ mode: "client", client_id: args.client_id, sinceHours: args.sinceHours, limit: args.limit }),
+        });
+        const jr = await r.json().catch(() => ({}));
+        if (!r.ok) return { error: jr?.error || `lead-status-sync-v2 ${r.status}` };
+        return { synced: jr.synced, failed: jr.failed, total: (jr.results || []).length };
+      }
       case "web_search": {
         const res = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(args.query)}&format=json&no_html=1`, { headers: { "User-Agent": "JarvisBot/1.0" } });
         const text = await res.text();
