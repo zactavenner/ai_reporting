@@ -613,6 +613,7 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentMember } = useTeamMember();
   const [dragOver, setDragOver] = useState(false);
+  const [uploadRole, setUploadRole] = useState<string>('reference');
 
   const handleUpload = async (fileList: FileList | File[]) => {
     for (const file of Array.from(fileList)) {
@@ -621,6 +622,7 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
         clientId,
         file,
         uploadedBy: currentMember?.name,
+        role: uploadRole,
       });
     }
   };
@@ -650,11 +652,35 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
 
   const isImage = (f: OfferFile) => /^(png|jpe?g|gif|webp|svg)$/i.test(f.file_type || '');
 
+  // Group images by role for a nicer visual layout; keep non-image files separate.
+  const imageFiles = files.filter(isImage);
+  const nonImageFiles = files.filter(f => !isImage(f));
+  const roleOrder = ['video_ad', 'static_ad', 'product', 'logo', 'avatar', 'lifestyle', 'testimonial', 'reference'];
+  const roleLabels: Record<string, string> = {
+    video_ad: '🎬 Video Ad References',
+    static_ad: '🖼️ Static Ad References',
+    product: 'Product',
+    logo: 'Logo',
+    avatar: 'Avatar',
+    lifestyle: 'Lifestyle',
+    testimonial: 'Testimonial',
+    reference: 'General References',
+  };
+  const grouped: Record<string, OfferFile[]> = {};
+  imageFiles.forEach(f => {
+    const key = (f.role && roleLabels[f.role]) ? f.role : 'reference';
+    (grouped[key] ||= []).push(f);
+  });
+  const orderedGroups = roleOrder.filter(k => grouped[k]?.length);
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Files — {offer.title}</DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Tag images as <b>Video Ad Ref</b> or <b>Static Ad Ref</b> so agents auto-use them when generating the matching creative. Every agent on every client sees these when this offer is selected in AI Studio.
+          </p>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -672,69 +698,115 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
             </div>
           )}
 
-          {/* Additional files */}
+          {/* Image references — grouped by role */}
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading files...</p>
-          ) : files.length > 0 ? (
-            <div className="space-y-2">
-              {files.map((f) => (
-                <div key={f.id} className="flex items-center justify-between gap-2 bg-muted/50 rounded-md px-2 py-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {isImage(f) ? (
-                      <img
-                        src={f.file_url}
-                        alt={f.file_name}
-                        className="h-10 w-10 rounded object-cover border border-border shrink-0"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm truncate">{f.file_name}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {f.file_size_bytes ? formatFileSize(f.file_size_bytes) : ''}
-                      </p>
-                    </div>
+          ) : (
+            <>
+              {orderedGroups.map((k) => (
+                <div key={k} className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-semibold">{roleLabels[k]}</h4>
+                    <Badge variant="outline" className="text-[10px] h-4 px-1.5">{grouped[k].length}</Badge>
                   </div>
-                  {isImage(f) && (
-                    <Select
-                      value={f.role || 'reference'}
-                      onValueChange={(role) =>
-                        updateFile.mutate({ id: f.id, offerId: offer.id, updates: { role, tags: [role] } })
-                      }
-                    >
-                      <SelectTrigger className="h-7 w-[110px] text-[11px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {OFFER_IMAGE_ROLES.map((r) => (
-                          <SelectItem key={r.key} value={r.key} className="text-xs">
-                            {r.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => window.open(f.file_url, '_blank')}>
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => deleteFile.mutate({ id: f.id, offerId: offer.id })}>
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </Button>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {grouped[k].map((f) => (
+                      <div key={f.id} className="group relative rounded-lg border border-border overflow-hidden bg-muted/30">
+                        <div className="aspect-square">
+                          <img
+                            src={f.file_url}
+                            alt={f.file_name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div className="absolute inset-x-0 top-0 flex justify-end p-1 opacity-0 group-hover:opacity-100 transition bg-gradient-to-b from-black/50 to-transparent">
+                          <button
+                            onClick={() => window.open(f.file_url, '_blank')}
+                            className="h-6 w-6 rounded-md bg-background/90 grid place-items-center text-foreground hover:bg-background mr-1"
+                            title="Open"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => deleteFile.mutate({ id: f.id, offerId: offer.id })}
+                            className="h-6 w-6 rounded-md bg-background/90 grid place-items-center text-destructive hover:bg-background"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="p-1.5 space-y-1 bg-background">
+                          <p className="text-[10px] truncate" title={f.file_name}>{f.file_name}</p>
+                          <Select
+                            value={f.role || 'reference'}
+                            onValueChange={(role) =>
+                              updateFile.mutate({ id: f.id, offerId: offer.id, updates: { role, tags: [role] } })
+                            }
+                          >
+                            <SelectTrigger className="h-6 w-full text-[10px] px-1.5">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {OFFER_IMAGE_ROLES.map((r) => (
+                                <SelectItem key={r.key} value={r.key} className="text-xs">
+                                  {r.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
-              <p className="text-[10px] text-muted-foreground px-1">
-                Tags drive how the AI uses each image (product = hero, logo = lockup, etc.).
-              </p>
-            </div>
-          ) : !offer.file_url ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No files attached</p>
-          ) : null}
 
-          {/* Upload with drag-drop */}
+              {nonImageFiles.length > 0 && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-semibold">Documents</h4>
+                  {nonImageFiles.map((f) => (
+                    <div key={f.id} className="flex items-center justify-between gap-2 bg-muted/50 rounded-md px-2 py-1.5">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm truncate">{f.file_name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {f.file_size_bytes ? formatFileSize(f.file_size_bytes) : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => window.open(f.file_url, '_blank')}>
+                        <ExternalLink className="h-3 w-3" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => deleteFile.mutate({ id: f.id, offerId: offer.id })}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {files.length === 0 && !offer.file_url && (
+                <p className="text-sm text-muted-foreground text-center py-4">No files attached yet</p>
+              )}
+            </>
+          )}
+
+          {/* Upload with drag-drop + role picker */}
+          <div className="flex items-center gap-2 pt-1">
+            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Tag new uploads as:</label>
+            <Select value={uploadRole} onValueChange={setUploadRole}>
+              <SelectTrigger className="h-7 w-[170px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OFFER_IMAGE_ROLES.map((r) => (
+                  <SelectItem key={r.key} value={r.key} className="text-xs">{r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div
             className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
               dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
@@ -746,7 +818,7 @@ function OfferFilesDialog({ offer, clientId, clientName, onClose }: { offer: Cli
           >
             <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
             <p className="text-sm text-muted-foreground">
-              {dragOver ? 'Drop files here' : 'Drag & drop or click to add files'}
+              {dragOver ? 'Drop files here' : `Drag & drop or click to add — will be tagged "${OFFER_IMAGE_ROLES.find(r => r.key === uploadRole)?.label}"`}
             </p>
           </div>
           <input
