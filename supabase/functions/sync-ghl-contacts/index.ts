@@ -3200,40 +3200,52 @@ serve(async (req) => {
         );
       }
       
-      if (!client.ghl_api_key || !client.ghl_location_id) {
+      const agencyPit = Deno.env.get('AGENCY_GHL_PIT_TOKEN') || Deno.env.get('AGENCY_GHL_API_KEY') || '';
+      if ((!client.ghl_api_key && !agencyPit) || !client.ghl_location_id) {
         return new Response(
           JSON.stringify({ 
-            contacts: { success: false, error: 'No GHL credentials configured' },
-            calendars: { success: false, error: 'No GHL credentials configured' },
-            opportunities: { success: false, error: 'No GHL credentials configured' },
+            contacts: { success: false, error: !client.ghl_location_id ? 'Missing GHL Location ID' : 'No GHL v2 PIT configured' },
+            calendars: { success: false, error: !client.ghl_location_id ? 'Missing GHL Location ID' : 'No GHL v2 PIT configured' },
+            opportunities: { success: false, error: !client.ghl_location_id ? 'Missing GHL Location ID' : 'No GHL v2 PIT configured' },
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
-      const headers = {
-        'Authorization': `Bearer ${client.ghl_api_key}`,
+
+      const buildHeaders = (token: string) => ({
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
         'Version': '2021-07-28',
+      });
+
+      // Helper: try request with client PIT first, fall back to agency PIT on 401/403.
+      const tryWithFallback = async (
+        run: (h: Record<string, string>) => Promise<Response>
+      ): Promise<{ ok: boolean; status: number; body: string; usedAgency: boolean }> => {
+        const primary = client.ghl_api_key || agencyPit;
+        let res = await run(buildHeaders(primary));
+        let usedAgency = !client.ghl_api_key && !!agencyPit;
+        if (!res.ok && (res.status === 401 || res.status === 403) && agencyPit && primary !== agencyPit) {
+          res = await run(buildHeaders(agencyPit));
+          usedAgency = true;
+        }
+        const body = await res.text();
+        return { ok: res.ok, status: res.status, body, usedAgency };
       };
-      
+
       // Test contacts endpoint using POST /contacts/search (v2)
       let contactsResult = { success: false, error: '' };
       try {
-        const contactsRes = await fetch(
-          `${GHL_BASE_URL}/contacts/search`,
-          { 
-            method: 'POST', 
+        const r = await tryWithFallback((headers) =>
+          fetch(`${GHL_BASE_URL}/contacts/search`, {
+            method: 'POST',
             headers,
             body: JSON.stringify({ locationId: client.ghl_location_id, pageLimit: 1, page: 1 })
-          }
+          })
         );
-        if (contactsRes.ok) {
-          contactsResult = { success: true, error: '' };
-        } else {
-          const errorText = await contactsRes.text();
-          contactsResult = { success: false, error: `${contactsRes.status}: ${errorText.substring(0, 100)}` };
-        }
+        contactsResult = r.ok
+          ? { success: true, error: r.usedAgency ? 'via agency PIT' : '' }
+          : { success: false, error: `${r.status}: ${r.body.substring(0, 120)}` };
       } catch (err) {
         contactsResult = { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
       }
@@ -3241,16 +3253,12 @@ serve(async (req) => {
       // Test calendars endpoint
       let calendarsResult = { success: false, error: '' };
       try {
-        const calendarsRes = await fetch(
-          `${GHL_BASE_URL}/calendars/?locationId=${client.ghl_location_id}`,
-          { method: 'GET', headers }
+        const r = await tryWithFallback((headers) =>
+          fetch(`${GHL_BASE_URL}/calendars/?locationId=${client.ghl_location_id}`, { method: 'GET', headers })
         );
-        if (calendarsRes.ok) {
-          calendarsResult = { success: true, error: '' };
-        } else {
-          const errorText = await calendarsRes.text();
-          calendarsResult = { success: false, error: `${calendarsRes.status}: ${errorText.substring(0, 100)}` };
-        }
+        calendarsResult = r.ok
+          ? { success: true, error: r.usedAgency ? 'via agency PIT' : '' }
+          : { success: false, error: `${r.status}: ${r.body.substring(0, 120)}` };
       } catch (err) {
         calendarsResult = { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
       }
@@ -3258,16 +3266,12 @@ serve(async (req) => {
       // Test opportunities endpoint using the search endpoint (doesn't require pipelineId)
       let opportunitiesResult = { success: false, error: '' };
       try {
-        const oppsRes = await fetch(
-          `${GHL_BASE_URL}/opportunities/search?location_id=${client.ghl_location_id}&limit=1`,
-          { method: 'GET', headers }
+        const r = await tryWithFallback((headers) =>
+          fetch(`${GHL_BASE_URL}/opportunities/search?location_id=${client.ghl_location_id}&limit=1`, { method: 'GET', headers })
         );
-        if (oppsRes.ok) {
-          opportunitiesResult = { success: true, error: '' };
-        } else {
-          const errorText = await oppsRes.text();
-          opportunitiesResult = { success: false, error: `${oppsRes.status}: ${errorText.substring(0, 100)}` };
-        }
+        opportunitiesResult = r.ok
+          ? { success: true, error: r.usedAgency ? 'via agency PIT' : '' }
+          : { success: false, error: `${r.status}: ${r.body.substring(0, 120)}` };
       } catch (err) {
         opportunitiesResult = { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
       }
