@@ -160,6 +160,16 @@ const Index = () => {
   const syncMeetings = useSyncMeetings();
   const { testResults, isTesting, testAllClients, getClientStatus } = useApiConnectionTest();
   const [syncingYesterday, setSyncingYesterday] = useState(false);
+  const [autoTested, setAutoTested] = useState(false);
+
+  // Auto-run GHL connection tests once when clients are loaded so
+  // the dashboard shows live green/red indicators without a manual click.
+  useEffect(() => {
+    if (!autoTested && clientIds.length > 0 && !isTesting) {
+      setAutoTested(true);
+      testAllClients(clientIds);
+    }
+  }, [autoTested, clientIds, isTesting, testAllClients]);
   const { data: allCreatives = [] } = useAllCreatives();
   const pendingCreatives = allCreatives.filter(c => c.status === 'pending');
 
