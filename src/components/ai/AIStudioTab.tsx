@@ -21,6 +21,7 @@ import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
+import { useAgencyAgents } from "@/hooks/useAgencyAgents";
 import { AgentMentionPopover } from "./AgentMentionPopover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
