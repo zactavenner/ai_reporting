@@ -788,6 +788,9 @@ export type Database = {
           hermes_callback_url: string | null
           hermes_enabled: boolean
           id: string
+          jarvis_display_name: string
+          jarvis_model: string
+          jarvis_training_md: string
           kpi_google_doc_url: string | null
           kpi_google_sheet_url: string | null
           master_default_gid: string | null
@@ -824,6 +827,9 @@ export type Database = {
           hermes_callback_url?: string | null
           hermes_enabled?: boolean
           id?: string
+          jarvis_display_name?: string
+          jarvis_model?: string
+          jarvis_training_md?: string
           kpi_google_doc_url?: string | null
           kpi_google_sheet_url?: string | null
           master_default_gid?: string | null
@@ -860,6 +866,9 @@ export type Database = {
           hermes_callback_url?: string | null
           hermes_enabled?: boolean
           id?: string
+          jarvis_display_name?: string
+          jarvis_model?: string
+          jarvis_training_md?: string
           kpi_google_doc_url?: string | null
           kpi_google_sheet_url?: string | null
           master_default_gid?: string | null
