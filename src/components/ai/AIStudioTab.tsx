@@ -1511,14 +1511,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const agentEnabledForTurn = selectedAgentId !== "off";
           const mentioned = agentEnabledForTurn ? extractAgentMentions(text, clientAgents as any) : [];
           // Explicit picker overrides @mentions when set to a specific agent.
-          const pickedAgent = (agentEnabledForTurn && selectedAgentId !== "master")
+          const pickedAgent = (agentEnabledForTurn && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:"))
             ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
             : null;
+          const pickedAgencyForTurn = (agentEnabledForTurn && selectedAgentId.startsWith("slug:"))
+            ? pickedAgencyAgent
+            : null;
+          const agencyContextBlock = pickedAgencyForTurn
+            ? `You are operating as the ${pickedAgencyForTurn.name} (${pickedAgencyForTurn.role}). Follow this role and speak in this voice for the entire turn.\n\n${pickedAgencyForTurn.system_prompt || ""}\n\n---\nUser request follows:\n`
+            : "";
           const agentBlock = pickedAgent
             ? buildAgentContextBlock([pickedAgent])
-            : (mentioned.length ? buildAgentContextBlock(mentioned) : "");
-          const masterAgentBlock = selectedAgentId === "master" && agentEnabledForTurn && (clientAgents as any[]).length > 0
-            ? `You are the MASTER AGENT. Inspect the user's request and silently delegate to the most appropriate specialist agent from the roster below. Adopt that specialist's role, knowledge and tone for this turn. Available specialists:\n${(clientAgents as any[]).filter(a => a.enabled).map(a => `- @${a.handle} (${a.agent_type}) — ${a.name}`).join("\n")}\n\n---\n`
+            : (mentioned.length && !pickedAgencyForTurn ? buildAgentContextBlock(mentioned) : "");
+          const masterAgentBlock = selectedAgentId === "master" && agentEnabledForTurn && agencyRoster.length > 0
+            ? `You are Jarvis, the Account Manager. Inspect the user's request and silently delegate to the most appropriate specialist from the roster below. Adopt that specialist's role, knowledge and tone for this turn. Available specialists:\n${agencyRoster.map(a => `- @${a.slug} (${a.role}) — ${a.name}`).join("\n")}\n\n---\n`
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
@@ -1541,13 +1547,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             lockLines.push(`🔒 IMAGE HARD-LOCK: compare models [${imageModels.map(m => `"${m}"`).join(", ")}] via compare_image_models.`);
           }
           const lockBlock = lockLines.length ? lockLines.join("\n") + "\n\n" : "";
-          return masterBlock + masterAgentBlock + agentBlock + iStyleBlock + vStyleBlock + lockBlock + text;
+          return masterBlock + masterAgentBlock + agencyContextBlock + agentBlock + iStyleBlock + vStyleBlock + lockBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
         quality,
         chatModel: (() => {
-          if (selectedAgentId !== "off" && selectedAgentId !== "master") {
+          if (selectedAgentId.startsWith("slug:") && pickedAgencyAgent?.default_model) {
+            return pickedAgencyAgent.default_model;
+          }
+          if (selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")) {
             const a = (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled);
             if (a?.model) return a.model;
           }
@@ -1558,6 +1567,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution } : {}),
         avatarId: selectedAvatarId,
         adFormat: adFormat || undefined,
+        agentSlug: selectedAgentId.startsWith("slug:")
+          ? selectedAgentId.slice("slug:".length)
+          : (selectedAgentId === "master" ? "account_manager" : undefined),
         offerContext: (() => {
           const list = selectedOfferId === "all"
             ? clientOffers
