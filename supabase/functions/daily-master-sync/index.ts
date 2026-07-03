@@ -174,6 +174,26 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 5000));
     }
 
+    // ── Step 2c: Pipeline Guardian (reconcile lead statuses vs GHL) ──
+    // Refreshes stale leads via lead-status-sync-v2, escalates funded misses,
+    // and triggers per-client recalcs — so Steps 4/5b see corrected stages.
+    if (!skipSteps.includes("pipeline_guardian")) {
+      const start = Date.now();
+      console.log(`[daily-master-sync] Step 2c: agent-pipeline-guardian`);
+      const res = await callFunction(supabaseUrl, supabaseKey, "agent-pipeline-guardian", {});
+      const duration = Date.now() - start;
+      const guardSummary = res.data?.summary || [];
+      const totalCorrections = guardSummary.reduce((s: number, r: any) => s + (r.corrections || 0), 0);
+      results.push({
+        step: "agent-pipeline-guardian",
+        success: res.success,
+        duration_ms: duration,
+        details: `${guardSummary.length} clients reconciled, ${totalCorrections} lead status corrections`,
+        error: res.error,
+      });
+      await new Promise(r => setTimeout(r, 5000));
+    }
+
     // ── Step 3: HubSpot All Clients ──
     if (!skipSteps.includes("hubspot")) {
       const start = Date.now();
