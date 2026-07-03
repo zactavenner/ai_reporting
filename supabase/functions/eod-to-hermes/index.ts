@@ -1,6 +1,6 @@
 // eod-to-hermes: forwards an EOD report from a team member directly to
 // Zac's phone via SMS through the agency GoHighLevel sub-account.
-// Uses the GHL v1 REST API (works with a location-level API key).
+// Uses the GHL v2 LeadConnector API with a Private Integration Token (PIT).
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -8,7 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GHL_API = "https://rest.gohighlevel.com/v1";
+const GHL_API = "https://services.leadconnectorhq.com";
+const GHL_VERSION = "2021-07-28";
 const ZAC_PHONE_FALLBACK = "+19167097345";
 const ZAC_NAME = "Zac";
 
@@ -17,6 +18,7 @@ async function ghlFetch(path: string, init: RequestInit, token: string) {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
+      Version: GHL_VERSION,
       Accept: "application/json",
       "Content-Type": "application/json",
       ...(init.headers || {}),
@@ -24,47 +26,22 @@ async function ghlFetch(path: string, init: RequestInit, token: string) {
   });
 }
 
-async function findOrCreateContact(token: string, phone: string, name: string): Promise<{ id: string | null; debug: string }> {
+async function findOrCreateContact(token: string, locationId: string, phone: string, name: string): Promise<{ id: string | null; debug: string }> {
   let debug = "";
-
-  // 1. Lookup by phone
   try {
-    const search = await ghlFetch(`/contacts/lookup?phone=${encodeURIComponent(phone)}`, { method: "GET" }, token);
-    const sTxt = await search.text();
-    if (search.ok) {
-      const j = sTxt ? JSON.parse(sTxt) : {};
-      const id = j?.contacts?.[0]?.id || j?.contact?.id;
-      if (id) return { id, debug: "found via lookup" };
-      debug += `lookup ok no-id; `;
-    } else {
-      debug += `lookup ${search.status}: ${sTxt.slice(0, 160)}; `;
-    }
-  } catch (e) {
-    debug += `lookup threw ${e instanceof Error ? e.message : e}; `;
-  }
-
-  // 2. Create
-  try {
-    const create = await ghlFetch(`/contacts/`, {
+    const res = await ghlFetch(`/contacts/upsert`, {
       method: "POST",
-      body: JSON.stringify({ phone, firstName: name, source: "EOD Bot" }),
+      body: JSON.stringify({ locationId, phone, firstName: name, source: "EOD Bot" }),
     }, token);
-    const cTxt = await create.text();
-    if (create.ok) {
-      const j = cTxt ? JSON.parse(cTxt) : {};
+    const txt = await res.text();
+    if (res.ok) {
+      const j = txt ? JSON.parse(txt) : {};
       const id = j?.contact?.id || j?.id || null;
-      return { id, debug: debug + "created" };
+      return { id, debug: "upsert ok" };
     }
-    if ([400, 409, 422].includes(create.status)) {
-      try {
-        const j = JSON.parse(cTxt);
-        const id = j?.meta?.contactId || j?.contact?.id || j?.id;
-        if (id) return { id, debug: debug + "dup-on-create" };
-      } catch { /* noop */ }
-    }
-    debug += `create ${create.status}: ${cTxt.slice(0, 200)}; `;
+    debug += `upsert ${res.status}: ${txt.slice(0, 240)}; `;
   } catch (e) {
-    debug += `create threw ${e instanceof Error ? e.message : e}; `;
+    debug += `upsert threw ${e instanceof Error ? e.message : e}; `;
   }
   return { id: null, debug };
 }
@@ -83,7 +60,8 @@ Deno.serve(async (req) => {
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    const GHL_TOKEN = Deno.env.get("AGENCY_GHL_API_KEY") || "";
+    const GHL_TOKEN = Deno.env.get("AGENCY_GHL_PIT_TOKEN") || Deno.env.get("AGENCY_GHL_API_KEY") || "";
+    const GHL_LOCATION_ID = Deno.env.get("AGENCY_GHL_LOCATION_ID") || "";
 
     const body = await req.json();
     const {
@@ -132,10 +110,12 @@ Deno.serve(async (req) => {
     let contactId: string | null = null;
 
     if (!GHL_TOKEN) {
-      deliveryError = "Agency GHL not configured (missing AGENCY_GHL_API_KEY)";
+      deliveryError = "Agency GHL not configured (missing AGENCY_GHL_PIT_TOKEN)";
+    } else if (!GHL_LOCATION_ID) {
+      deliveryError = "Agency GHL not configured (missing AGENCY_GHL_LOCATION_ID)";
     } else {
       try {
-        const r0 = await findOrCreateContact(GHL_TOKEN, phone, ZAC_NAME);
+        const r0 = await findOrCreateContact(GHL_TOKEN, GHL_LOCATION_ID, phone, ZAC_NAME);
         contactId = r0.id;
         if (!contactId) throw new Error(`Failed to find or create GHL contact — ${r0.debug}`);
         const r = await sendGhlSms(GHL_TOKEN, contactId, text);
