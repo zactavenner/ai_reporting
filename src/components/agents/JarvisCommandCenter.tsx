@@ -84,6 +84,7 @@ export function JarvisCommandCenter() {
   const [streamingReply, setStreamingReply] = useState("");
   const [thoughts, setThoughts] = useState<Array<{ stage: string; text: string; ts: number }>>([]);
   const [liveInter, setLiveInter] = useState<Array<{ speaker: string; content: string }>>([]);
+  const [queued, setQueued] = useState<string[]>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: settings } = useAgencySettings();
@@ -214,10 +215,24 @@ export function JarvisCommandCenter() {
 
   const submit = () => {
     const t = input.trim();
-    if (!t || pending) return;
+    if (!t) return;
     setInput("");
+    if (pending) {
+      setQueued((q) => [...q, t]);
+      toast.success("Queued — will send when Jarvis finishes");
+      return;
+    }
     void streamSend(t);
   };
+
+  // Drain queued messages once Jarvis is idle
+  useEffect(() => {
+    if (pending || queued.length === 0) return;
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    void streamSend(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, queued]);
 
   // Realtime updates while Jarvis is working
   useEffect(() => {
@@ -360,20 +375,36 @@ export function JarvisCommandCenter() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
                 }}
-                placeholder="Message Jarvis…  (Shift+Enter for newline)"
+                placeholder={pending ? "Jarvis is working — type to queue next message…" : "Message Jarvis…  (Shift+Enter for newline)"}
                 rows={1}
                 className="min-h-[44px] max-h-40 resize-none"
-                disabled={pending}
               />
               <TooltipProvider><Tooltip>
                 <TooltipTrigger asChild>
-                  <Button onClick={submit} disabled={pending || !input.trim()} size="icon">
+                  <Button onClick={submit} disabled={!input.trim()} size="icon">
                     <Send className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Send (Enter)</TooltipContent>
+                <TooltipContent>{pending ? "Queue (Enter)" : "Send (Enter)"}</TooltipContent>
               </Tooltip></TooltipProvider>
             </div>
+            {queued.length > 0 && (
+              <div className="max-w-3xl mx-auto mt-2 space-y-1">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Queued ({queued.length})</p>
+                {queued.map((q, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs bg-muted/50 rounded-md px-2 py-1">
+                    <span className="text-muted-foreground">#{i + 1}</span>
+                    <span className="truncate flex-1">{q}</span>
+                    <button
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => setQueued((qs) => qs.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
