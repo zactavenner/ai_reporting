@@ -21,6 +21,7 @@ import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
+import { useAgencyAgents } from "@/hooks/useAgencyAgents";
 import { AgentMentionPopover } from "./AgentMentionPopover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AgentFolderInline } from "@/components/agents/AgentFolderInline";
@@ -1145,11 +1146,25 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   // --- Per-client agents (@mention support in AI Studio) ---
   const { data: clientAgents = [] } = useClientAgents(clientId);
+  const { data: agencyAgents = [] } = useAgencyAgents();
+  // Roster surfaced in the AI Studio picker: agency-wide specialists (all
+  // clients share the same team) excluding the account_manager, which becomes
+  // the "Jarvis" master/delegator option. Values are prefixed with `slug:` so
+  // the composer can distinguish them from client_agents rows (uuid ids).
+  const agencyRoster = (agencyAgents as any[]).filter((a) => a.is_active && a.slug !== "account_manager");
+  const pickedAgencyAgent = selectedAgentId.startsWith("slug:")
+    ? agencyRoster.find((a) => `slug:${a.slug}` === selectedAgentId)
+    : null;
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
+    if (selectedAgentId.startsWith("slug:")) {
+      const stillActive = agencyRoster.some((a) => `slug:${a.slug}` === selectedAgentId);
+      if (agencyRoster.length > 0 && !stillActive) setSelectedAgentId("off");
+      return;
+    }
     const selectedIsEnabled = (clientAgents as any[]).some((a) => a.id === selectedAgentId && a.enabled);
     if ((clientAgents as any[]).length > 0 && !selectedIsEnabled) setSelectedAgentId("off");
-  }, [clientAgents, selectedAgentId]);
+  }, [clientAgents, agencyRoster, selectedAgentId]);
 
   // --- Auto-import the selected offer's image assets as references in the composer.
   // Whenever the offer picker changes, drop any previously-imported offer images and
@@ -1496,14 +1511,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const agentEnabledForTurn = selectedAgentId !== "off";
           const mentioned = agentEnabledForTurn ? extractAgentMentions(text, clientAgents as any) : [];
           // Explicit picker overrides @mentions when set to a specific agent.
-          const pickedAgent = (agentEnabledForTurn && selectedAgentId !== "master")
+          const pickedAgent = (agentEnabledForTurn && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:"))
             ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
             : null;
+          const pickedAgencyForTurn = (agentEnabledForTurn && selectedAgentId.startsWith("slug:"))
+            ? pickedAgencyAgent
+            : null;
+          const agencyContextBlock = pickedAgencyForTurn
+            ? `You are operating as the ${pickedAgencyForTurn.name} (${pickedAgencyForTurn.role}). Follow this role and speak in this voice for the entire turn.\n\n${pickedAgencyForTurn.system_prompt || ""}\n\n---\nUser request follows:\n`
+            : "";
           const agentBlock = pickedAgent
             ? buildAgentContextBlock([pickedAgent])
-            : (mentioned.length ? buildAgentContextBlock(mentioned) : "");
-          const masterAgentBlock = selectedAgentId === "master" && agentEnabledForTurn && (clientAgents as any[]).length > 0
-            ? `You are the MASTER AGENT. Inspect the user's request and silently delegate to the most appropriate specialist agent from the roster below. Adopt that specialist's role, knowledge and tone for this turn. Available specialists:\n${(clientAgents as any[]).filter(a => a.enabled).map(a => `- @${a.handle} (${a.agent_type}) — ${a.name}`).join("\n")}\n\n---\n`
+            : (mentioned.length && !pickedAgencyForTurn ? buildAgentContextBlock(mentioned) : "");
+          const masterAgentBlock = selectedAgentId === "master" && agentEnabledForTurn && agencyRoster.length > 0
+            ? `You are Jarvis, the Account Manager. Inspect the user's request and silently delegate to the most appropriate specialist from the roster below. Adopt that specialist's role, knowledge and tone for this turn. Available specialists:\n${agencyRoster.map(a => `- @${a.slug} (${a.role}) — ${a.name}`).join("\n")}\n\n---\n`
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
@@ -1526,13 +1547,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             lockLines.push(`🔒 IMAGE HARD-LOCK: compare models [${imageModels.map(m => `"${m}"`).join(", ")}] via compare_image_models.`);
           }
           const lockBlock = lockLines.length ? lockLines.join("\n") + "\n\n" : "";
-          return masterBlock + masterAgentBlock + agentBlock + iStyleBlock + vStyleBlock + lockBlock + text;
+          return masterBlock + masterAgentBlock + agencyContextBlock + agentBlock + iStyleBlock + vStyleBlock + lockBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
         quality,
         chatModel: (() => {
-          if (selectedAgentId !== "off" && selectedAgentId !== "master") {
+          if (selectedAgentId.startsWith("slug:") && pickedAgencyAgent?.default_model) {
+            return pickedAgencyAgent.default_model;
+          }
+          if (selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")) {
             const a = (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled);
             if (a?.model) return a.model;
           }
@@ -1543,6 +1567,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution } : {}),
         avatarId: selectedAvatarId,
         adFormat: adFormat || undefined,
+        agentSlug: selectedAgentId.startsWith("slug:")
+          ? selectedAgentId.slice("slug:".length)
+          : (selectedAgentId === "master" ? "account_manager" : undefined),
         offerContext: (() => {
           const list = selectedOfferId === "all"
             ? clientOffers
@@ -2154,19 +2181,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
               )}
               {(() => {
-                const pickedAgent = selectedAgentId !== "off" && selectedAgentId !== "master"
+                const pickedAgent = selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")
                   ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
                   : null;
-                const effectiveModel = pickedAgent?.model || chatModel;
-                const modelOverridden = !!(pickedAgent?.model && pickedAgent.model !== chatModel);
+                const effectiveModel = pickedAgencyAgent?.default_model || pickedAgent?.model || chatModel;
+                const modelOverridden = !!((pickedAgencyAgent?.default_model && pickedAgencyAgent.default_model !== chatModel) || (pickedAgent?.model && pickedAgent.model !== chatModel));
                 const modelShort = (CHAT_MODELS.find(m => m.value === effectiveModel)?.label) || effectiveModel.split("/").pop() || effectiveModel;
                 const agentLabel = selectedAgentId === "off"
                   ? null
                   : selectedAgentId === "master"
-                    ? "Master Agent"
-                    : pickedAgent
-                      ? `@${pickedAgent.handle}`
-                      : null;
+                    ? "Jarvis (AM)"
+                    : pickedAgencyAgent
+                      ? `@${pickedAgencyAgent.slug}`
+                      : pickedAgent
+                        ? `@${pickedAgent.handle}`
+                        : null;
                 if (!agentLabel && !modelOverridden) return null;
                 return (
                   <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2 text-[10px]">
@@ -2271,7 +2300,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       <Bot className="h-3 w-3" />
                       {(() => {
                         if (selectedAgentId === "off") return "Agent";
-                        if (selectedAgentId === "master") return "Master";
+                        if (selectedAgentId === "master") return "Jarvis";
+                        if (selectedAgentId.startsWith("slug:")) {
+                          const a = agencyRoster.find(x => `slug:${x.slug}` === selectedAgentId);
+                          return a ? `@${a.slug}` : "Agent";
+                        }
                         const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
                         return a ? `@${a.handle}` : "Agent";
                       })()}
@@ -2293,12 +2326,38 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         onClick={() => setSelectedAgentId("master")}
                         className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === "master" ? "bg-primary/10 font-medium" : ""}`}
                       >
-                        {selectedAgentId === "master" ? "● " : "○ "}Master Agent <span className="text-muted-foreground">— auto-delegates</span>
+                        {selectedAgentId === "master" ? "● " : "○ "}Jarvis (Account Manager) <span className="text-muted-foreground">— auto-delegates</span>
                       </button>
                     </div>
+                    {agencyRoster.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border/60">
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Team specialists</div>
+                        <div className="space-y-0.5 max-h-56 overflow-y-auto">
+                          {agencyRoster.map((a: any) => {
+                            const value = `slug:${a.slug}`;
+                            return (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => setSelectedAgentId(value)}
+                                className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === value ? "bg-primary/10 font-medium" : ""}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="truncate">
+                                    {selectedAgentId === value ? "● " : "○ "}@{a.slug}
+                                    <span className="text-muted-foreground"> · {a.name}</span>
+                                  </span>
+                                  {a.default_model && <span className="text-[9px] text-muted-foreground shrink-0">{a.default_model.split("/").pop()}</span>}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {(clientAgents as any[]).filter((a: any) => a.enabled).length > 0 && (
                       <div className="mt-2 pt-2 border-t border-border/60">
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Specialists</div>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Client-only agents</div>
                         <div className="space-y-0.5 max-h-56 overflow-y-auto">
                           {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => (
                             <button
@@ -2319,7 +2378,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         </div>
                       </div>
                     )}
-                    {(clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
+                    {agencyRoster.length === 0 && (clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
                       <div className="mt-2 pt-2 border-t border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
                         No specialists yet — create one in the Agents tab.
                       </div>
