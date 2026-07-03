@@ -66,6 +66,8 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
 
 export const OFFER_IMAGE_ROLES = [
   { key: "reference", label: "Reference" },
+  { key: "video_ad", label: "Video Ad Ref" },
+  { key: "static_ad", label: "Static Ad Ref" },
   { key: "product", label: "Product" },
   { key: "logo", label: "Logo" },
   { key: "lifestyle", label: "Lifestyle" },
