@@ -299,6 +299,25 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 2000));
     }
 
+    // ── Step 5d: Weekly Report Refresh (current + prior week, all clients) ──
+    if (!skipSteps.includes("weekly_report")) {
+      const start = Date.now();
+      console.log(`[daily-master-sync] Step 5d: weekly-report-generator-v2`);
+      const res = await callFunction(supabaseUrl, supabaseKey, "weekly-report-generator-v2", {
+        allClients: true,
+        weeks: 2, // current week-in-progress + last completed week stay fresh
+      });
+      const duration = Date.now() - start;
+      results.push({
+        step: "weekly-report-generator-v2",
+        success: res.success,
+        duration_ms: duration,
+        details: `${(res.data?.results || []).filter((r: any) => !r.error).length} week-reports refreshed`,
+        error: res.error,
+      });
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
     // ── Step 6: Meta Token Expiry Check ──
     if (!skipSteps.includes("token_check")) {
       const start = Date.now();

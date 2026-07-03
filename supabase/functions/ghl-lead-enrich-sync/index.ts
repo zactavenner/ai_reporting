@@ -97,32 +97,97 @@ async function ghlRemoveTag(
 }
 
 // ── Enrichment ──
-// Calls the existing enrich-lead-retargetiq edge function, which returns
-// company/income/accreditation data we can push back to GHL.
+// Calls the existing enrich-lead-retargetiq edge function (RetargetIQ v2 API:
+// GetDataByPhone/GetDataByEmail with api_key + website slug in the body).
+// Requires the lead's email/phone and the client's retargetiq_website_slug.
 async function enrichLead(
+  supabase: any,
   supabaseUrl: string,
   supabaseKey: string,
+  clientId: string,
   leadId: string,
 ): Promise<Record<string, any> | null> {
   try {
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("id, external_id, email, phone, name")
+      .eq("id", leadId)
+      .maybeSingle();
+    if (!lead || (!lead.email && !lead.phone)) return null;
+
+    const { data: settings } = await supabase
+      .from("client_settings")
+      .select("retargetiq_website_slug")
+      .eq("client_id", clientId)
+      .maybeSingle();
+
     const res = await fetch(`${supabaseUrl}/functions/v1/enrich-lead-retargetiq`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${supabaseKey}`,
       },
-      body: JSON.stringify({ leadId }),
+      body: JSON.stringify({
+        client_id: clientId,
+        lead_id: leadId,
+        external_id: lead.external_id,
+        email: lead.email,
+        phone: lead.phone,
+        website_slug: settings?.retargetiq_website_slug || undefined,
+      }),
     });
     if (!res.ok) {
       console.warn(`[ghl-lead-enrich-sync] Enrichment failed for lead ${leadId}: ${res.status}`);
       return null;
     }
     const data = await res.json();
-    return data.enrichment || data.data || null;
+    return data.enrichment || data.identity || data.data || null;
   } catch (err) {
     console.warn(`[ghl-lead-enrich-sync] Enrichment error for lead ${leadId}:`, err);
     return null;
   }
+}
+
+// Write the enrichment summary as a note on the GHL contact so reps see it
+// in the CRM without leaving GHL.
+async function ghlCreateNote(
+  apiKey: string,
+  contactId: string,
+  noteBody: string,
+): Promise<{ ok: boolean; status: number }> {
+  const res = await fetch(`${GHL_BASE_URL}/contacts/${contactId}/notes`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Version: GHL_API_VERSION,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ body: noteBody }),
+  });
+  return { ok: res.ok, status: res.status };
+}
+
+// Format RetargetIQ identity data as a readable CRM note
+function formatEnrichmentNote(e: Record<string, any>): string {
+  const lines: string[] = ["🔎 RetargetIQ Enrichment"];
+  const d = e.data || e;
+  const fin = e.finances || d.finances || {};
+  const add = (label: string, v: any) => { if (v !== undefined && v !== null && `${v}`.trim() !== "") lines.push(`${label}: ${v}`); };
+  add("Name", [e.firstName, e.lastName].filter(Boolean).join(" "));
+  add("Location", [e.city, e.state, e.zip].filter(Boolean).join(", "));
+  add("Age", d.age);
+  add("Occupation", d.occupation || d.jobTitle);
+  add("Household Income", fin.householdIncome || d.householdIncome || d.income_range);
+  add("Net Worth", fin.netWorth || d.netWorth || d.net_worth);
+  add("Credit Range", fin.creditRange || d.creditRange);
+  add("Investments", fin.investmentActivity || d.investments);
+  const company = (e.companies || [])[0] || {};
+  add("Company", company.company || company.name || e.company_name);
+  add("Title", company.title || e.job_title);
+  add("LinkedIn", company.linkedin || e.linkedin_url);
+  add("Accredited (est.)", e.accredited);
+  lines.push(`— synced ${new Date().toISOString().split("T")[0]}`);
+  return lines.join("\n");
 }
 
 // ── Process a single job ──
@@ -151,7 +216,7 @@ async function processJob(supabase: any, supabaseUrl: string, supabaseKey: strin
       if (!job.lead_id) throw new Error("enrich_and_sync_back requires lead_id");
 
       // Step 1: Enrich the lead
-      const enrichment = await enrichLead(supabaseUrl, supabaseKey, job.lead_id);
+      const enrichment = await enrichLead(supabase, supabaseUrl, supabaseKey, job.client_id, job.lead_id);
       if (!enrichment) {
         // Enrichment unavailable — not a hard failure, just log and succeed
         console.log(`[ghl-lead-enrich-sync] No enrichment data for lead ${job.lead_id}; skipping write-back`);
@@ -210,10 +275,34 @@ async function processJob(supabase: any, supabaseUrl: string, supabaseKey: strin
         }
       }
 
+      // Step 5: Write the enrichment summary as a GHL note (once per lead —
+      // enrichment_note_synced_at guards against duplicate notes on retries)
+      let noteWritten = false;
+      const { data: leadRow } = await supabase
+        .from("leads")
+        .select("enrichment_note_synced_at")
+        .eq("id", job.lead_id)
+        .maybeSingle();
+      if (!leadRow?.enrichment_note_synced_at) {
+        const noteResult = await ghlCreateNote(
+          client.ghl_api_key,
+          resolvedContactId,
+          formatEnrichmentNote(enrichment),
+        );
+        noteWritten = noteResult.ok;
+        if (noteResult.ok) {
+          await supabase.from("leads").update({
+            enrichment_note_synced_at: new Date().toISOString(),
+          }).eq("id", job.lead_id);
+        } else {
+          console.warn(`[ghl-lead-enrich-sync] Note create failed (non-fatal): ${noteResult.status}`);
+        }
+      }
+
       // Mark succeeded
       await supabase.rpc("ghl_queue_mark_succeeded", {
         p_job_id: job.id,
-        p_response: { updates, tags, enrichment_fields: Object.keys(enrichment) },
+        p_response: { updates, tags, noteWritten, enrichment_fields: Object.keys(enrichment) },
       });
 
       // Also update local lead metadata for future reference

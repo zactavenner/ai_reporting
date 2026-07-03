@@ -43,6 +43,7 @@ import { RevenueAttributionPanel } from '@/components/dashboard/RevenueAttributi
 import CustomerJourneyPanel from '@/components/dashboard/CustomerJourneyPanel';
 import { GoalTrackerWidget } from '@/components/dashboard/GoalTrackerWidget';
 import { EndToEndFunnelPanel } from '@/components/dashboard/EndToEndFunnelPanel';
+import { WeeklyReportPanel } from '@/components/dashboard/WeeklyReportPanel';
 import { KPISettingsSection } from '@/components/settings/KPISettingsSection';
 import { ClientBillingTab } from '@/components/billing/ClientBillingTab';
 import { useClient } from '@/hooks/useClients';
@@ -289,6 +290,10 @@ export default function ClientDetail() {
               <TrendingUp className="h-4 w-4" />
               Attribution
             </TabsTrigger>
+            <TabsTrigger value="weekly-report" className="gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Weekly Report
+            </TabsTrigger>
             <TabsTrigger value="creatives" className="gap-2">
               <Palette className="h-4 w-4" />
               Creatives
@@ -447,6 +452,13 @@ export default function ClientDetail() {
 
             <SectionErrorBoundary sectionName="KPI Goals">
               <GoalTrackerWidget clientId={clientId} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── WEEKLY REPORT TAB ─── */}
+          <TabsContent value="weekly-report" className="space-y-6">
+            <SectionErrorBoundary sectionName="Weekly Report">
+              <WeeklyReportPanel clientId={client.id} />
             </SectionErrorBoundary>
           </TabsContent>
 
