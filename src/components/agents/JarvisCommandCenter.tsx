@@ -84,6 +84,7 @@ export function JarvisCommandCenter() {
   const [streamingReply, setStreamingReply] = useState("");
   const [thoughts, setThoughts] = useState<Array<{ stage: string; text: string; ts: number }>>([]);
   const [liveInter, setLiveInter] = useState<Array<{ speaker: string; content: string }>>([]);
+  const [queued, setQueued] = useState<string[]>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: settings } = useAgencySettings();
@@ -214,10 +215,24 @@ export function JarvisCommandCenter() {
 
   const submit = () => {
     const t = input.trim();
-    if (!t || pending) return;
+    if (!t) return;
     setInput("");
+    if (pending) {
+      setQueued((q) => [...q, t]);
+      toast.success("Queued — will send when Jarvis finishes");
+      return;
+    }
     void streamSend(t);
   };
+
+  // Drain queued messages once Jarvis is idle
+  useEffect(() => {
+    if (pending || queued.length === 0) return;
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    void streamSend(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, queued]);
 
   // Realtime updates while Jarvis is working
   useEffect(() => {
