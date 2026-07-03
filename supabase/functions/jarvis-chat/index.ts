@@ -45,6 +45,8 @@ YOU HAVE DIRECT PLATFORM ACCESS via tools:
  - ask_client_agent(client_id, agent_handle, question, loops?) — talk to ANY specialist agent under ANY client, optionally looping N times (self-critique passes) to squeeze the best possible answer
  - ask_account_manager(client_id, question) — talk to the per-client Jarvis AM (fastest path for client-wide context)
  - send_agency_sms(phone, message) — send an SMS from the agency GHL number (e.g. to Zac, sales managers, team)
+ - get_lead_status(client_id, identifier) — pull LIVE status of a single lead from GHL v2 (booked / showed / committed / funded + Meta attribution) and write it into reporting tables
+ - refresh_client_leads(client_id, sinceHours?) — sweep every stale lead for a client through the v2 sync (up to 200)
  - web_search — pull external info when needed
 
 RULES:
@@ -66,6 +68,8 @@ const TOOLS = [
   { type: "function", function: { name: "list_client_agents", description: "List every specialist agent configured under a client (handle, name, type, model, enabled).", parameters: { type: "object", properties: { client_id: { type: "string" } }, required: ["client_id"] } } },
   { type: "function", function: { name: "ask_client_agent", description: "Ask a specific specialist agent under a client a question. Optionally run quality loops (self-critique passes 1-5) to force the agent to improve their answer.", parameters: { type: "object", properties: { client_id: { type: "string" }, agent_handle: { type: "string", description: "Agent handle or name substring" }, question: { type: "string" }, loops: { type: "number", description: "1-5. Number of self-critique + rewrite loops. Default 1." } }, required: ["client_id", "agent_handle", "question"] } } },
   { type: "function", function: { name: "send_agency_sms", description: "Send an SMS from the agency GHL number to a phone number (e.g. Zac +19167097345, sales managers, team). Use for real notifications the user asks you to send.", parameters: { type: "object", properties: { phone: { type: "string", description: "E.164 phone, e.g. +19167097345" }, message: { type: "string" }, name: { type: "string", description: "Optional contact name" } }, required: ["phone", "message"] } } },
+  { type: "function", function: { name: "get_lead_status", description: "Fetch LIVE status of a single lead from GHL v2 (contact, appointments, opportunities). Writes results into leads/calls/funded_investors and returns booked/showed/committed/funded + Meta ad attribution.", parameters: { type: "object", properties: { client_id: { type: "string" }, lead_id: { type: "string", description: "Local lead uuid (preferred)" }, external_id: { type: "string", description: "GHL contact id" }, email: { type: "string" }, phone: { type: "string" } }, required: ["client_id"] } } },
+  { type: "function", function: { name: "refresh_client_leads", description: "Sweep every stale lead for a client through the v2 GHL sync — updates booked/showed/funded status and Meta ad attribution across the dashboard. Use before answering performance questions or after a big raise.", parameters: { type: "object", properties: { client_id: { type: "string" }, sinceHours: { type: "number", description: "Only refresh leads not synced in this many hours. Default 24." }, limit: { type: "number", description: "Max leads to sync (default 200, hard cap 500)." } }, required: ["client_id"] } } },
   { type: "function", function: { name: "web_search", description: "Search the web for external / current info.", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } } },
 ];
 
@@ -202,6 +206,28 @@ async function execTool(name: string, args: any, supa: any): Promise<any> {
         const jr = await r.json().catch(() => ({}));
         if (!r.ok) return { error: jr?.error || `send-ghl-message ${r.status}` };
         return { ok: true, to: args.phone, messageId: jr?.messageId };
+      }
+      case "get_lead_status": {
+        const payload: any = { mode: "single", client_id: args.client_id };
+        for (const k of ["lead_id", "external_id", "email", "phone"]) if (args[k]) payload[k] = args[k];
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/lead-status-sync-v2`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+          body: JSON.stringify(payload),
+        });
+        const jr = await r.json().catch(() => ({}));
+        if (!r.ok) return { error: jr?.error || `lead-status-sync-v2 ${r.status}` };
+        return jr.results?.[0] || jr;
+      }
+      case "refresh_client_leads": {
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/lead-status-sync-v2`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+          body: JSON.stringify({ mode: "client", client_id: args.client_id, sinceHours: args.sinceHours, limit: args.limit }),
+        });
+        const jr = await r.json().catch(() => ({}));
+        if (!r.ok) return { error: jr?.error || `lead-status-sync-v2 ${r.status}` };
+        return { synced: jr.synced, failed: jr.failed, total: (jr.results || []).length };
       }
       case "web_search": {
         const res = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(args.query)}&format=json&no_html=1`, { headers: { "User-Agent": "JarvisBot/1.0" } });
