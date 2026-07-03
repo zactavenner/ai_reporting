@@ -2300,7 +2300,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       <Bot className="h-3 w-3" />
                       {(() => {
                         if (selectedAgentId === "off") return "Agent";
-                        if (selectedAgentId === "master") return "Master";
+                        if (selectedAgentId === "master") return "Jarvis";
+                        if (selectedAgentId.startsWith("slug:")) {
+                          const a = agencyRoster.find(x => `slug:${x.slug}` === selectedAgentId);
+                          return a ? `@${a.slug}` : "Agent";
+                        }
                         const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
                         return a ? `@${a.handle}` : "Agent";
                       })()}
@@ -2322,12 +2326,38 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         onClick={() => setSelectedAgentId("master")}
                         className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === "master" ? "bg-primary/10 font-medium" : ""}`}
                       >
-                        {selectedAgentId === "master" ? "● " : "○ "}Master Agent <span className="text-muted-foreground">— auto-delegates</span>
+                        {selectedAgentId === "master" ? "● " : "○ "}Jarvis (Account Manager) <span className="text-muted-foreground">— auto-delegates</span>
                       </button>
                     </div>
+                    {agencyRoster.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border/60">
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Team specialists</div>
+                        <div className="space-y-0.5 max-h-56 overflow-y-auto">
+                          {agencyRoster.map((a: any) => {
+                            const value = `slug:${a.slug}`;
+                            return (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => setSelectedAgentId(value)}
+                                className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === value ? "bg-primary/10 font-medium" : ""}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="truncate">
+                                    {selectedAgentId === value ? "● " : "○ "}@{a.slug}
+                                    <span className="text-muted-foreground"> · {a.name}</span>
+                                  </span>
+                                  {a.default_model && <span className="text-[9px] text-muted-foreground shrink-0">{a.default_model.split("/").pop()}</span>}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {(clientAgents as any[]).filter((a: any) => a.enabled).length > 0 && (
                       <div className="mt-2 pt-2 border-t border-border/60">
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Specialists</div>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Client-only agents</div>
                         <div className="space-y-0.5 max-h-56 overflow-y-auto">
                           {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => (
                             <button
@@ -2348,7 +2378,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         </div>
                       </div>
                     )}
-                    {(clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
+                    {agencyRoster.length === 0 && (clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
                       <div className="mt-2 pt-2 border-t border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
                         No specialists yet — create one in the Agents tab.
                       </div>
