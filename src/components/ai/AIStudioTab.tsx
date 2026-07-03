@@ -1146,11 +1146,25 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
   // --- Per-client agents (@mention support in AI Studio) ---
   const { data: clientAgents = [] } = useClientAgents(clientId);
+  const { data: agencyAgents = [] } = useAgencyAgents();
+  // Roster surfaced in the AI Studio picker: agency-wide specialists (all
+  // clients share the same team) excluding the account_manager, which becomes
+  // the "Jarvis" master/delegator option. Values are prefixed with `slug:` so
+  // the composer can distinguish them from client_agents rows (uuid ids).
+  const agencyRoster = (agencyAgents as any[]).filter((a) => a.is_active && a.slug !== "account_manager");
+  const pickedAgencyAgent = selectedAgentId.startsWith("slug:")
+    ? agencyRoster.find((a) => `slug:${a.slug}` === selectedAgentId)
+    : null;
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
+    if (selectedAgentId.startsWith("slug:")) {
+      const stillActive = agencyRoster.some((a) => `slug:${a.slug}` === selectedAgentId);
+      if (agencyRoster.length > 0 && !stillActive) setSelectedAgentId("off");
+      return;
+    }
     const selectedIsEnabled = (clientAgents as any[]).some((a) => a.id === selectedAgentId && a.enabled);
     if ((clientAgents as any[]).length > 0 && !selectedIsEnabled) setSelectedAgentId("off");
-  }, [clientAgents, selectedAgentId]);
+  }, [clientAgents, agencyRoster, selectedAgentId]);
 
   // --- Auto-import the selected offer's image assets as references in the composer.
   // Whenever the offer picker changes, drop any previously-imported offer images and
