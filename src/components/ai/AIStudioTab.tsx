@@ -898,7 +898,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("client_offer_files")
-        .select("offer_id, file_url, file_name, file_type")
+        .select("offer_id, file_url, file_name, file_type, role, tags")
         .eq("client_id", clientId);
       if (error) throw error;
       return data || [];
