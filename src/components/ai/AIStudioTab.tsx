@@ -898,7 +898,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("client_offer_files")
-        .select("offer_id, file_url, file_name, file_type")
+        .select("offer_id, file_url, file_name, file_type, role, tags")
         .eq("client_id", clientId);
       if (error) throw error;
       return data || [];
@@ -1583,7 +1583,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (files.length > 0) {
               parts.push(`Attached files (${files.length}) — review each PDF / asset:`);
               files.forEach((f: any, idx: number) => {
-                parts.push(`  ${idx + 1}. ${f.file_name}${f.file_type ? ` [${f.file_type}]` : ""} → ${f.file_url}`);
+                const roleLabel = f.role && f.role !== "reference" ? ` {role: ${f.role}}` : "";
+                parts.push(`  ${idx + 1}. ${f.file_name}${f.file_type ? ` [${f.file_type}]` : ""}${roleLabel} → ${f.file_url}`);
               });
             }
             return parts.join("\n");
@@ -2164,22 +2165,100 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 }
               }}
             >
-              {pendingAttachments.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                  {pendingAttachments.map((a, i) => (
-                    <div key={i} className={`flex items-center gap-1.5 text-[10px] rounded-md px-2 py-1 ${a.fromOffer ? "bg-primary/10 text-foreground border border-primary/30" : "bg-muted"}`}>
-                      {a.uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : a.fromOffer ? <Sparkles className="h-3 w-3 text-primary" /> : <Paperclip className="h-3 w-3" />}
-                      <span className="max-w-[140px] truncate">{a.name}</span>
-                      {a.fromOffer && (
-                        <span className="text-[9px] text-muted-foreground capitalize">
-                          {a.role && a.role !== "reference" ? a.role : "offer"}
-                        </span>
-                      )}
-                      <button onClick={() => setPendingAttachments(curr => curr.filter((_, j) => j !== i))} className="hover:text-destructive"><X className="h-3 w-3" /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {pendingAttachments.length > 0 && (() => {
+                const offerRefs = pendingAttachments.filter(a => a.fromOffer);
+                const userRefs = pendingAttachments.filter(a => !a.fromOffer);
+                const isImg = (a: Attachment) => /image\//i.test(a.mime || "") || /\.(png|jpe?g|gif|webp|svg|heic|avif)$/i.test(a.name || "");
+                const groupByRole = (arr: Attachment[]) => {
+                  const g: Record<string, Attachment[]> = {};
+                  arr.forEach(a => {
+                    const key = a.role && a.role !== "reference" ? a.role : "reference";
+                    (g[key] ||= []).push(a);
+                  });
+                  return g;
+                };
+                const roleLabel = (k: string) => ({
+                  video_ad: "Video Ad References",
+                  static_ad: "Static Ad References",
+                  product: "Product",
+                  logo: "Logo",
+                  lifestyle: "Lifestyle",
+                  testimonial: "Testimonial",
+                  avatar: "Avatar",
+                  reference: "References",
+                } as Record<string, string>)[k] || k;
+                const groups = groupByRole(offerRefs);
+                const orderedKeys = ["video_ad", "static_ad", "product", "logo", "avatar", "lifestyle", "testimonial", "reference"]
+                  .filter(k => groups[k]?.length);
+                return (
+                  <div className="px-3 pt-2 space-y-2">
+                    {offerRefs.length > 0 && (
+                      <div className="rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-2">
+                        <div className="flex items-center gap-1.5 text-[10px] text-primary">
+                          <Sparkles className="h-3 w-3" />
+                          <span className="font-semibold uppercase tracking-wide">
+                            {offerRefs.length} offer reference{offerRefs.length === 1 ? "" : "s"} auto-attached
+                          </span>
+                          {selectedOfferTitle && (
+                            <span className="text-muted-foreground normal-case">from "{selectedOfferTitle}"</span>
+                          )}
+                        </div>
+                        {orderedKeys.map(k => (
+                          <div key={k} className="space-y-1">
+                            <div className="text-[9px] uppercase tracking-wide text-muted-foreground font-medium">
+                              {roleLabel(k)} · {groups[k].length}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {groups[k].map((a) => {
+                                const idx = pendingAttachments.indexOf(a);
+                                return (
+                                  <div key={a.url} className="relative group">
+                                    {isImg(a) ? (
+                                      <img
+                                        src={a.url}
+                                        alt={a.name}
+                                        title={a.name}
+                                        className="h-14 w-14 rounded-md object-cover border border-primary/40"
+                                        loading="lazy"
+                                      />
+                                    ) : (
+                                      <div className="h-14 w-14 rounded-md border border-primary/40 bg-background grid place-items-center text-[8px] text-muted-foreground p-1 text-center">
+                                        <Paperclip className="h-3 w-3 mb-0.5" />
+                                        <span className="truncate w-full leading-tight">{a.name.split(".").pop()}</span>
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={() => setPendingAttachments(curr => curr.filter((_, j) => j !== idx))}
+                                      className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-background border border-border text-muted-foreground hover:text-destructive grid place-items-center opacity-0 group-hover:opacity-100 transition"
+                                      title="Remove"
+                                    >
+                                      <X className="h-2.5 w-2.5" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {userRefs.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {userRefs.map((a) => {
+                          const idx = pendingAttachments.indexOf(a);
+                          return (
+                            <div key={idx} className="flex items-center gap-1.5 text-[10px] rounded-md px-2 py-1 bg-muted">
+                              {a.uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
+                              <span className="max-w-[140px] truncate">{a.name}</span>
+                              <button onClick={() => setPendingAttachments(curr => curr.filter((_, j) => j !== idx))} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {(() => {
                 const pickedAgent = selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")
                   ? (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled)
