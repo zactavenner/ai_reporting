@@ -174,10 +174,13 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
+  const navigate = useNavigate();
+  const pendingApprovals = usePendingApprovalsCount();
 
   const getBadge = (value: string) => {
     if (value === 'meetings' && pendingMeetingCount > 0) return pendingMeetingCount;
     if (value === 'creatives' && pendingCreativeCount > 0) return pendingCreativeCount;
+    if (value === 'approvals' && pendingApprovals > 0) return pendingApprovals;
     return 0;
   };
 
@@ -209,7 +212,13 @@ export function AppSidebar({
                     <SidebarMenuItem key={item.value}>
                       <SidebarMenuButton
                         isActive={activeTab === item.value}
-                        onClick={() => onTabChange(item.value)}
+                        onClick={() => {
+                          if ((item as any).href) {
+                            navigate((item as any).href);
+                          } else {
+                            onTabChange(item.value);
+                          }
+                        }}
                         tooltip={item.title}
                       >
                         <item.icon className="h-4 w-4" />
