@@ -53,6 +53,7 @@ const AIStudioTab = lazy(() => import('@/components/ai/AIStudioTab').then(m => (
 const ClientFolderTab = lazy(() => import('@/components/folder/ClientFolderTab').then(m => ({ default: m.ClientFolderTab })));
 const ConnectionsTab = lazy(() => import('@/components/client/ConnectionsTab'));
 const ClientDatabaseTab = lazy(() => import('@/components/client/ClientDatabaseTab').then(m => ({ default: m.ClientDatabaseTab })));
+const ClientWorkflowsTab = lazy(() => import('@/components/ghl/ClientWorkflowsTab').then(m => ({ default: m.ClientWorkflowsTab })));
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
 import { ClientOffersSection } from '@/components/offers/ClientOffersSection';
@@ -448,6 +449,10 @@ export default function ClientDetail() {
             <TabsTrigger value="database" className="gap-2 whitespace-nowrap">
               <Users className="h-4 w-4" />
               Database
+            </TabsTrigger>
+            <TabsTrigger value="workflows" className="gap-2 whitespace-nowrap">
+              <Cog className="h-4 w-4" />
+              Workflows
             </TabsTrigger>
             <TabsTrigger value="client-settings" className="gap-2 whitespace-nowrap">
               <Cog className="h-4 w-4" />
