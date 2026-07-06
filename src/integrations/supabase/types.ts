@@ -14,6 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_classifications: {
+        Row: {
+          classification: string
+          client_id: string | null
+          created_at: string
+          id: string
+          meta_ad_id: string
+          metrics_snapshot: Json
+          reasoning: string | null
+          run_id: string
+        }
+        Insert: {
+          classification: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          meta_ad_id: string
+          metrics_snapshot?: Json
+          reasoning?: string | null
+          run_id: string
+        }
+        Update: {
+          classification?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          meta_ad_id?: string
+          metrics_snapshot?: Json
+          reasoning?: string | null
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_classifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ad_classifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_classifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ad_classifications_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "media_buyer_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ad_iterations: {
         Row: {
           asset_id: string | null
@@ -6226,6 +6288,74 @@ export type Database = {
           },
         ]
       }
+      creative_intel_findings: {
+        Row: {
+          client_id: string | null
+          confidence: number | null
+          created_at: string
+          evidence: Json
+          id: string
+          pattern_description: string
+          pattern_type: string
+          recommendation: string
+          run_id: string
+          scope: string
+        }
+        Insert: {
+          client_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          evidence?: Json
+          id?: string
+          pattern_description: string
+          pattern_type: string
+          recommendation: string
+          run_id: string
+          scope: string
+        }
+        Update: {
+          client_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          evidence?: Json
+          id?: string
+          pattern_description?: string
+          pattern_type?: string
+          recommendation?: string
+          run_id?: string
+          scope?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_intel_findings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_intel_findings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_intel_findings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "creative_intel_findings_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "media_buyer_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       creatives: {
         Row: {
           ai_performance_score: number | null
@@ -10045,6 +10175,70 @@ export type Database = {
           },
           {
             foreignKeyName: "leads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      media_buyer_runs: {
+        Row: {
+          client_id: string | null
+          cost_usd: number | null
+          created_at: string
+          error_message: string | null
+          findings_md: string | null
+          finished_at: string | null
+          id: string
+          proposals_created: number
+          run_type: string
+          status: string
+          structured_findings: Json
+        }
+        Insert: {
+          client_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          error_message?: string | null
+          findings_md?: string | null
+          finished_at?: string | null
+          id?: string
+          proposals_created?: number
+          run_type: string
+          status?: string
+          structured_findings?: Json
+        }
+        Update: {
+          client_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          error_message?: string | null
+          findings_md?: string | null
+          finished_at?: string | null
+          id?: string
+          proposals_created?: number
+          run_type?: string
+          status?: string
+          structured_findings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_buyer_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "media_buyer_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_buyer_runs_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
