@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
-import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail, Trash2, Paperclip, Loader2, X } from 'lucide-react';
+import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail, Trash2, Paperclip, Loader2, X, Phone, StickyNote, Calendar, Handshake, Banknote } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -47,7 +47,7 @@ const CAMPAIGN_COLORS = [
   { label: 'Light Yellow', value: '#fefce8' },
 ];
 
-type StepKind = 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email';
+type StepKind = 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email' | 'phone_call' | 'note' | 'booking' | 'commitment' | 'funding';
 
 interface SmsMsg { delay_days: number; body: string; media_url?: string | null; media_type?: string | null }
 interface EmailMsg { delay_days: number; subject: string; from_name: string; body: string }
@@ -83,6 +83,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
   const [newEmailBody, setNewEmailBody] = useState('');
   const [newSmsMessages, setNewSmsMessages] = useState<SmsMsg[]>([{ delay_days: 0, body: '' }]);
   const [newEmailMessages, setNewEmailMessages] = useState<EmailMsg[]>([{ delay_days: 0, subject: '', from_name: '', body: '' }]);
+  const [newPhoneNumber, setNewPhoneNumber] = useState('');
+  const [newNoteBody, setNewNoteBody] = useState('');
   
   const [editStepOpen, setEditStepOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<FunnelStep | null>(null);
@@ -141,6 +143,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
         : 'https://' + newStepUrl;
     } else if (newStepKind === 'fb_lead_form') {
       validUrl = 'fb://lead-form';
+    } else if (newStepKind === 'phone_call') {
+      validUrl = newPhoneNumber.trim() ? `tel:${newPhoneNumber.trim()}` : 'internal://phone_call';
     } else {
       validUrl = `internal://${newStepKind}`;
     }
@@ -177,6 +181,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       step_kind: newStepKind,
       ad_platform: newStepKind === 'ads' ? newAdPlatform : null,
       sms_body: newStepKind === 'sms' ? (cleanSms[0]?.body || newSmsBody || null) : null,
+      // Reuse sms_body as a small subtitle/description for compact step kinds
+      ...(newStepKind === 'note' ? { sms_body: newNoteBody.trim() || null } : {}),
       email_subject: newStepKind === 'email' ? (cleanEmails[0]?.subject || newEmailSubject || null) : null,
       email_from_name: newStepKind === 'email' ? (cleanEmails[0]?.from_name || newEmailFromName || null) : null,
       email_body: newStepKind === 'email' ? (cleanEmails[0]?.body || newEmailBody || null) : null,
@@ -195,6 +201,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     setNewEmailBody('');
     setNewSmsMessages([{ delay_days: 0, body: '' }]);
     setNewEmailMessages([{ delay_days: 0, subject: '', from_name: '', body: '' }]);
+    setNewPhoneNumber('');
+    setNewNoteBody('');
     setAddStepOpen(false);
     setAddStepCampaignId(null);
     setAddStepParentId(null);
