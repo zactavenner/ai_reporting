@@ -131,13 +131,21 @@ export function FunnelStepCard({
       );
     }
     if (isSms) {
-      return <SmsMockup body={step.sms_body || ''} fromName={brandName} deviceType={deviceType} />;
+      return (
+        <SmsMockup
+          body={step.sms_body || ''}
+          messages={(step.messages || []) as any}
+          fromName={brandName}
+          deviceType={deviceType}
+        />
+      );
     }
     if (isEmail) {
       return (
         <EmailMockup
           subject={step.email_subject || ''}
           body={step.email_body || ''}
+          messages={(step.messages || []) as any}
           fromName={step.email_from_name || brandName}
           deviceType={deviceType}
         />
