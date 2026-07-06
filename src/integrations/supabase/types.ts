@@ -4268,6 +4268,7 @@ export type Database = {
           id: string
           messages: Json
           name: string
+          parent_step_id: string | null
           sms_body: string | null
           sort_order: number | null
           step_kind: string
@@ -4286,6 +4287,7 @@ export type Database = {
           id?: string
           messages?: Json
           name: string
+          parent_step_id?: string | null
           sms_body?: string | null
           sort_order?: number | null
           step_kind?: string
@@ -4304,6 +4306,7 @@ export type Database = {
           id?: string
           messages?: Json
           name?: string
+          parent_step_id?: string | null
           sms_body?: string | null
           sort_order?: number | null
           step_kind?: string
@@ -4339,6 +4342,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_funnel_steps_parent_step_id_fkey"
+            columns: ["parent_step_id"]
+            isOneToOne: false
+            referencedRelation: "client_funnel_steps"
+            referencedColumns: ["id"]
           },
         ]
       }

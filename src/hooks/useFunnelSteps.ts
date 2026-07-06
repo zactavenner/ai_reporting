@@ -6,6 +6,7 @@ export interface FunnelStep {
   id: string;
   client_id: string;
   campaign_id: string | null;
+  parent_step_id: string | null;
   name: string;
   url: string;
   step_type: string;
@@ -51,6 +52,7 @@ export function useCreateFunnelStep() {
     mutationFn: async (step: {
       client_id: string;
       campaign_id?: string | null;
+      parent_step_id?: string | null;
       name: string;
       url: string;
       sort_order?: number;

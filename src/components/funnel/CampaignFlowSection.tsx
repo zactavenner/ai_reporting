@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, ChevronRight, GripVertical, Link2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, ChevronRight, GripVertical, Link2, ZoomIn, ZoomOut, Maximize2, MessageSquarePlus } from 'lucide-react';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { TransformWrapper, TransformComponent, useControls } from 'react-zoom-pan-pinch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -31,7 +32,7 @@ interface CampaignFlowSectionProps {
   clientId?: string;
   brandName?: string;
   publicShareToken?: string | null;
-  onAddStep: (campaignId: string) => void;
+  onAddStep: (campaignId: string, parentStepId?: string | null) => void;
   onEditStep: (step: FunnelStep) => void;
   onDeleteStep: (stepId: string) => void;
   onReorderSteps: (orderedIds: string[]) => void;
@@ -48,11 +49,19 @@ interface SortableStepProps {
   variants: FunnelStepVariant[];
   clientId?: string;
   brandName?: string;
+  childSteps: FunnelStep[];
+  variantsByStep: Record<string, FunnelStepVariant[]>;
+  onEditStep: (step: FunnelStep) => void;
+  onDeleteStep: (stepId: string) => void;
+  onAddNurture: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function SortableStep({ step, index, deviceType, isPublicView, isLast, variants, clientId, brandName, onEdit, onDelete }: SortableStepProps) {
+function SortableStep({
+  step, index, deviceType, isPublicView, isLast, variants, clientId, brandName,
+  childSteps, variantsByStep, onEditStep, onDeleteStep, onAddNurture, onEdit, onDelete,
+}: SortableStepProps) {
   const {
     attributes,
     listeners,
@@ -70,7 +79,7 @@ function SortableStep({ step, index, deviceType, isPublicView, isLast, variants,
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-start">
-      <div className="relative">
+      <div className="relative flex flex-col items-center">
         {!isPublicView && (
           <button
             {...attributes}
@@ -91,12 +100,67 @@ function SortableStep({ step, index, deviceType, isPublicView, isLast, variants,
           onEdit={onEdit}
           onDelete={onDelete}
         />
+
+        {/* Nurture stack under this column */}
+        {(childSteps.length > 0 || !isPublicView) && (
+          <div className="mt-4 flex flex-col items-center gap-3 w-full">
+            {childSteps.length > 0 && (
+              <div className="h-6 w-px bg-border" aria-hidden />
+            )}
+            {childSteps.map((child) => (
+              <div key={child.id} className="flex flex-col items-center">
+                <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground bg-background/70 backdrop-blur px-2 py-0.5 rounded-full border">
+                  Nurture · {child.step_kind === 'sms' ? 'SMS' : child.step_kind === 'email' ? 'Email' : child.name}
+                </div>
+                <FunnelStepCard
+                  step={child}
+                  stepNumber={index + 1}
+                  deviceType={deviceType}
+                  isPublicView={isPublicView}
+                  variants={variantsByStep[child.id] || []}
+                  clientId={clientId}
+                  brandName={brandName}
+                  onEdit={() => onEditStep(child)}
+                  onDelete={() => onDeleteStep(child.id)}
+                />
+                <div className="h-4 w-px bg-border/60 mt-2" aria-hidden />
+              </div>
+            ))}
+            {!isPublicView && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onAddNurture}
+                className="h-7 text-xs bg-background/80 backdrop-blur"
+              >
+                <MessageSquarePlus className="h-3 w-3 mr-1" /> Add nurture
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       {!isLast && (
         <div className="flex-shrink-0 self-stretch flex items-start">
           <ChevronRight className="mx-3 mt-[200px] h-6 w-6 text-muted-foreground" />
         </div>
       )}
+    </div>
+  );
+}
+
+function ZoomToolbar() {
+  const { zoomIn, zoomOut, resetTransform } = useControls();
+  return (
+    <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-background/80 backdrop-blur border rounded-md shadow-sm p-1">
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomOut()} title="Zoom out">
+        <ZoomOut className="h-3.5 w-3.5" />
+      </Button>
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => resetTransform()} title="Reset">
+        <Maximize2 className="h-3.5 w-3.5" />
+      </Button>
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomIn()} title="Zoom in">
+        <ZoomIn className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
@@ -133,6 +197,21 @@ export function CampaignFlowSection({
     return map;
   }, [allVariants]);
 
+  // Split into top-level columns + children map
+  const { topSteps, childrenByParent } = useMemo(() => {
+    const top: FunnelStep[] = [];
+    const kids: Record<string, FunnelStep[]> = {};
+    steps.forEach(s => {
+      if (s.parent_step_id) {
+        (kids[s.parent_step_id] ||= []).push(s);
+      } else {
+        top.push(s);
+      }
+    });
+    Object.values(kids).forEach(arr => arr.sort((a, b) => a.sort_order - b.sort_order));
+    return { topSteps: top, childrenByParent: kids };
+  }, [steps]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -145,10 +224,11 @@ export function CampaignFlowSection({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     
-    const oldIndex = steps.findIndex(s => s.id === active.id);
-    const newIndex = steps.findIndex(s => s.id === over.id);
+    const oldIndex = topSteps.findIndex(s => s.id === active.id);
+    const newIndex = topSteps.findIndex(s => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
     
-    const newOrder = arrayMove(steps, oldIndex, newIndex);
+    const newOrder = arrayMove(topSteps, oldIndex, newIndex);
     onReorderSteps(newOrder.map(s => s.id));
   };
 
@@ -238,36 +318,59 @@ export function CampaignFlowSection({
       </div>
       
       {/* Flow Diagram with Steps */}
-      {steps.length === 0 ? (
+      {topSteps.length === 0 ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
           <p>No steps in this campaign yet. Click "Add Step" to get started.</p>
         </div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={steps.map(s => s.id)} strategy={horizontalListSortingStrategy}>
-            <div className="flex items-start gap-2 overflow-x-auto pb-4 pl-6">
-              {steps.map((step, index) => (
-                <SortableStep
-                  key={step.id}
-                  step={step}
-                  index={index}
-                  deviceType={deviceType}
-                  isPublicView={isPublicView}
-                  isLast={index === steps.length - 1}
-                  variants={variantsByStep[step.id] || []}
-                  clientId={clientId}
-                  brandName={brandName}
-                  onEdit={() => onEditStep(step)}
-                  onDelete={() => onDeleteStep(step.id)}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
+        <div className="relative rounded-lg border bg-background/40 overflow-hidden" style={{ height: 780 }}>
+          <TransformWrapper
+            initialScale={1}
+            minScale={0.4}
+            maxScale={2}
+            limitToBounds={false}
+            wheel={{ step: 0.1 }}
+            doubleClick={{ disabled: true }}
+            panning={{ excluded: ['input', 'textarea', 'button', 'a', 'select', 'iframe'] }}
+          >
+            <ZoomToolbar />
+            <TransformComponent
+              wrapperStyle={{ width: '100%', height: '100%' }}
+              contentStyle={{ padding: '2rem 2rem 3rem 2.5rem' }}
+            >
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={topSteps.map(s => s.id)} strategy={horizontalListSortingStrategy}>
+                  <div className="flex items-start gap-2">
+                    {topSteps.map((step, index) => (
+                      <SortableStep
+                        key={step.id}
+                        step={step}
+                        index={index}
+                        deviceType={deviceType}
+                        isPublicView={isPublicView}
+                        isLast={index === topSteps.length - 1}
+                        variants={variantsByStep[step.id] || []}
+                        clientId={clientId}
+                        brandName={brandName}
+                        childSteps={childrenByParent[step.id] || []}
+                        variantsByStep={variantsByStep}
+                        onEditStep={onEditStep}
+                        onDeleteStep={onDeleteStep}
+                        onAddNurture={() => onAddStep(campaign.id, step.id)}
+                        onEdit={() => onEditStep(step)}
+                        onDelete={() => onDeleteStep(step.id)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </TransformComponent>
+          </TransformWrapper>
+        </div>
       )}
     </div>
   );

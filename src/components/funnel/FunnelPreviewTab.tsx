@@ -72,6 +72,7 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
   
   const [addStepOpen, setAddStepOpen] = useState(false);
   const [addStepCampaignId, setAddStepCampaignId] = useState<string | null>(null);
+  const [addStepParentId, setAddStepParentId] = useState<string | null>(null);
   const [newStepName, setNewStepName] = useState('');
   const [newStepUrl, setNewStepUrl] = useState('');
   const [newStepKind, setNewStepKind] = useState<StepKind>('page');
@@ -144,7 +145,10 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       validUrl = `internal://${newStepKind}`;
     }
     
-    const campaignSteps = steps.filter(s => s.campaign_id === addStepCampaignId);
+    const siblingSteps = steps.filter(s =>
+      s.campaign_id === addStepCampaignId &&
+      (s.parent_step_id ?? null) === (addStepParentId ?? null)
+    );
     
     const cleanSms = newSmsMessages
       .map(m => ({
@@ -166,9 +170,10 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     await createStep.mutateAsync({
       client_id: clientId,
       campaign_id: addStepCampaignId,
+      parent_step_id: addStepParentId,
       name: newStepName.trim(),
       url: validUrl,
-      sort_order: campaignSteps.length,
+      sort_order: siblingSteps.length,
       step_kind: newStepKind,
       ad_platform: newStepKind === 'ads' ? newAdPlatform : null,
       sms_body: newStepKind === 'sms' ? (cleanSms[0]?.body || newSmsBody || null) : null,
@@ -192,10 +197,14 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     setNewEmailMessages([{ delay_days: 0, subject: '', from_name: '', body: '' }]);
     setAddStepOpen(false);
     setAddStepCampaignId(null);
+    setAddStepParentId(null);
   };
 
-  const openAddStep = (campaignId: string) => {
+  const openAddStep = (campaignId: string, parentStepId: string | null = null) => {
     setAddStepCampaignId(campaignId);
+    setAddStepParentId(parentStepId);
+    // Nurture defaults to SMS since that's the most common use case
+    if (parentStepId) setNewStepKind('sms');
     setAddStepOpen(true);
   };
 
@@ -460,9 +469,11 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       <Dialog open={addStepOpen} onOpenChange={setAddStepOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Funnel Step</DialogTitle>
+            <DialogTitle>{addStepParentId ? 'Add Nurture Step' : 'Add Funnel Step'}</DialogTitle>
             <DialogDescription>
-              Add a landing page, lead form, ad, SMS, or email to this campaign
+              {addStepParentId
+                ? `Attach an SMS or email follow-up under "${steps.find(s => s.id === addStepParentId)?.name || 'this step'}"`
+                : 'Add a landing page, lead form, ad, SMS, or email to this campaign'}
             </DialogDescription>
           </DialogHeader>
           
