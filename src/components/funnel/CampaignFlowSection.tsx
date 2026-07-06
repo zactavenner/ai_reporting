@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, ChevronRight, GripVertical, Link2, ZoomIn, ZoomOut, Maximize2, MessageSquarePlus, GitBranch } from 'lucide-react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { Plus, Edit2, Trash2, ChevronRight, GripVertical, Link2, ZoomIn, ZoomOut, Maximize2, Minimize2, Crosshair, MessageSquarePlus, GitBranch } from 'lucide-react';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -208,18 +208,28 @@ function SortableStep({
   );
 }
 
-function ZoomToolbar() {
+function ZoomToolbar({ isFullscreen, onToggleFullscreen }: { isFullscreen: boolean; onToggleFullscreen: () => void }) {
   const { zoomIn, zoomOut, resetTransform } = useControls();
   return (
     <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-background/80 backdrop-blur border rounded-md shadow-sm p-1">
       <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomOut()} title="Zoom out">
         <ZoomOut className="h-3.5 w-3.5" />
       </Button>
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => resetTransform()} title="Reset">
-        <Maximize2 className="h-3.5 w-3.5" />
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => resetTransform()} title="Recenter / reset zoom">
+        <Crosshair className="h-3.5 w-3.5" />
       </Button>
       <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomIn()} title="Zoom in">
         <ZoomIn className="h-3.5 w-3.5" />
+      </Button>
+      <div className="w-px h-4 bg-border mx-0.5" />
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0"
+        onClick={onToggleFullscreen}
+        title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+      >
+        {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
       </Button>
     </div>
   );
@@ -242,6 +252,24 @@ export function CampaignFlowSection({
 }: CampaignFlowSectionProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(campaign.name);
+  const flowContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement && document.fullscreenElement === flowContainerRef.current);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  const toggleFullscreen = () => {
+    const el = flowContainerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.().catch(() => toast.error('Fullscreen not available'));
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
 
   // Fetch all variants for steps in this campaign
   const stepIds = useMemo(() => steps.map(s => s.id), [steps]);
@@ -383,7 +411,11 @@ export function CampaignFlowSection({
           <p>No steps in this campaign yet. Click "Add Step" to get started.</p>
         </div>
       ) : (
-        <div className="relative rounded-lg border bg-background/40 overflow-hidden" style={{ height: 780 }}>
+        <div
+          ref={flowContainerRef}
+          className="relative rounded-lg border bg-background/40 overflow-hidden"
+          style={{ height: isFullscreen ? '100vh' : 780 }}
+        >
           <TransformWrapper
             initialScale={1}
             minScale={0.4}
@@ -393,7 +425,7 @@ export function CampaignFlowSection({
             doubleClick={{ disabled: true }}
             panning={{ excluded: ['input', 'textarea', 'button', 'a', 'select', 'iframe'] }}
           >
-            <ZoomToolbar />
+            <ZoomToolbar isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} />
             <TransformComponent
               wrapperStyle={{ width: '100%', height: '100%' }}
               contentStyle={{ padding: '2rem 2rem 3rem 2.5rem' }}
