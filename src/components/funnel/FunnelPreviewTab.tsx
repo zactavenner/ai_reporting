@@ -496,6 +496,11 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
                   { k: 'fb_lead_form', label: 'FB Lead Form', Icon: FileText, hint: 'Native form', color: '#1877F2' },
                   { k: 'sms', label: 'SMS', Icon: MessageSquare, hint: 'Text message', color: 'primary' },
                   { k: 'email', label: 'Email', Icon: Mail, hint: 'Email preview', color: 'primary' },
+                  { k: 'phone_call', label: 'Phone Call', Icon: Phone, hint: 'Outbound call', color: 'primary' },
+                  { k: 'note', label: 'Note / Label', Icon: StickyNote, hint: 'Blank bold header', color: 'primary' },
+                  { k: 'booking', label: 'Booking', Icon: Calendar, hint: 'Calendar milestone', color: 'primary' },
+                  { k: 'commitment', label: 'Commitment', Icon: Handshake, hint: 'Verbal commit', color: 'primary' },
+                  { k: 'funding', label: 'Funding', Icon: Banknote, hint: 'Investor funded', color: 'primary' },
                 ] as const).map(({ k, label, Icon, hint }) => (
                   <button
                     key={k}
@@ -567,6 +572,45 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
 
             {newStepKind === 'email' && (
               <EmailCadenceEditor messages={newEmailMessages} onChange={setNewEmailMessages} />
+            )}
+
+            {newStepKind === 'phone_call' && (
+              <div className="space-y-2">
+                <Label htmlFor="phone-number">Phone number (optional)</Label>
+                <Input
+                  id="phone-number"
+                  value={newPhoneNumber}
+                  onChange={e => setNewPhoneNumber(e.target.value)}
+                  placeholder="+1 555 123 4567"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Renders a compact call-step card. Use the name to describe the intent (e.g. "No-show callback").
+                </p>
+              </div>
+            )}
+
+            {newStepKind === 'note' && (
+              <div className="space-y-2">
+                <Label htmlFor="note-body">Description (optional)</Label>
+                <Textarea
+                  id="note-body"
+                  value={newNoteBody}
+                  onChange={e => setNewNoteBody(e.target.value)}
+                  placeholder="What happens here? e.g. Kick off no-show sequence"
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground">
+                  The step <strong>name</strong> renders as a bold label — perfect for section headers like "No-Show Sequence" with SMS/Email nurture rows stacked under the same parent.
+                </p>
+              </div>
+            )}
+
+            {(newStepKind === 'booking' || newStepKind === 'commitment' || newStepKind === 'funding') && (
+              <div className="rounded-lg bg-muted/40 border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Renders a compact icon card (~half the width of a phone) with the step name in bold. Use it as a milestone marker in the flow.
+                </p>
+              </div>
             )}
             
             <div className="flex justify-end gap-2 pt-2">
