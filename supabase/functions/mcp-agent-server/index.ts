@@ -22,6 +22,67 @@ function getProdDb() {
 
 const META_TOOL_PREFIX = 'meta_';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// API / Hermes parity instructions — served in the MCP `initialize` response so
+// every new MCP client (Claude Desktop, Cursor, ChatGPT, Codex, custom agents)
+// receives the full external-data-api usage guide on first connect.
+// Keep in sync with supabase/functions/external-data-api/index.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+const API_INSTRUCTIONS = `HPA MCP server — full parity with the internal external-data-api ("Hermes API").
+
+You can:
+1. Manage AI agents (list_agents, get_agent, create_agent, update_agent, run_agent, get_agent_runs).
+2. Read & write Meta Ads (meta_list_campaigns / _adsets / _ads / _get_ad_performance, and WRITE tools meta_toggle_status, meta_update_budget, meta_duplicate, meta_create_campaign, meta_create_ad, meta_sync_account).
+3. Generic table CRUD via db_* tools — same allow-list, filters, relations, and composites as external-data-api.
+4. Storage ops via storage_* tools on the same allowed buckets.
+5. Composite operations: create_task_composite (task + assignees + subtasks + comments in one call), get_ads_overview (full Meta hierarchy + totals for a client).
+
+ALLOWED TABLES (db_* tools):
+clients, leads, calls, funded_investors, daily_metrics, agency_members, agency_pods,
+agency_settings, agency_meetings, tasks, task_comments, task_files, task_history,
+task_assignees, task_notifications, creatives, client_settings, client_pipelines,
+client_custom_tabs, client_funnel_steps, client_live_ads, client_pod_assignments,
+client_voice_notes, client_offers, pipeline_stages, pipeline_opportunities,
+funnel_campaigns, funnel_step_variants, ad_spend_reports, alert_configs,
+chat_conversations, chat_messages, ai_hub_conversations, ai_hub_messages,
+custom_gpts, gpt_files, gpt_knowledge_base, knowledge_base_documents,
+csv_import_logs, contact_timeline_events, data_discrepancies, sync_logs,
+sync_queue, sync_outbound_events, pixel_verifications, pixel_expected_events,
+email_parsed_investors, pending_meeting_tasks, member_activity_log,
+dashboard_preferences, spam_blacklist, webhook_logs,
+meta_campaigns, meta_ad_sets, meta_ads.
+
+ALLOWED STORAGE BUCKETS (storage_* tools):
+creatives, task-files, gpt-files, live-ads, client-offers.
+
+FILTERS (db_select): pass a JSON object mapped column -> value. Supported forms:
+  { col: "value" }                              → equality
+  { col: null }                                 → IS NULL
+  { col: ["a","b"] }                            → IN (...)
+  { col: { op: "gt|gte|lt|lte|neq|like|ilike|in|is", value: X } }
+  { col: { "$gte": "2025-01-01" } }             → Mongo-style shorthand
+
+RELATIONS (db_select include): pass an array of relation keys per table, e.g.
+  { table: "tasks", include: ["subtasks","assignees","comments","files","history","notifications"] }
+  { table: "meta_campaigns", include: ["ad_sets","client"] }
+  { table: "meta_ad_sets", include: ["ads","campaign","client"] }
+  { table: "meta_ads", include: ["ad_set","client"] }
+  { table: "pipeline_opportunities", include: ["stage"] }
+  { table: "client_pipelines", include: ["stages"] }
+  { table: "agency_members", include: ["pod"] }
+  { table: "task_assignees", include: ["member","pod"] }
+  { table: "client_offers", include: ["client"] }
+
+COMPOSITE ACTIONS:
+  create_task_composite — { task:{title,description?,client_id?,priority?,stage?,status?,due_date?,recurrence_type?,recurrence_interval?,created_by?},
+                            assignees?:[{member_id?,pod_id?}], subtasks?:[{title,...}], comments?:[{author_name,content,comment_type?}] }
+  get_ads_overview — { client_id, status?, date_start?, date_end? } returns campaigns→ad_sets→ads with computed totals.
+
+WRITES require user confirmation. Always dry-run reads first, then propose the exact write payload before invoking meta_* WRITE tools, db_insert/db_update/db_upsert/db_delete, storage_delete, or storage_upload_base64.
+
+Client scoping: always pass client_id when a tool accepts it. When a user references a client by name, resolve via list_clients or db_select on the clients table before acting.
+`;
+
 async function logMetaToolCall(entry: {
   tool_name: string;
   args: Record<string, any>;
@@ -325,6 +386,151 @@ const TOOLS = [
       required: ['client_id'],
     },
   },
+  // ============ Generic API / Hermes parity (proxies external-data-api) ============
+  {
+    name: 'db_list_tables',
+    description: 'List all tables, storage buckets, relation maps, and composite actions available through the external-data-api / MCP.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'db_select',
+    description: 'Read rows from an allowed table. Supports filters (eq/gt/gte/lt/lte/neq/like/ilike/in/is, $-prefixed shorthand, arrays for IN, null for IS NULL), relations via include, select_columns, order_by, order_dir, limit, offset.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        table: { type: 'string' },
+        filters: { type: 'object', description: 'Column -> value or { op, value } / { $op: value }' },
+        include: { type: 'array', items: { type: 'string' }, description: 'Relation keys, see instructions' },
+        select_columns: { type: 'string', description: 'PostgREST select string, default "*"' },
+        order_by: { type: 'string' },
+        order_dir: { type: 'string', enum: ['asc', 'desc'] },
+        limit: { type: 'number' },
+        offset: { type: 'number' },
+      },
+      required: ['table'],
+    },
+  },
+  {
+    name: 'db_count',
+    description: 'Count rows in an allowed table with optional equality filters.',
+    inputSchema: {
+      type: 'object',
+      properties: { table: { type: 'string' }, filters: { type: 'object' } },
+      required: ['table'],
+    },
+  },
+  {
+    name: 'db_insert',
+    description: 'WRITE: Insert one or many rows into an allowed table. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: { table: { type: 'string' }, data: { description: 'Row object or array of row objects' } },
+      required: ['table', 'data'],
+    },
+  },
+  {
+    name: 'db_upsert',
+    description: 'WRITE: Upsert one or many rows into an allowed table. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: { table: { type: 'string' }, data: {} },
+      required: ['table', 'data'],
+    },
+  },
+  {
+    name: 'db_update',
+    description: 'WRITE: Update rows in an allowed table matching the `match` filters. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: { table: { type: 'string' }, data: { type: 'object' }, match: { type: 'object' } },
+      required: ['table', 'data', 'match'],
+    },
+  },
+  {
+    name: 'db_delete',
+    description: 'WRITE: Delete rows in an allowed table matching the `match` filters. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: { table: { type: 'string' }, match: { type: 'object' } },
+      required: ['table', 'match'],
+    },
+  },
+  {
+    name: 'storage_list',
+    description: 'List files in an allowed storage bucket (creatives, task-files, gpt-files, live-ads, client-offers).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        bucket: { type: 'string' },
+        file_path: { type: 'string', description: 'Folder path (optional, default root)' },
+        limit: { type: 'number' },
+        offset: { type: 'number' },
+        order_by: { type: 'string' },
+        order_dir: { type: 'string', enum: ['asc', 'desc'] },
+      },
+      required: ['bucket'],
+    },
+  },
+  {
+    name: 'storage_get_url',
+    description: 'Get the public URL for a file in an allowed bucket.',
+    inputSchema: {
+      type: 'object',
+      properties: { bucket: { type: 'string' }, file_path: { type: 'string' } },
+      required: ['bucket', 'file_path'],
+    },
+  },
+  {
+    name: 'storage_delete',
+    description: 'WRITE: Delete a file from an allowed bucket. Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: { bucket: { type: 'string' }, file_path: { type: 'string' } },
+      required: ['bucket', 'file_path'],
+    },
+  },
+  {
+    name: 'storage_upload_base64',
+    description: 'WRITE: Upload a base64-encoded file to an allowed bucket (upsert). Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        bucket: { type: 'string' },
+        file_path: { type: 'string' },
+        data: { type: 'string', description: 'base64-encoded bytes' },
+        content_type: { type: 'string' },
+      },
+      required: ['bucket', 'file_path', 'data'],
+    },
+  },
+  {
+    name: 'create_task_composite',
+    description: 'WRITE: Create a task with optional assignees, subtasks, and comments in one call (mirrors external-data-api create_task). Requires user confirmation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: { type: 'object', description: '{title (required), description?, client_id?, priority?, stage?, status?, due_date?, recurrence_type?, recurrence_interval?, created_by?}' },
+        assignees: { type: 'array', items: { type: 'object' } },
+        subtasks: { type: 'array', items: { type: 'object' } },
+        comments: { type: 'array', items: { type: 'object' } },
+      },
+      required: ['task'],
+    },
+  },
+  {
+    name: 'get_ads_overview',
+    description: 'Get full Meta ads hierarchy (campaigns → ad sets → ads) for a client with spend & attribution totals.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        status: { type: 'string' },
+        date_start: { type: 'string', description: 'synced_at >= (ISO)' },
+        date_end: { type: 'string', description: 'synced_at <= (ISO)' },
+      },
+      required: ['client_id'],
+    },
+  },
 ];
 
 async function handleToolCall(name: string, args: Record<string, any>): Promise<any> {
@@ -542,9 +748,54 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
       });
     }
 
+    // ============ Generic API / Hermes parity (proxy to external-data-api) ============
+    case 'db_list_tables':
+      return await callDataApi({ action: 'list_tables' });
+    case 'db_select':
+      return await callDataApi({ action: 'select', ...args });
+    case 'db_count':
+      return await callDataApi({ action: 'count', ...args });
+    case 'db_insert':
+      return await callDataApi({ action: 'insert', ...args });
+    case 'db_upsert':
+      return await callDataApi({ action: 'upsert', ...args });
+    case 'db_update':
+      return await callDataApi({ action: 'update', ...args });
+    case 'db_delete':
+      return await callDataApi({ action: 'delete', ...args });
+    case 'storage_list':
+      return await callDataApi({ action: 'list_storage', ...args });
+    case 'storage_get_url':
+      return await callDataApi({ action: 'get_file_url', ...args });
+    case 'storage_delete':
+      return await callDataApi({ action: 'delete_file', ...args });
+    case 'storage_upload_base64':
+      return await callDataApi({ action: 'upload_file_base64', ...args });
+    case 'create_task_composite':
+      return await callDataApi({ action: 'create_task', ...args });
+    case 'get_ads_overview':
+      return await callDataApi({ action: 'get_ads_overview', ...args });
+
     default:
       return { error: `Unknown tool: ${name}` };
   }
+}
+
+// Proxy to external-data-api (the "Hermes API"). Uses the same shared password
+// contract as the rest of the internal fleet so every MCP tool sees identical
+// behavior to a direct API call.
+async function callDataApi(payload: Record<string, any>): Promise<any> {
+  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/external-data-api`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+    },
+    body: JSON.stringify({ password: 'HPA1234$', ...payload }),
+  });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { status: res.status, body: text }; }
 }
 
 async function invokeEdge(fnName: string, payload: Record<string, any>): Promise<any> {
@@ -574,6 +825,7 @@ async function handleJsonRpc(body: any): Promise<any> {
           protocolVersion: '2024-11-05',
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: 'hpa-agent-server', version: '1.0.0' },
+          instructions: API_INSTRUCTIONS,
         },
       };
 
