@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Download, Save, RefreshCw } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GhlWorkflowAuditDashboard } from "@/components/ghl/GhlWorkflowAuditDashboard";
 
 type Client = {
   id: string;
@@ -17,6 +19,21 @@ type Client = {
 type WorkflowSummary = { id?: string; _id?: string; name?: string; status?: string };
 
 export default function GhlWorkflowsPage() {
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <Tabs defaultValue="audit" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="audit">Workflow Audit</TabsTrigger>
+          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+        </TabsList>
+        <TabsContent value="audit"><GhlWorkflowAuditDashboard /></TabsContent>
+        <TabsContent value="advanced"><AdvancedWorkflowEditor /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function AdvancedWorkflowEditor() {
   const [clients, setClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState<string>("");
   const [tokenDraft, setTokenDraft] = useState("");
@@ -135,9 +152,9 @@ export default function GhlWorkflowsPage() {
   );
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">GHL Workflows</h1>
+        <h2 className="font-display text-2xl font-bold text-foreground">Advanced (Internal API)</h2>
         <p className="text-muted-foreground text-sm mt-1">
           List, view, and manually edit GoHighLevel workflows using the internal API
           (token-id auth). Pick a client, paste their Firebase refresh token, and load workflows.
