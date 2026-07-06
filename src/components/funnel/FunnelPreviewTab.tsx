@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail } from 'lucide-react';
+import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -48,6 +48,9 @@ const CAMPAIGN_COLORS = [
 
 type StepKind = 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email';
 
+interface SmsMsg { delay_days: number; body: string }
+interface EmailMsg { delay_days: number; subject: string; from_name: string; body: string }
+
 export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPreviewTabProps) {
   const [searchParams] = useSearchParams();
   const campaignFilter = searchParams.get('campaign');
@@ -76,6 +79,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
   const [newEmailSubject, setNewEmailSubject] = useState('');
   const [newEmailFromName, setNewEmailFromName] = useState('');
   const [newEmailBody, setNewEmailBody] = useState('');
+  const [newSmsMessages, setNewSmsMessages] = useState<SmsMsg[]>([{ delay_days: 0, body: '' }]);
+  const [newEmailMessages, setNewEmailMessages] = useState<EmailMsg[]>([{ delay_days: 0, subject: '', from_name: '', body: '' }]);
   
   const [editStepOpen, setEditStepOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<FunnelStep | null>(null);
@@ -86,6 +91,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
   const [editEmailFromName, setEditEmailFromName] = useState('');
   const [editEmailBody, setEditEmailBody] = useState('');
   const [editAdPlatform, setEditAdPlatform] = useState<'facebook' | 'instagram'>('facebook');
+  const [editSmsMessages, setEditSmsMessages] = useState<SmsMsg[]>([]);
+  const [editEmailMessages, setEditEmailMessages] = useState<EmailMsg[]>([]);
   
   const [deviceType, setDeviceType] = useState<DeviceType>('phone');
   const [previewStep, setPreviewStep] = useState<FunnelStep | null>(null);
@@ -138,6 +145,18 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     
     const campaignSteps = steps.filter(s => s.campaign_id === addStepCampaignId);
     
+    const cleanSms = newSmsMessages
+      .map(m => ({ delay_days: Number(m.delay_days) || 0, body: (m.body || '').trim() }))
+      .filter(m => m.body.length > 0);
+    const cleanEmails = newEmailMessages
+      .map(m => ({
+        delay_days: Number(m.delay_days) || 0,
+        subject: (m.subject || '').trim(),
+        from_name: (m.from_name || '').trim(),
+        body: (m.body || '').trim(),
+      }))
+      .filter(m => m.subject || m.body);
+
     await createStep.mutateAsync({
       client_id: clientId,
       campaign_id: addStepCampaignId,
@@ -146,10 +165,14 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       sort_order: campaignSteps.length,
       step_kind: newStepKind,
       ad_platform: newStepKind === 'ads' ? newAdPlatform : null,
-      sms_body: newStepKind === 'sms' ? newSmsBody : null,
-      email_subject: newStepKind === 'email' ? newEmailSubject : null,
-      email_from_name: newStepKind === 'email' ? newEmailFromName : null,
-      email_body: newStepKind === 'email' ? newEmailBody : null,
+      sms_body: newStepKind === 'sms' ? (cleanSms[0]?.body || newSmsBody || null) : null,
+      email_subject: newStepKind === 'email' ? (cleanEmails[0]?.subject || newEmailSubject || null) : null,
+      email_from_name: newStepKind === 'email' ? (cleanEmails[0]?.from_name || newEmailFromName || null) : null,
+      email_body: newStepKind === 'email' ? (cleanEmails[0]?.body || newEmailBody || null) : null,
+      messages:
+        newStepKind === 'sms' ? cleanSms :
+        newStepKind === 'email' ? cleanEmails :
+        [],
     });
     
     setNewStepName('');
@@ -159,6 +182,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     setNewEmailSubject('');
     setNewEmailFromName('');
     setNewEmailBody('');
+    setNewSmsMessages([{ delay_days: 0, body: '' }]);
+    setNewEmailMessages([{ delay_days: 0, subject: '', from_name: '', body: '' }]);
     setAddStepOpen(false);
     setAddStepCampaignId(null);
   };
@@ -177,6 +202,30 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     setEditEmailFromName(step.email_from_name || '');
     setEditEmailBody(step.email_body || '');
     setEditAdPlatform((step.ad_platform as 'facebook' | 'instagram') || 'facebook');
+    const existingMsgs = (step.messages as any[]) || [];
+    if (step.step_kind === 'sms') {
+      setEditSmsMessages(
+        existingMsgs.length > 0
+          ? existingMsgs.map(m => ({ delay_days: Number(m.delay_days) || 0, body: m.body || '' }))
+          : [{ delay_days: 0, body: step.sms_body || '' }]
+      );
+    } else if (step.step_kind === 'email') {
+      setEditEmailMessages(
+        existingMsgs.length > 0
+          ? existingMsgs.map(m => ({
+              delay_days: Number(m.delay_days) || 0,
+              subject: m.subject || '',
+              from_name: m.from_name || '',
+              body: m.body || '',
+            }))
+          : [{
+              delay_days: 0,
+              subject: step.email_subject || '',
+              from_name: step.email_from_name || '',
+              body: step.email_body || '',
+            }]
+      );
+    }
     setEditStepOpen(true);
   };
 
@@ -192,11 +241,24 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
         ? editStepUrl
         : 'https://' + editStepUrl;
     } else if (kind === 'sms') {
-      updates.sms_body = editSmsBody;
+      const clean = editSmsMessages
+        .map(m => ({ delay_days: Number(m.delay_days) || 0, body: (m.body || '').trim() }))
+        .filter(m => m.body.length > 0);
+      (updates as any).messages = clean;
+      updates.sms_body = clean[0]?.body || editSmsBody || null;
     } else if (kind === 'email') {
-      updates.email_subject = editEmailSubject;
-      updates.email_from_name = editEmailFromName;
-      updates.email_body = editEmailBody;
+      const clean = editEmailMessages
+        .map(m => ({
+          delay_days: Number(m.delay_days) || 0,
+          subject: (m.subject || '').trim(),
+          from_name: (m.from_name || '').trim(),
+          body: (m.body || '').trim(),
+        }))
+        .filter(m => m.subject || m.body);
+      (updates as any).messages = clean;
+      updates.email_subject = clean[0]?.subject || editEmailSubject || null;
+      updates.email_from_name = clean[0]?.from_name || editEmailFromName || null;
+      updates.email_body = clean[0]?.body || editEmailBody || null;
     } else if (kind === 'ads') {
       updates.ad_platform = editAdPlatform;
     }
