@@ -9,6 +9,12 @@ export interface FunnelStep {
   name: string;
   url: string;
   step_type: string;
+  step_kind: 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email';
+  ad_platform: 'facebook' | 'instagram' | null;
+  sms_body: string | null;
+  email_subject: string | null;
+  email_from_name: string | null;
+  email_body: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -36,7 +42,19 @@ export function useCreateFunnelStep() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (step: { client_id: string; campaign_id?: string | null; name: string; url: string; sort_order?: number }) => {
+    mutationFn: async (step: {
+      client_id: string;
+      campaign_id?: string | null;
+      name: string;
+      url: string;
+      sort_order?: number;
+      step_kind?: string;
+      ad_platform?: string | null;
+      sms_body?: string | null;
+      email_subject?: string | null;
+      email_from_name?: string | null;
+      email_body?: string | null;
+    }) => {
       const { data, error } = await supabase
         .from('client_funnel_steps')
         .insert(step)
