@@ -30,6 +30,7 @@ import {
   TrendingUp,
   ExternalLink,
   Sparkles,
+  Inbox,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -46,6 +47,8 @@ import {
 } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useNavigate } from 'react-router-dom';
+import { usePendingApprovalsCount } from '@/hooks/usePendingApprovalsCount';
 
 interface AppSidebarProps {
   pendingTaskCount?: number;
@@ -61,6 +64,12 @@ const navStructure = [
     title: 'Dashboard',
     value: 'dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    title: 'Approvals',
+    value: 'approvals',
+    icon: Inbox,
+    href: '/approvals',
   },
   {
     title: 'Tasks',
