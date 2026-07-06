@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail, Trash2 } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail, Trash2, Paperclip, Loader2, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ const CAMPAIGN_COLORS = [
 
 type StepKind = 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email';
 
-interface SmsMsg { delay_days: number; body: string }
+interface SmsMsg { delay_days: number; body: string; media_url?: string | null; media_type?: string | null }
 interface EmailMsg { delay_days: number; subject: string; from_name: string; body: string }
 
 export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPreviewTabProps) {
@@ -146,8 +147,13 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     const campaignSteps = steps.filter(s => s.campaign_id === addStepCampaignId);
     
     const cleanSms = newSmsMessages
-      .map(m => ({ delay_days: Number(m.delay_days) || 0, body: (m.body || '').trim() }))
-      .filter(m => m.body.length > 0);
+      .map(m => ({
+        delay_days: Number(m.delay_days) || 0,
+        body: (m.body || '').trim(),
+        media_url: m.media_url || null,
+        media_type: m.media_type || null,
+      }))
+      .filter(m => m.body.length > 0 || m.media_url);
     const cleanEmails = newEmailMessages
       .map(m => ({
         delay_days: Number(m.delay_days) || 0,
@@ -206,7 +212,12 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     if (step.step_kind === 'sms') {
       setEditSmsMessages(
         existingMsgs.length > 0
-          ? existingMsgs.map(m => ({ delay_days: Number(m.delay_days) || 0, body: m.body || '' }))
+          ? existingMsgs.map((m: any) => ({
+              delay_days: Number(m.delay_days) || 0,
+              body: m.body || '',
+              media_url: m.media_url || null,
+              media_type: m.media_type || null,
+            }))
           : [{ delay_days: 0, body: step.sms_body || '' }]
       );
     } else if (step.step_kind === 'email') {
@@ -242,8 +253,13 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
         : 'https://' + editStepUrl;
     } else if (kind === 'sms') {
       const clean = editSmsMessages
-        .map(m => ({ delay_days: Number(m.delay_days) || 0, body: (m.body || '').trim() }))
-        .filter(m => m.body.length > 0);
+        .map(m => ({
+          delay_days: Number(m.delay_days) || 0,
+          body: (m.body || '').trim(),
+          media_url: m.media_url || null,
+          media_type: m.media_type || null,
+        }))
+        .filter(m => m.body.length > 0 || m.media_url);
       (updates as any).messages = clean;
       updates.sms_body = clean[0]?.body || editSmsBody || null;
     } else if (kind === 'email') {
