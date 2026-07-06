@@ -4266,6 +4266,7 @@ export type Database = {
           email_from_name: string | null
           email_subject: string | null
           id: string
+          messages: Json
           name: string
           sms_body: string | null
           sort_order: number | null
@@ -4283,6 +4284,7 @@ export type Database = {
           email_from_name?: string | null
           email_subject?: string | null
           id?: string
+          messages?: Json
           name: string
           sms_body?: string | null
           sort_order?: number | null
@@ -4300,6 +4302,7 @@ export type Database = {
           email_from_name?: string | null
           email_subject?: string | null
           id?: string
+          messages?: Json
           name?: string
           sms_body?: string | null
           sort_order?: number | null
