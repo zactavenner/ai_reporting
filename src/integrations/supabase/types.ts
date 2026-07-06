@@ -998,6 +998,36 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_lessons: {
+        Row: {
+          active: boolean
+          agent_name: string
+          context: Json | null
+          created_at: string
+          id: string
+          lesson: string
+          source: string
+        }
+        Insert: {
+          active?: boolean
+          agent_name: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          lesson: string
+          source: string
+        }
+        Update: {
+          active?: boolean
+          agent_name?: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          lesson?: string
+          source?: string
+        }
+        Relationships: []
+      }
       agent_messages: {
         Row: {
           body: string | null
@@ -2206,6 +2236,92 @@ export type Database = {
           },
         ]
       }
+      approval_queue: {
+        Row: {
+          agent_reasoning: string | null
+          audit_log_id: string | null
+          client_id: string | null
+          compliance_check_result: Json | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          preview_payload: Json | null
+          priority: number
+          queue_type: string
+          rejection_reason: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          summary: string | null
+          title: string | null
+        }
+        Insert: {
+          agent_reasoning?: string | null
+          audit_log_id?: string | null
+          client_id?: string | null
+          compliance_check_result?: Json | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          preview_payload?: Json | null
+          priority?: number
+          queue_type: string
+          rejection_reason?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          summary?: string | null
+          title?: string | null
+        }
+        Update: {
+          agent_reasoning?: string | null
+          audit_log_id?: string | null
+          client_id?: string | null
+          compliance_check_result?: Json | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          preview_payload?: Json | null
+          priority?: number
+          queue_type?: string
+          rejection_reason?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          summary?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_queue_audit_log_id_fkey"
+            columns: ["audit_log_id"]
+            isOneToOne: false
+            referencedRelation: "autonomous_audit_log"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "approval_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       assets: {
         Row: {
           client_id: string | null
@@ -2259,6 +2375,76 @@ export type Database = {
           url?: string | null
         }
         Relationships: []
+      }
+      autonomous_audit_log: {
+        Row: {
+          action_type: string
+          agent_name: string
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
+          client_id: string | null
+          created_at: string
+          id: string
+          inputs: Json | null
+          outputs: Json | null
+          reasoning: string
+          target_entity: string | null
+          target_id: string | null
+        }
+        Insert: {
+          action_type: string
+          agent_name: string
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          inputs?: Json | null
+          outputs?: Json | null
+          reasoning: string
+          target_entity?: string | null
+          target_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          agent_name?: string
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          inputs?: Json | null
+          outputs?: Json | null
+          reasoning?: string
+          target_entity?: string | null
+          target_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autonomous_audit_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "autonomous_audit_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "autonomous_audit_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
       }
       avatar_looks: {
         Row: {
@@ -4148,6 +4334,70 @@ export type Database = {
             foreignKeyName: "client_funnel_steps_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      client_kpi_targets: {
+        Row: {
+          autonomy_mode: string
+          client_id: string
+          created_at: string
+          guardrails: Json
+          id: string
+          max_daily_budget: number | null
+          target_cost_per_funded: number | null
+          target_cpbc: number | null
+          target_cpl: number | null
+          target_cps: number | null
+          updated_at: string
+        }
+        Insert: {
+          autonomy_mode?: string
+          client_id: string
+          created_at?: string
+          guardrails?: Json
+          id?: string
+          max_daily_budget?: number | null
+          target_cost_per_funded?: number | null
+          target_cpbc?: number | null
+          target_cpl?: number | null
+          target_cps?: number | null
+          updated_at?: string
+        }
+        Update: {
+          autonomy_mode?: string
+          client_id?: string
+          created_at?: string
+          guardrails?: Json
+          id?: string
+          max_daily_budget?: number | null
+          target_cost_per_funded?: number | null
+          target_cpbc?: number | null
+          target_cpl?: number | null
+          target_cps?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_kpi_targets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_kpi_targets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_kpi_targets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
           },
@@ -14830,6 +15080,30 @@ export type Database = {
       }
       reap_orphaned_canvas_placeholders: { Args: never; Returns: number }
       reap_stale_agent_tasks: { Args: { p_minutes?: number }; Returns: number }
+      resolve_audit_entry: {
+        Args: { entry_id: string; new_status: string; resolver: string }
+        Returns: {
+          action_type: string
+          agent_name: string
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
+          client_id: string | null
+          created_at: string
+          id: string
+          inputs: Json | null
+          outputs: Json | null
+          reasoning: string
+          target_entity: string | null
+          target_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "autonomous_audit_log"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       email_classification:
