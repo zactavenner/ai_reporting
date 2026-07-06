@@ -1,0 +1,2 @@
+ALTER TABLE public.client_funnel_steps ADD COLUMN IF NOT EXISTS parent_step_id UUID NULL REFERENCES public.client_funnel_steps(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_client_funnel_steps_parent_step_id ON public.client_funnel_steps(parent_step_id);
