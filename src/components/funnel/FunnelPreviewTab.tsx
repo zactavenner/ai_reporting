@@ -208,11 +208,19 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     setAddStepParentId(null);
   };
 
-  const openAddStep = (campaignId: string, parentStepId: string | null = null) => {
+  const openAddStep = (
+    campaignId: string,
+    parentStepId: string | null = null,
+    defaultKind?: FunnelStep['step_kind'],
+  ) => {
     setAddStepCampaignId(campaignId);
     setAddStepParentId(parentStepId);
-    // Nurture defaults to SMS since that's the most common use case
-    if (parentStepId) setNewStepKind('sms');
+    if (defaultKind) {
+      setNewStepKind(defaultKind);
+    } else if (parentStepId) {
+      // Nurture defaults to SMS since that's the most common use case
+      setNewStepKind('sms');
+    }
     setAddStepOpen(true);
   };
 

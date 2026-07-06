@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, ChevronRight, GripVertical, Link2, ZoomIn, ZoomOut, Maximize2, MessageSquarePlus } from 'lucide-react';
+import { Plus, Edit2, Trash2, ChevronRight, GripVertical, Link2, ZoomIn, ZoomOut, Maximize2, MessageSquarePlus, GitBranch } from 'lucide-react';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -32,7 +32,11 @@ interface CampaignFlowSectionProps {
   clientId?: string;
   brandName?: string;
   publicShareToken?: string | null;
-  onAddStep: (campaignId: string, parentStepId?: string | null) => void;
+  onAddStep: (
+    campaignId: string,
+    parentStepId?: string | null,
+    defaultKind?: FunnelStep['step_kind'],
+  ) => void;
   onEditStep: (step: FunnelStep) => void;
   onDeleteStep: (stepId: string) => void;
   onReorderSteps: (orderedIds: string[]) => void;
@@ -54,13 +58,16 @@ interface SortableStepProps {
   onEditStep: (step: FunnelStep) => void;
   onDeleteStep: (stepId: string) => void;
   onAddNurture: () => void;
+  onAddBranch: () => void;
+  onInsertAfter: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
 function SortableStep({
   step, index, deviceType, isPublicView, isLast, variants, clientId, brandName,
-  childSteps, variantsByStep, onEditStep, onDeleteStep, onAddNurture, onEdit, onDelete,
+  childSteps, variantsByStep, onEditStep, onDeleteStep,
+  onAddNurture, onAddBranch, onInsertAfter, onEdit, onDelete,
 }: SortableStepProps) {
   const {
     attributes,
@@ -76,6 +83,10 @@ function SortableStep({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  const NURTURE_KINDS = new Set(['sms', 'email', 'phone_call', 'note']);
+  const nurtureChildren = childSteps.filter(c => NURTURE_KINDS.has(c.step_kind));
+  const branchChildren = childSteps.filter(c => !NURTURE_KINDS.has(c.step_kind));
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-start">
@@ -101,13 +112,43 @@ function SortableStep({
           onDelete={onDelete}
         />
 
+        {/* Horizontal branch chain (sub-flow) */}
+        {branchChildren.length > 0 && (
+          <div className="mt-4 flex flex-col items-center w-full">
+            <div className="h-6 w-px bg-primary/50" aria-hidden />
+            <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary bg-background/80 backdrop-blur px-2 py-0.5 rounded-full border border-primary/40">
+              <GitBranch className="h-3 w-3" /> Branch
+            </div>
+            <div className="flex items-start gap-2">
+              {branchChildren.map((b, bi) => (
+                <div key={b.id} className="flex items-start">
+                  <FunnelStepCard
+                    step={b}
+                    stepNumber={index + 1}
+                    deviceType={deviceType}
+                    isPublicView={isPublicView}
+                    variants={variantsByStep[b.id] || []}
+                    clientId={clientId}
+                    brandName={brandName}
+                    onEdit={() => onEditStep(b)}
+                    onDelete={() => onDeleteStep(b.id)}
+                  />
+                  {bi < branchChildren.length - 1 && (
+                    <ChevronRight className="mx-2 mt-[200px] h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Nurture stack under this column */}
-        {(childSteps.length > 0 || !isPublicView) && (
+        {(nurtureChildren.length > 0 || !isPublicView) && (
           <div className="mt-4 flex flex-col items-center gap-3 w-full">
-            {childSteps.length > 0 && (
+            {nurtureChildren.length > 0 && (
               <div className="h-6 w-px bg-border" aria-hidden />
             )}
-            {childSteps.map((child) => (
+            {nurtureChildren.map((child) => (
               <div key={child.id} className="flex flex-col items-center">
                 <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground bg-background/70 backdrop-blur px-2 py-0.5 rounded-full border">
                   Nurture · {child.step_kind === 'sms' ? 'SMS' : child.step_kind === 'email' ? 'Email' : child.name}
@@ -127,21 +168,40 @@ function SortableStep({
               </div>
             ))}
             {!isPublicView && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onAddNurture}
-                className="h-7 text-xs bg-background/80 backdrop-blur"
-              >
-                <MessageSquarePlus className="h-3 w-3 mr-1" /> Add nurture
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onAddNurture}
+                  className="h-7 text-xs bg-background/80 backdrop-blur"
+                >
+                  <MessageSquarePlus className="h-3 w-3 mr-1" /> Nurture
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onAddBranch}
+                  className="h-7 text-xs bg-background/80 backdrop-blur border-primary/40 text-primary hover:text-primary"
+                >
+                  <GitBranch className="h-3 w-3 mr-1" /> Branch
+                </Button>
+              </div>
             )}
           </div>
         )}
       </div>
       {!isLast && (
-        <div className="flex-shrink-0 self-stretch flex items-start">
+        <div className="flex-shrink-0 self-stretch flex items-start relative group">
           <ChevronRight className="mx-3 mt-[200px] h-6 w-6 text-muted-foreground" />
+          {!isPublicView && (
+            <button
+              onClick={onInsertAfter}
+              title="Insert step here"
+              className="absolute left-1/2 -translate-x-1/2 top-[190px] opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 rounded-full bg-primary text-primary-foreground shadow-md flex items-center justify-center hover:scale-110"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -361,6 +421,8 @@ export function CampaignFlowSection({
                         onEditStep={onEditStep}
                         onDeleteStep={onDeleteStep}
                         onAddNurture={() => onAddStep(campaign.id, step.id)}
+                        onAddBranch={() => onAddStep(campaign.id, step.id, 'page')}
+                        onInsertAfter={() => onAddStep(campaign.id, null, 'page')}
                         onEdit={() => onEditStep(step)}
                         onDelete={() => onDeleteStep(step.id)}
                       />
