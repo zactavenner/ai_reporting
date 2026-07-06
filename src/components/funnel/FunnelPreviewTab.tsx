@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail, Trash2 } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail, Trash2, Paperclip, Loader2, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ const CAMPAIGN_COLORS = [
 
 type StepKind = 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email';
 
-interface SmsMsg { delay_days: number; body: string }
+interface SmsMsg { delay_days: number; body: string; media_url?: string | null; media_type?: string | null }
 interface EmailMsg { delay_days: number; subject: string; from_name: string; body: string }
 
 export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPreviewTabProps) {
@@ -146,8 +147,13 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     const campaignSteps = steps.filter(s => s.campaign_id === addStepCampaignId);
     
     const cleanSms = newSmsMessages
-      .map(m => ({ delay_days: Number(m.delay_days) || 0, body: (m.body || '').trim() }))
-      .filter(m => m.body.length > 0);
+      .map(m => ({
+        delay_days: Number(m.delay_days) || 0,
+        body: (m.body || '').trim(),
+        media_url: m.media_url || null,
+        media_type: m.media_type || null,
+      }))
+      .filter(m => m.body.length > 0 || m.media_url);
     const cleanEmails = newEmailMessages
       .map(m => ({
         delay_days: Number(m.delay_days) || 0,
@@ -206,7 +212,12 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     if (step.step_kind === 'sms') {
       setEditSmsMessages(
         existingMsgs.length > 0
-          ? existingMsgs.map(m => ({ delay_days: Number(m.delay_days) || 0, body: m.body || '' }))
+          ? existingMsgs.map((m: any) => ({
+              delay_days: Number(m.delay_days) || 0,
+              body: m.body || '',
+              media_url: m.media_url || null,
+              media_type: m.media_type || null,
+            }))
           : [{ delay_days: 0, body: step.sms_body || '' }]
       );
     } else if (step.step_kind === 'email') {
@@ -242,8 +253,13 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
         : 'https://' + editStepUrl;
     } else if (kind === 'sms') {
       const clean = editSmsMessages
-        .map(m => ({ delay_days: Number(m.delay_days) || 0, body: (m.body || '').trim() }))
-        .filter(m => m.body.length > 0);
+        .map(m => ({
+          delay_days: Number(m.delay_days) || 0,
+          body: (m.body || '').trim(),
+          media_url: m.media_url || null,
+          media_type: m.media_type || null,
+        }))
+        .filter(m => m.body.length > 0 || m.media_url);
       (updates as any).messages = clean;
       updates.sms_body = clean[0]?.body || editSmsBody || null;
     } else if (kind === 'email') {
@@ -640,6 +656,28 @@ function SmsCadenceEditor({
     const lastDelay = messages[messages.length - 1]?.delay_days ?? 0;
     onChange([...messages, { delay_days: lastDelay + 2, body: '' }]);
   };
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const inputsRef = useRef<Record<number, HTMLInputElement | null>>({});
+
+  const handleFile = async (i: number, file: File | null) => {
+    if (!file) return;
+    setUploadingIdx(i);
+    try {
+      const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+      const path = `funnel-sms/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from('client-uploads')
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('client-uploads').getPublicUrl(path);
+      update(i, { media_url: publicUrl, media_type: file.type });
+    } catch (e: any) {
+      console.error(e);
+      alert('Upload failed: ' + (e?.message || 'unknown'));
+    } finally {
+      setUploadingIdx(null);
+    }
+  };
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -677,6 +715,52 @@ function SmsCadenceEditor({
             placeholder="Hey {firstName}, quick follow-up..."
             rows={3}
           />
+          <div className="flex items-center gap-2">
+            <input
+              ref={el => { inputsRef.current[i] = el; }}
+              type="file"
+              accept="video/*,image/*"
+              className="hidden"
+              onChange={e => handleFile(i, e.target.files?.[0] || null)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={uploadingIdx === i}
+              onClick={() => inputsRef.current[i]?.click()}
+            >
+              {uploadingIdx === i ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Paperclip className="h-3 w-3 mr-1" />
+              )}
+              {m.media_url ? 'Replace attachment' : 'Attach video / image'}
+            </Button>
+            {m.media_url && (
+              <>
+                <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">
+                  {(m.media_type || '').startsWith('video') ? 'Video attached' : 'Image attached'}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => update(i, { media_url: null, media_type: null })}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </>
+            )}
+          </div>
+          {m.media_url && (m.media_type || '').startsWith('video') && (
+            <video src={m.media_url} className="rounded-md max-h-32 bg-black" controls muted playsInline />
+          )}
+          {m.media_url && (m.media_type || '').startsWith('image') && (
+            <img src={m.media_url} alt="attachment" className="rounded-md max-h-32" />
+          )}
         </div>
       ))}
       <Button variant="outline" size="sm" onClick={add} className="w-full">
