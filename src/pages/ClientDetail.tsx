@@ -625,6 +625,12 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
+          <TabsContent value="workflows" className="space-y-6">
+            <SectionErrorBoundary sectionName="Workflows">
+              <ClientWorkflowsTab clientId={client.id} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
           <TabsContent value="client-settings" className="space-y-6">
             {/* Connections (moved from separate tab) */}
             <SectionErrorBoundary sectionName="Connections">
