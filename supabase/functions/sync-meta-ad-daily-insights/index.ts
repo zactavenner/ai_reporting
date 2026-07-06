@@ -127,11 +127,11 @@ Deno.serve(async (req) => {
         const msg = (e as Error).message;
         console.error(`[insights] ${c.name} failed: ${msg}`);
         await sb.from("sync_errors").insert({
-          function_name: "sync-meta-ad-daily-insights",
+          integration_name: "sync-meta-ad-daily-insights",
           client_id: c.id,
+          endpoint: `insights?days=${days}`,
           error_message: msg.slice(0, 1000),
-          context: { days },
-        }).select().maybeSingle().then(() => {}).catch(() => {});
+        }).then(() => {}).catch(() => {});
         results.push({ client_id: c.id, name: c.name, error: msg });
       }
       await new Promise((r) => setTimeout(r, 2000));
