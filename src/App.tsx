@@ -41,6 +41,7 @@ const OfferDetailPage = lazyRetry(() => import("./pages/OfferDetailPage"));
 const WhatsAppPage = lazyRetry(() => import("./pages/WhatsAppPage"));
 const AIStudioStylesPage = lazyRetry(() => import("./pages/AIStudioStylesPage"));
 const ApprovalsPage = lazyRetry(() => import("./pages/ApprovalsPage"));
+const MediaBuyerPage = lazyRetry(() => import("./pages/MediaBuyerPage"));
 const UnsubscribePage = lazyRetry(() => import("./pages/UnsubscribePage"));
 const LoginPage = lazyRetry(() => import("./pages/LoginPage"));
 const OAuthConsent = lazyRetry(() => import("./pages/OAuthConsent"));
@@ -93,6 +94,7 @@ const App = () => (
             <Route path="/ai-studio/styles" element={<PasswordGate><AIStudioStylesPage /></PasswordGate>} />
             <Route path="/approvals" element={<PasswordGate><ApprovalsPage /></PasswordGate>} />
             <Route path="/approvals/history" element={<PasswordGate><ApprovalsPage /></PasswordGate>} />
+            <Route path="/media-buyer" element={<PasswordGate><MediaBuyerPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
