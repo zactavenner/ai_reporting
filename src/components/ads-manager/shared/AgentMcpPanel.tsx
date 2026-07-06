@@ -25,7 +25,24 @@ const META_TOOLS: ToolDef[] = [
   { name: 'meta_sync_account', description: 'Trigger a Meta Ads sync for this client', write: true },
 ];
 
-const READONLY_TOOLS = META_TOOLS.filter((t) => !t.write).map((t) => t.name);
+const API_TOOLS: ToolDef[] = [
+  { name: 'db_list_tables', description: 'List all tables, buckets, relations, and composites' },
+  { name: 'db_select', description: 'Read rows with filters / relations / order / pagination' },
+  { name: 'db_count', description: 'Count rows in an allowed table' },
+  { name: 'db_insert', description: 'Insert row(s) into an allowed table', write: true },
+  { name: 'db_upsert', description: 'Upsert row(s) into an allowed table', write: true },
+  { name: 'db_update', description: 'Update rows matching a filter', write: true },
+  { name: 'db_delete', description: 'Delete rows matching a filter', write: true },
+  { name: 'storage_list', description: 'List files in an allowed bucket' },
+  { name: 'storage_get_url', description: 'Get public URL for a file' },
+  { name: 'storage_delete', description: 'Delete a file from a bucket', write: true },
+  { name: 'storage_upload_base64', description: 'Upload a base64 file (upsert)', write: true },
+  { name: 'create_task_composite', description: 'Task + assignees + subtasks + comments in one call', write: true },
+  { name: 'get_ads_overview', description: 'Full Meta hierarchy + attribution totals for a client' },
+];
+
+const ALL_TOOLS = [...META_TOOLS, ...API_TOOLS];
+const READONLY_TOOLS = ALL_TOOLS.filter((t) => !t.write).map((t) => t.name);
 
 export function AgentMcpPanel({ clientId }: AgentMcpPanelProps) {
   const [open, setOpen] = useState(false);
@@ -76,7 +93,7 @@ export function AgentMcpPanel({ clientId }: AgentMcpPanelProps) {
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-primary" />
           <span className="font-semibold text-sm">AI Agent · MCP Tools</span>
-          <Badge variant="secondary" className="text-[10px]">{META_TOOLS.length} Meta tools</Badge>
+          <Badge variant="secondary" className="text-[10px]">{META_TOOLS.length} Meta · {API_TOOLS.length} API</Badge>
         </div>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
@@ -96,7 +113,7 @@ export function AgentMcpPanel({ clientId }: AgentMcpPanelProps) {
 
           {/* Tool list */}
           <div>
-            <div className="text-xs font-medium text-muted-foreground mb-2">Available Meta Ads tools</div>
+            <div className="text-xs font-medium text-muted-foreground mb-2">Meta Ads tools</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
               {META_TOOLS.map((t) => (
                 <div key={t.name} className="flex items-start gap-2 text-xs p-2 rounded border bg-background">
@@ -110,6 +127,29 @@ export function AgentMcpPanel({ clientId }: AgentMcpPanelProps) {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Generic API / Hermes parity tools */}
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-2">
+              API / Hermes tools (full parity with <code className="text-[10px]">external-data-api</code>)
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+              {API_TOOLS.map((t) => (
+                <div key={t.name} className="flex items-start gap-2 text-xs p-2 rounded border bg-background">
+                  <Badge variant={t.write ? 'destructive' : 'outline'} className="text-[10px] mt-0.5 shrink-0">
+                    {t.write ? 'WRITE' : 'READ'}
+                  </Badge>
+                  <div className="min-w-0">
+                    <div className="font-mono font-medium truncate">{t.name}</div>
+                    <div className="text-muted-foreground">{t.description}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Full API usage instructions (allowed tables, filter syntax, relations, composites) are sent to the client automatically in the MCP <code>initialize</code> response — no extra setup for new connections.
+            </p>
           </div>
 
           {/* Test runner */}
