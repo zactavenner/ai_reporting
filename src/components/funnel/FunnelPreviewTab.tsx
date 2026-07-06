@@ -527,51 +527,11 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
             )}
 
             {newStepKind === 'sms' && (
-              <div className="space-y-2">
-                <Label htmlFor="step-sms-body">SMS message</Label>
-                <Textarea
-                  id="step-sms-body"
-                  value={newSmsBody}
-                  onChange={e => setNewSmsBody(e.target.value)}
-                  placeholder="Hey {firstName}, thanks for your interest! Reply YES to book a quick call."
-                  rows={4}
-                />
-              </div>
+              <SmsCadenceEditor messages={newSmsMessages} onChange={setNewSmsMessages} />
             )}
 
             {newStepKind === 'email' && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="step-email-from">From name</Label>
-                    <Input
-                      id="step-email-from"
-                      value={newEmailFromName}
-                      onChange={e => setNewEmailFromName(e.target.value)}
-                      placeholder="Your Brand"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="step-email-subject">Subject</Label>
-                    <Input
-                      id="step-email-subject"
-                      value={newEmailSubject}
-                      onChange={e => setNewEmailSubject(e.target.value)}
-                      placeholder="Your investment opportunity awaits"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="step-email-body">Body</Label>
-                  <Textarea
-                    id="step-email-body"
-                    value={newEmailBody}
-                    onChange={e => setNewEmailBody(e.target.value)}
-                    rows={6}
-                    placeholder="Hi {firstName},\n\nThanks for showing interest..."
-                  />
-                </div>
-              </div>
+              <EmailCadenceEditor messages={newEmailMessages} onChange={setNewEmailMessages} />
             )}
             
             <div className="flex justify-end gap-2 pt-2">
