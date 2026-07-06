@@ -221,6 +221,26 @@ Deno.serve(async (req) => {
     const totalBackfilled = results.reduce((s, r) => s + (r.backfilledDays?.length || 0), 0);
     console.log(`[sync-meta-ads-daily] Complete: ${succeeded} succeeded, ${failed} failed, ${totalBackfilled} backfill ranges processed`);
 
+    // ── ADDITIVE: fire ad-level daily insights sync (trailing 7d). ──
+    // Wrapped so any failure NEVER affects the existing sync behavior or return value.
+    try {
+      const insightsRes = await fetch(`${supabaseUrl}/functions/v1/sync-meta-ad-daily-insights`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+        body: JSON.stringify({ days: 7 }),
+      });
+      console.log(`[sync-meta-ads-daily] insights kickoff status=${insightsRes.status}`);
+    } catch (e) {
+      console.warn(`[sync-meta-ads-daily] insights kickoff failed (non-fatal):`, e);
+      try {
+        await supabase.from("sync_errors").insert({
+          integration_name: "sync-meta-ads-daily",
+          endpoint: "sync-meta-ad-daily-insights kickoff",
+          error_message: (e as Error)?.message?.slice(0, 1000) ?? "unknown",
+        });
+      } catch { /* ignore */ }
+    }
+
     // ── Update orchestrator sync_run ──
     if (orchestratorRunId) {
       await supabase.from("sync_runs").update({

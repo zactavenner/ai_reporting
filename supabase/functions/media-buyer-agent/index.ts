@@ -47,7 +47,7 @@ const RUN_TYPE_INSTRUCTIONS: Record<RunType, string> = {
   daily_review: "Daily performance review for each active client in scope. Focus on trend deltas vs prior equal window. Classify every active ad. Propose immediate budget adjustments (within guardrails) and creative kills for underperformers with sufficient spend.",
   weekly_review: "Weekly rollup with structural recommendations. Classify ads, identify winning angles, propose new creative launches (creative_launch with full launch_spec), scale winners, kill losers.",
   creative_intel: "Cross-client creative intelligence pass. Identify STRUCTURAL patterns that transfer across accounts (hook shapes, formats, CTAs, spokesperson patterns) — never confidential client brand/claim content. Portfolio-scope findings only. Produce specific creative production recommendations. No proposals unless a launch is clearly warranted.",
-  fatigue_scan: "Fatigue-only scan portfolio-wide. Flag ads whose frequency >= 3.0 with declining CTR or rising CPL over the lookback vs prior window. Classify each flagged ad and propose creative_kill or iterate. Skip classifying ads with no fatigue signal.",
+  fatigue_scan: "Fatigue-only scan portfolio-wide. Use ONLY the `ad_window_metrics` array in context — each entry has frequency_current, ctr_delta_pct, cpl_delta_pct, spend_current, cpl_current, and prior-window comparisons. Flag ads that meet ANY of: frequency_current >= 3.0 AND ctr_delta_pct <= -15; OR frequency_current >= 4.0; OR cpl_delta_pct >= 25 with spend_current >= 50. For each flagged ad emit an ad_classification (PAUSE/ITERATE/WATCH) with metrics_snapshot copied from ad_window_metrics, and produce a creative_kill (queue_type='creative') or budget_change proposal referencing target_ad_id. Skip ads with no fatigue signal — do NOT classify healthy ads.",
   pixel_audit: "Tracking / pixel audit for the given client (or portfolio). Cross-reference pixel_verifications, pixel_expected_events, funnel_analytics. Label every claim VERIFIED / LIKELY / UNKNOWN / NEEDS TESTING. For NEEDS TESTING items produce task_created proposals with specific test steps.",
   launch_plan: "Produce concrete launch proposals for the given client. Each proposal must include a complete launch_spec in preview_payload: campaign objective, adset targeting/budget, ad creative refs, naming per convention, UTMs.",
 };
@@ -61,7 +61,7 @@ async function loadContext(sb: Sb, clientIds: string[], lookbackDays: number) {
   const winStart = new Date(now.getTime() - lookbackDays * 86400_000).toISOString().slice(0, 10);
   const priorStart = new Date(now.getTime() - 2 * lookbackDays * 86400_000).toISOString().slice(0, 10);
 
-  const [clientsRes, targetsRes, offersRes, adsRes, adsetsRes, campaignsRes, dailyRes, priorDailyRes, lessonsRes, pixelRes, expEventsRes] = await Promise.all([
+  const [clientsRes, targetsRes, offersRes, adsRes, adsetsRes, campaignsRes, dailyRes, priorDailyRes, lessonsRes, pixelRes, expEventsRes, insightsWinRes, insightsPriorRes] = await Promise.all([
     sb.from("clients").select("id, name, status, timezone").in("id", clientIds),
     sb.from("client_kpi_targets").select("*").in("client_id", clientIds),
     sb.from("client_offers").select("client_id, name, description, offer_type, target_return, minimum_investment").in("client_id", clientIds).eq("is_primary", true),
@@ -73,7 +73,55 @@ async function loadContext(sb: Sb, clientIds: string[], lookbackDays: number) {
     sb.from("agent_lessons").select("lesson, source, context, created_at").eq("agent_name", "media-buyer").eq("active", true).order("created_at", { ascending: false }).limit(30),
     sb.from("pixel_verifications").select("client_id, status, events_detected, missing_expected, scanned_at").in("client_id", clientIds).order("scanned_at", { ascending: false }).limit(100),
     sb.from("pixel_expected_events").select("step_id, platform, event_name, is_custom").limit(200),
+    sb.from("meta_ad_daily_insights").select("date, client_id, meta_ad_id, spend, impressions, reach, frequency, clicks, ctr, leads, cost_per_lead").in("client_id", clientIds).gte("date", winStart),
+    sb.from("meta_ad_daily_insights").select("date, client_id, meta_ad_id, spend, impressions, reach, frequency, clicks, ctr, leads, cost_per_lead").in("client_id", clientIds).gte("date", priorStart).lt("date", winStart),
   ]);
+
+  // Aggregate per meta_ad_id per window and compute WoW deltas
+  type Agg = { meta_ad_id: string; client_id: string | null; spend: number; impressions: number; clicks: number; leads: number; freq_last: number; days: number; avg_ctr: number; cpl: number };
+  const aggregate = (rows: any[]): Map<string, Agg> => {
+    const m = new Map<string, Agg>();
+    for (const r of rows) {
+      const k = String(r.meta_ad_id);
+      const a = m.get(k) ?? { meta_ad_id: k, client_id: r.client_id ?? null, spend: 0, impressions: 0, clicks: 0, leads: 0, freq_last: 0, days: 0, avg_ctr: 0, cpl: 0 };
+      a.spend += Number(r.spend ?? 0);
+      a.impressions += Number(r.impressions ?? 0);
+      a.clicks += Number(r.clicks ?? 0);
+      a.leads += Number(r.leads ?? 0);
+      a.freq_last = Math.max(a.freq_last, Number(r.frequency ?? 0));
+      a.days += 1;
+      m.set(k, a);
+    }
+    for (const a of m.values()) {
+      a.avg_ctr = a.impressions > 0 ? (a.clicks / a.impressions) * 100 : 0;
+      a.cpl = a.leads > 0 ? a.spend / a.leads : 0;
+    }
+    return m;
+  };
+  const winAgg = aggregate((insightsWinRes as any).data ?? []);
+  const priorAgg = aggregate((insightsPriorRes as any).data ?? []);
+  const adWindowMetrics: any[] = [];
+  for (const [k, cur] of winAgg.entries()) {
+    const prior = priorAgg.get(k);
+    const cpl_delta_pct = prior && prior.cpl > 0 && cur.cpl > 0 ? ((cur.cpl - prior.cpl) / prior.cpl) * 100 : null;
+    const ctr_delta_pct = prior && prior.avg_ctr > 0 ? ((cur.avg_ctr - prior.avg_ctr) / prior.avg_ctr) * 100 : null;
+    adWindowMetrics.push({
+      meta_ad_id: k,
+      client_id: cur.client_id,
+      frequency_current: Number(cur.freq_last.toFixed(2)),
+      spend_current: Number(cur.spend.toFixed(2)),
+      leads_current: cur.leads,
+      ctr_current_pct: Number(cur.avg_ctr.toFixed(3)),
+      cpl_current: Number(cur.cpl.toFixed(2)),
+      spend_prior: prior ? Number(prior.spend.toFixed(2)) : null,
+      leads_prior: prior?.leads ?? null,
+      ctr_prior_pct: prior ? Number(prior.avg_ctr.toFixed(3)) : null,
+      cpl_prior: prior ? Number(prior.cpl.toFixed(2)) : null,
+      cpl_delta_pct: cpl_delta_pct !== null ? Number(cpl_delta_pct.toFixed(1)) : null,
+      ctr_delta_pct: ctr_delta_pct !== null ? Number(ctr_delta_pct.toFixed(1)) : null,
+      days_active_in_window: cur.days,
+    });
+  }
 
   return {
     lookback_start: winStart,
@@ -89,6 +137,7 @@ async function loadContext(sb: Sb, clientIds: string[], lookbackDays: number) {
     lessons: lessonsRes.data ?? [],
     pixel_verifications: pixelRes.data ?? [],
     pixel_expected_events: expEventsRes.data ?? [],
+    ad_window_metrics: adWindowMetrics,
   };
 }
 

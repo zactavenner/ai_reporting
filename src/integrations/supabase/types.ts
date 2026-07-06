@@ -10317,6 +10317,91 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_ad_daily_insights: {
+        Row: {
+          clicks: number | null
+          client_id: string | null
+          cost_per_lead: number | null
+          cpc: number | null
+          cpm: number | null
+          created_at: string
+          ctr: number | null
+          date: string
+          frequency: number | null
+          id: string
+          impressions: number | null
+          leads: number | null
+          meta_ad_id: string
+          meta_adset_id: string | null
+          meta_campaign_id: string | null
+          reach: number | null
+          spend: number | null
+          updated_at: string
+        }
+        Insert: {
+          clicks?: number | null
+          client_id?: string | null
+          cost_per_lead?: number | null
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          date: string
+          frequency?: number | null
+          id?: string
+          impressions?: number | null
+          leads?: number | null
+          meta_ad_id: string
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          reach?: number | null
+          spend?: number | null
+          updated_at?: string
+        }
+        Update: {
+          clicks?: number | null
+          client_id?: string | null
+          cost_per_lead?: number | null
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          date?: string
+          frequency?: number | null
+          id?: string
+          impressions?: number | null
+          leads?: number | null
+          meta_ad_id?: string
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          reach?: number | null
+          spend?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_daily_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_ad_daily_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_ad_daily_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       meta_ad_sets: {
         Row: {
           attributed_calls: number | null
