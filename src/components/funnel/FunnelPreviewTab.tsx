@@ -469,9 +469,11 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       <Dialog open={addStepOpen} onOpenChange={setAddStepOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Funnel Step</DialogTitle>
+            <DialogTitle>{addStepParentId ? 'Add Nurture Step' : 'Add Funnel Step'}</DialogTitle>
             <DialogDescription>
-              Add a landing page, lead form, ad, SMS, or email to this campaign
+              {addStepParentId
+                ? `Attach an SMS or email follow-up under "${steps.find(s => s.id === addStepParentId)?.name || 'this step'}"`
+                : 'Add a landing page, lead form, ad, SMS, or email to this campaign'}
             </DialogDescription>
           </DialogHeader>
           
