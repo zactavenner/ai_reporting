@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Edit2, ExternalLink, Trash2, Gauge, Loader2, Radio, TestTube2, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
+import { Edit2, ExternalLink, Trash2, Gauge, Loader2, Radio, TestTube2, CheckCircle2, AlertCircle, XCircle, Images } from 'lucide-react';
 import { PageMetadataPreview } from './PageMetadataPreview';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,12 @@ import { PixelVerificationModal } from './PixelVerificationModal';
 import { SplitTestModal } from './SplitTestModal';
 import { supabase } from '@/integrations/supabase/client';
 import { FacebookLeadFormMockup } from './FacebookLeadFormMockup';
+import { AdRotatorMockup, type AdPlatform } from './AdRotatorMockup';
+import { SmsMockup } from './SmsMockup';
+import { EmailMockup } from './EmailMockup';
+import { AdSelectorModal } from './AdSelectorModal';
+import { useCreatives } from '@/hooks/useCreatives';
+import { useFunnelStepAds, useSetFunnelStepAds } from '@/hooks/useFunnelStepAds';
 import { useLatestPixelVerification, getVerificationStatusInfo } from '@/hooks/usePixelVerification';
 import type { FunnelStep } from '@/hooks/useFunnelSteps';
 import type { FunnelStepVariant } from '@/hooks/useFunnelStepVariants';
@@ -36,6 +42,7 @@ interface FunnelStepCardProps {
   isPublicView: boolean;
   variants?: FunnelStepVariant[];
   clientId?: string;
+  brandName?: string;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -59,6 +66,7 @@ export function FunnelStepCard({
   isPublicView,
   variants = [],
   clientId,
+  brandName,
   onEdit,
   onDelete,
 }: FunnelStepCardProps) {
@@ -67,11 +75,27 @@ export function FunnelStepCard({
   const [speedModalOpen, setSpeedModalOpen] = useState(false);
   const [pixelModalOpen, setPixelModalOpen] = useState(false);
   const [splitTestModalOpen, setSplitTestModalOpen] = useState(false);
+  const [adSelectorOpen, setAdSelectorOpen] = useState(false);
 
   const { data: latestVerification } = useLatestPixelVerification(step.id);
   const verificationStatus = getVerificationStatusInfo(latestVerification?.status);
-  const isFbLeadForm = step.url === 'fb://lead-form';
-  
+  const kind = step.step_kind || (step.url === 'fb://lead-form' ? 'fb_lead_form' : 'page');
+  const isFbLeadForm = kind === 'fb_lead_form';
+  const isPage = kind === 'page';
+  const isAds = kind === 'ads';
+  const isSms = kind === 'sms';
+  const isEmail = kind === 'email';
+
+  // Ad-rotator specific data
+  const { data: stepAds = [] } = useFunnelStepAds(isAds ? [step.id] : []);
+  const { data: allCreatives = [] } = useCreatives(isAds ? clientId : undefined);
+  const setAds = useSetFunnelStepAds();
+  const selectedAdCreatives = stepAds
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(a => allCreatives.find(c => c.id === a.creative_id))
+    .filter(Boolean) as typeof allCreatives;
+
   const hasVariants = variants.length > 0;
 
   const runSpeedTest = async () => {
@@ -93,8 +117,31 @@ export function FunnelStepCard({
   };
 
   const renderDeviceMockup = (url: string, title: string, variantLabel?: string) => {
-    if (url === 'fb://lead-form') {
+    if (isFbLeadForm || url === 'fb://lead-form') {
       return <FacebookLeadFormMockup stepName={title} deviceType={deviceType} />;
+    }
+    if (isAds) {
+      return (
+        <AdRotatorMockup
+          creatives={selectedAdCreatives}
+          platform={(step.ad_platform as AdPlatform) || 'facebook'}
+          deviceType={deviceType}
+          brandName={brandName}
+        />
+      );
+    }
+    if (isSms) {
+      return <SmsMockup body={step.sms_body || ''} fromName={brandName} deviceType={deviceType} />;
+    }
+    if (isEmail) {
+      return (
+        <EmailMockup
+          subject={step.email_subject || ''}
+          body={step.email_body || ''}
+          fromName={step.email_from_name || brandName}
+          deviceType={deviceType}
+        />
+      );
     }
     switch (deviceType) {
       case 'desktop':
@@ -145,10 +192,21 @@ export function FunnelStepCard({
   const renderActionButtons = () => (
     <div className="flex flex-col items-center gap-2 mt-3">
       {/* Verification Status Badge */}
-      {!isFbLeadForm && renderVerificationBadge()}
+      {isPage && renderVerificationBadge()}
       
       <div className="flex items-center gap-1">
-        {!isFbLeadForm && (
+        {isAds && !isPublicView && (
+          <Button
+            variant={selectedAdCreatives.length > 0 ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setAdSelectorOpen(true)}
+            className="h-7 px-2 text-xs"
+          >
+            <Images className="h-3 w-3 mr-1" />
+            {selectedAdCreatives.length > 0 ? `${selectedAdCreatives.length} ad${selectedAdCreatives.length > 1 ? 's' : ''}` : 'Select Ads'}
+          </Button>
+        )}
+        {isPage && (
           <>
             <Button
               variant={hasVariants ? "default" : "ghost"}
@@ -213,7 +271,7 @@ export function FunnelStepCard({
           </AlertDialog>
         </>
       )}
-        {!isFbLeadForm && (
+        {isPage && (
           <a
             href={step.url}
             target="_blank"
@@ -231,7 +289,7 @@ export function FunnelStepCard({
     <>
       <div className="flex items-start gap-2">
         {/* Show variants side-by-side if they exist */}
-        {hasVariants ? (
+        {hasVariants && isPage ? (
           allUrls.map(({ url, label, isOriginal }, index) => (
             <div key={label} className="flex flex-col items-start">
               <Badge 
@@ -243,14 +301,14 @@ export function FunnelStepCard({
               {renderDeviceMockup(url, `${stepNumber}. ${step.name}`)}
               {/* Only show action buttons under first variant (A) */}
               {index === 0 && renderActionButtons()}
-              {index === 0 && !isFbLeadForm && <PageMetadataPreview url={url} stepId={step.id} />}
+              {index === 0 && isPage && <PageMetadataPreview url={url} stepId={step.id} />}
             </div>
           ))
         ) : (
           <div className="flex flex-col items-center">
             {renderDeviceMockup(step.url, `${stepNumber}. ${step.name}`)}
             {renderActionButtons()}
-            {!isFbLeadForm && <PageMetadataPreview url={step.url} stepId={step.id} />}
+            {isPage && <PageMetadataPreview url={step.url} stepId={step.id} />}
           </div>
         )}
       </div>
@@ -279,6 +337,22 @@ export function FunnelStepCard({
         step={step}
         isPublicView={isPublicView}
       />
+
+      {isAds && clientId && (
+        <AdSelectorModal
+          open={adSelectorOpen}
+          onOpenChange={setAdSelectorOpen}
+          clientId={clientId}
+          initialSelected={stepAds.map(a => a.creative_id)}
+          initialPlatform={(step.ad_platform as AdPlatform) || 'facebook'}
+          onSave={async (creativeIds, platform) => {
+            await setAds.mutateAsync({ stepId: step.id, creativeIds });
+            // Persist platform choice on the step
+            const { supabase } = await import('@/integrations/supabase/client');
+            await supabase.from('client_funnel_steps').update({ ad_platform: platform }).eq('id', step.id);
+          }}
+        />
+      )}
     </>
   );
 }

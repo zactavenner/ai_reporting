@@ -4072,34 +4072,52 @@ export type Database = {
       }
       client_funnel_steps: {
         Row: {
+          ad_platform: string | null
           campaign_id: string | null
           client_id: string
           created_at: string | null
+          email_body: string | null
+          email_from_name: string | null
+          email_subject: string | null
           id: string
           name: string
+          sms_body: string | null
           sort_order: number | null
+          step_kind: string
           step_type: string
           updated_at: string | null
           url: string
         }
         Insert: {
+          ad_platform?: string | null
           campaign_id?: string | null
           client_id: string
           created_at?: string | null
+          email_body?: string | null
+          email_from_name?: string | null
+          email_subject?: string | null
           id?: string
           name: string
+          sms_body?: string | null
           sort_order?: number | null
+          step_kind?: string
           step_type?: string
           updated_at?: string | null
           url: string
         }
         Update: {
+          ad_platform?: string | null
           campaign_id?: string | null
           client_id?: string
           created_at?: string | null
+          email_body?: string | null
+          email_from_name?: string | null
+          email_subject?: string | null
           id?: string
           name?: string
+          sms_body?: string | null
           sort_order?: number | null
+          step_kind?: string
           step_type?: string
           updated_at?: string | null
           url?: string
@@ -8043,6 +8061,45 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      funnel_step_ads: {
+        Row: {
+          created_at: string
+          creative_id: string
+          id: string
+          sort_order: number
+          step_id: string
+        }
+        Insert: {
+          created_at?: string
+          creative_id: string
+          id?: string
+          sort_order?: number
+          step_id: string
+        }
+        Update: {
+          created_at?: string
+          creative_id?: string
+          id?: string
+          sort_order?: number
+          step_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_step_ads_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "creatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funnel_step_ads_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "client_funnel_steps"
+            referencedColumns: ["id"]
           },
         ]
       }

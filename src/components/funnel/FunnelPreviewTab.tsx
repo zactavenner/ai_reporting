@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Plus, FolderPlus, FileText, Globe } from 'lucide-react';
+import { Plus, FolderPlus, FileText, Globe, Images, MessageSquare, Mail } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -28,6 +30,7 @@ import { TabletMockup } from './TabletMockup';
 import { DesktopMockup } from './DesktopMockup';
 import { useFunnelSteps, useCreateFunnelStep, useUpdateFunnelStep, useDeleteFunnelStep, useReorderFunnelSteps, FunnelStep } from '@/hooks/useFunnelSteps';
 import { useFunnelCampaigns, useCreateFunnelCampaign, useUpdateFunnelCampaign, useDeleteFunnelCampaign, FunnelCampaign } from '@/hooks/useFunnelCampaigns';
+import { useClient } from '@/hooks/useClients';
 
 interface FunnelPreviewTabProps {
   clientId: string;
@@ -43,7 +46,12 @@ const CAMPAIGN_COLORS = [
   { label: 'Light Yellow', value: '#fefce8' },
 ];
 
+type StepKind = 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email';
+
 export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPreviewTabProps) {
+  const [searchParams] = useSearchParams();
+  const campaignFilter = searchParams.get('campaign');
+  const { data: client } = useClient(clientId);
   const { data: campaigns = [], isLoading: campaignsLoading } = useFunnelCampaigns(clientId);
   const { data: steps = [], isLoading: stepsLoading } = useFunnelSteps(clientId);
   const createCampaign = useCreateFunnelCampaign();
@@ -62,29 +70,41 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
   const [addStepCampaignId, setAddStepCampaignId] = useState<string | null>(null);
   const [newStepName, setNewStepName] = useState('');
   const [newStepUrl, setNewStepUrl] = useState('');
-  const [newStepType, setNewStepType] = useState<'url' | 'fb_lead_form'>('url');
+  const [newStepKind, setNewStepKind] = useState<StepKind>('page');
+  const [newAdPlatform, setNewAdPlatform] = useState<'facebook' | 'instagram'>('facebook');
+  const [newSmsBody, setNewSmsBody] = useState('');
+  const [newEmailSubject, setNewEmailSubject] = useState('');
+  const [newEmailFromName, setNewEmailFromName] = useState('');
+  const [newEmailBody, setNewEmailBody] = useState('');
   
   const [editStepOpen, setEditStepOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<FunnelStep | null>(null);
   const [editStepName, setEditStepName] = useState('');
   const [editStepUrl, setEditStepUrl] = useState('');
+  const [editSmsBody, setEditSmsBody] = useState('');
+  const [editEmailSubject, setEditEmailSubject] = useState('');
+  const [editEmailFromName, setEditEmailFromName] = useState('');
+  const [editEmailBody, setEditEmailBody] = useState('');
+  const [editAdPlatform, setEditAdPlatform] = useState<'facebook' | 'instagram'>('facebook');
   
   const [deviceType, setDeviceType] = useState<DeviceType>('phone');
   const [previewStep, setPreviewStep] = useState<FunnelStep | null>(null);
 
   // Group steps by campaign
   const stepsByCampaign = useMemo(() => {
-    return campaigns.map(campaign => ({
+    const filtered = campaignFilter ? campaigns.filter(c => c.id === campaignFilter) : campaigns;
+    return filtered.map(campaign => ({
       campaign,
       steps: steps.filter(s => s.campaign_id === campaign.id)
         .sort((a, b) => a.sort_order - b.sort_order)
     }));
-  }, [campaigns, steps]);
+  }, [campaigns, steps, campaignFilter]);
 
   // Steps without a campaign (legacy or uncategorized)
   const uncategorizedSteps = useMemo(() => {
+    if (campaignFilter) return [];
     return steps.filter(s => !s.campaign_id).sort((a, b) => a.sort_order - b.sort_order);
-  }, [steps]);
+  }, [steps, campaignFilter]);
 
   const handleAddCampaign = async () => {
     if (!newCampaignName.trim()) return;
@@ -103,11 +123,17 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
 
   const handleAddStep = async () => {
     if (!newStepName.trim() || !addStepCampaignId) return;
-    if (newStepType === 'url' && !newStepUrl.trim()) return;
-    
-    let validUrl = newStepType === 'fb_lead_form' ? 'fb://lead-form' : newStepUrl;
-    if (newStepType === 'url' && !newStepUrl.startsWith('http://') && !newStepUrl.startsWith('https://')) {
-      validUrl = 'https://' + newStepUrl;
+    if (newStepKind === 'page' && !newStepUrl.trim()) return;
+
+    let validUrl = '';
+    if (newStepKind === 'page') {
+      validUrl = newStepUrl.startsWith('http://') || newStepUrl.startsWith('https://')
+        ? newStepUrl
+        : 'https://' + newStepUrl;
+    } else if (newStepKind === 'fb_lead_form') {
+      validUrl = 'fb://lead-form';
+    } else {
+      validUrl = `internal://${newStepKind}`;
     }
     
     const campaignSteps = steps.filter(s => s.campaign_id === addStepCampaignId);
@@ -118,11 +144,21 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       name: newStepName.trim(),
       url: validUrl,
       sort_order: campaignSteps.length,
+      step_kind: newStepKind,
+      ad_platform: newStepKind === 'ads' ? newAdPlatform : null,
+      sms_body: newStepKind === 'sms' ? newSmsBody : null,
+      email_subject: newStepKind === 'email' ? newEmailSubject : null,
+      email_from_name: newStepKind === 'email' ? newEmailFromName : null,
+      email_body: newStepKind === 'email' ? newEmailBody : null,
     });
     
     setNewStepName('');
     setNewStepUrl('');
-    setNewStepType('url');
+    setNewStepKind('page');
+    setNewSmsBody('');
+    setNewEmailSubject('');
+    setNewEmailFromName('');
+    setNewEmailBody('');
     setAddStepOpen(false);
     setAddStepCampaignId(null);
   };
@@ -136,22 +172,36 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
     setEditingStep(step);
     setEditStepName(step.name);
     setEditStepUrl(step.url);
+    setEditSmsBody(step.sms_body || '');
+    setEditEmailSubject(step.email_subject || '');
+    setEditEmailFromName(step.email_from_name || '');
+    setEditEmailBody(step.email_body || '');
+    setEditAdPlatform((step.ad_platform as 'facebook' | 'instagram') || 'facebook');
     setEditStepOpen(true);
   };
 
   const handleEditStep = async () => {
-    if (!editingStep || !editStepName.trim() || !editStepUrl.trim()) return;
-    
-    let validUrl = editStepUrl;
-    if (!editStepUrl.startsWith('http://') && !editStepUrl.startsWith('https://')) {
-      validUrl = 'https://' + editStepUrl;
+    if (!editingStep || !editStepName.trim()) return;
+    const kind = (editingStep.step_kind || 'page') as StepKind;
+
+    const updates: Partial<FunnelStep> = { name: editStepName.trim() };
+
+    if (kind === 'page') {
+      if (!editStepUrl.trim()) return;
+      updates.url = editStepUrl.startsWith('http://') || editStepUrl.startsWith('https://')
+        ? editStepUrl
+        : 'https://' + editStepUrl;
+    } else if (kind === 'sms') {
+      updates.sms_body = editSmsBody;
+    } else if (kind === 'email') {
+      updates.email_subject = editEmailSubject;
+      updates.email_from_name = editEmailFromName;
+      updates.email_body = editEmailBody;
+    } else if (kind === 'ads') {
+      updates.ad_platform = editAdPlatform;
     }
-    
-    await updateStep.mutateAsync({
-      id: editingStep.id,
-      clientId,
-      updates: { name: editStepName.trim(), url: validUrl },
-    });
+
+    await updateStep.mutateAsync({ id: editingStep.id, clientId, updates });
     
     setEditStepOpen(false);
     setEditingStep(null);
@@ -192,7 +242,14 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold">Funnel Preview</h2>
+          <h2 className="text-lg font-bold">
+            Funnel Preview
+            {campaignFilter && stepsByCampaign[0] && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                · {stepsByCampaign[0].campaign.name}
+              </span>
+            )}
+          </h2>
           <p className="text-sm text-muted-foreground">
             Organize your funnels into campaigns and preview across devices
           </p>
@@ -235,6 +292,9 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
               steps={campaignSteps}
               deviceType={deviceType}
               isPublicView={isPublicView}
+              clientId={clientId}
+              brandName={client?.name}
+              publicShareToken={client?.slug || client?.public_token || null}
               onAddStep={openAddStep}
               onEditStep={openEditStep}
               onDeleteStep={handleDeleteStep}
@@ -320,11 +380,11 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
 
       {/* Add Step Modal */}
       <Dialog open={addStepOpen} onOpenChange={setAddStepOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Funnel Step</DialogTitle>
             <DialogDescription>
-              Add a new page or form to this campaign
+              Add a landing page, lead form, ad, SMS, or email to this campaign
             </DialogDescription>
           </DialogHeader>
           
@@ -332,33 +392,29 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
             {/* Step Type Selector */}
             <div className="space-y-2">
               <Label>Step Type</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setNewStepType('url')}
-                  className={cn(
-                    "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-sm",
-                    newStepType === 'url' 
-                      ? "border-primary bg-primary/5" 
-                      : "border-border hover:border-muted-foreground"
-                  )}
-                >
-                  <Globe className="h-5 w-5" />
-                  <span className="font-medium">Web Page</span>
-                  <span className="text-[10px] text-muted-foreground">Landing page URL</span>
-                </button>
-                <button
-                  onClick={() => setNewStepType('fb_lead_form')}
-                  className={cn(
-                    "flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-sm",
-                    newStepType === 'fb_lead_form' 
-                      ? "border-[#1877F2] bg-[#1877F2]/5" 
-                      : "border-border hover:border-muted-foreground"
-                  )}
-                >
-                  <FileText className="h-5 w-5 text-[#1877F2]" />
-                  <span className="font-medium">FB Lead Form</span>
-                  <span className="text-[10px] text-muted-foreground">Native form preview</span>
-                </button>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {([
+                  { k: 'ads', label: 'Ads (FB/IG)', Icon: Images, hint: '1-3 rotating creatives', color: 'primary' },
+                  { k: 'page', label: 'Web Page', Icon: Globe, hint: 'Landing page URL', color: 'primary' },
+                  { k: 'fb_lead_form', label: 'FB Lead Form', Icon: FileText, hint: 'Native form', color: '#1877F2' },
+                  { k: 'sms', label: 'SMS', Icon: MessageSquare, hint: 'Text message', color: 'primary' },
+                  { k: 'email', label: 'Email', Icon: Mail, hint: 'Email preview', color: 'primary' },
+                ] as const).map(({ k, label, Icon, hint }) => (
+                  <button
+                    key={k}
+                    onClick={() => setNewStepKind(k)}
+                    className={cn(
+                      'flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all text-xs',
+                      newStepKind === k
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-muted-foreground'
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="font-medium text-[11px] text-center leading-tight">{label}</span>
+                    <span className="text-[9px] text-muted-foreground text-center leading-tight">{hint}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -368,11 +424,11 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
                 id="step-name"
                 value={newStepName}
                 onChange={(e) => setNewStepName(e.target.value)}
-                placeholder={newStepType === 'fb_lead_form' ? "e.g., Lead Qualification Form" : "e.g., Landing Page, Book A Call, Thank You"}
+                placeholder="e.g., Landing Page, Nurture SMS, Follow-up Email"
               />
             </div>
             
-            {newStepType === 'url' && (
+            {newStepKind === 'page' && (
               <div className="space-y-2">
                 <Label htmlFor="step-url">Page URL</Label>
                 <Input
@@ -387,11 +443,72 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
               </div>
             )}
 
-            {newStepType === 'fb_lead_form' && (
+            {newStepKind === 'fb_lead_form' && (
               <div className="rounded-lg bg-[#1877F2]/5 border border-[#1877F2]/20 p-3">
                 <p className="text-xs text-muted-foreground">
                   This will add a native Facebook Lead Form mockup to your funnel flow, showing accredited investor qualification, liquidity range, and contact fields.
                 </p>
+              </div>
+            )}
+
+            {newStepKind === 'ads' && (
+              <div className="space-y-2">
+                <Label>Ad Platform</Label>
+                <ToggleGroup type="single" value={newAdPlatform} onValueChange={v => v && setNewAdPlatform(v as any)}>
+                  <ToggleGroupItem value="facebook">Facebook</ToggleGroupItem>
+                  <ToggleGroupItem value="instagram">Instagram</ToggleGroupItem>
+                </ToggleGroup>
+                <p className="text-xs text-muted-foreground">
+                  After creating the step, click <strong>Select Ads</strong> to pick 1–3 approved or launched creatives that will rotate.
+                </p>
+              </div>
+            )}
+
+            {newStepKind === 'sms' && (
+              <div className="space-y-2">
+                <Label htmlFor="step-sms-body">SMS message</Label>
+                <Textarea
+                  id="step-sms-body"
+                  value={newSmsBody}
+                  onChange={e => setNewSmsBody(e.target.value)}
+                  placeholder="Hey {firstName}, thanks for your interest! Reply YES to book a quick call."
+                  rows={4}
+                />
+              </div>
+            )}
+
+            {newStepKind === 'email' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="step-email-from">From name</Label>
+                    <Input
+                      id="step-email-from"
+                      value={newEmailFromName}
+                      onChange={e => setNewEmailFromName(e.target.value)}
+                      placeholder="Your Brand"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="step-email-subject">Subject</Label>
+                    <Input
+                      id="step-email-subject"
+                      value={newEmailSubject}
+                      onChange={e => setNewEmailSubject(e.target.value)}
+                      placeholder="Your investment opportunity awaits"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="step-email-body">Body</Label>
+                  <Textarea
+                    id="step-email-body"
+                    value={newEmailBody}
+                    onChange={e => setNewEmailBody(e.target.value)}
+                    rows={6}
+                    placeholder="Hi {firstName},\n\nThanks for showing interest..."
+                  />
+                </div>
               </div>
             )}
             
@@ -401,7 +518,7 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
               </Button>
               <Button 
                 onClick={handleAddStep}
-                disabled={!newStepName.trim() || (newStepType === 'url' && !newStepUrl.trim()) || createStep.isPending}
+                disabled={!newStepName.trim() || (newStepKind === 'page' && !newStepUrl.trim()) || createStep.isPending}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Step
@@ -413,7 +530,7 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
 
       {/* Edit Step Modal */}
       <Dialog open={editStepOpen} onOpenChange={setEditStepOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Funnel Step</DialogTitle>
           </DialogHeader>
@@ -428,16 +545,75 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
                 placeholder="Step name"
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit-step-url">Page URL</Label>
-              <Input
-                id="edit-step-url"
-                value={editStepUrl}
-                onChange={(e) => setEditStepUrl(e.target.value)}
-                placeholder="https://example.com/page"
-              />
-            </div>
+
+            {(editingStep?.step_kind || 'page') === 'page' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-step-url">Page URL</Label>
+                <Input
+                  id="edit-step-url"
+                  value={editStepUrl}
+                  onChange={(e) => setEditStepUrl(e.target.value)}
+                  placeholder="https://example.com/page"
+                />
+              </div>
+            )}
+
+            {editingStep?.step_kind === 'ads' && (
+              <div className="space-y-2">
+                <Label>Ad Platform</Label>
+                <ToggleGroup type="single" value={editAdPlatform} onValueChange={v => v && setEditAdPlatform(v as any)}>
+                  <ToggleGroupItem value="facebook">Facebook</ToggleGroupItem>
+                  <ToggleGroupItem value="instagram">Instagram</ToggleGroupItem>
+                </ToggleGroup>
+                <p className="text-xs text-muted-foreground">
+                  Use the <strong>Select Ads</strong> button on the step card to change which creatives rotate.
+                </p>
+              </div>
+            )}
+
+            {editingStep?.step_kind === 'sms' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-sms-body">SMS message</Label>
+                <Textarea
+                  id="edit-sms-body"
+                  value={editSmsBody}
+                  onChange={e => setEditSmsBody(e.target.value)}
+                  rows={5}
+                />
+              </div>
+            )}
+
+            {editingStep?.step_kind === 'email' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-email-from">From name</Label>
+                    <Input
+                      id="edit-email-from"
+                      value={editEmailFromName}
+                      onChange={e => setEditEmailFromName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-email-subject">Subject</Label>
+                    <Input
+                      id="edit-email-subject"
+                      value={editEmailSubject}
+                      onChange={e => setEditEmailSubject(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-email-body">Body</Label>
+                  <Textarea
+                    id="edit-email-body"
+                    value={editEmailBody}
+                    onChange={e => setEditEmailBody(e.target.value)}
+                    rows={7}
+                  />
+                </div>
+              </div>
+            )}
             
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setEditStepOpen(false)}>
@@ -445,7 +621,11 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
               </Button>
               <Button 
                 onClick={handleEditStep}
-                disabled={!editStepName.trim() || !editStepUrl.trim() || updateStep.isPending}
+                disabled={
+                  !editStepName.trim() ||
+                  ((editingStep?.step_kind || 'page') === 'page' && !editStepUrl.trim()) ||
+                  updateStep.isPending
+                }
               >
                 Save Changes
               </Button>

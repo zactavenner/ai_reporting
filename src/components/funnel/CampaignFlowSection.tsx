@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, ChevronRight, GripVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, ChevronRight, GripVertical, Link2 } from 'lucide-react';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,9 @@ interface CampaignFlowSectionProps {
   steps: FunnelStep[];
   deviceType: DeviceType;
   isPublicView: boolean;
+  clientId?: string;
+  brandName?: string;
+  publicShareToken?: string | null;
   onAddStep: (campaignId: string) => void;
   onEditStep: (step: FunnelStep) => void;
   onDeleteStep: (stepId: string) => void;
@@ -42,11 +46,13 @@ interface SortableStepProps {
   isPublicView: boolean;
   isLast: boolean;
   variants: FunnelStepVariant[];
+  clientId?: string;
+  brandName?: string;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function SortableStep({ step, index, deviceType, isPublicView, isLast, variants, onEdit, onDelete }: SortableStepProps) {
+function SortableStep({ step, index, deviceType, isPublicView, isLast, variants, clientId, brandName, onEdit, onDelete }: SortableStepProps) {
   const {
     attributes,
     listeners,
@@ -80,6 +86,8 @@ function SortableStep({ step, index, deviceType, isPublicView, isLast, variants,
           deviceType={deviceType}
           isPublicView={isPublicView}
           variants={variants}
+          clientId={clientId}
+          brandName={brandName}
           onEdit={onEdit}
           onDelete={onDelete}
         />
@@ -98,6 +106,9 @@ export function CampaignFlowSection({
   steps,
   deviceType,
   isPublicView,
+  clientId,
+  brandName,
+  publicShareToken,
   onAddStep,
   onEditStep,
   onDeleteStep,
@@ -148,6 +159,18 @@ export function CampaignFlowSection({
     setIsEditingName(false);
   };
 
+  const handleCopyPreviewLink = () => {
+    if (!publicShareToken) {
+      toast.error('This client needs a public share token first.');
+      return;
+    }
+    const url = `${window.location.origin}/public/${publicShareToken}?tab=funnel&campaign=${campaign.id}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success('Preview link copied to clipboard'),
+      () => toast.error('Failed to copy link')
+    );
+  };
+
   return (
     <div 
       className="rounded-xl p-6 border"
@@ -183,6 +206,9 @@ export function CampaignFlowSection({
         </div>
         {!isPublicView && (
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleCopyPreviewLink} title="Copy client preview link">
+              <Link2 className="h-4 w-4 mr-1" /> Copy Preview Link
+            </Button>
             <Button size="sm" variant="outline" onClick={() => onAddStep(campaign.id)}>
               <Plus className="h-4 w-4 mr-1" /> Add Step
             </Button>
@@ -233,6 +259,8 @@ export function CampaignFlowSection({
                   isPublicView={isPublicView}
                   isLast={index === steps.length - 1}
                   variants={variantsByStep[step.id] || []}
+                  clientId={clientId}
+                  brandName={brandName}
                   onEdit={() => onEditStep(step)}
                   onDelete={() => onDeleteStep(step.id)}
                 />
