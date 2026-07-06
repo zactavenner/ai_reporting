@@ -900,6 +900,8 @@ serve(async (req) => {
       version: '1.0.0',
       description: 'MCP server for HPA AI Agents — connect from Claude Code Desktop',
       tools: TOOLS.map(t => t.name),
+      tool_count: TOOLS.length,
+      instructions: API_INSTRUCTIONS,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
