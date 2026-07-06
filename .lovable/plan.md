@@ -1,134 +1,74 @@
-# GHL Workflow Audit Dashboard
+# Phase 3A — Media Buyer Agent
 
-Read-only, multi-client workflow inventory + health monitor for Reporting 5.0, built on the GHL public Workflow API. Cached in Supabase, refreshed every 6h. Existing internal-API editor is preserved under an "Advanced" tab.
+Additive build: new agent + tables + edge functions + one page. No changes to existing tables, cron jobs, billing, or auth. All proposals flow through `agent-gatekeeper` → `approval_queue` → `/approvals`.
 
-## 1. Database
+## Assumptions (please correct if wrong)
+- Agent registered in existing `agents` table (name `media-buyer`, `is_core=true`, `enabled=true`, `template_key='media-buyer'`); the operating doctrine is stored in `prompt_template`.
+- LLM call uses the same `LOVABLE_API_KEY` Lovable AI Gateway pattern the rest of the project uses. Model requested was "claude-sonnet-4-6" — not routable through Lovable AI Gateway; I'll use `openai/gpt-5.4` (best reasoning available) with the model id stored on the agent row so it can be swapped later without a redeploy.
+- Meta write calls (budget/pause/launch) use the existing `_shared/meta.ts` helper + `client.meta_access_token` fallback to `META_SHARED_ACCESS_TOKEN`.
+- "Never touch" existing cron jobs — I'll add NEW cron jobs only.
 
-**Migration:** `create_ghl_workflow_audit_tables.sql`
+## New tables (single migration)
+- `media_buyer_runs` — per spec.
+- `ad_classifications` — per spec, unique on `(run_id, meta_ad_id)`.
+- `creative_intel_findings` — per spec.
+- All: `service_role ALL`, `authenticated SELECT/INSERT/UPDATE/DELETE`, RLS on with a permissive authenticated policy (mirrors existing agent tables).
 
-- `public.ghl_workflows` — canonical cache, one row per (client, workflow).
-  - `client_id`, `workflow_id`, `name`, `name_normalized` (generated: trim + lower + collapse spaces, for duplicate detection), `status`, `version`, `ghl_created_at`, `ghl_updated_at`, `fetched_at`, `raw jsonb`.
-  - Unique `(client_id, workflow_id)`. Indexes on `client_id`, `status`, `(client_id, name_normalized)`.
-- `public.ghl_workflow_history` — append-only diff log for change indicators.
-  - `client_id`, `workflow_id`, `changed_at`, `field` (`version` | `status` | `ghl_updated_at`), `old_value`, `new_value`.
-  - Written from the edge function only when a real diff is detected.
-- `public.ghl_workflow_sync_runs` — per-client sync outcome for the audit table's Status column and error state.
-  - `client_id`, `started_at`, `finished_at`, `status` (`success` | `error`), `workflow_count`, `error_message`, `http_status`.
+## New edge function: `media-buyer-agent`
+Input: `{ run_type, client_id?, lookback_days=14 }`. Pipeline:
+1. Gather context strictly from DB — no Meta API calls:
+   - `meta_campaigns`, `meta_ad_sets`, `meta_ads` (status=ACTIVE + last-touched in window)
+   - `daily_metrics` for lookback window + prior equal window (trend deltas)
+   - Downstream joins: `leads`, `calls`, `funded_investors` aggregated per client
+   - `client_kpi_targets` (targets + guardrails + autonomy_mode)
+   - `client_offers` primary offer
+   - Active `agent_lessons` where `agent_name='media-buyer'`
+2. Call Lovable AI Gateway with the media-buyer system prompt + run_type instruction. Strict JSON schema requested via `response_format: json_object`, parsed defensively.
+3. Persist to `media_buyer_runs` / `ad_classifications` / `creative_intel_findings`. Portfolio-scope creative_intel `pattern_type in ('hook','headline','cta')` also inserted into `copy_library` (type mapped, `client_id=null`, tags include `['media-buyer','winner']`); `pattern_type in ('format','visual','spokesperson')` inserted into `swipe_file` (title=pattern_description, notes=recommendation, tags include `['media-buyer']`).
+4. For each proposal with `confidence >= 0.7`, POST to `agent-gatekeeper` (agent_name `media-buyer`) with proper `action_type` and `queue_type` mapping:
+   - `budget_change` → `queue_type: 'budget'`, `action_type: 'budget_change'`
+   - `creative_kill` → `queue_type: 'creative'`, `action_type: 'creative_kill'`
+   - `creative_scale` → `queue_type: 'budget'`, `action_type: 'creative_scale'`
+   - `creative_launch` → `queue_type: 'launch'`, `action_type: 'creative_launch'`
+   - `task_created` → `queue_type: 'creative'`, `action_type: 'task_created'` (kept for pixel-audit findings)
+   - `inputs` includes `budget_delta_pct` and `target_ad_id` so gatekeeper guardrails apply.
+5. `run_type='pixel_audit'`: reads `funnel_analytics`, `pixel_verifications`, `pixel_expected_events` if present; builds VERIFIED/LIKELY/UNKNOWN/NEEDS TESTING report in `findings_md` + `structured_findings`. For each NEEDS TESTING item, insert a `tasks` row (category `pixel-audit`, priority `high`, `client_id`, `created_by='media-buyer'`, assigned to first `agency_member` on the client's pod when available).
 
-RLS: `authenticated` SELECT on all three, `service_role` ALL. Full GRANTs per project rules. No anon.
+## Executor extension: `execute-approved-action`
+Add two handlers (existing message/report handlers untouched):
+- `queue_type='budget'`: re-check guardrails from `client_kpi_targets`; call Meta Graph `POST /{adset_id}` with `daily_budget` or `POST /{ad_id}` with `status=PAUSED|ACTIVE`. Any Meta write error (200/278/permissions) → create a `tasks` row "Manual Meta action required: …" with the full payload in the description, respond `{executed:false, fallback:'task_created', task_id}`. Never throw.
+- `queue_type='launch'`: creates campaign → adset → ad in `PAUSED` status via Graph API from `preview_payload.launch_spec`. Same fallback-to-task on any error.
+- Uses `_shared/meta.ts` + `client.meta_access_token` fallback to `META_SHARED_ACCESS_TOKEN` for auth.
 
-Also add `linked_ghl_workflow_id text NULL` to `client_funnel_steps` for the Campaign Canvas link in section 7.
+## Scheduling (new pg_cron jobs only, via `supabase--insert`)
+- `media-buyer-fatigue-scan` — every 6 hours, portfolio-wide `fatigue_scan`
+- `media-buyer-daily-review` — 05:30 America/Los_Angeles (cron `30 12 * * *` UTC ≈ 5:30 AM PST/PDT; note the standard DST caveat — I'll document in the SQL comment)
+- `media-buyer-weekly-review` — Sundays 18:00 America/Los_Angeles
+- `media-buyer-creative-intel` — Mondays 07:00 America/Los_Angeles
+- Each cron fires a per-client fan-out inside the edge function (single HTTP call per schedule, loops active clients server-side).
 
-## 2. Edge function: `ghl-workflows-audit`
+## Frontend: `/media-buyer`
+- Route added to `src/App.tsx`, sidebar item added to `src/components/layout/AppSidebar.tsx` with `TrendingUp` icon.
+- `src/pages/MediaBuyerPage.tsx` composed from four small components in `src/components/media-buyer/`:
+  - `RunControls.tsx` — client selector (uses existing `useClients`) + button per run_type; shows current running status via query on `media_buyer_runs.status='running'`.
+  - `ClassificationBoard.tsx` — 6 columns (SCALE / KEEP / WATCH / ITERATE / PAUSE / INSUFFICIENT DATA) from latest run; joins `meta_ads.thumbnail_url` for each card; cards show CPL/CPS/CPBC + frequency + reasoning.
+  - `CreativeIntelPanel.tsx` — latest `creative_intel_findings` grouped by `pattern_type`; shows evidence ad ids + recommendation.
+  - `RunHistoryList.tsx` — recent runs; expand → renders `findings_md` via `react-markdown` (already in deps).
+- Existing dashboard tokens (glass-card, forest/gold), Space Grotesk; mobile responsive with tabs on <md.
 
-Path: `supabase/functions/ghl-workflows-audit/index.ts`.
+## Initial live run
+- After deploy, POST `/functions/v1/media-buyer-agent` with `{ run_type: 'fatigue_scan' }` (portfolio-wide).
+- Report back: findings summary from the run, count of classifications inserted, count of proposals queued.
 
-- Input: `{ clientId?: string }` — omit to sync all active clients.
-- For each target client with a valid GHL API key + location id:
-  1. `GET https://services.leadconnectorhq.com/workflows/?locationId={id}` with `Authorization: Bearer <key>`, `Version: 2021-07-28`, `Accept: application/json`.
-  2. Load existing rows from `ghl_workflows` for that client.
-  3. For each returned workflow: diff `version`/`status`/`ghl_updated_at` against cache, write diffs to `ghl_workflow_history`, then upsert into `ghl_workflows` (`onConflict: client_id,workflow_id`).
-  4. Record `ghl_workflow_sync_runs` row with count or error.
-- One client's failure never aborts the loop; error is captured per-client.
-- Returns `{ clients, workflows, successful, errors: [{ clientId, clientName, error }] }`.
-- Uses `SUPABASE_SERVICE_ROLE_KEY`, CORS via `npm:@supabase/supabase-js@2/cors`, JWT validation for the `clientId?` refresh path.
+## Files touched / created
+- New migration: `supabase/migrations/<ts>_media_buyer_tables.sql`
+- Insert-tool call: cron schedules + `agents` seed row (contains project URL + anon key — kept out of migrations per project rules)
+- New edge fn: `supabase/functions/media-buyer-agent/index.ts`
+- Edit edge fn: `supabase/functions/execute-approved-action/index.ts` (append budget + launch handlers)
+- New page: `src/pages/MediaBuyerPage.tsx` + 4 components under `src/components/media-buyer/`
+- Edit: `src/App.tsx`, `src/components/layout/AppSidebar.tsx`
 
-## 3. Scheduled sync
-
-Add pg_cron entry (via `supabase--insert`, not migration — contains project URL/anon key) running every 6 hours: `0 */6 * * *` → `net.http_post` to `ghl-workflows-audit` with empty body.
-
-## 4. Page rebuild: `/ghl-workflows`
-
-Restructure `src/pages/GhlWorkflowsPage.tsx` with two tabs:
-
-- **Workflow Audit** (default) — new component `GhlWorkflowAuditDashboard`.
-- **Advanced** — the current single-client JSON editor, unchanged.
-
-### Audit dashboard layout
-
-Header KPI strip (reads from cache):
-`Total Workflows · Published · Draft · Stale · Clients · Sync Errors`.
-
-Toolbar: search clients, `Refresh All` button (calls the edge function with no `clientId`).
-
-Table (client-level rollup, one row per client):
-
-```text
-CLIENT           WORKFLOWS  PUBLISHED  DRAFT  STALE  LAST SYNC  STATUS
-Acme Capital     42         38         4      6      2m ago     Healthy
-Beacon Fund      17         15         2      1      6h ago     Error
-```
-
-Status pill: `Healthy` / `Error` / `Never synced` derived from the most recent `ghl_workflow_sync_runs` row. Per-row refresh icon calls `ghl-workflows-audit` with that `clientId`.
-
-Sort by issues first (errors → stale count → draft count → healthy).
-
-Visual language matches existing Reporting 5.0 admin tables (`SortableTableHeader`, shadcn `Table`, subtle status pills — no colored row backgrounds).
-
-## 5. Client drawer
-
-Clicking a client row opens a right-side `Sheet` with that client's workflows:
-
-- Search input
-- Filter chips: `All` `Published` `Draft` `Stale` `Duplicates` `Changed`
-- Sort default: sync errors → drafts → stale → duplicates → healthy
-- Each workflow card shows: name, status pill, version, `Updated Xd ago`, badges (`Stale`, `Draft`, `Duplicate name`, `Changed since last sync`).
-- Clicking `Changed since last sync` shows a popover listing the diffs from `ghl_workflow_history` (last 5).
-
-## 6. Audit rules (derived client-side from cache)
-
-- **Draft** — `status !== 'published'`.
-- **Stale** — `ghl_updated_at < now() - 90 days`. Threshold is a constant `STALE_DAYS = 90` in one file for later config.
-- **Sync problem** — latest `ghl_workflow_sync_runs.status === 'error'`, or no successful run in 24h.
-- **Duplicate name** — `count(*) > 1` grouped by `(client_id, name_normalized)`. Computed in the drawer via a memoized map.
-
-Nothing is auto-deleted or merged.
-
-## 7. Campaign Canvas link (foundation only)
-
-In `FunnelStepCard` for step kinds `sms`, `email`, `note`, `booking` (nurture types):
-
-- Add a small `Link GHL Workflow` action in the step's overflow menu.
-- Opens a `Command`/searchable picker populated from `ghl_workflows` filtered by that campaign's `client_id`.
-- Persists selection to `client_funnel_steps.linked_ghl_workflow_id`.
-- Card renders a compact linked-workflow chip: name + status pill + version + updated date. Chip is informational, no edit affordance.
-
-No auto-import from GHL; user-initiated link only.
-
-## 8. Change indicators
-
-`ghl_workflow_history` powers a `Changed since last sync` badge on each workflow. Badge shows if there is any history row with `changed_at > previous sync time for that workflow`. Popover lists the last few diffs in the form `Version 16 → 17`, `Draft → Published`, etc.
-
-No step-level or content-level comparisons — public list API only gives metadata.
-
-## 9. Empty & error states
-
-- No GHL credentials → "GHL Not Connected" card with `Go to Client Settings` link.
-- Auth error captured in latest sync run → "GHL Connection Error" card with `Update Connection` link.
-- API returns empty array → "No Workflows Found" state inside the drawer.
-- Never synced yet → dashboard row shows `Never synced` pill + `Refresh` primary action.
-
-## 10. Hooks
-
-- `src/hooks/useGhlWorkflowAudit.ts` — react-query hook for the client rollup (joins `clients` + latest sync run + workflow counts).
-- `src/hooks/useGhlClientWorkflows.ts` — per-client workflow list + history for the drawer.
-- Both read from Supabase cache only; a `refreshWorkflows(clientId?)` mutation invokes the edge function then invalidates queries.
-
-## 11. Explicit scope guardrails
-
-The audit UI must not expose any control that implies editing on the public-API path: no edit workflow, edit triggers, edit SMS/email copy, add/delete steps, publish/unpublish, enable/disable. All such capability remains only inside the existing "Advanced" tab (internal-API path, unchanged).
-
-## Files touched
-
-- new: `supabase/functions/ghl-workflows-audit/index.ts`
-- new: migration for `ghl_workflows`, `ghl_workflow_history`, `ghl_workflow_sync_runs`, and `client_funnel_steps.linked_ghl_workflow_id`
-- new: cron `supabase--insert` (6-hour schedule)
-- new: `src/components/ghl/GhlWorkflowAuditDashboard.tsx`
-- new: `src/components/ghl/ClientWorkflowsDrawer.tsx`
-- new: `src/hooks/useGhlWorkflowAudit.ts`, `src/hooks/useGhlClientWorkflows.ts`
-- edited: `src/pages/GhlWorkflowsPage.tsx` — wrap current UI in tabs, add Audit tab
-- edited: `src/components/funnel/FunnelStepCard.tsx` — Link GHL Workflow menu + chip
-- edited: `src/components/funnel/FunnelPreviewTab.tsx` — pass link state through
-- edited: `.lovable/plan.md`
-
-Nothing in the existing internal-API editor, funnel canvas, or other sync functions is renamed or removed.
+## Explicit non-goals for this phase
+- No changes to `agent-gatekeeper`, `approval_queue`, `autonomous_audit_log`, or any existing cron.
+- No new secrets requested — reuses `LOVABLE_API_KEY` and existing Meta token pattern.
+- No re-syncing Meta data — the agent reads only what already exists in DB.
