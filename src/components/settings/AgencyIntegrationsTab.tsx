@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Eye, EyeOff, ExternalLink, CheckCircle2, XCircle, Plug } from 'lucide-react';
 
 const PLATFORMS = [
-  { id: 'meta', name: 'Meta Ads', icon: '📘', description: 'Connect Facebook & Instagram ad accounts.', docsUrl: 'https://developers.facebook.com/docs/marketing-apis/', fields: [{ key: 'access_token', label: 'Access Token', placeholder: 'EAAx...', secret: true }, { key: 'ad_account_id', label: 'Ad Account ID', placeholder: 'act_123456789' }] },
   { id: 'google', name: 'Google Ads', icon: '🔍', description: 'Connect Google Ads accounts.', docsUrl: 'https://developers.google.com/google-ads/api/docs/start', fields: [{ key: 'customer_id', label: 'Customer ID', placeholder: '123-456-7890' }] },
   { id: 'linkedin', name: 'LinkedIn Ads', icon: '💼', description: 'Connect LinkedIn Campaign Manager.', docsUrl: 'https://learn.microsoft.com/en-us/linkedin/marketing/', fields: [{ key: 'access_token', label: 'Access Token', placeholder: 'AQV...', secret: true }] },
   { id: 'tiktok', name: 'TikTok Ads', icon: '🎵', description: 'Connect TikTok Ads Manager.', docsUrl: 'https://business-api.tiktok.com/portal/docs', fields: [{ key: 'access_token', label: 'Access Token', placeholder: 'Your token...', secret: true }] },
