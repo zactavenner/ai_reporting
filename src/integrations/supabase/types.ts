@@ -4266,6 +4266,7 @@ export type Database = {
           email_from_name: string | null
           email_subject: string | null
           id: string
+          linked_ghl_workflow_id: string | null
           messages: Json
           name: string
           parent_step_id: string | null
@@ -4285,6 +4286,7 @@ export type Database = {
           email_from_name?: string | null
           email_subject?: string | null
           id?: string
+          linked_ghl_workflow_id?: string | null
           messages?: Json
           name: string
           parent_step_id?: string | null
@@ -4304,6 +4306,7 @@ export type Database = {
           email_from_name?: string | null
           email_subject?: string | null
           id?: string
+          linked_ghl_workflow_id?: string | null
           messages?: Json
           name?: string
           parent_step_id?: string | null
@@ -8664,6 +8667,183 @@ export type Database = {
           },
           {
             foreignKeyName: "ghl_reconciliation_results_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      ghl_workflow_history: {
+        Row: {
+          changed_at: string
+          client_id: string
+          field: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          workflow_id: string
+        }
+        Insert: {
+          changed_at?: string
+          client_id: string
+          field: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          workflow_id: string
+        }
+        Update: {
+          changed_at?: string
+          client_id?: string
+          field?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_workflow_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ghl_workflow_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ghl_workflow_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      ghl_workflow_sync_runs: {
+        Row: {
+          client_id: string
+          error_message: string | null
+          finished_at: string | null
+          http_status: number | null
+          id: string
+          started_at: string
+          status: string
+          workflow_count: number | null
+        }
+        Insert: {
+          client_id: string
+          error_message?: string | null
+          finished_at?: string | null
+          http_status?: number | null
+          id?: string
+          started_at?: string
+          status: string
+          workflow_count?: number | null
+        }
+        Update: {
+          client_id?: string
+          error_message?: string | null
+          finished_at?: string | null
+          http_status?: number | null
+          id?: string
+          started_at?: string
+          status?: string
+          workflow_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_workflow_sync_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ghl_workflow_sync_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ghl_workflow_sync_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      ghl_workflows: {
+        Row: {
+          client_id: string
+          created_at: string
+          fetched_at: string
+          ghl_created_at: string | null
+          ghl_updated_at: string | null
+          id: string
+          name: string
+          name_normalized: string | null
+          raw: Json | null
+          status: string | null
+          updated_at: string
+          version: number | null
+          workflow_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          fetched_at?: string
+          ghl_created_at?: string | null
+          ghl_updated_at?: string | null
+          id?: string
+          name: string
+          name_normalized?: string | null
+          raw?: Json | null
+          status?: string | null
+          updated_at?: string
+          version?: number | null
+          workflow_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          fetched_at?: string
+          ghl_created_at?: string | null
+          ghl_updated_at?: string | null
+          id?: string
+          name?: string
+          name_normalized?: string | null
+          raw?: Json | null
+          status?: string | null
+          updated_at?: string
+          version?: number | null
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ghl_workflows_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ghl_workflows_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ghl_workflows_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
