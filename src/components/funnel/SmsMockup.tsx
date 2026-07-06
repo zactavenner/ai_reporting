@@ -5,6 +5,8 @@ import type { DeviceType } from './DeviceSwitcher';
 export interface SmsMessage {
   delay_days?: number;
   body: string;
+  media_url?: string | null;
+  media_type?: string | null;
 }
 
 interface SmsMockupProps {
@@ -69,8 +71,25 @@ export function SmsMockup({ body, messages, fromName = 'New Message', deviceType
                   </p>
                   <div className="flex justify-start">
                     <div className="max-w-[80%] bg-[#e9e9eb] text-black rounded-2xl rounded-bl-md px-3 py-2">
+                      {m.media_url && (m.media_type || '').startsWith('video') && (
+                        <video
+                          src={m.media_url}
+                          autoPlay
+                          muted
+                          loop
+                          playsInline
+                          className="mb-1.5 rounded-xl w-full max-h-64 object-cover bg-black"
+                        />
+                      )}
+                      {m.media_url && (m.media_type || '').startsWith('image') && (
+                        <img
+                          src={m.media_url}
+                          alt="attachment"
+                          className="mb-1.5 rounded-xl w-full max-h-64 object-cover"
+                        />
+                      )}
                       <p className="text-[13px] whitespace-pre-wrap leading-snug">
-                        {m.body || 'Your SMS message preview will appear here.'}
+                        {m.body || (m.media_url ? '' : 'Your SMS message preview will appear here.')}
                       </p>
                     </div>
                   </div>
