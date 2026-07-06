@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useGhlClientWorkflows, type WorkflowRow } from "@/hooks/useGhlClientWorkflows";
 import { useGhlWorkflowAudit, useRefreshGhlWorkflows } from "@/hooks/useGhlWorkflowAudit";
 import { Loader2, RefreshCw, ArrowUpRight, AlertCircle } from "lucide-react";
+import { WorkflowDetailDrawer } from "./WorkflowDetailDrawer";
 
 type Filter = "all" | "published" | "draft" | "stale" | "duplicates" | "changed";
 
@@ -23,7 +24,8 @@ export function ClientWorkflowsTab({ clientId }: { clientId: string }) {
   const { data: auditRows = [] } = useGhlWorkflowAudit();
   const refresh = useRefreshGhlWorkflows();
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("published");
+  const [selected, setSelected] = useState<WorkflowRow | null>(null);
 
   const meta = auditRows.find((r) => r.clientId === clientId);
 
@@ -108,9 +110,22 @@ export function ClientWorkflowsTab({ clientId }: { clientId: string }) {
         <div className="text-center py-14 text-sm text-muted-foreground">No workflows found</div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((w) => <WorkflowCard key={w.workflow_id} w={w} />)}
+          {filtered.map((w) => (
+            <WorkflowCard key={w.workflow_id} w={w} onClick={() => setSelected(w)} />
+          ))}
         </div>
       )}
+
+      <WorkflowDetailDrawer
+        open={!!selected}
+        onOpenChange={(o) => !o && setSelected(null)}
+        clientId={clientId}
+        workflowId={selected?.workflow_id ?? null}
+        workflowName={selected?.name ?? ""}
+        status={selected?.status ?? null}
+        version={selected?.version ?? null}
+        ghlUpdatedAt={selected?.ghl_updated_at ?? null}
+      />
     </div>
   );
 }
@@ -127,9 +142,15 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "am
   );
 }
 
-function WorkflowCard({ w }: { w: WorkflowRow }) {
+function WorkflowCard({ w, onClick }: { w: WorkflowRow; onClick: () => void }) {
   return (
-    <div className="border rounded-lg p-3 space-y-1.5 bg-card">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      className="border rounded-lg p-3 space-y-1.5 bg-card hover:bg-muted/40 cursor-pointer transition"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="font-medium text-sm truncate">{w.name}</div>
         <Badge variant={w.isDraft ? "outline" : "default"} className="text-[10px] h-5 flex-shrink-0">
