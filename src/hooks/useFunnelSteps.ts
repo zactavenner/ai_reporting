@@ -15,6 +15,12 @@ export interface FunnelStep {
   email_subject: string | null;
   email_from_name: string | null;
   email_body: string | null;
+  messages: Array<{
+    delay_days?: number;
+    body?: string;
+    subject?: string;
+    from_name?: string;
+  }> | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -54,6 +60,7 @@ export function useCreateFunnelStep() {
       email_subject?: string | null;
       email_from_name?: string | null;
       email_body?: string | null;
+      messages?: any;
     }) => {
       const { data, error } = await supabase
         .from('client_funnel_steps')
