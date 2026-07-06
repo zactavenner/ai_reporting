@@ -26,6 +26,10 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
 
   const current = slides[idx];
   const isVideo = current?.type === 'video';
+  const aspectRatio = (current as any)?.aspect_ratio || '1:1';
+  const aspectCss = aspectRatio.replace(':', ' / ');
+  // 9:16 native → cover; others → contain on black to show full creative
+  const fitClass = aspectRatio === '9:16' ? 'object-cover' : 'object-contain';
 
   const width = deviceType === 'desktop' ? 480 : deviceType === 'tablet' ? 420 : 320;
 
@@ -50,10 +54,10 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
       muted
       loop
       playsInline
-      className="w-full h-full object-cover"
+      className={cn('w-full h-full', fitClass)}
     />
   ) : (
-    <img key={current.id} src={current.file_url || ''} alt={current.title} className="w-full h-full object-cover" />
+    <img key={current.id} src={current.file_url || ''} alt={current.title} className={cn('w-full h-full', fitClass)} />
   );
 
   if (platform === 'instagram') {
@@ -73,7 +77,7 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
           </div>
           <MoreHorizontal className="w-4 h-4" />
         </div>
-        <div className="relative bg-black" style={{ aspectRatio: '1 / 1' }}>
+        <div className="relative bg-black" style={{ aspectRatio: aspectCss }}>
           {MediaEl}
           {isVideo && (
             <div className="absolute top-2 right-2 bg-black/40 rounded-full p-1">
@@ -121,7 +125,7 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
           {current.body_copy || current.headline}
         </p>
       )}
-      <div className="relative bg-black" style={{ aspectRatio: '1 / 1' }}>
+      <div className="relative bg-black" style={{ aspectRatio: aspectCss }}>
         {MediaEl}
       </div>
       {(current.headline || current.cta_text) && (
