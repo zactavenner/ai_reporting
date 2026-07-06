@@ -10,7 +10,7 @@ export interface FunnelStep {
   name: string;
   url: string;
   step_type: string;
-  step_kind: 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email';
+  step_kind: 'page' | 'fb_lead_form' | 'ads' | 'sms' | 'email' | 'phone_call' | 'note' | 'booking' | 'commitment' | 'funding';
   ad_platform: 'facebook' | 'instagram' | null;
   sms_body: string | null;
   email_subject: string | null;
