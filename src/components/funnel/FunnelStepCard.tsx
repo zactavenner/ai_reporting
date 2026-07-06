@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Edit2, ExternalLink, Trash2, Gauge, Loader2, Radio, TestTube2, CheckCircle2, AlertCircle, XCircle, Images } from 'lucide-react';
+import { Edit2, ExternalLink, Trash2, Gauge, Loader2, Radio, TestTube2, CheckCircle2, AlertCircle, XCircle, Images, Phone, StickyNote, Calendar, Handshake, Banknote } from 'lucide-react';
 import { PageMetadataPreview } from './PageMetadataPreview';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -85,6 +85,12 @@ export function FunnelStepCard({
   const isAds = kind === 'ads';
   const isSms = kind === 'sms';
   const isEmail = kind === 'email';
+  const isPhoneCall = kind === 'phone_call';
+  const isNote = kind === 'note';
+  const isBooking = kind === 'booking';
+  const isCommitment = kind === 'commitment';
+  const isFunding = kind === 'funding';
+  const isCompact = isPhoneCall || isNote || isBooking || isCommitment || isFunding;
 
   // Ad-rotator specific data
   const { data: stepAds = [] } = useFunnelStepAds(isAds ? [step.id] : []);
@@ -117,6 +123,40 @@ export function FunnelStepCard({
   };
 
   const renderDeviceMockup = (url: string, title: string, variantLabel?: string) => {
+    if (isCompact) {
+      const CompactIcon =
+        isPhoneCall ? Phone :
+        isBooking ? Calendar :
+        isCommitment ? Handshake :
+        isFunding ? Banknote :
+        StickyNote;
+      const accent =
+        isPhoneCall ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40' :
+        isBooking ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/40' :
+        isCommitment ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40' :
+        isFunding ? 'text-green-700 bg-green-50 dark:bg-green-950/40' :
+        'text-muted-foreground bg-muted/40';
+      const subtitle =
+        isPhoneCall ? (step.url?.replace(/^tel:/, '') || 'Outbound call') :
+        isBooking ? 'Booking confirmed' :
+        isCommitment ? 'Commitment' :
+        isFunding ? 'Funded' :
+        (step.sms_body || '');
+      return (
+        <div
+          className="rounded-xl border bg-card shadow-sm flex flex-col items-center justify-center text-center px-3 py-4 flex-shrink-0"
+          style={{ width: 160, minHeight: 200 }}
+        >
+          <div className={`h-12 w-12 rounded-full flex items-center justify-center mb-2 ${accent}`}>
+            <CompactIcon className="h-6 w-6" />
+          </div>
+          <div className="text-sm font-bold leading-tight break-words">{step.name}</div>
+          {subtitle && (
+            <div className="text-[11px] text-muted-foreground mt-1 break-words">{subtitle}</div>
+          )}
+        </div>
+      );
+    }
     if (isFbLeadForm || url === 'fb://lead-form') {
       return <FacebookLeadFormMockup stepName={title} deviceType={deviceType} />;
     }
