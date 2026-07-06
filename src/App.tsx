@@ -41,6 +41,8 @@ const OfferDetailPage = lazyRetry(() => import("./pages/OfferDetailPage"));
 const WhatsAppPage = lazyRetry(() => import("./pages/WhatsAppPage"));
 const AIStudioStylesPage = lazyRetry(() => import("./pages/AIStudioStylesPage"));
 const UnsubscribePage = lazyRetry(() => import("./pages/UnsubscribePage"));
+const LoginPage = lazyRetry(() => import("./pages/LoginPage"));
+const OAuthConsent = lazyRetry(() => import("./pages/OAuthConsent"));
 
 function PageLoader() {
   return (
@@ -94,6 +96,8 @@ const App = () => (
             <Route path="/public/:token/creatives" element={<PublicCreatives />} />
             <Route path="/taskurl" element={<PublicTaskUrl />} />
             <Route path="/unsubscribe" element={<UnsubscribePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
