@@ -72,6 +72,12 @@ const navStructure = [
     href: '/approvals',
   },
   {
+    title: 'Media Buyer',
+    value: 'media-buyer',
+    icon: TrendingUp,
+    href: '/media-buyer',
+  },
+  {
     title: 'Tasks',
     value: 'tasks',
     icon: ClipboardCheck,
