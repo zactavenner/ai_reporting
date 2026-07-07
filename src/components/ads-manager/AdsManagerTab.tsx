@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
 import { AgentMcpPanel } from './shared/AgentMcpPanel';
 import { NewCampaignWizard } from './NewCampaignWizard';
+import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 
 interface AdsManagerTabProps {
