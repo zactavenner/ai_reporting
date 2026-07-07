@@ -22,6 +22,31 @@ export interface FunnelStep {
     subject?: string;
     from_name?: string;
   }> | null;
+  form_config: {
+    questions?: Array<
+      | {
+          id: string;
+          type: 'short_text';
+          label: string;
+          required?: boolean;
+        }
+      | {
+          id: string;
+          type: 'multiple_choice';
+          label: string;
+          required?: boolean;
+          options: string[];
+        }
+      | {
+          id: string;
+          type: 'capital';
+          label: string;
+          required?: boolean;
+          min_k: number; // minimum acceptable amount in $K
+          options?: string[]; // auto-derived, stored for stability
+        }
+    >;
+  } | null;
   sort_order: number;
   created_at: string;
   updated_at: string;

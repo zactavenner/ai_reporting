@@ -1,0 +1,1 @@
+ALTER TABLE public.client_funnel_steps ADD COLUMN IF NOT EXISTS form_config jsonb;
