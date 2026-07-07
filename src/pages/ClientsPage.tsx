@@ -10,6 +10,8 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Users, Search, ArrowUpDown } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Target } from 'lucide-react';
 import { Client } from '@/types';
 import { toast } from 'sonner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -24,6 +26,31 @@ import {
 } from '@/components/ui/alert-dialog';
 
 type SortMode = 'newest' | 'alpha' | 'most-assets';
+
+function CapiCoverageBadge() {
+  const { data } = useQuery({
+    queryKey: ['capi-coverage-summary'],
+    queryFn: async () => {
+      const [{ data: clients }, { data: events }] = await Promise.all([
+        supabase.from('clients').select('id, meta_pixel_id').eq('status', 'active'),
+        supabase.from('capi_events_sent').select('client_id, success')
+          .gte('sent_at', new Date(Date.now() - 7 * 86400_000).toISOString()),
+      ]);
+      const total = clients?.length ?? 0;
+      const configured = clients?.filter((c: any) => !!c.meta_pixel_id).length ?? 0;
+      const events7d = events?.length ?? 0;
+      return { total, configured, events7d };
+    },
+    staleTime: 60_000,
+  });
+  if (!data) return null;
+  return (
+    <Badge variant="outline" className="gap-1.5 whitespace-nowrap" title="Clients with a Meta pixel configured for CAPI">
+      <Target className="h-3 w-3" />
+      CAPI: {data.configured}/{data.total} configured · {data.events7d} events 7d
+    </Badge>
+  );
+}
 
 export default function ClientsPage() {
   const navigate = useNavigate();
