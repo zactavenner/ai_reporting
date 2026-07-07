@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
       const insightsRes = await fetch(`${supabaseUrl}/functions/v1/sync-meta-ad-daily-insights`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-        body: JSON.stringify({ days: 7 }),
+        body: JSON.stringify({ days: 3 }),
       });
       console.log(`[sync-meta-ads-daily] insights kickoff status=${insightsRes.status}`);
     } catch (e) {
