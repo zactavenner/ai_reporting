@@ -160,6 +160,12 @@ function MetricCells({ row }: { row: any }) {
     : fatigue === 'watch' ? 'text-yellow-600' : '';
   const roas = calcRoas(row);
   const attrPct = attributionQualityPct(row);
+  const metaLeads = Number(row.meta_reported_leads) || 0;
+  const crmLeads = Number(row.attributed_leads) || 0;
+  const displayLeads = Math.max(metaLeads, crmLeads);
+  const spend = Number(row.spend) || 0;
+  const displayCpl = displayLeads > 0 ? spend / displayLeads : Number(row.cost_per_lead) || 0;
+  const leadsTitle = `Meta-reported: ${metaLeads} · CRM-attributed: ${crmLeads}`;
   return (
     <>
       <TableCell className="text-center tabular-nums font-medium">{fmt$(row.spend)}</TableCell>
@@ -171,11 +177,11 @@ function MetricCells({ row }: { row: any }) {
       <TableCell className="text-center tabular-nums">{fmtN(row.clicks)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmtPct(row.ctr)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmt$(row.cpc)}</TableCell>
-      <TableCell className="text-center tabular-nums">{fmtN(row.attributed_leads)}</TableCell>
+      <TableCell className="text-center tabular-nums" title={leadsTitle}>{fmtN(displayLeads)}</TableCell>
       <TableCell className={`text-center tabular-nums ${spamCount > 0 ? 'text-destructive font-semibold' : ''}`}>
         {spamCount > 0 ? spamCount : '—'}
       </TableCell>
-      <TableCell className="text-center tabular-nums">{fmt$(row.cost_per_lead)}</TableCell>
+      <TableCell className="text-center tabular-nums" title={leadsTitle}>{fmt$(displayCpl)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmtN(row.attributed_calls)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmtN(row.attributed_showed)}</TableCell>
       <TableCell className="text-center tabular-nums">{fmtN(row.attributed_funded)}</TableCell>
