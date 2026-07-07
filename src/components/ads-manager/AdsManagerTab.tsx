@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, Calendar, AlertTriangle, Trophy, Wand2, Download, Film, Rocket } from 'lucide-react';
+import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, Calendar, AlertTriangle, Trophy, Wand2, Download, Film, Rocket, FileText, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
 import { AgentMcpPanel } from './shared/AgentMcpPanel';
 import { NewCampaignWizard } from './NewCampaignWizard';
+import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 
 interface AdsManagerTabProps {
@@ -603,6 +604,43 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
   const sorted = useMemo(() => sortData(data, sortConfig), [data, sortConfig]);
   const [previewAd, setPreviewAd] = useState<any | null>(null);
   const [variationAd, setVariationAd] = useState<any | null>(null);
+  const [analysis, setAnalysis] = useState<any | null>(null);
+  const [analyzing, setAnalyzing] = useState<null | 'transcribe' | 'train'>(null);
+
+  // Reset analysis when preview target changes
+  useEffect(() => { setAnalysis(null); }, [previewAd?.id]);
+
+  const runAnalyze = async (mode: 'transcribe' | 'train') => {
+    if (!previewAd?.video_source_url) {
+      toast.error('No video source available for this ad');
+      return;
+    }
+    setAnalyzing(mode);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-ad-video', {
+        body: {
+          clientId,
+          adId: previewAd.id,
+          adName: previewAd.name,
+          videoUrl: previewAd.video_source_url,
+          mode,
+          metrics: {
+            spend: previewAd.spend, ctr: previewAd.ctr,
+            cpl: previewAd.cost_per_lead, cpa: previewAd.cost_per_funded,
+            leads: previewAd.attributed_leads, funded: previewAd.attributed_funded,
+          },
+        },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'Analyze failed');
+      setAnalysis(data.analysis);
+      toast.success(mode === 'train' ? 'Video Agent trained on this asset' : 'Transcript & breakdown ready');
+    } catch (e: any) {
+      toast.error(e?.message || 'Analyze failed');
+    } finally {
+      setAnalyzing(null);
+    }
+  };
   const createTask = useCreateTask();
   const fetchHD = useFetchAdMediaHD();
 
@@ -792,6 +830,69 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
                   Create Variations
                 </Button>
               </div>
+
+              {previewAd.video_source_url && (
+                <>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-2"
+                      disabled={!!analyzing}
+                      onClick={() => runAnalyze('transcribe')}
+                    >
+                      {analyzing === 'transcribe'
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <FileText className="h-3.5 w-3.5" />}
+                      Transcribe & Break Down
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="flex-1 gap-2"
+                      disabled={!!analyzing}
+                      title="Auto-transcribe, break down end-to-end, and add as a training example to the Video Ads Specialist agent."
+                      onClick={() => runAnalyze('train')}
+                    >
+                      {analyzing === 'train'
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <GraduationCap className="h-3.5 w-3.5" />}
+                      Train Video Agent
+                    </Button>
+                  </div>
+
+                  {analysis && (
+                    <div className="rounded-md border bg-muted/30 p-3 text-xs max-h-72 overflow-y-auto space-y-2">
+                      {analysis.hook && (
+                        <div>
+                          <div className="font-semibold text-[11px] uppercase text-muted-foreground">Hook</div>
+                          <div>{analysis.hook.first_3s} <span className="text-muted-foreground">({analysis.hook.type})</span></div>
+                        </div>
+                      )}
+                      {Array.isArray(analysis.structure) && analysis.structure.length > 0 && (
+                        <div>
+                          <div className="font-semibold text-[11px] uppercase text-muted-foreground">Structure</div>
+                          <ul className="space-y-0.5">
+                            {analysis.structure.map((s: any, i: number) => (
+                              <li key={i}><span className="text-muted-foreground">{s.t}</span> {s.beat} — <span className="text-muted-foreground">{s.purpose}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {analysis.cta && <div><span className="font-semibold text-[11px] uppercase text-muted-foreground">CTA:</span> {analysis.cta}</div>}
+                      {analysis.replicable_formula && (
+                        <div><span className="font-semibold text-[11px] uppercase text-muted-foreground">Formula:</span> {analysis.replicable_formula}</div>
+                      )}
+                      {analysis.transcript && (
+                        <details>
+                          <summary className="cursor-pointer font-semibold text-[11px] uppercase text-muted-foreground">Transcript</summary>
+                          <p className="whitespace-pre-wrap mt-1">{analysis.transcript}</p>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </DialogContent>
