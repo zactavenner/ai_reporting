@@ -49,18 +49,14 @@ export function TopCreativeCard({ clientId, from, to }: Props) {
         .gt('spend', 0)
         .limit(50);
       if (error) throw error;
-      const rows = ((data || []) as TopAd[])
-        .map((a) => ({
-          ...a,
-          // Prefer Meta's own lead-form submissions ("true" leads); fall back to CRM-attributed.
-          _trueLeads: Number(a.meta_reported_leads || 0) || Number(a.attributed_leads || 0),
-        }))
+      const trueLeads = (a: TopAd) => Number(a.meta_reported_leads || 0) || Number(a.attributed_leads || 0);
+      return ((data || []) as TopAd[])
         .sort((a, b) => {
-          if (b._trueLeads !== a._trueLeads) return b._trueLeads - a._trueLeads;
+          const diff = trueLeads(b) - trueLeads(a);
+          if (diff !== 0) return diff;
           return Number(b.spend || 0) - Number(a.spend || 0);
         })
         .slice(0, 3);
-      return rows;
     },
     enabled: !!clientId,
     staleTime: 5 * 60 * 1000,
