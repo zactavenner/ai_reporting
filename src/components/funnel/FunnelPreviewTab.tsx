@@ -32,6 +32,7 @@ import { DesktopMockup } from './DesktopMockup';
 import { useFunnelSteps, useCreateFunnelStep, useUpdateFunnelStep, useDeleteFunnelStep, useReorderFunnelSteps, FunnelStep } from '@/hooks/useFunnelSteps';
 import { useFunnelCampaigns, useCreateFunnelCampaign, useUpdateFunnelCampaign, useDeleteFunnelCampaign, FunnelCampaign } from '@/hooks/useFunnelCampaigns';
 import { useClient } from '@/hooks/useClients';
+import { LeadFormEditor, DEFAULT_LEAD_FORM_QUESTIONS, type LeadFormQuestion } from './LeadFormEditor';
 
 interface FunnelPreviewTabProps {
   clientId: string;
@@ -97,6 +98,7 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
   const [editAdPlatform, setEditAdPlatform] = useState<'facebook' | 'instagram'>('facebook');
   const [editSmsMessages, setEditSmsMessages] = useState<SmsMsg[]>([]);
   const [editEmailMessages, setEditEmailMessages] = useState<EmailMsg[]>([]);
+  const [editFormQuestions, setEditFormQuestions] = useState<LeadFormQuestion[]>([]);
   
   const [deviceType, setDeviceType] = useState<DeviceType>('phone');
   const [previewStep, setPreviewStep] = useState<FunnelStep | null>(null);
@@ -262,6 +264,12 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
             }]
       );
     }
+    if (step.step_kind === 'fb_lead_form') {
+      const existing = (step.form_config as any)?.questions as LeadFormQuestion[] | undefined;
+      setEditFormQuestions(existing && existing.length > 0 ? existing : DEFAULT_LEAD_FORM_QUESTIONS);
+    } else {
+      setEditFormQuestions([]);
+    }
     setEditStepOpen(true);
   };
 
@@ -302,6 +310,8 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
       updates.email_body = clean[0]?.body || editEmailBody || null;
     } else if (kind === 'ads') {
       updates.ad_platform = editAdPlatform;
+    } else if (kind === 'fb_lead_form') {
+      (updates as any).form_config = { questions: editFormQuestions };
     }
 
     await updateStep.mutateAsync({ id: editingStep.id, clientId, updates });
