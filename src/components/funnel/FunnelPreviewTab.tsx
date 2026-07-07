@@ -697,6 +697,10 @@ export function FunnelPreviewTab({ clientId, isPublicView = false }: FunnelPrevi
             {editingStep?.step_kind === 'email' && (
               <EmailCadenceEditor messages={editEmailMessages} onChange={setEditEmailMessages} />
             )}
+
+            {editingStep?.step_kind === 'fb_lead_form' && (
+              <LeadFormEditor questions={editFormQuestions} onChange={setEditFormQuestions} />
+            )}
             
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setEditStepOpen(false)}>
