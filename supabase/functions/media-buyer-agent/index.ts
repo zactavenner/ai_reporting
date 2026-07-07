@@ -44,7 +44,7 @@ interface AgentOutput {
 
 const RUN_TYPE_INSTRUCTIONS: Record<RunType, string> = {
   account_audit: "Perform a full account audit for the given client (or portfolio). Classify every active ad. Identify structural issues (naming, sprawl, over-segmentation), tracking gaps, and 1-3 highest-leverage actions. Produce proposals only for concrete actions.",
-  daily_review: "Daily performance review for each active client in scope. Focus on trend deltas vs prior equal window. Classify every active ad. Propose immediate budget adjustments (within guardrails) and creative kills for underperformers with sufficient spend.",
+  daily_review: "Daily performance review for each active client in scope. Focus on trend deltas vs prior equal window. Classify every active ad. Propose immediate budget adjustments (within guardrails) and creative kills for underperformers with sufficient spend. IMPORTANT: also inspect `ad_lead_quality_7d` in context — when an ad's bad_rate is elevated (>=25%) or qualified_rate is depressed (<25%) with spend_current >= 50, propose specific downstream fixes through the normal gatekeeper flow: audience exclusions (queue_type='audience'), form qualification question changes (queue_type='form'), or creative callout adjustments (queue_type='creative'). Route insight, not just data — a cheap CPL with a bad qualified rate is a worse ad than an expensive CPL with a great qualified rate.",
   weekly_review: "Weekly rollup with structural recommendations. Classify ads, identify winning angles, propose new creative launches (creative_launch with full launch_spec), scale winners, kill losers.",
   creative_intel: "Cross-client creative intelligence pass. Identify STRUCTURAL patterns that transfer across accounts (hook shapes, formats, CTAs, spokesperson patterns) — never confidential client brand/claim content. Portfolio-scope findings only. Produce specific creative production recommendations. No proposals unless a launch is clearly warranted.",
   fatigue_scan: "Fatigue-only scan portfolio-wide. Use ONLY the `ad_window_metrics` array in context — each entry has frequency_current, ctr_delta_pct, cpl_delta_pct, spend_current, cpl_current, and prior-window comparisons. Flag ads that meet ANY of: frequency_current >= 3.0 AND ctr_delta_pct <= -15; OR frequency_current >= 4.0; OR cpl_delta_pct >= 25 with spend_current >= 50. For each flagged ad emit an ad_classification (PAUSE/ITERATE/WATCH) with metrics_snapshot copied from ad_window_metrics, and produce a creative_kill (queue_type='creative') or budget_change proposal referencing target_ad_id. Skip ads with no fatigue signal — do NOT classify healthy ads.",
@@ -73,9 +73,22 @@ async function loadContext(sb: Sb, clientIds: string[], lookbackDays: number) {
     sb.from("agent_lessons").select("lesson, source, context, created_at").eq("agent_name", "media-buyer").eq("active", true).order("created_at", { ascending: false }).limit(30),
     sb.from("pixel_verifications").select("client_id, status, events_detected, missing_expected, scanned_at").in("client_id", clientIds).order("scanned_at", { ascending: false }).limit(100),
     sb.from("pixel_expected_events").select("step_id, platform, event_name, is_custom").limit(200),
-    sb.from("meta_ad_daily_insights").select("date, client_id, meta_ad_id, spend, impressions, reach, frequency, clicks, ctr, leads, cost_per_lead").in("client_id", clientIds).gte("date", winStart),
-    sb.from("meta_ad_daily_insights").select("date, client_id, meta_ad_id, spend, impressions, reach, frequency, clicks, ctr, leads, cost_per_lead").in("client_id", clientIds).gte("date", priorStart).lt("date", winStart),
+    sb.from("meta_ad_daily_insights").select("date, client_id, meta_ad_id, spend, impressions, reach, frequency, clicks, ctr, leads, cost_per_lead, video_3s_views, video_thruplay").in("client_id", clientIds).gte("date", winStart),
+    sb.from("meta_ad_daily_insights").select("date, client_id, meta_ad_id, spend, impressions, reach, frequency, clicks, ctr, leads, cost_per_lead, video_3s_views, video_thruplay").in("client_id", clientIds).gte("date", priorStart).lt("date", winStart),
   ]);
+
+  // Latest ad-level lead quality (7d) per meta_ad_id for context
+  const qualityRes = await sb
+    .from("ad_lead_quality")
+    .select("client_id, meta_ad_id, window_size, date, leads, qualified, qualified_rate, bad_rate, booked_rate, funded")
+    .in("client_id", clientIds)
+    .eq("window_size", "7d")
+    .order("date", { ascending: false })
+    .limit(2000);
+  const qualityByAd = new Map<string, any>();
+  for (const q of (qualityRes.data ?? [])) {
+    if (!qualityByAd.has(q.meta_ad_id)) qualityByAd.set(q.meta_ad_id, q);
+  }
 
   // Aggregate per meta_ad_id per window and compute WoW deltas
   type Agg = { meta_ad_id: string; client_id: string | null; spend: number; impressions: number; clicks: number; leads: number; freq_last: number; days: number; avg_ctr: number; cpl: number };
@@ -138,6 +151,7 @@ async function loadContext(sb: Sb, clientIds: string[], lookbackDays: number) {
     pixel_verifications: pixelRes.data ?? [],
     pixel_expected_events: expEventsRes.data ?? [],
     ad_window_metrics: adWindowMetrics,
+    ad_lead_quality_7d: [...qualityByAd.values()],
   };
 }
 
