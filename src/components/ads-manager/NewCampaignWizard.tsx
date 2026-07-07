@@ -6,10 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Upload, Rocket, Loader2, X, Image as ImageIcon, Film } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
+import { LeadFormEditor, DEFAULT_LEAD_FORM_QUESTIONS, LeadFormQuestion } from '@/components/funnel/LeadFormEditor';
 
 interface NewCampaignWizardProps {
   open: boolean;
@@ -18,22 +20,42 @@ interface NewCampaignWizardProps {
   clientName: string;
 }
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCampaignWizardProps) {
   const [step, setStep] = useState<Step>(1);
   const [name, setName] = useState('');
   const [objective, setObjective] = useState('leads');
   const [budget, setBudget] = useState('100');
-  const [audience, setAudience] = useState('');
   const [notes, setNotes] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Targeting
+  const [ageMin, setAgeMin] = useState('30');
+  const [ageMax, setAgeMax] = useState('65');
+  const [gender, setGender] = useState('all');
+  const [locations, setLocations] = useState('United States');
+  const [interests, setInterests] = useState('');
+  const [behaviors, setBehaviors] = useState('');
+  const [customAudiences, setCustomAudiences] = useState('');
+  const [placements, setPlacements] = useState('automatic');
+  // Lead form
+  const [leadFormName, setLeadFormName] = useState('');
+  const [leadFormIntro, setLeadFormIntro] = useState('');
+  const [privacyUrl, setPrivacyUrl] = useState('');
+  const [thankYouUrl, setThankYouUrl] = useState('');
+  const [questions, setQuestions] = useState<LeadFormQuestion[]>(DEFAULT_LEAD_FORM_QUESTIONS);
+  const [smsVerify, setSmsVerify] = useState(false);
+  const [smsVerifyMessage, setSmsVerifyMessage] = useState('Your verification code is {{code}}. Reply STOP to opt out.');
   const createTask = useCreateTask();
 
   const reset = () => {
     setStep(1); setName(''); setObjective('leads'); setBudget('100');
-    setAudience(''); setNotes(''); setFiles([]);
+    setNotes(''); setFiles([]);
+    setAgeMin('30'); setAgeMax('65'); setGender('all'); setLocations('United States');
+    setInterests(''); setBehaviors(''); setCustomAudiences(''); setPlacements('automatic');
+    setLeadFormName(''); setLeadFormIntro(''); setPrivacyUrl(''); setThankYouUrl('');
+    setQuestions(DEFAULT_LEAD_FORM_QUESTIONS); setSmsVerify(false);
   };
   const close = () => { reset(); onClose(); };
 
@@ -64,7 +86,25 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
         `Client: ${clientName}`,
         `Objective: ${objective}`,
         `Daily budget: $${budget}`,
-        audience ? `Audience: ${audience}` : null,
+        `\n**Targeting**`,
+        `Age: ${ageMin}–${ageMax}`,
+        `Gender: ${gender}`,
+        `Locations: ${locations || '—'}`,
+        `Placements: ${placements}`,
+        interests ? `Interests: ${interests}` : null,
+        behaviors ? `Behaviors: ${behaviors}` : null,
+        customAudiences ? `Custom audiences: ${customAudiences}` : null,
+        `\n**Lead Form**`,
+        `Name: ${leadFormName || name}`,
+        leadFormIntro ? `Intro: ${leadFormIntro}` : null,
+        privacyUrl ? `Privacy policy: ${privacyUrl}` : null,
+        thankYouUrl ? `Thank-you URL: ${thankYouUrl}` : null,
+        `Questions (${questions.length}):`,
+        ...questions.map((q, i) => {
+          const opts = (q as any).options ? ` [${(q as any).options.join(' | ')}]` : '';
+          return `  ${i + 1}. (${q.type}${q.required ? ', required' : ''}) ${q.label}${opts}`;
+        }),
+        smsVerify ? `\n**SMS Verify:** ENABLED\nMessage template: ${smsVerifyMessage}` : `\n**SMS Verify:** disabled`,
         notes ? `\nNotes:\n${notes}` : null,
         uploaded.length ? `\nCreatives (${uploaded.length}):\n${uploaded.map(u => `- [${u.name}](${u.url})`).join('\n')}` : '\n_No creatives attached — request from creative team._',
       ].filter(Boolean).join('\n');
@@ -79,7 +119,7 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
         status: 'todo',
         due_date: due.toISOString().split('T')[0],
       });
-      toast.success('Campaign launch task created for media buyer');
+      toast.success('Campaign launch brief created for media buyer');
       close();
     } catch (e: any) {
       toast.error(e?.message || 'Failed to create campaign');
@@ -90,14 +130,15 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
           <Rocket className="h-4 w-4" /> New Campaign
-          <Badge variant="outline" className="ml-auto text-[10px]">Step {step} of 3</Badge>
+          <Badge variant="outline" className="ml-auto text-[10px]">Step {step} of 5</Badge>
         </DialogTitle>
 
         {step === 1 && (
           <div className="space-y-3">
+            <p className="text-[11px] text-muted-foreground">Basics — objective, budget, and name.</p>
             <div>
               <Label className="text-xs">Campaign name</Label>
               <Input value={name} onChange={e => setName(e.target.value)} placeholder="TOF | Offer | Lead Form | CBO" />
@@ -121,14 +162,111 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                 <Input type="number" value={budget} onChange={e => setBudget(e.target.value)} />
               </div>
             </div>
-            <div>
-              <Label className="text-xs">Audience (optional)</Label>
-              <Input value={audience} onChange={e => setAudience(e.target.value)} placeholder="Accredited investors 35-65, US" />
-            </div>
           </div>
         )}
 
         {step === 2 && (
+          <div className="space-y-3">
+            <p className="text-[11px] text-muted-foreground">Targeting — age, gender, geo, interests, custom audiences.</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Age min</Label>
+                <Input type="number" min={18} max={65} value={ageMin} onChange={e => setAgeMin(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Age max</Label>
+                <Input type="number" min={18} max={65} value={ageMax} onChange={e => setAgeMax(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Gender</Label>
+                <Select value={gender} onValueChange={setGender}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Locations (comma-separated)</Label>
+              <Input value={locations} onChange={e => setLocations(e.target.value)} placeholder="United States, Canada" />
+            </div>
+            <div>
+              <Label className="text-xs">Interests (comma-separated)</Label>
+              <Textarea value={interests} onChange={e => setInterests(e.target.value)} rows={2}
+                placeholder="Real estate investing, Robert Kiyosaki, Grant Cardone, Accredited investor" />
+            </div>
+            <div>
+              <Label className="text-xs">Behaviors (optional)</Label>
+              <Input value={behaviors} onChange={e => setBehaviors(e.target.value)} placeholder="Business travelers, Small business owners" />
+            </div>
+            <div>
+              <Label className="text-xs">Custom / Lookalike audiences (optional)</Label>
+              <Input value={customAudiences} onChange={e => setCustomAudiences(e.target.value)} placeholder="LAL 1% funded investors, Website visitors 180d" />
+            </div>
+            <div>
+              <Label className="text-xs">Placements</Label>
+              <Select value={placements} onValueChange={setPlacements}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="automatic">Automatic (recommended)</SelectItem>
+                  <SelectItem value="feed-only">Feed only (FB + IG)</SelectItem>
+                  <SelectItem value="stories-reels">Stories + Reels</SelectItem>
+                  <SelectItem value="manual">Manual — see notes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-3">
+            <p className="text-[11px] text-muted-foreground">Lead form — questions, privacy, and optional SMS verify.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Lead form name</Label>
+                <Input value={leadFormName} onChange={e => setLeadFormName(e.target.value)} placeholder="Defaults to campaign name" />
+              </div>
+              <div>
+                <Label className="text-xs">Privacy policy URL</Label>
+                <Input value={privacyUrl} onChange={e => setPrivacyUrl(e.target.value)} placeholder="https://…/privacy" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Intro / greeting</Label>
+              <Textarea value={leadFormIntro} onChange={e => setLeadFormIntro(e.target.value)} rows={2}
+                placeholder="Quick 30-second application to see if you qualify." />
+            </div>
+            <div>
+              <Label className="text-xs">Thank-you URL</Label>
+              <Input value={thankYouUrl} onChange={e => setThankYouUrl(e.target.value)} placeholder="https://…/thank-you" />
+            </div>
+            <div className="rounded-md border p-3 bg-muted/30">
+              <LeadFormEditor questions={questions} onChange={setQuestions} />
+            </div>
+            <div className="rounded-md border p-3 flex items-start gap-3">
+              <Switch checked={smsVerify} onCheckedChange={setSmsVerify} />
+              <div className="flex-1 space-y-2">
+                <div>
+                  <div className="text-xs font-medium">SMS phone verification</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Sends a 6-digit code via SMS after submit. Filters bot/typo leads and improves list quality.
+                  </div>
+                </div>
+                {smsVerify && (
+                  <div>
+                    <Label className="text-[11px]">Verification SMS template</Label>
+                    <Input value={smsVerifyMessage} onChange={e => setSmsVerifyMessage(e.target.value)} className="h-8 text-xs" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
           <div className="space-y-3">
             <Label className="text-xs">Upload creatives (images / videos)</Label>
             <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg py-8 cursor-pointer hover:bg-muted/40 transition-colors">
@@ -154,7 +292,7 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
           </div>
         )}
 
-        {step === 3 && (
+        {step === 5 && (
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Launch notes / instructions for media buyer</Label>
@@ -164,7 +302,10 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
             <div className="rounded-md border p-3 bg-muted/40 text-xs space-y-1">
               <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{name || '—'}</span></div>
               <div><span className="text-muted-foreground">Objective:</span> {objective} · <span className="text-muted-foreground">Budget:</span> ${budget}/day</div>
-              {audience && <div><span className="text-muted-foreground">Audience:</span> {audience}</div>}
+              <div><span className="text-muted-foreground">Age:</span> {ageMin}–{ageMax} · <span className="text-muted-foreground">Gender:</span> {gender}</div>
+              <div><span className="text-muted-foreground">Locations:</span> {locations || '—'}</div>
+              {interests && <div><span className="text-muted-foreground">Interests:</span> {interests}</div>}
+              <div><span className="text-muted-foreground">Lead form:</span> {questions.length} question{questions.length === 1 ? '' : 's'} · SMS verify {smsVerify ? 'ON' : 'off'}</div>
               <div><span className="text-muted-foreground">Creatives:</span> {files.length} file{files.length === 1 ? '' : 's'}</div>
             </div>
           </div>
@@ -174,8 +315,8 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
           <Button variant="ghost" size="sm" onClick={close}>Cancel</Button>
           <div className="flex gap-2">
             {step > 1 && <Button variant="outline" size="sm" onClick={() => setStep((step - 1) as Step)}>Back</Button>}
-            {step < 3 && <Button size="sm" onClick={() => setStep((step + 1) as Step)} disabled={step === 1 && !name.trim()}>Next</Button>}
-            {step === 3 && (
+            {step < 5 && <Button size="sm" onClick={() => setStep((step + 1) as Step)} disabled={step === 1 && !name.trim()}>Next</Button>}
+            {step === 5 && (
               <Button size="sm" onClick={launch} disabled={uploading}>
                 {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Rocket className="h-3.5 w-3.5 mr-1" />}
                 Launch
