@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, Calendar, AlertTriangle, Trophy, Wand2, Download, Film } from 'lucide-react';
+import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, Calendar, AlertTriangle, Trophy, Wand2, Download, Film, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -20,8 +20,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { formatDistanceToNow, addBusinessDays } from 'date-fns';
 import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
-import { AdsConnectionHealthPanel } from './shared/AdsConnectionHealthPanel';
 import { AgentMcpPanel } from './shared/AgentMcpPanel';
+import { NewCampaignWizard } from './NewCampaignWizard';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 
 interface AdsManagerTabProps {
@@ -328,9 +328,9 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
   const [activeTab, setActiveTab] = useState('campaigns');
   const [filterCampaignId, setFilterCampaignId] = useState<string | null>(null);
   const [filterAdSetId, setFilterAdSetId] = useState<string | null>(null);
-  // Default ON so freshly launched / paused ads are visible. Off = legacy
-  // behaviour of hiding any row that has not yet accrued spend.
-  const [showZeroSpend, setShowZeroSpend] = useState(true);
+  // Status filter: 'active' (default, cleanest view), 'all', or 'paused'.
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'paused'>('active');
+  const [wizardOpen, setWizardOpen] = useState(false);
   const lastSyncedRange = useRef<string | null>(null);
   const isMobile = useIsMobile();
 
@@ -352,19 +352,25 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
     ? formatDistanceToNow(new Date((settings as any).meta_ads_last_sync), { addSuffix: true })
     : null;
 
-  const hasSpend = (r: any) => r.spend && Number(r.spend) > 0;
+  const matchesStatus = (r: any) => {
+    const s = (r.effective_status || r.status || '').toUpperCase();
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'active') return s === 'ACTIVE';
+    if (statusFilter === 'paused') return s === 'PAUSED';
+    return true;
+  };
   const activeCampaigns = useMemo(
-    () => showZeroSpend ? campaigns : campaigns.filter(hasSpend),
-    [campaigns, showZeroSpend],
+    () => campaigns.filter(matchesStatus),
+    [campaigns, statusFilter],
   );
   const adSets = useMemo(() => {
     const filtered = filterCampaignId ? allAdSets.filter((a: any) => a.campaign_id === filterCampaignId) : allAdSets;
-    return showZeroSpend ? filtered : filtered.filter(hasSpend);
-  }, [allAdSets, filterCampaignId, showZeroSpend]);
+    return filtered.filter(matchesStatus);
+  }, [allAdSets, filterCampaignId, statusFilter]);
   const ads = useMemo(() => {
     const filtered = filterAdSetId ? allAds.filter((a: any) => a.ad_set_id === filterAdSetId) : allAds;
-    return showZeroSpend ? filtered : filtered.filter(hasSpend);
-  }, [allAds, filterAdSetId, showZeroSpend]);
+    return filtered.filter(matchesStatus);
+  }, [allAds, filterAdSetId, statusFilter]);
 
   const filterCampaignName = filterCampaignId ? campaigns.find((c: any) => c.id === filterCampaignId)?.name : null;
   const filterAdSetName = filterAdSetId ? allAdSets.find((a: any) => a.id === filterAdSetId)?.name : null;
@@ -395,14 +401,24 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground select-none cursor-pointer pr-1">
-            <Switch checked={showZeroSpend} onCheckedChange={setShowZeroSpend} className="scale-75" />
-            <span>Show 0-spend</span>
-          </label>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active only</SelectItem>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="paused">Paused only</SelectItem>
+            </SelectContent>
+          </Select>
           <Badge variant="secondary" className="text-xs gap-1.5">
             <Calendar className="h-3 w-3" />
             {startDate} → {endDate}
           </Badge>
+          <Button size="sm" onClick={() => setWizardOpen(true)} className="gap-1.5">
+            <Rocket className="h-4 w-4" />
+            New Campaign
+          </Button>
           <Button size="sm" variant="outline" onClick={handleAttribution} disabled={attributionMutation.isPending}>
             {attributionMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-2" />}
             Run Attribution
@@ -450,7 +466,6 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
         </TabsList>
 
         <div className="mt-3 space-y-3">
-          <AdsConnectionHealthPanel clientId={clientId} />
           <AgentMcpPanel clientId={clientId} />
           <InsightsPanel ads={ads} campaigns={activeCampaigns} />
         </div>
@@ -493,6 +508,13 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           )}
         </TabsContent>
       </Tabs>
+
+      <NewCampaignWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        clientId={clientId}
+        clientName={clientName}
+      />
     </div>
   );
 }
