@@ -73,7 +73,7 @@ async function syncClient(sb: any, client: any, days: number) {
   url.searchParams.set("level", "ad");
   url.searchParams.set("time_increment", "1");
   url.searchParams.set("time_range", JSON.stringify({ since: ymd(start), until: ymd(end) }));
-  url.searchParams.set("fields", "date_start,ad_id,adset_id,campaign_id,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,actions,video_3_sec_watched_actions,video_thruplay_watched_actions");
+  url.searchParams.set("fields", "date_start,ad_id,adset_id,campaign_id,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,actions,video_thruplay_watched_actions");
   url.searchParams.set("limit", "500");
   url.searchParams.set("access_token", token);
 
@@ -99,7 +99,7 @@ async function syncClient(sb: any, client: any, days: number) {
       cpm: Number(d.cpm ?? 0) || 0,
       leads,
       cost_per_lead: leads > 0 ? spend / leads : 0,
-      video_3s_views: extractVideo(d.actions, d.video_3_sec_watched_actions, "video_view") || null,
+      video_3s_views: extractVideo(d.actions, undefined, "video_view") || null,
       video_thruplay: extractVideo(d.actions, d.video_thruplay_watched_actions, "video_thruplay") || null,
     };
   });
