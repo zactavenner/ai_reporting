@@ -659,6 +659,32 @@ Deno.serve(async (req) => {
     };
 
     // Upsert enrichment record
+    // Defensive sanitization: coerce empty strings to null for boolean/numeric
+    // columns so Postgres doesn't reject the upsert with "invalid input syntax".
+    const BOOL_COLS = new Set([
+      'amex_card','bank_card','blue_collar','business_owner','credit_card',
+      'has_children','is_investor','is_primary_identity','is_veteran',
+      'likely_charitable_donor','multilingual','owns_investments','owns_mutual_funds',
+      'owns_stocks_bonds','owns_swimming_pool','political_contributor','premium_amex_card',
+      'premium_card','single_family_dwelling','speaks_english','voter','white_collar'
+    ]);
+    for (const k of Object.keys(enrichRecord)) {
+      const v = enrichRecord[k];
+      if (v === '') { enrichRecord[k] = null; continue; }
+      if (BOOL_COLS.has(k)) {
+        if (v == null) continue;
+        if (typeof v === 'boolean') continue;
+        if (typeof v === 'number') { enrichRecord[k] = v !== 0; continue; }
+        if (typeof v === 'string') {
+          const s = v.toLowerCase().trim();
+          enrichRecord[k] = (s === 'true' || s === 'yes' || s === 'y' || s === '1')
+            ? true
+            : (s === 'false' || s === 'no' || s === 'n' || s === '0') ? false : null;
+        } else {
+          enrichRecord[k] = null;
+        }
+      }
+    }
     const { data: upserted, error: upsertError } = await supabase
       .from('lead_enrichment')
       .upsert(enrichRecord, { onConflict: 'external_id,client_id' })
