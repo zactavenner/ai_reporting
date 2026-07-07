@@ -1141,6 +1141,8 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
       </div>
 
       {/* Funnel + Investor profile */}
+      <TopCreativeCard clientId={clientId} from={from} to={to} />
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <Card className="p-5 lg:col-span-2 rounded-2xl border-border/60 bg-card/60 backdrop-blur">
           <div className="mb-4">
