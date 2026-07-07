@@ -29,6 +29,7 @@ import { useSyncQueue } from '@/hooks/useSyncQueue';
 import { DollarSign, Target, Plug, Loader2, RefreshCw, CheckCircle, XCircle, Users, Lock, Eye, EyeOff, AlertTriangle, ListOrdered, MessageSquare as MessageSquareIcon } from 'lucide-react';
 import { ClientSheetBindingCard } from './ClientSheetBindingCard';
 import { StripeSyncStatus } from './StripeSyncStatus';
+import { MetaTrackingSection } from './MetaTrackingSection';
 
 function ClientUrlField({
   clientId,
