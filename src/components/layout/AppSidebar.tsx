@@ -85,6 +85,12 @@ const navStructure = [
     href: '/lead-quality',
   },
   {
+    title: 'Weekly Report (Parity)',
+    value: 'weekly-parity',
+    icon: FileText,
+    href: '/weekly-parity',
+  },
+  {
     title: 'Tasks',
     value: 'tasks',
     icon: ClipboardCheck,
