@@ -300,6 +300,66 @@ const API_SECTIONS: ApiSection[] = [
     ],
   },
   {
+    title: '🧭 Funnels & Nurture Sequences',
+    badge: 'Composite',
+    calls: [
+      {
+        title: 'Get Full Funnel for ONE Client (channel-labeled)',
+        description: 'Returns campaigns → steps (page / fb_lead_form / ads / sms / email / phone_call / note / booking / commitment / funding). Every SMS and Email step includes a normalized `nurture.messages[]` array with `channel: "sms" | "email"`, `delay_days`, and full body/subject/from_name so the entire nurture cadence is labeled correctly.',
+        body: {
+          password: PASSWORD, action: 'get_client_funnel',
+          client_id: '<CLIENT_UUID>',
+        },
+      },
+      {
+        title: 'Get Full Funnels for ALL Active Clients',
+        description: 'One-shot pull of the entire agency: every active client with their campaigns, funnel steps, and full SMS + Email nurture cadence. Pass `statuses: ["*"]` to include paused / onboarding clients too.',
+        body: {
+          password: PASSWORD, action: 'get_all_client_funnels',
+          statuses: ['active'],
+        },
+      },
+      {
+        title: 'Select Funnel Campaigns (with nested steps)',
+        description: 'Raw table access — campaigns + their client_funnel_steps rows (includes step_kind, sms_body, email_subject, email_from_name, email_body, and the `messages` jsonb array for multi-message SMS/Email cadences).',
+        body: {
+          password: PASSWORD, action: 'select', table: 'funnel_campaigns',
+          filters: { client_id: '<CLIENT_UUID>' },
+          include: ['steps', 'client'],
+          order_by: 'sort_order', order_dir: 'asc',
+        },
+      },
+      {
+        title: 'Select SMS Nurture Steps Only',
+        description: 'Every SMS step for a client. `messages` is a jsonb array of `{ delay_days, body, media_url?, media_type? }`.',
+        body: {
+          password: PASSWORD, action: 'select', table: 'client_funnel_steps',
+          filters: { client_id: '<CLIENT_UUID>', step_kind: 'sms' },
+          order_by: 'sort_order', order_dir: 'asc',
+        },
+      },
+      {
+        title: 'Select Email Nurture Steps Only',
+        description: 'Every Email step for a client. `messages` is a jsonb array of `{ delay_days, from_name, subject, body }`.',
+        body: {
+          password: PASSWORD, action: 'select', table: 'client_funnel_steps',
+          filters: { client_id: '<CLIENT_UUID>', step_kind: 'email' },
+          order_by: 'sort_order', order_dir: 'asc',
+        },
+      },
+      {
+        title: 'Select ALL Funnel Steps (any kind)',
+        description: 'Full funnel step feed with parent/child relationships (`parent_step_id`) so you can rebuild the tree. `step_kind` values: page, fb_lead_form, ads, sms, email, phone_call, note, booking, commitment, funding.',
+        body: {
+          password: PASSWORD, action: 'select', table: 'client_funnel_steps',
+          filters: { client_id: '<CLIENT_UUID>' },
+          include: ['campaign', 'variants', 'ads', 'metadata'],
+          order_by: 'sort_order', order_dir: 'asc',
+        },
+      },
+    ],
+  },
+  {
     title: '📁 Storage',
     calls: [
       {
