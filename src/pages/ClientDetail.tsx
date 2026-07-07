@@ -54,6 +54,7 @@ const ClientFolderTab = lazy(() => import('@/components/folder/ClientFolderTab')
 const ConnectionsTab = lazy(() => import('@/components/client/ConnectionsTab'));
 const ClientDatabaseTab = lazy(() => import('@/components/client/ClientDatabaseTab').then(m => ({ default: m.ClientDatabaseTab })));
 const ClientWorkflowsTab = lazy(() => import('@/components/ghl/ClientWorkflowsTab').then(m => ({ default: m.ClientWorkflowsTab })));
+const AdsManagerTab = lazy(() => import('@/components/ads-manager/AdsManagerTab').then(m => ({ default: m.AdsManagerTab })));
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
 import { ClientOffersSection } from '@/components/offers/ClientOffersSection';
@@ -414,6 +415,10 @@ export default function ClientDetail() {
               <Palette className="h-4 w-4" />
               Creatives
             </TabsTrigger>
+            <TabsTrigger value="ads-manager" className="gap-2 whitespace-nowrap">
+              <BarChart3 className="h-4 w-4" />
+              Ads Manager
+            </TabsTrigger>
             <TabsTrigger value="ai-studio" className="gap-2 whitespace-nowrap">
               <Sparkles className="h-4 w-4" />
               AI Studio
@@ -492,6 +497,12 @@ export default function ClientDetail() {
           </TabsContent>
 
           {/* ─── AI STUDIO TAB ─── */}
+          <TabsContent value="ads-manager" className="space-y-6">
+            <SectionErrorBoundary sectionName="Ads Manager">
+              <AdsManagerTab clientId={client.id} clientName={client.name} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
           <TabsContent value="ai-studio" className="m-0">
             <SectionErrorBoundary sectionName="AI Studio">
               {/* Bound height so the chat & canvas panels scroll internally and
