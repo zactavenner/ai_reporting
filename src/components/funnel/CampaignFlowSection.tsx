@@ -421,7 +421,7 @@ export function CampaignFlowSection({
             minScale={0.4}
             maxScale={2}
             limitToBounds={false}
-            wheel={{ step: 0.03 }}
+            wheel={{ step: 0.2, smoothStep: 0.01 }}
             doubleClick={{ disabled: true }}
             panning={{ excluded: ['input', 'textarea', 'button', 'a', 'select', 'iframe'] }}
           >
