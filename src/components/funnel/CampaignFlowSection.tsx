@@ -212,13 +212,13 @@ function ZoomToolbar({ isFullscreen, onToggleFullscreen }: { isFullscreen: boole
   const { zoomIn, zoomOut, resetTransform } = useControls();
   return (
     <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-background/80 backdrop-blur border rounded-md shadow-sm p-1">
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomOut()} title="Zoom out">
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomOut(0.2)} title="Zoom out">
         <ZoomOut className="h-3.5 w-3.5" />
       </Button>
       <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => resetTransform()} title="Recenter / reset zoom">
         <Crosshair className="h-3.5 w-3.5" />
       </Button>
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomIn()} title="Zoom in">
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => zoomIn(0.2)} title="Zoom in">
         <ZoomIn className="h-3.5 w-3.5" />
       </Button>
       <div className="w-px h-4 bg-border mx-0.5" />
@@ -421,7 +421,7 @@ export function CampaignFlowSection({
             minScale={0.4}
             maxScale={2}
             limitToBounds={false}
-            wheel={{ step: 0.2, smoothStep: 0.01 }}
+            wheel={{ step: 0.2 }}
             doubleClick={{ disabled: true }}
             panning={{ excluded: ['input', 'textarea', 'button', 'a', 'select', 'iframe'] }}
           >
