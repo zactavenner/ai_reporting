@@ -415,6 +415,10 @@ export default function ClientDetail() {
               <Palette className="h-4 w-4" />
               Creatives
             </TabsTrigger>
+            <TabsTrigger value="ads-manager" className="gap-2 whitespace-nowrap">
+              <BarChart3 className="h-4 w-4" />
+              Ads Manager
+            </TabsTrigger>
             <TabsTrigger value="ai-studio" className="gap-2 whitespace-nowrap">
               <Sparkles className="h-4 w-4" />
               AI Studio
