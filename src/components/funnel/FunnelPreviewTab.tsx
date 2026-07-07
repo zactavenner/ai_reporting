@@ -930,14 +930,74 @@ function EmailCadenceEditor({
     const lastFrom = messages[messages.length - 1]?.from_name ?? '';
     onChange([...messages, { delay_days: lastDelay + 3, subject: '', from_name: lastFrom, body: '' }]);
   };
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [parsing, setParsing] = useState(false);
+
+  const runParse = async () => {
+    if (!pasteText.trim()) return;
+    setParsing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('parse-nurture-sequence', {
+        body: { text: pasteText, channel: 'email' },
+      });
+      if (error) throw error;
+      const parsed: EmailMsg[] = (data?.messages || []).map((m: any) => ({
+        delay_days: Number(m.delay_days) || 0,
+        from_name: String(m.from_name || ''),
+        subject: String(m.subject || ''),
+        body: String(m.body || ''),
+      }));
+      if (!parsed.length) throw new Error('No emails detected');
+      onChange(parsed);
+      toast.success(`Parsed ${parsed.length} email${parsed.length === 1 ? '' : 's'}`);
+      setPasteOpen(false);
+      setPasteText('');
+    } catch (e: any) {
+      toast.error(`Parse failed: ${e?.message || 'unknown'}`);
+    } finally {
+      setParsing(false);
+    }
+  };
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label>Email cadence</Label>
-        <span className="text-[11px] text-muted-foreground">
-          {messages.length} email{messages.length === 1 ? '' : 's'} · stacked in preview
-        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-[11px]"
+            onClick={() => setPasteOpen(v => !v)}
+          >
+            <Sparkles className="h-3 w-3 mr-1" /> Paste full sequence
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
+            {messages.length} email{messages.length === 1 ? '' : 's'}
+          </span>
+        </div>
       </div>
+      {pasteOpen && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Paste the entire email nurture sequence. AI will auto-detect each email, day spacing, subject line, from name, and body.
+          </p>
+          <Textarea
+            value={pasteText}
+            onChange={e => setPasteText(e.target.value)}
+            rows={10}
+            placeholder={"Day 0\nFrom: Alex\nSubject: Welcome to the fund overview\n\nHi {firstName},\n...\n\nDay 3\nSubject: The 3 things most investors miss\n\n..."}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => { setPasteOpen(false); setPasteText(''); }}>Cancel</Button>
+            <Button type="button" size="sm" onClick={runParse} disabled={parsing || !pasteText.trim()}>
+              {parsing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+              Parse with AI
+            </Button>
+          </div>
+        </div>
+      )}
       {messages.map((m, i) => (
         <div key={i} className="rounded-lg border border-border p-3 space-y-2 bg-muted/30">
           <div className="flex items-center justify-between gap-2">
