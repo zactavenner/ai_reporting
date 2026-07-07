@@ -603,6 +603,43 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
   const sorted = useMemo(() => sortData(data, sortConfig), [data, sortConfig]);
   const [previewAd, setPreviewAd] = useState<any | null>(null);
   const [variationAd, setVariationAd] = useState<any | null>(null);
+  const [analysis, setAnalysis] = useState<any | null>(null);
+  const [analyzing, setAnalyzing] = useState<null | 'transcribe' | 'train'>(null);
+
+  // Reset analysis when preview target changes
+  useEffect(() => { setAnalysis(null); }, [previewAd?.id]);
+
+  const runAnalyze = async (mode: 'transcribe' | 'train') => {
+    if (!previewAd?.video_source_url) {
+      toast.error('No video source available for this ad');
+      return;
+    }
+    setAnalyzing(mode);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-ad-video', {
+        body: {
+          clientId,
+          adId: previewAd.id,
+          adName: previewAd.name,
+          videoUrl: previewAd.video_source_url,
+          mode,
+          metrics: {
+            spend: previewAd.spend, ctr: previewAd.ctr,
+            cpl: previewAd.cost_per_lead, cpa: previewAd.cost_per_funded,
+            leads: previewAd.attributed_leads, funded: previewAd.attributed_funded,
+          },
+        },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'Analyze failed');
+      setAnalysis(data.analysis);
+      toast.success(mode === 'train' ? 'Video Agent trained on this asset' : 'Transcript & breakdown ready');
+    } catch (e: any) {
+      toast.error(e?.message || 'Analyze failed');
+    } finally {
+      setAnalyzing(null);
+    }
+  };
   const createTask = useCreateTask();
   const fetchHD = useFetchAdMediaHD();
 
