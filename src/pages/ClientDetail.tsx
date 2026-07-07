@@ -497,6 +497,12 @@ export default function ClientDetail() {
           </TabsContent>
 
           {/* ─── AI STUDIO TAB ─── */}
+          <TabsContent value="ads-manager" className="space-y-6">
+            <SectionErrorBoundary sectionName="Ads Manager">
+              <AdsManagerTab clientId={client.id} clientName={client.name} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
           <TabsContent value="ai-studio" className="m-0">
             <SectionErrorBoundary sectionName="AI Studio">
               {/* Bound height so the chat & canvas panels scroll internally and
