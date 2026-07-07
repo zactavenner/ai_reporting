@@ -2,24 +2,28 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Signal, Wifi, Battery } from 'lucide-react';
 import type { DeviceType } from './DeviceSwitcher';
+import type { LeadFormQuestion } from './LeadFormEditor';
+import { generateCapitalOptions } from './LeadFormEditor';
 
 interface FacebookLeadFormMockupProps {
   stepName?: string;
   deviceType: DeviceType;
   className?: string;
+  questions?: LeadFormQuestion[];
 }
 
-export function FacebookLeadFormMockup({ stepName, deviceType, className }: FacebookLeadFormMockupProps) {
+export function FacebookLeadFormMockup({ stepName, deviceType, className, questions }: FacebookLeadFormMockupProps) {
   if (deviceType === 'desktop') {
-    return <DesktopLeadForm stepName={stepName} className={className} />;
+    return <DesktopLeadForm stepName={stepName} className={className} questions={questions} />;
   }
   if (deviceType === 'tablet') {
-    return <TabletLeadForm stepName={stepName} className={className} />;
+    return <TabletLeadForm stepName={stepName} className={className} questions={questions} />;
   }
-  return <PhoneLeadForm stepName={stepName} className={className} />;
+  return <PhoneLeadForm stepName={stepName} className={className} questions={questions} />;
 }
 
-function LeadFormContent() {
+function LeadFormContent({ questions }: { questions?: LeadFormQuestion[] }) {
+  const hasCustom = !!(questions && questions.length > 0);
   return (
     <div className="w-full h-full bg-[#ffffff] flex flex-col text-[#1c1e21] overflow-y-auto">
       {/* FB Header */}
@@ -48,50 +52,83 @@ function LeadFormContent() {
           Complete this form to learn more about this investment opportunity.
         </p>
 
-        {/* Question 1 */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[#1c1e21]">
-            Are you an accredited investor? <span className="text-[#e41e3f]">*</span>
-          </label>
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-2 px-3 py-2.5 border border-[#1877F2] rounded-lg bg-[#e7f3ff] cursor-default">
-              <div className="w-4 h-4 rounded-full border-2 border-[#1877F2] flex items-center justify-center flex-shrink-0">
-                <div className="w-2 h-2 rounded-full bg-[#1877F2]" />
-              </div>
-              <span className="text-xs text-[#1c1e21]">Yes</span>
-            </label>
-            <label className="flex items-center gap-2 px-3 py-2.5 border border-[#dadde1] rounded-lg cursor-default">
-              <div className="w-4 h-4 rounded-full border-2 border-[#dadde1] flex-shrink-0" />
-              <span className="text-xs text-[#1c1e21]">No</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Question 2 */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[#1c1e21]">
-            Available liquidity <span className="text-[#e41e3f]">*</span>
-          </label>
-          <div className="space-y-1.5">
-            {['$50k or less', '$50k – $100k', '$100k – $250k', '$250k – $500k', '$500k – $1M', '$1M+'].map((range, i) => (
-              <label
-                key={range}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 border rounded-lg cursor-default",
-                  i === 3 ? "border-[#1877F2] bg-[#e7f3ff]" : "border-[#dadde1]"
+        {hasCustom ? (
+          questions!.map((q, qi) => {
+            const opts = q.type === 'multiple_choice'
+              ? q.options
+              : q.type === 'capital'
+              ? (q.options && q.options.length ? q.options : generateCapitalOptions(q.min_k))
+              : null;
+            const selectedIdx = opts ? Math.min(1, opts.length - 1) : -1;
+            return (
+              <div key={q.id} className="space-y-1.5">
+                <label className="text-xs font-semibold text-[#1c1e21]">
+                  {q.label}{q.required && <span className="text-[#e41e3f]"> *</span>}
+                </label>
+                {opts ? (
+                  <div className="space-y-1.5">
+                    {opts.map((opt, i) => (
+                      <label
+                        key={i}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 border rounded-lg cursor-default",
+                          i === selectedIdx ? "border-[#1877F2] bg-[#e7f3ff]" : "border-[#dadde1]",
+                        )}
+                      >
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                          i === selectedIdx ? "border-[#1877F2]" : "border-[#dadde1]",
+                        )}>
+                          {i === selectedIdx && <div className="w-2 h-2 rounded-full bg-[#1877F2]" />}
+                        </div>
+                        <span className="text-xs text-[#1c1e21]">{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2.5 border border-[#dadde1] rounded-lg bg-[#f0f2f5]">
+                    <span className="text-xs text-[#65676b]">Short answer...</span>
+                  </div>
                 )}
-              >
-                <div className={cn(
-                  "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
-                  i === 3 ? "border-[#1877F2]" : "border-[#dadde1]"
-                )}>
-                  {i === 3 && <div className="w-2 h-2 rounded-full bg-[#1877F2]" />}
-                </div>
-                <span className="text-xs text-[#1c1e21]">{range}</span>
+              </div>
+            );
+          })
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#1c1e21]">
+                Are you an accredited investor? <span className="text-[#e41e3f]">*</span>
               </label>
-            ))}
-          </div>
-        </div>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 px-3 py-2.5 border border-[#1877F2] rounded-lg bg-[#e7f3ff] cursor-default">
+                  <div className="w-4 h-4 rounded-full border-2 border-[#1877F2] flex items-center justify-center flex-shrink-0">
+                    <div className="w-2 h-2 rounded-full bg-[#1877F2]" />
+                  </div>
+                  <span className="text-xs text-[#1c1e21]">Yes</span>
+                </label>
+                <label className="flex items-center gap-2 px-3 py-2.5 border border-[#dadde1] rounded-lg cursor-default">
+                  <div className="w-4 h-4 rounded-full border-2 border-[#dadde1] flex-shrink-0" />
+                  <span className="text-xs text-[#1c1e21]">No</span>
+                </label>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#1c1e21]">
+                Available liquidity <span className="text-[#e41e3f]">*</span>
+              </label>
+              <div className="space-y-1.5">
+                {['$50k or less', '$50k – $100k', '$100k – $250k', '$250k – $500k', '$500k – $1M', '$1M+'].map((range, i) => (
+                  <label key={range} className={cn("flex items-center gap-2 px-3 py-2 border rounded-lg cursor-default", i === 3 ? "border-[#1877F2] bg-[#e7f3ff]" : "border-[#dadde1]")}>
+                    <div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0", i === 3 ? "border-[#1877F2]" : "border-[#dadde1]")}>
+                      {i === 3 && <div className="w-2 h-2 rounded-full bg-[#1877F2]" />}
+                    </div>
+                    <span className="text-xs text-[#1c1e21]">{range}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Prefill section */}
         <div className="pt-2 border-t border-[#dadde1]">
@@ -137,7 +174,7 @@ function LeadFormContent() {
   );
 }
 
-function PhoneLeadForm({ stepName, className }: { stepName?: string; className?: string }) {
+function PhoneLeadForm({ stepName, className, questions }: { stepName?: string; className?: string; questions?: LeadFormQuestion[] }) {
   return (
     <div className={cn("flex flex-col items-center", className)}>
       {stepName && (
@@ -167,7 +204,7 @@ function PhoneLeadForm({ stepName, className }: { stepName?: string; className?:
 
               {/* Screen Content */}
               <div className="w-[320px] h-[620px] overflow-hidden">
-                <LeadFormContent />
+                <LeadFormContent questions={questions} />
               </div>
 
               {/* Safari Bottom Bar */}
@@ -213,7 +250,7 @@ function PhoneLeadForm({ stepName, className }: { stepName?: string; className?:
   );
 }
 
-function TabletLeadForm({ stepName, className }: { stepName?: string; className?: string }) {
+function TabletLeadForm({ stepName, className, questions }: { stepName?: string; className?: string; questions?: LeadFormQuestion[] }) {
   return (
     <div className={cn("flex flex-col items-center", className)}>
       {stepName && (
@@ -237,7 +274,7 @@ function TabletLeadForm({ stepName, className }: { stepName?: string; className?
 
             {/* Screen */}
             <div className="w-[500px] h-[680px] overflow-hidden">
-              <LeadFormContent />
+              <LeadFormContent questions={questions} />
             </div>
           </div>
         </div>
@@ -247,7 +284,7 @@ function TabletLeadForm({ stepName, className }: { stepName?: string; className?
   );
 }
 
-function DesktopLeadForm({ stepName, className }: { stepName?: string; className?: string }) {
+function DesktopLeadForm({ stepName, className, questions }: { stepName?: string; className?: string; questions?: LeadFormQuestion[] }) {
   return (
     <div className={cn("flex flex-col items-center", className)}>
       {stepName && (
@@ -267,7 +304,7 @@ function DesktopLeadForm({ stepName, className }: { stepName?: string; className
             </div>
             {/* Screen */}
             <div className="w-[700px] h-[500px] overflow-hidden">
-              <LeadFormContent />
+              <LeadFormContent questions={questions} />
             </div>
           </div>
         </div>
