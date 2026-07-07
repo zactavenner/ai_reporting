@@ -15,7 +15,8 @@ const ALLOWED_TABLES = [
   "creatives", "client_settings", "client_pipelines", "client_custom_tabs",
   "client_funnel_steps", "client_live_ads", "client_pod_assignments",
   "client_voice_notes", "client_offers", "pipeline_stages", "pipeline_opportunities",
-  "funnel_campaigns", "funnel_step_variants", "ad_spend_reports",
+  "funnel_campaigns", "funnel_step_variants", "funnel_step_ads",
+  "funnel_step_metadata", "ad_spend_reports",
   "alert_configs", "chat_conversations", "chat_messages",
   "ai_hub_conversations", "ai_hub_messages", "custom_gpts", "gpt_files",
   "gpt_knowledge_base", "knowledge_base_documents", "csv_import_logs",
@@ -46,6 +47,17 @@ const RELATION_MAP: Record<string, Record<string, string>> = {
   },
   client_pipelines: {
     stages: "stages:pipeline_stages(id,name,ghl_stage_id,sort_order)",
+  },
+  funnel_campaigns: {
+    client: "client:clients(id,name,slug)",
+    steps: "steps:client_funnel_steps(id,name,url,step_kind,step_type,ad_platform,sort_order,parent_step_id,sms_body,email_subject,email_from_name,email_body,messages,linked_ghl_workflow_id,form_config,created_at,updated_at)",
+  },
+  client_funnel_steps: {
+    client: "client:clients(id,name,slug)",
+    campaign: "campaign:funnel_campaigns(id,name,sort_order)",
+    variants: "variants:funnel_step_variants(id,name,url,traffic_percent,is_control)",
+    ads: "ads:funnel_step_ads(id,ad_id)",
+    metadata: "metadata:funnel_step_metadata(id,key,value,note)",
   },
   agency_members: {
     pod: "pod:agency_pods(id,name,color,description)",
@@ -122,6 +134,19 @@ Deno.serve(async (req) => {
               status: "Optional. Filter by status (e.g. 'ACTIVE')",
               date_start: "Optional. Filter synced_at >= date",
               date_end: "Optional. Filter synced_at <= date",
+            },
+          },
+          get_client_funnel: {
+            description: "Get the full funnel for a client: campaigns → steps (pages, lead forms, ads, SMS, email, phone, notes) with nurture-sequence messages parsed and channel-labeled (sms vs email).",
+            fields: {
+              client_id: "Required. The client UUID",
+              campaign_id: "Optional. Restrict to a single funnel campaign",
+            },
+          },
+          get_all_client_funnels: {
+            description: "Same as get_client_funnel, but for every active client at once. Ideal for a one-shot 'pull everything' sync.",
+            fields: {
+              statuses: "Optional. Array of client.status values to include (default ['active']). Use ['*'] for all clients.",
             },
           },
         },
@@ -295,6 +320,179 @@ Deno.serve(async (req) => {
         },
         campaigns,
       });
+    }
+
+    // ========================
+    // COMPOSITE: get_client_funnel  (funnel + nurture sequence, channel-labeled)
+    // ========================
+    if (action === "get_client_funnel" || action === "get_all_client_funnels") {
+      const isBulk = action === "get_all_client_funnels";
+      let clientIds: string[] = [];
+
+      if (isBulk) {
+        const statuses: string[] = Array.isArray(body.statuses) && body.statuses.length
+          ? body.statuses
+          : ["active"];
+        let cq = supabase.from("clients").select("id,name,slug,status");
+        if (!statuses.includes("*")) cq = cq.in("status", statuses);
+        const { data: cls, error: cErr } = await cq;
+        if (cErr) return jsonResp({ error: cErr.message }, 400);
+        clientIds = (cls || []).map((c: { id: string }) => c.id);
+      } else {
+        if (!body.client_id) return jsonResp({ error: "Missing 'client_id'" }, 400);
+        clientIds = [body.client_id];
+      }
+
+      if (clientIds.length === 0) {
+        return jsonResp({ clients: [], count: 0 });
+      }
+
+      // Pull clients, campaigns, steps in bulk (single round-trip each)
+      const [{ data: clientRows }, { data: campaignRows }, { data: stepRows }] = await Promise.all([
+        supabase.from("clients")
+          .select("id,name,slug,status,industry,website_url,logo_url,meta_pixel_id")
+          .in("id", clientIds),
+        supabase.from("funnel_campaigns")
+          .select("id,client_id,name,sort_order,created_at,updated_at")
+          .in("client_id", clientIds)
+          .order("sort_order", { ascending: true }),
+        (body.campaign_id
+          ? supabase.from("client_funnel_steps")
+              .select("*")
+              .in("client_id", clientIds)
+              .eq("campaign_id", body.campaign_id)
+          : supabase.from("client_funnel_steps")
+              .select("*")
+              .in("client_id", clientIds)
+        ).order("sort_order", { ascending: true }),
+      ]);
+
+      const normalizeMessages = (kind: string, raw: unknown, step: Record<string, unknown>) => {
+        const arr = Array.isArray(raw) ? raw : [];
+        if (kind === "sms") {
+          const msgs = arr.map((m: Record<string, unknown>, i: number) => ({
+            index: i,
+            channel: "sms",
+            delay_days: Number(m?.delay_days) || 0,
+            body: String(m?.body ?? ""),
+            media_url: (m?.media_url as string) ?? null,
+            media_type: (m?.media_type as string) ?? null,
+          }));
+          if (msgs.length === 0 && step.sms_body) {
+            msgs.push({ index: 0, channel: "sms", delay_days: 0, body: String(step.sms_body), media_url: null, media_type: null });
+          }
+          return msgs;
+        }
+        if (kind === "email") {
+          const msgs = arr.map((m: Record<string, unknown>, i: number) => ({
+            index: i,
+            channel: "email",
+            delay_days: Number(m?.delay_days) || 0,
+            from_name: String(m?.from_name ?? ""),
+            subject: String(m?.subject ?? ""),
+            body: String(m?.body ?? ""),
+          }));
+          if (msgs.length === 0 && (step.email_subject || step.email_body)) {
+            msgs.push({
+              index: 0,
+              channel: "email",
+              delay_days: 0,
+              from_name: String(step.email_from_name ?? ""),
+              subject: String(step.email_subject ?? ""),
+              body: String(step.email_body ?? ""),
+            });
+          }
+          return msgs;
+        }
+        return [];
+      };
+
+      const buildStep = (s: Record<string, unknown>) => {
+        const kind = String(s.step_kind ?? "page");
+        const messages = normalizeMessages(kind, s.messages, s);
+        return {
+          id: s.id,
+          name: s.name,
+          step_kind: kind,
+          step_type: s.step_type,
+          ad_platform: s.ad_platform ?? null,
+          url: s.url ?? null,
+          sort_order: s.sort_order ?? 0,
+          parent_step_id: s.parent_step_id ?? null,
+          campaign_id: s.campaign_id ?? null,
+          linked_ghl_workflow_id: s.linked_ghl_workflow_id ?? null,
+          form_config: s.form_config ?? null,
+          // Channel-labeled nurture content
+          channel: kind === "sms" ? "sms" : kind === "email" ? "email" : null,
+          nurture: {
+            channel: kind === "sms" ? "sms" : kind === "email" ? "email" : null,
+            message_count: messages.length,
+            total_days: messages.reduce((mx, m) => Math.max(mx, m.delay_days), 0),
+            messages,
+          },
+          created_at: s.created_at,
+          updated_at: s.updated_at,
+          children: [] as Array<Record<string, unknown>>,
+        };
+      };
+
+      const clients = (clientRows || []).map((cl: Record<string, unknown>) => {
+        const cCampaigns = (campaignRows || []).filter((c: Record<string, unknown>) => c.client_id === cl.id);
+        const cSteps = (stepRows || []).filter((s: Record<string, unknown>) => s.client_id === cl.id).map(buildStep);
+        // Build parent → children tree
+        const byId: Record<string, ReturnType<typeof buildStep>> = {};
+        for (const s of cSteps) byId[s.id as string] = s;
+        const roots: Array<ReturnType<typeof buildStep>> = [];
+        for (const s of cSteps) {
+          const pid = s.parent_step_id as string | null;
+          if (pid && byId[pid]) byId[pid].children.push(s);
+          else roots.push(s);
+        }
+        // Group top-level steps by campaign, keep uncampaigned in a synthetic bucket.
+        const campaigns = cCampaigns.map((c: Record<string, unknown>) => {
+          const steps = roots.filter((r) => r.campaign_id === c.id);
+          return {
+            id: c.id,
+            name: c.name,
+            sort_order: c.sort_order ?? 0,
+            step_count: steps.length,
+            sms_step_count: steps.filter((s) => s.step_kind === "sms").length +
+              steps.reduce((n, s) => n + s.children.filter((c) => c.step_kind === "sms").length, 0),
+            email_step_count: steps.filter((s) => s.step_kind === "email").length +
+              steps.reduce((n, s) => n + s.children.filter((c) => c.step_kind === "email").length, 0),
+            steps,
+          };
+        });
+        const uncampaigned = roots.filter((r) => !r.campaign_id);
+        if (uncampaigned.length > 0) {
+          campaigns.push({
+            id: null,
+            name: "(Uncategorized)",
+            sort_order: 9999,
+            step_count: uncampaigned.length,
+            sms_step_count: uncampaigned.filter((s) => s.step_kind === "sms").length,
+            email_step_count: uncampaigned.filter((s) => s.step_kind === "email").length,
+            steps: uncampaigned,
+          });
+        }
+
+        return {
+          client_id: cl.id,
+          client_name: cl.name,
+          slug: cl.slug,
+          status: cl.status,
+          industry: cl.industry ?? null,
+          website_url: cl.website_url ?? null,
+          logo_url: cl.logo_url ?? null,
+          meta_pixel_id: cl.meta_pixel_id ?? null,
+          campaign_count: campaigns.length,
+          campaigns,
+        };
+      });
+
+      return jsonResp(isBulk
+        ? { clients, count: clients.length }
+        : (clients[0] ?? { client_id: clientIds[0], campaigns: [] }));
     }
 
     // ========================
@@ -483,7 +681,7 @@ Deno.serve(async (req) => {
       return jsonResp({ data: rows, table });
     }
 
-    return jsonResp({ error: "Invalid action. Use: list_tables, select, count, insert, upsert, update, delete, create_task, get_ads_overview, list_storage, get_file_url, delete_file, upload_file_base64" }, 400);
+    return jsonResp({ error: "Invalid action. Use: list_tables, select, count, insert, upsert, update, delete, create_task, get_ads_overview, get_client_funnel, get_all_client_funnels, list_storage, get_file_url, delete_file, upload_file_base64" }, 400);
 
   } catch (err: unknown) {
     return jsonResp({ error: err instanceof Error ? err.message : String(err) }, 500);
