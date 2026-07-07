@@ -1,9 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+const INTERNAL_PASSWORD = "HPA1234$";
 
 interface Payload {
   recipients: string[];
@@ -12,6 +14,7 @@ interface Payload {
   pdf_base64?: string;
   pdf_filename?: string;
   client_name?: string;
+  client_id?: string;
 }
 
 serve(async (req) => {
@@ -20,20 +23,7 @@ serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get('RESEND_API_KEY');
-    if (!apiKey) {
-      // Return 200 so the client-side supabase.functions.invoke surfaces the message
-      // instead of a generic "Failed to send a request to the Edge Function".
-      return new Response(
-        JSON.stringify({
-          error: 'Email sending is not set up yet. Complete the Lovable Emails / sender domain setup, then try again.',
-          code: 'email_not_configured',
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    const { recipients, subject, html, pdf_base64, pdf_filename, client_name } = (await req.json()) as Payload;
+    const { recipients, subject, html, client_name, client_id } = (await req.json()) as Payload;
 
     const cleaned = (recipients || [])
       .map((e) => String(e || '').trim().toLowerCase())
@@ -46,36 +36,70 @@ serve(async (req) => {
       });
     }
 
-    const fromAddress = Deno.env.get('STATS_REPORT_FROM') || 'reports@highperformanceads.com';
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+    const supabase = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-    const attachments = pdf_base64
-      ? [{ filename: pdf_filename || `${(client_name || 'report').toLowerCase().replace(/\s+/g, '-')}-stat-sheet.pdf`, content: pdf_base64 }]
-      : undefined;
+    const results: Array<{ email: string; ok?: boolean; error?: string; messageId?: string }> = [];
+    for (const email of cleaned) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/send-ghl-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            password: INTERNAL_PASSWORD,
+            channel: 'email',
+            to_email: email,
+            name: client_name || 'Investor Report',
+            subject: subject || `${client_name || 'Client'} — Stat Sheet`,
+            html,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `send failed ${res.status}`);
+        results.push({ email, ok: true, messageId: data?.messageId });
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: `${client_name || 'High Performance Ads'} Reports <${fromAddress}>`,
-        to: cleaned,
-        subject: subject || `${client_name || 'Client'} – Stat Sheet`,
-        html,
-        attachments,
-      }),
-    });
+        if (client_id) {
+          await supabase.from('client_report_sends').insert({
+            client_id,
+            cadence: 'ad_hoc',
+            channel: 'email',
+            period_start: new Date().toISOString().slice(0, 10),
+            period_end: new Date().toISOString().slice(0, 10),
+            status: 'sent',
+            idempotency_key: `stats:${client_id}:${email}:${Date.now()}`,
+            ghl_message_id: data?.messageId || null,
+            ghl_contact_id: data?.contactId || null,
+            sent_at: new Date().toISOString(),
+            payload: { subject, source: 'send-sheet-stats-email' },
+          });
+        }
+      } catch (e: any) {
+        const msg = e?.message || String(e);
+        results.push({ email, error: msg });
+        if (client_id) {
+          await supabase.from('client_report_sends').insert({
+            client_id,
+            cadence: 'ad_hoc',
+            channel: 'email',
+            period_start: new Date().toISOString().slice(0, 10),
+            period_end: new Date().toISOString().slice(0, 10),
+            status: 'failed',
+            error: msg,
+            idempotency_key: `stats:${client_id}:${email}:${Date.now()}`,
+            payload: { subject, source: 'send-sheet-stats-email' },
+          });
+        }
+      }
+    }
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return new Response(JSON.stringify({ error: data?.message || 'Send failed', detail: data }), {
-        status: res.status,
+    const failed = results.filter((r) => r.error);
+    if (failed.length === results.length) {
+      return new Response(JSON.stringify({ error: failed[0].error, results }), {
+        status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    return new Response(JSON.stringify({ ok: true, sent_to: cleaned, id: data?.id }), {
+    return new Response(JSON.stringify({ ok: true, sent_to: results.filter((r) => r.ok).map((r) => r.email), results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e: any) {
