@@ -175,6 +175,76 @@ export type Database = {
           },
         ]
       }
+      ad_lead_quality: {
+        Row: {
+          bad_rate: number
+          booked_rate: number
+          client_id: string | null
+          created_at: string
+          date: string
+          funded: number
+          id: string
+          leads: number
+          meta_ad_id: string
+          qualified: number
+          qualified_rate: number
+          updated_at: string
+          window_size: string
+        }
+        Insert: {
+          bad_rate?: number
+          booked_rate?: number
+          client_id?: string | null
+          created_at?: string
+          date: string
+          funded?: number
+          id?: string
+          leads?: number
+          meta_ad_id: string
+          qualified?: number
+          qualified_rate?: number
+          updated_at?: string
+          window_size: string
+        }
+        Update: {
+          bad_rate?: number
+          booked_rate?: number
+          client_id?: string | null
+          created_at?: string
+          date?: string
+          funded?: number
+          id?: string
+          leads?: number
+          meta_ad_id?: string
+          qualified?: number
+          qualified_rate?: number
+          updated_at?: string
+          window_size?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_lead_quality_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ad_lead_quality_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_lead_quality_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       ad_scripts: {
         Row: {
           ad_format: string | null
@@ -3614,6 +3684,65 @@ export type Database = {
           },
         ]
       }
+      capi_events_sent: {
+        Row: {
+          client_id: string | null
+          event_name: string
+          id: string
+          lead_disposition_id: string
+          meta_response: Json | null
+          sent_at: string
+          success: boolean
+        }
+        Insert: {
+          client_id?: string | null
+          event_name: string
+          id?: string
+          lead_disposition_id: string
+          meta_response?: Json | null
+          sent_at?: string
+          success?: boolean
+        }
+        Update: {
+          client_id?: string | null
+          event_name?: string
+          id?: string
+          lead_disposition_id?: string
+          meta_response?: Json | null
+          sent_at?: string
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capi_events_sent_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "capi_events_sent_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capi_events_sent_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "capi_events_sent_lead_disposition_id_fkey"
+            columns: ["lead_disposition_id"]
+            isOneToOne: true
+            referencedRelation: "lead_dispositions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           client_id: string | null
@@ -5860,6 +5989,8 @@ export type Database = {
           meta_access_token: string | null
           meta_ad_account_id: string | null
           meta_ad_account_ids: string[] | null
+          meta_capi_access_token: string | null
+          meta_pixel_id: string | null
           meta_system_user_token: string | null
           meta_token_type: string | null
           name: string
@@ -5910,6 +6041,8 @@ export type Database = {
           meta_access_token?: string | null
           meta_ad_account_id?: string | null
           meta_ad_account_ids?: string[] | null
+          meta_capi_access_token?: string | null
+          meta_pixel_id?: string | null
           meta_system_user_token?: string | null
           meta_token_type?: string | null
           name: string
@@ -5960,6 +6093,8 @@ export type Database = {
           meta_access_token?: string | null
           meta_ad_account_id?: string | null
           meta_ad_account_ids?: string[] | null
+          meta_capi_access_token?: string | null
+          meta_pixel_id?: string | null
           meta_system_user_token?: string | null
           meta_token_type?: string | null
           name?: string
@@ -7094,6 +7229,61 @@ export type Database = {
           },
           {
             foreignKeyName: "deals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      disposition_mappings: {
+        Row: {
+          active: boolean
+          client_id: string | null
+          created_at: string
+          disposition: string
+          id: string
+          match_type: string
+          match_value: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          client_id?: string | null
+          created_at?: string
+          disposition: string
+          id?: string
+          match_type: string
+          match_value: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          client_id?: string | null
+          created_at?: string
+          disposition?: string
+          id?: string
+          match_type?: string
+          match_value?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disposition_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "disposition_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disposition_mappings_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
@@ -9671,6 +9861,74 @@ export type Database = {
           },
         ]
       }
+      lead_dispositions: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          disposed_at: string
+          disposed_by: string | null
+          disposition: string
+          disposition_reason: string | null
+          ghl_raw: Json | null
+          id: string
+          lead_id: string | null
+          source: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          disposed_at?: string
+          disposed_by?: string | null
+          disposition: string
+          disposition_reason?: string | null
+          ghl_raw?: Json | null
+          id?: string
+          lead_id?: string | null
+          source?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          disposed_at?: string
+          disposed_by?: string | null
+          disposition?: string
+          disposition_reason?: string | null
+          ghl_raw?: Json | null
+          id?: string
+          lead_id?: string | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_dispositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "lead_dispositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_dispositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "lead_dispositions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_enrichment: {
         Row: {
           accredited_probability: string | null
@@ -10072,7 +10330,9 @@ export type Database = {
           campaign_name: string | null
           client_id: string
           created_at: string
+          current_disposition: string | null
           custom_fields: Json | null
+          disposition_updated_at: string | null
           email: string | null
           external_id: string
           ghl_notes: Json | null
@@ -10086,6 +10346,7 @@ export type Database = {
           opportunity_value: number | null
           phone: string | null
           pipeline_value: number | null
+          quality_score: number | null
           questions: Json | null
           source: string
           status: string | null
@@ -10103,7 +10364,9 @@ export type Database = {
           campaign_name?: string | null
           client_id: string
           created_at?: string
+          current_disposition?: string | null
           custom_fields?: Json | null
+          disposition_updated_at?: string | null
           email?: string | null
           external_id: string
           ghl_notes?: Json | null
@@ -10117,6 +10380,7 @@ export type Database = {
           opportunity_value?: number | null
           phone?: string | null
           pipeline_value?: number | null
+          quality_score?: number | null
           questions?: Json | null
           source?: string
           status?: string | null
@@ -10134,7 +10398,9 @@ export type Database = {
           campaign_name?: string | null
           client_id?: string
           created_at?: string
+          current_disposition?: string | null
           custom_fields?: Json | null
+          disposition_updated_at?: string | null
           email?: string | null
           external_id?: string
           ghl_notes?: Json | null
@@ -10148,6 +10414,7 @@ export type Database = {
           opportunity_value?: number | null
           phone?: string | null
           pipeline_value?: number | null
+          quality_score?: number | null
           questions?: Json | null
           source?: string
           status?: string | null
@@ -10337,6 +10604,8 @@ export type Database = {
           reach: number | null
           spend: number | null
           updated_at: string
+          video_3s_views: number | null
+          video_thruplay: number | null
         }
         Insert: {
           clicks?: number | null
@@ -10357,6 +10626,8 @@ export type Database = {
           reach?: number | null
           spend?: number | null
           updated_at?: string
+          video_3s_views?: number | null
+          video_thruplay?: number | null
         }
         Update: {
           clicks?: number | null
@@ -10377,6 +10648,8 @@ export type Database = {
           reach?: number | null
           spend?: number | null
           updated_at?: string
+          video_3s_views?: number | null
+          video_thruplay?: number | null
         }
         Relationships: [
           {

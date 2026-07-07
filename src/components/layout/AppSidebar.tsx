@@ -31,6 +31,7 @@ import {
   ExternalLink,
   Sparkles,
   Inbox,
+  UserCheck,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -76,6 +77,12 @@ const navStructure = [
     value: 'media-buyer',
     icon: TrendingUp,
     href: '/media-buyer',
+  },
+  {
+    title: 'Lead Quality',
+    value: 'lead-quality',
+    icon: UserCheck,
+    href: '/lead-quality',
   },
   {
     title: 'Tasks',
