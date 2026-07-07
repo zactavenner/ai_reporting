@@ -791,18 +791,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   }, [agg]);
 
   if (!parsed) {
-    return (
-      <div className="border-2 border-dashed border-border bg-card rounded-2xl p-12 text-center">
-        <p className="text-sm text-muted-foreground">
-          No reporting Google Sheet configured for this client yet.
-        </p>
-        {!isPublicView && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Add a sheet URL in Settings → Reporting Sheet to enable the dashboard.
-          </p>
-        )}
-      </div>
-    );
+    return <SheetSetupPrompt clientId={clientId} isPublicView={isPublicView} />;
   }
 
   const presets: { id: Preset; label: string }[] = [
