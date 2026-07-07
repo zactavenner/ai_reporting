@@ -54,6 +54,7 @@ import { cn } from '@/lib/utils';
 import { SheetStatsReportDialog, type StatHighlight } from './SheetStatsReportDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
+import { TopCreativeCard } from './TopCreativeCard';
 
 function SheetSetupPrompt({ clientId, isPublicView }: { clientId: string; isPublicView?: boolean }) {
   const [url, setUrl] = useState('');
