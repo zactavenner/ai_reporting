@@ -53,6 +53,50 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { SheetStatsReportDialog, type StatHighlight } from './SheetStatsReportDialog';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+
+function SheetSetupPrompt({ clientId, isPublicView }: { clientId: string; isPublicView?: boolean }) {
+  const [url, setUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+  const save = async () => {
+    const trimmed = url.trim();
+    if (!/spreadsheets\/d\//.test(trimmed)) {
+      toast({ variant: 'destructive', title: 'Invalid link', description: 'Paste a full Google Sheets URL (…/spreadsheets/d/…).' });
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from('client_settings')
+      .upsert({ client_id: clientId, kpi_google_sheet_url: trimmed }, { onConflict: 'client_id' });
+    setSaving(false);
+    if (error) return toast({ variant: 'destructive', title: 'Could not save', description: error.message });
+    toast({ title: 'Sheet connected', description: 'Reloading…' });
+    setTimeout(() => window.location.reload(), 600);
+  };
+  return (
+    <div className="border-2 border-dashed border-border bg-card rounded-2xl p-8 text-center max-w-xl mx-auto">
+      <p className="text-sm font-medium">Connect this client's reporting Google Sheet</p>
+      <p className="text-xs text-muted-foreground mt-1">Source-of-truth CRM totals feed the Sheet Stats dashboard and scheduled email reports.</p>
+      {!isPublicView && (
+        <div className="mt-4 flex gap-2">
+          <Input
+            placeholder="https://docs.google.com/spreadsheets/d/…"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            disabled={saving}
+          />
+          <Button onClick={save} disabled={saving || !url.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+        </div>
+      )}
+      {!isPublicView && (
+        <p className="text-[11px] text-muted-foreground mt-3">
+          You can also manage this under Client Settings → Reporting Sheet.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } | null {
   if (!url) return null;
@@ -791,18 +835,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   }, [agg]);
 
   if (!parsed) {
-    return (
-      <div className="border-2 border-dashed border-border bg-card rounded-2xl p-12 text-center">
-        <p className="text-sm text-muted-foreground">
-          No reporting Google Sheet configured for this client yet.
-        </p>
-        {!isPublicView && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Add a sheet URL in Settings → Reporting Sheet to enable the dashboard.
-          </p>
-        )}
-      </div>
-    );
+    return <SheetSetupPrompt clientId={clientId} isPublicView={isPublicView} />;
   }
 
   const presets: { id: Preset; label: string }[] = [

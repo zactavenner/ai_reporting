@@ -39,6 +39,12 @@ verify_jwt = false
 [functions.stripe-webhook]
 verify_jwt = false
 
+[functions.dispatch-sheet-stats]
+verify_jwt = false
+
+[functions.send-sheet-stats-email]
+verify_jwt = false
+
 [functions.sync-ghl-contacts]
 verify_jwt = false
 
