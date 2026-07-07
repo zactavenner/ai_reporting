@@ -66,20 +66,23 @@ type Preset = 'y' | '3d' | '7d' | '30d' | '90d' | 'tm' | 'lm' | 'ty' | 'launch' 
 
 function presetRange(p: Preset, launchDate?: Date): { from: Date; to: Date } {
   const today = new Date();
+  // Ad spend and sheet data only finalize once per day, so every rolling range
+  // ends at yesterday (never includes today's partial data).
+  const yesterday = subDays(today, 1);
   switch (p) {
-    case 'y': { const y = subDays(today, 1); return { from: y, to: y }; }
-    case '3d': return { from: subDays(today, 2), to: today };
-    case '7d': return { from: subDays(today, 6), to: today };
-    case '30d': return { from: subDays(today, 29), to: today };
-    case '90d': return { from: subDays(today, 89), to: today };
-    case 'tm': return { from: startOfMonth(today), to: today };
+    case 'y': return { from: yesterday, to: yesterday };
+    case '3d': return { from: subDays(yesterday, 2), to: yesterday };
+    case '7d': return { from: subDays(yesterday, 6), to: yesterday };
+    case '30d': return { from: subDays(yesterday, 29), to: yesterday };
+    case '90d': return { from: subDays(yesterday, 89), to: yesterday };
+    case 'tm': return { from: startOfMonth(today), to: yesterday };
     case 'lm': {
       const prev = subMonths(today, 1);
       return { from: startOfMonth(prev), to: endOfMonth(prev) };
     }
-    case 'ty': return { from: startOfYear(today), to: today };
-    case 'launch': return { from: launchDate ?? subYears(today, 1), to: today };
-    default: return { from: subDays(today, 29), to: today };
+    case 'ty': return { from: startOfYear(today), to: yesterday };
+    case 'launch': return { from: launchDate ?? subYears(today, 1), to: yesterday };
+    default: return { from: subDays(yesterday, 29), to: yesterday };
   }
 }
 
@@ -514,7 +517,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   }
 
   const range = preset === 'custom'
-    ? { from: customRange.from ?? subDays(new Date(), 29), to: customRange.to ?? new Date() }
+    ? { from: customRange.from ?? subDays(new Date(), 30), to: customRange.to ?? subDays(new Date(), 1) }
     : presetRange(preset, launchDate);
 
   const from = format(range.from, 'yyyy-MM-dd');
