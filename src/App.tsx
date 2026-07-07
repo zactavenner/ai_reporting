@@ -43,6 +43,7 @@ const AIStudioStylesPage = lazyRetry(() => import("./pages/AIStudioStylesPage"))
 const ApprovalsPage = lazyRetry(() => import("./pages/ApprovalsPage"));
 const MediaBuyerPage = lazyRetry(() => import("./pages/MediaBuyerPage"));
 const LeadQualityPage = lazyRetry(() => import("./pages/LeadQualityPage"));
+const WeeklyParityPage = lazyRetry(() => import("./pages/WeeklyParityPage"));
 const UnsubscribePage = lazyRetry(() => import("./pages/UnsubscribePage"));
 const LoginPage = lazyRetry(() => import("./pages/LoginPage"));
 const OAuthConsent = lazyRetry(() => import("./pages/OAuthConsent"));
@@ -97,6 +98,7 @@ const App = () => (
             <Route path="/approvals/history" element={<PasswordGate><ApprovalsPage /></PasswordGate>} />
             <Route path="/media-buyer" element={<PasswordGate><MediaBuyerPage /></PasswordGate>} />
             <Route path="/lead-quality" element={<PasswordGate><LeadQualityPage /></PasswordGate>} />
+            <Route path="/weekly-parity" element={<PasswordGate><WeeklyParityPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
