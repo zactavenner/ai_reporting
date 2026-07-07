@@ -328,8 +328,17 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
   const [activeTab, setActiveTab] = useState('campaigns');
   const [filterCampaignId, setFilterCampaignId] = useState<string | null>(null);
   const [filterAdSetId, setFilterAdSetId] = useState<string | null>(null);
-  // Status filter: 'active' (default, cleanest view), 'all', or 'paused'.
-  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'paused'>('active');
+  // Status filter persisted per client so the choice survives navigation/refresh.
+  const statusStorageKey = `ads-manager:status-filter:${clientId}`;
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'paused'>(() => {
+    if (typeof window === 'undefined') return 'active';
+    const saved = window.localStorage.getItem(statusStorageKey);
+    return saved === 'all' || saved === 'paused' || saved === 'active' ? saved : 'active';
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(statusStorageKey, statusFilter);
+  }, [statusFilter, statusStorageKey]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const lastSyncedRange = useRef<string | null>(null);
   const isMobile = useIsMobile();
