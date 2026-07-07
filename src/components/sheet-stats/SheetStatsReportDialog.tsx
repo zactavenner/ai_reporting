@@ -307,6 +307,7 @@ export function SheetStatsReportDialog({
           pdf_base64: pdf?.base64,
           pdf_filename: pdf?.filename,
           client_name: clientName,
+          client_id: clientId,
         },
       });
       if (error) throw error;
