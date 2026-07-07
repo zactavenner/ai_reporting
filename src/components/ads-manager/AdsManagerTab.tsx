@@ -233,7 +233,7 @@ function MobileRowList({
                   <div><div className="text-muted-foreground">Spend</div><div className="font-semibold tabular-nums">{fmt$(r.spend)}</div></div>
                   <div><div className="text-muted-foreground">CTR</div><div className="font-semibold tabular-nums">{fmtPct(r.ctr)}</div></div>
                   <div><div className="text-muted-foreground">CPL</div><div className="font-semibold tabular-nums">{fmt$(r.cost_per_lead)}</div></div>
-                  <div><div className="text-muted-foreground">Leads</div><div className="font-semibold tabular-nums">{fmtN(r.attributed_leads)}</div></div>
+                  <div><div className="text-muted-foreground">Leads</div><div className="font-semibold tabular-nums">{fmtN(Math.max(Number(r.meta_reported_leads)||0, Number(r.attributed_leads)||0))}</div></div>
                   <div><div className="text-muted-foreground">Funded</div><div className="font-semibold tabular-nums">{fmtN(r.attributed_funded)}</div></div>
                   <div><div className="text-muted-foreground">CPA</div><div className="font-semibold tabular-nums">{fmt$(r.cost_per_funded)}</div></div>
                 </div>
