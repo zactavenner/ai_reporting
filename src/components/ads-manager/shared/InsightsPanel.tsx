@@ -25,6 +25,7 @@ interface Props {
   campaigns: any[];
   dateRange?: { from: Date; to: Date };
   onJumpTo?: (target: { type: string; id: string }) => void;
+  clientId?: string;
 }
 
 const severityStyles: Record<AdsInsight['severity'], string> = {
@@ -52,7 +53,7 @@ const actionLabel: Record<AdsInsight['action'], string> = {
   review: 'Review',
 };
 
-export function InsightsPanel({ ads, campaigns, dateRange, onJumpTo }: Props) {
+export function InsightsPanel({ ads, campaigns, dateRange, onJumpTo, clientId }: Props) {
   const [data, setData] = useState<{ summary: string; insights: AdsInsight[] } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
@@ -63,6 +64,7 @@ export function InsightsPanel({ ads, campaigns, dateRange, onJumpTo }: Props) {
         body: {
           ads,
           campaigns,
+          clientId,
           dateRange: dateRange ? { from: dateRange.from.toISOString(), to: dateRange.to.toISOString() } : null,
         },
       });

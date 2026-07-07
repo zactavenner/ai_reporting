@@ -477,7 +477,7 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
 
         <div className="mt-3 space-y-3">
           <AgentMcpPanel clientId={clientId} />
-          <InsightsPanel ads={ads} campaigns={activeCampaigns} />
+          <InsightsPanel ads={ads} campaigns={activeCampaigns} clientId={clientId} />
         </div>
 
         <TabsContent value="campaigns">

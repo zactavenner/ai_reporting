@@ -2,8 +2,52 @@
 // prioritized, actionable recommendations (pause, scale, refresh creative, adjust bid, etc.).
 // Uses Lovable AI Gateway (no client-side keys).
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } | null {
+  if (!url) return null;
+  const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!idMatch) return null;
+  const gidMatch = url.match(/[#?&]gid=(\d+)/);
+  return { sheet_id: idMatch[1], gid: gidMatch?.[1] };
+}
+
+async function loadClientContext(clientId: string) {
+  const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+  const [offerRes, funnelRes, settingsRes, clientRes] = await Promise.all([
+    sb.from('client_offers').select('title, description, offer_type, fund_name, fund_type, raise_amount, min_investment, timeline, target_investor, targeted_returns, hold_period, distribution_schedule, investment_range, tax_advantages, credibility, fund_history, industry_focus, accredited_only, reg_d_type').eq('client_id', clientId).order('created_at', { ascending: false }).limit(3),
+    sb.from('client_funnel_steps').select('name, url, sort_order, step_type, step_kind, ad_platform, sms_body, email_subject, email_from_name, email_body, messages, linked_ghl_workflow_id, form_config').eq('client_id', clientId).order('sort_order', { ascending: true }).limit(80),
+    sb.from('client_settings').select('kpi_google_sheet_url, metrics_sheet_mapping').eq('client_id', clientId).maybeSingle(),
+    sb.from('clients').select('name, status, timezone').eq('id', clientId).maybeSingle(),
+  ]);
+
+  let sheetMetrics: any = null;
+  const sheetInfo = parseSheetUrl((settingsRes.data as any)?.kpi_google_sheet_url);
+  if (sheetInfo) {
+    try {
+      const mappingRaw = (settingsRes.data as any)?.metrics_sheet_mapping;
+      const mapping = mappingRaw?.columns && typeof mappingRaw.columns === 'object' ? mappingRaw.columns : undefined;
+      const { data } = await sb.functions.invoke('fetch-sheet-metrics', {
+        body: { sheet_id: sheetInfo.sheet_id, gid: sheetInfo.gid, mapping },
+      });
+      sheetMetrics = (data as any)?.aggregated ?? null;
+    } catch (e) {
+      console.warn('sheet fetch failed:', (e as Error).message);
+    }
+  }
+
+  return {
+    client: clientRes.data ?? null,
+    offers: offerRes.data ?? [],
+    funnel_canvas: funnelRes.data ?? [],
+    sheet_metrics: sheetMetrics,
+    has_sheet: !!sheetInfo,
+  };
+}
 
 interface AdRow {
   id: string;
@@ -95,6 +139,12 @@ function summarize(ads: AdRow[], campaigns: CampaignRow[]) {
 const SYSTEM = `You are a senior paid-media strategist for a direct-response capital-raising agency.
 Analyze the supplied Meta/Google Ads performance snapshot and return a JSON object with prioritized, concrete recommendations.
 
+You are given four layers of context:
+1. The client + OFFER (fund name, targeted returns, min investment, accredited-only, target investor). Ground creative/audience advice in the actual offer.
+2. The FUNNEL CANVAS — every step of the funnel: landing pages, forms, SMS nurture bodies, email sequences, and linked GHL workflows. When leads are cheap but funded is weak, recommend specific SMS/email/form fixes on the right step.
+3. GOOGLE SHEET KPI TOTALS — pulled from the client's KPI sheet via API. Treat these as source-of-truth CRM/funnel numbers when they diverge from Meta-attributed leads.
+4. The Meta ads + campaign performance snapshot.
+
 Heuristics to apply (treat as guidance, not absolutes):
 - Pause candidates: spend > $300 with 0 leads/funded after 7+ days, or CTR < 0.6% with > $200 spend.
 - Scale candidates: ROAS (revenue / spend) > 2 OR attributed_funded > 0 with healthy CTR (> 1.2%).
@@ -132,6 +182,7 @@ Deno.serve(async (req) => {
     const ads: AdRow[] = Array.isArray(body.ads) ? body.ads : [];
     const campaigns: CampaignRow[] = Array.isArray(body.campaigns) ? body.campaigns : [];
     const dateRange = body.dateRange || null;
+    const clientId: string | undefined = typeof body.clientId === 'string' ? body.clientId : undefined;
 
     if (ads.length === 0 && campaigns.length === 0) {
       return new Response(
@@ -141,9 +192,25 @@ Deno.serve(async (req) => {
     }
 
     const payload = summarize(ads, campaigns);
+    const clientCtx = clientId ? await loadClientContext(clientId).catch((e) => {
+      console.warn('client context failed:', e?.message);
+      return null;
+    }) : null;
 
     const userMsg = `Date range: ${dateRange ? JSON.stringify(dateRange) : "last 30 days"}.
 Ads (${payload.ads.length}) and campaigns (${payload.campaigns.length}) follow as JSON. Return JSON only.
+
+${clientCtx ? `CLIENT: ${JSON.stringify(clientCtx.client)}
+
+OFFER (what this client is raising for — factor into audience/creative recommendations):
+${JSON.stringify(clientCtx.offers)}
+
+FUNNEL CANVAS (pages, forms, SMS nurture, email sequence, GHL workflow links — recommend fixes at the funnel step where the drop-off is happening, not just the ad):
+${JSON.stringify(clientCtx.funnel_canvas)}
+
+GOOGLE SHEET KPI TOTALS ${clientCtx.has_sheet ? '(pulled via the KPI sheet API for source-of-truth CRM/funnel numbers — use these when they diverge from Meta-attributed leads)' : '(no KPI sheet configured)'}:
+${JSON.stringify(clientCtx.sheet_metrics)}
+` : ''}
 
 CAMPAIGNS:
 ${JSON.stringify(payload.campaigns)}
