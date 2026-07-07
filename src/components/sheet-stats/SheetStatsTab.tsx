@@ -517,7 +517,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
   }
 
   const range = preset === 'custom'
-    ? { from: customRange.from ?? subDays(new Date(), 29), to: customRange.to ?? new Date() }
+    ? { from: customRange.from ?? subDays(new Date(), 30), to: customRange.to ?? subDays(new Date(), 1) }
     : presetRange(preset, launchDate);
 
   const from = format(range.from, 'yyyy-MM-dd');
