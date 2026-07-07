@@ -158,7 +158,13 @@ export function FunnelStepCard({
       );
     }
     if (isFbLeadForm || url === 'fb://lead-form') {
-      return <FacebookLeadFormMockup stepName={title} deviceType={deviceType} />;
+      return (
+        <FacebookLeadFormMockup
+          stepName={title}
+          deviceType={deviceType}
+          questions={(step as any).form_config?.questions}
+        />
+      );
     }
     if (isAds) {
       return (
