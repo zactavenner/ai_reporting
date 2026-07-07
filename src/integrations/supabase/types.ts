@@ -4456,6 +4456,7 @@ export type Database = {
           email_body: string | null
           email_from_name: string | null
           email_subject: string | null
+          form_config: Json | null
           id: string
           linked_ghl_workflow_id: string | null
           messages: Json
@@ -4476,6 +4477,7 @@ export type Database = {
           email_body?: string | null
           email_from_name?: string | null
           email_subject?: string | null
+          form_config?: Json | null
           id?: string
           linked_ghl_workflow_id?: string | null
           messages?: Json
@@ -4496,6 +4498,7 @@ export type Database = {
           email_body?: string | null
           email_from_name?: string | null
           email_subject?: string | null
+          form_config?: Json | null
           id?: string
           linked_ghl_workflow_id?: string | null
           messages?: Json
