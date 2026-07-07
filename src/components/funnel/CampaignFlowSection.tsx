@@ -413,8 +413,12 @@ export function CampaignFlowSection({
       ) : (
         <div
           ref={flowContainerRef}
-          className="relative rounded-lg border bg-background/40 overflow-hidden"
-          style={{ height: isFullscreen ? '100vh' : 780 }}
+          className={`relative overflow-hidden ${
+            isFullscreen
+              ? 'rounded-none border-0 bg-background'
+              : 'rounded-lg border bg-background/40'
+          }`}
+          style={{ height: isFullscreen ? '100vh' : 780, width: isFullscreen ? '100vw' : undefined }}
         >
           <TransformWrapper
             initialScale={1}
