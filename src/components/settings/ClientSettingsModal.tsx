@@ -29,6 +29,7 @@ import { useSyncQueue } from '@/hooks/useSyncQueue';
 import { DollarSign, Target, Plug, Loader2, RefreshCw, CheckCircle, XCircle, Users, Lock, Eye, EyeOff, AlertTriangle, ListOrdered, MessageSquare as MessageSquareIcon } from 'lucide-react';
 import { ClientSheetBindingCard } from './ClientSheetBindingCard';
 import { StripeSyncStatus } from './StripeSyncStatus';
+import { MetaTrackingSection } from './MetaTrackingSection';
 
 function ClientUrlField({
   clientId,
@@ -855,6 +856,7 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
           </TabsContent>
 
           <TabsContent value="integrations" className="space-y-4 mt-4">
+            <MetaTrackingSection clientId={client.id} />
             <div className="border-2 border-border p-4 space-y-4">
               <div>
                 <h4 className="font-medium mb-1 flex items-center gap-2">
