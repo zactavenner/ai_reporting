@@ -146,6 +146,7 @@ export default function ClientsPage() {
         {/* Search & Sort Bar */}
         {clients && clients.length > 0 && (
           <div className="flex gap-3 items-center">
+            <CapiCoverageBadge />
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
