@@ -18,6 +18,9 @@ port = 54323
 [functions.webhook-ingest]
 verify_jwt = false
 
+[functions.parse-nurture-sequence]
+verify_jwt = false
+
 [functions.ai-analysis]
 verify_jwt = false
 
