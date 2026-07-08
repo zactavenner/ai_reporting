@@ -83,6 +83,8 @@ serve(async (req) => {
       const formattedSubscriptions = subscriptions.data.map((sub: any) => ({
         id: sub.id,
         status: sub.status,
+        cancel_at_period_end: !!sub.cancel_at_period_end,
+        pause_collection: sub.pause_collection || null,
         current_period_start: sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null,
         current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
         items: sub.items.data.map((item: any) => ({
