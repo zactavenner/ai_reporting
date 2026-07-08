@@ -420,6 +420,12 @@ export default function ClientDetail() {
               <BarChart3 className="h-4 w-4" />
               Ads Manager
             </TabsTrigger>
+            {/^clear summit/i.test(client.name || '') && (
+              <TabsTrigger value="fund-launch-review" className="gap-2 whitespace-nowrap">
+                <Rocket className="h-4 w-4" />
+                Fund Launch Review
+              </TabsTrigger>
+            )}
             <TabsTrigger value="ai-studio" className="gap-2 whitespace-nowrap">
               <Sparkles className="h-4 w-4" />
               AI Studio
