@@ -22,14 +22,27 @@ function ymd(d: Date) { return d.toISOString().slice(0, 10); }
 
 function extractLeads(actions: any[] | undefined): number {
   if (!Array.isArray(actions)) return 0;
-  let total = 0;
+  // Match Meta Ads Manager "Leads (Form)" column by preferring the deduped
+  // grouped lead action. Otherwise fall back in priority order — never sum
+  // multiple lead action_types (they double-count the same conversion).
+  const byType = new Map<string, number>();
   for (const a of actions) {
     const t = String(a?.action_type ?? "");
-    if (t === "lead" || t === "onsite_conversion.lead_grouped" || t.endsWith(".lead") || t === "offsite_conversion.fb_pixel_lead") {
-      total += Number(a?.value ?? 0) || 0;
-    }
+    const v = Number(a?.value ?? 0) || 0;
+    if (v) byType.set(t, (byType.get(t) ?? 0) + v);
   }
-  return total;
+  const priority = [
+    "onsite_conversion.lead_grouped",
+    "lead",
+    "offsite_conversion.fb_pixel_lead",
+  ];
+  for (const key of priority) {
+    const v = byType.get(key);
+    if (v && v > 0) return v;
+  }
+  // Last-resort catch for exotic ".lead" suffixes
+  for (const [k, v] of byType) if (k.endsWith(".lead") && v > 0) return v;
+  return 0;
 }
 
 function extractVideo(actions: any[] | undefined, video: any[] | undefined, keyContains: string): number {
@@ -78,7 +91,12 @@ async function syncClient(sb: any, client: any, days: number, startDate?: string
   url.searchParams.set("level", "ad");
   url.searchParams.set("time_increment", "1");
   url.searchParams.set("time_range", JSON.stringify({ since: ymd(start), until: ymd(end) }));
-  url.searchParams.set("fields", "date_start,ad_id,adset_id,campaign_id,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,actions,video_thruplay_watched_actions");
+  url.searchParams.set(
+    "fields",
+    "date_start,ad_id,adset_id,campaign_id,spend,impressions,reach,frequency,clicks,inline_link_clicks,ctr,cpc,cpm,actions,video_thruplay_watched_actions",
+  );
+  // Inherit each ad set's attribution setting so numbers match Ads Manager.
+  url.searchParams.set("use_unified_attribution_setting", "true");
   url.searchParams.set("limit", "500");
   url.searchParams.set("access_token", token);
 
@@ -88,6 +106,14 @@ async function syncClient(sb: any, client: any, days: number, startDate?: string
   const rows = data.map((d) => {
     const leads = extractLeads(d.actions);
     const spend = Number(d.spend ?? 0) || 0;
+    // Meta Ads Manager's default "Clicks" column is Link clicks
+    // (inline_link_clicks). Fall back to total clicks if unavailable.
+    const linkClicks = Number(d.inline_link_clicks ?? 0) || 0;
+    const totalClicks = Number(d.clicks ?? 0) || 0;
+    const clicks = linkClicks > 0 ? linkClicks : totalClicks;
+    const impressions = Number(d.impressions ?? 0) || 0;
+    const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+    const cpc = clicks > 0 ? spend / clicks : 0;
     return {
       date: d.date_start,
       client_id: client.id,
@@ -95,12 +121,12 @@ async function syncClient(sb: any, client: any, days: number, startDate?: string
       meta_adset_id: d.adset_id ?? null,
       meta_campaign_id: d.campaign_id ?? null,
       spend,
-      impressions: Number(d.impressions ?? 0) || 0,
+      impressions,
       reach: Number(d.reach ?? 0) || 0,
       frequency: Number(d.frequency ?? 0) || 0,
-      clicks: Number(d.clicks ?? 0) || 0,
-      ctr: Number(d.ctr ?? 0) || 0,
-      cpc: Number(d.cpc ?? 0) || 0,
+      clicks,
+      ctr,
+      cpc,
       cpm: Number(d.cpm ?? 0) || 0,
       leads,
       cost_per_lead: leads > 0 ? spend / leads : 0,
