@@ -23,6 +23,7 @@ import {
 import { useClients } from '@/hooks/useClients';
 import { useBrollGeneration } from '@/hooks/useBrollGeneration';
 import { useSingleJobPersistence } from '@/hooks/useSingleJobPersistence';
+import { RecentJobsPanel } from '@/components/shared/RecentJobsPanel';
 import { useBrollAssets, useDeleteAsset, useCreateAsset, useUpdateAsset } from '@/hooks/useAssets';
 import { AssetGrid } from '@/components/assets/AssetGrid';
 import { KeyframeUploader, TRANSITION_PRESETS } from '@/components/broll/KeyframeUploader';
@@ -466,7 +467,9 @@ export default function BrollPage() {
               <Badge variant="secondary">{brollAssets.length} clips</Badge>
             </div>
 
-            <AssetGrid
+            <RecentJobsPanel kinds={['broll', 'image-to-video']} />
+
+        <AssetGrid
               assets={brollAssets}
               isLoading={isLoadingAssets}
               onDelete={handleDelete}
