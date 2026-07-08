@@ -2,7 +2,6 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
-const HPA_CLIENT_ID = '18acd701-92ff-4bbc-86aa-1f7cd9a9c973';
 const APP_URL = 'https://aireporting.lovable.app';
 
 interface Body {
@@ -107,7 +106,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const [{ data: task }, { data: member }, { data: client }] = await Promise.all([
+    const [{ data: task }, { data: member }] = await Promise.all([
       supabase
         .from('tasks')
         .select('id, title, description, due_date, status, stage, client_id, clients(name)')
@@ -118,11 +117,6 @@ Deno.serve(async (req) => {
         .select('id, name, email, phone')
         .eq('id', member_id)
         .maybeSingle(),
-      supabase
-        .from('clients')
-        .select('ghl_api_key, ghl_location_id')
-        .eq('id', HPA_CLIENT_ID)
-        .maybeSingle(),
     ]);
 
     if (!task || !member) {
@@ -131,8 +125,16 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Look up GHL credentials from the task's own client_id
+    const { data: client } = await supabase
+      .from('clients')
+      .select('ghl_api_key, ghl_location_id')
+      .eq('id', task.client_id)
+      .maybeSingle();
+
     if (!client?.ghl_api_key || !client?.ghl_location_id) {
-      return new Response(JSON.stringify({ error: 'HPA GHL not configured' }), {
+      return new Response(JSON.stringify({ error: 'GHL credentials not configured for this client' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

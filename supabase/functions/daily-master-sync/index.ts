@@ -7,27 +7,6 @@ const corsHeaders = {
 
 declare const EdgeRuntime: { waitUntil: (promise: Promise<any>) => void } | undefined;
 
-// Fire-and-forget invocation — does NOT wait for the child function to finish.
-// This is the key change: each child runs in its own edge instance with its own timeout budget.
-function fireAndForget(
-  supabaseUrl: string,
-  supabaseKey: string,
-  functionName: string,
-  body: Record<string, unknown>,
-  label: string,
-): void {
-  fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${supabaseKey}`,
-    },
-    body: JSON.stringify(body),
-  })
-    .then(() => console.log(`[daily-master-sync] dispatched ${label}`))
-    .catch((err) => console.error(`[daily-master-sync] dispatch failed ${label}:`, err));
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -46,7 +25,6 @@ Deno.serve(async (req) => {
   } catch {}
 
   // Dispatch lock: if another master run started <10min ago, skip.
-  // Prevents the watchdog + cron from double-firing concurrent syncs.
   if (!force) {
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: recent } = await supabase
@@ -78,11 +56,11 @@ Deno.serve(async (req) => {
       console.error("[daily-master-sync] stale cleanup error:", e);
     }
 
-    // Rolling 7-day window ending yesterday
+    // Rolling 30-day window ending yesterday
     const endDate = new Date();
     endDate.setUTCDate(endDate.getUTCDate() - 1);
     const startDate = new Date(endDate);
-    startDate.setUTCDate(startDate.getUTCDate() - 29); // 30-day window for resilience
+    startDate.setUTCDate(startDate.getUTCDate() - 29);
     const startStr = startDate.toISOString().split("T")[0];
     const endStr = endDate.toISOString().split("T")[0];
 
@@ -96,9 +74,9 @@ Deno.serve(async (req) => {
       return;
     }
 
-    console.log(`[daily-master-sync] dispatching syncs for ${clients.length} clients (window ${startStr} → ${endStr})`);
+    console.log(`[daily-master-sync] enqueuing jobs for ${clients.length} clients (window ${startStr} → ${endStr})`);
 
-    const { data: masterRun } = await supabase.from("sync_runs").insert({
+    await supabase.from("sync_runs").insert({
       function_name: "daily-master-sync",
       started_at: new Date().toISOString(),
       finished_at: new Date().toISOString(),
@@ -108,72 +86,87 @@ Deno.serve(async (req) => {
         source: "master",
         window: `${startStr}→${endStr}`,
         clientCount: clients.length,
-        mode: "fire-and-forget",
+        mode: "sync_queue",
         dispatched_at: new Date().toISOString(),
       },
-    }).select("id").single();
+    });
 
-    // Stagger dispatches by 2 seconds each to avoid hammering subfunction cold-starts
-    let dispatchIdx = 0;
+    const now = Date.now();
+    const rows: Record<string, unknown>[] = [];
+
     for (const client of clients) {
-      const delay = dispatchIdx * 2000;
-      dispatchIdx++;
+      // ── Meta Ads ──
+      if (!skipSteps.includes("meta") && client.meta_ad_account_id) {
+        rows.push({
+          client_id: client.id,
+          sync_type: "meta_ads_sync",
+          priority: 2,
+          status: "pending",
+          payload: { startDate: startStr, endDate: endStr },
+          // immediate
+        });
+      }
 
-      setTimeout(() => {
-        if (!skipSteps.includes("meta") && client.meta_ad_account_id) {
-          fireAndForget(supabaseUrl, supabaseKey, "sync-meta-ads", {
-            clientId: client.id,
-            startDate: startStr,
-            endDate: endStr,
-          }, `${client.name}/meta`);
-        }
+      // ── GHL ──
+      if (!skipSteps.includes("ghl") && client.ghl_api_key && client.ghl_location_id) {
+        const lastSync = client.last_ghl_sync_at ? new Date(client.last_ghl_sync_at).getTime() : 0;
+        const hoursSinceSync = lastSync ? (Date.now() - lastSync) / (1000 * 60 * 60) : Infinity;
+        let ghlDays = 30;
+        if (!lastSync) ghlDays = 365;
+        else if (hoursSinceSync > 168) ghlDays = 90;
+        else if (hoursSinceSync > 24) ghlDays = 60;
 
-        if (!skipSteps.includes("ghl") && client.ghl_api_key && client.ghl_location_id) {
-          // Backfill detection: if no sync in last 24h (or never), pull a wider window
-          const lastSync = client.last_ghl_sync_at ? new Date(client.last_ghl_sync_at).getTime() : 0;
-          const hoursSinceSync = lastSync ? (Date.now() - lastSync) / (1000 * 60 * 60) : Infinity;
-          let ghlDays = 30;
-          if (!lastSync) ghlDays = 365;            // never synced → full backfill
-          else if (hoursSinceSync > 168) ghlDays = 90;  // >1 week stale → 90d
-          else if (hoursSinceSync > 24) ghlDays = 60;   // >24h stale → 60d
+        // Contacts — immediate
+        rows.push({
+          client_id: client.id,
+          sync_type: "ghl_contacts_sync",
+          priority: 2,
+          status: "pending",
+          payload: { syncType: "contacts", sinceDateDays: ghlDays },
+        });
 
-          fireAndForget(supabaseUrl, supabaseKey, "sync-ghl-contacts", {
-            client_id: client.id,
-            syncType: "contacts",
-            sinceDateDays: ghlDays,
-          }, `${client.name}/ghl-contacts(${ghlDays}d)`);
+        // Calendar — run after contacts (~15 s) so lead UTM map is warm
+        rows.push({
+          client_id: client.id,
+          sync_type: "ghl_calendar_sync",
+          priority: 3,
+          status: "pending",
+          next_retry_at: new Date(now + 15_000).toISOString(),
+          payload: { sinceDateDays: ghlDays },
+        });
 
-          // Calendar appointments (booked calls) — dispatched ~15s after contacts so
-          // the leads lookup map (with UTMs) is warm for call → lead linking.
-          setTimeout(() => {
-            fireAndForget(supabaseUrl, supabaseKey, "sync-calendar-appointments", {
-              clientId: client.id,
-              sinceDateDays: ghlDays,
-            }, `${client.name}/ghl-calendar(${ghlDays}d)`);
-          }, 15000);
+        // Pipelines — slightly after calendar
+        rows.push({
+          client_id: client.id,
+          sync_type: "ghl_pipelines_sync",
+          priority: 3,
+          status: "pending",
+          next_retry_at: new Date(now + 25_000).toISOString(),
+          payload: {},
+        });
+      }
 
-          // Pipelines a few seconds later, same client
-          setTimeout(() => {
-            fireAndForget(supabaseUrl, supabaseKey, "sync-ghl-pipelines", {
-              client_id: client.id,
-            }, `${client.name}/ghl-pipelines`);
-          }, 25000);
-        }
-
-        // Recalculate metrics 60s after dispatch — gives sync functions time to write
-        if (!skipSteps.includes("recalculate")) {
-          setTimeout(() => {
-            fireAndForget(supabaseUrl, supabaseKey, "recalculate-daily-metrics", {
-              clientId: client.id,
-              startDate: startStr,
-              endDate: endStr,
-            }, `${client.name}/recalculate`);
-          }, 60000);
-        }
-      }, delay);
+      // ── Recalculate metrics — after syncs complete (~60 s) ──
+      if (!skipSteps.includes("recalculate")) {
+        rows.push({
+          client_id: client.id,
+          sync_type: "recalculate_metrics",
+          priority: 5,
+          status: "pending",
+          next_retry_at: new Date(now + 60_000).toISOString(),
+          payload: { startDate: startStr, endDate: endStr },
+        });
+      }
     }
 
-    console.log(`[daily-master-sync] all dispatches scheduled (${clients.length} clients, ${dispatchIdx * 2}s spread)`);
+    if (rows.length > 0) {
+      const { error: insertErr } = await supabase.from("sync_queue").insert(rows);
+      if (insertErr) {
+        console.error("[daily-master-sync] sync_queue insert error:", insertErr);
+      } else {
+        console.log(`[daily-master-sync] enqueued ${rows.length} jobs for ${clients.length} clients`);
+      }
+    }
   };
 
   if (typeof EdgeRuntime !== "undefined") {
@@ -182,11 +175,10 @@ Deno.serve(async (req) => {
     orchestrate().catch(console.error);
   }
 
-  // Return immediately — orchestration runs in background
   return new Response(
     JSON.stringify({
       success: true,
-      message: "Daily master sync dispatched (fire-and-forget mode)",
+      message: "Daily master sync enqueued via sync_queue",
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );

@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Sparkles, Copy } from 'lucide-react';
+import { Sparkles, Copy, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useWeeklyRecap, buildAutoFillFromRecap } from '@/hooks/useWeeklyRecap';
 
 interface CampaignRow {
   name: string;
@@ -33,6 +34,45 @@ export function WeeklyReportBuilder({ clientId, clientName }: Props) {
   const [adjustments, setAdjustments] = useState('');
   const [output, setOutput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const { data: recap } = useWeeklyRecap(clientId);
+
+  /** Fill only empty fields so manual edits are preserved */
+  function fillFromRecap(force = false) {
+    if (!recap) { toast.error('Recap data not loaded yet'); return; }
+    const filled = buildAutoFillFromRecap(recap);
+
+    if (force || !insights) setInsights(filled.numbers_notes);
+    if (force || !updates) setUpdates(filled.pipeline_notes);
+    if (force || !adjustments) setAdjustments(filled.working_not_working);
+
+    // Pre-fill campaign rows from top creatives if campaigns are still default/empty
+    const allEmpty = campaigns.every((c) => !c.spend && !c.leads);
+    if (force || allEmpty) {
+      const top = recap.creatives.top;
+      if (top.length > 0) {
+        const fmt = (n: number) => n.toFixed(2);
+        setCampaigns(
+          top.map((a) => ({
+            name: a.name,
+            spend: fmt(a.spend),
+            leads: String(a.leads),
+            cpl: a.cpl != null ? fmt(a.cpl) : '',
+            calls: '',
+            showed: '',
+          })),
+        );
+      }
+    }
+
+    toast.success('Fields filled from weekly recap');
+  }
+
+  // Auto-fill empty fields on first load
+  useEffect(() => {
+    if (recap) fillFromRecap(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recap?.windowStart]);
 
   function updateRow(i: number, patch: Partial<CampaignRow>) {
     setCampaigns((p) => p.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -72,7 +112,19 @@ ${JSON.stringify(payload, null, 2)}`;
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Weekly Report Inputs</CardTitle>
+          <CardTitle className="flex items-center justify-between text-base">
+            <span>Weekly Report Inputs</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fillFromRecap(true)}
+              disabled={!recap}
+              title="Overwrite all fields with latest weekly recap data"
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              Refill from recap
+            </Button>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>

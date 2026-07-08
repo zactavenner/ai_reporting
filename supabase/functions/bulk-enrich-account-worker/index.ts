@@ -6,6 +6,9 @@ const corsHeaders = {
 };
 
 const BATCH = 25;
+// A job is done when the anti-join query returns fewer rows than BATCH
+// (meaning no more unenriched leads remain beyond the current cutoff window).
+const REFRESH_DAYS = 30;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -31,37 +34,51 @@ Deno.serve(async (req) => {
 
     await supabase.from('enrichment_jobs').update({ status: 'running' }).eq('id', job.id);
 
-    // Get next batch of candidate leads not enriched within 30 days
-    const cutoff = new Date(Date.now() - 30 * 86400_000).toISOString();
-    const { data: enrichedRecent } = await supabase
-      .from('lead_enrichment')
-      .select('external_id')
-      .eq('client_id', job.client_id)
-      .gte('last_enriched_at', cutoff)
-      .limit(50000);
-    const recentSet = new Set((enrichedRecent || []).map((r: any) => r.external_id));
+    // SQL anti-join: leads that have NO recent enrichment entry (last_enriched_at within REFRESH_DAYS).
+    // This is O(index) and never burns credits on already-enriched leads.
+    const cutoff = new Date(Date.now() - REFRESH_DAYS * 86400_000).toISOString();
+    const { data: candidates, error: candidateErr } = await supabase.rpc(
+      'get_unenriched_leads',
+      { p_client_id: job.client_id, p_cutoff: cutoff, p_limit: BATCH },
+    );
 
-    const { data: leads } = await supabase
-      .from('leads')
-      .select('id, external_id, name, email, phone')
-      .eq('client_id', job.client_id)
-      .not('external_id', 'is', null)
-      .order('created_at', { ascending: true })
-      .range(job.last_offset, job.last_offset + BATCH * 4 - 1);
+    // Fallback if RPC doesn't exist: direct anti-join via JS (still better than in-memory set)
+    let leads: any[] = [];
+    if (candidateErr) {
+      console.warn('[WORKER] RPC not available, falling back to JS anti-join:', candidateErr.message);
+      const { data: recentRows } = await supabase
+        .from('lead_enrichment')
+        .select('external_id')
+        .eq('client_id', job.client_id)
+        .gte('last_enriched_at', cutoff);
+      const recentSet = new Set((recentRows || []).map((r: any) => r.external_id));
 
-    const candidates = (leads || []).filter(l => !recentSet.has(l.external_id)).slice(0, BATCH);
+      const { data: allLeads } = await supabase
+        .from('leads')
+        .select('id, external_id, name, email, phone')
+        .eq('client_id', job.client_id)
+        .not('external_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(BATCH * 8);
+      leads = (allLeads || []).filter(l => !recentSet.has(l.external_id)).slice(0, BATCH);
+    } else {
+      leads = candidates || [];
+    }
 
-    if (!leads || leads.length === 0) {
+    // Terminal condition: no more unenriched candidates → job is complete.
+    if (leads.length === 0) {
       await supabase.from('enrichment_jobs').update({
-        status: 'completed', finished_at: new Date().toISOString(),
+        status: 'completed',
+        finished_at: new Date().toISOString(),
       }).eq('id', job.id);
+      console.log(`[WORKER] Job ${job.id} completed — no unenriched leads remaining`);
       return new Response(JSON.stringify({ success: true, completed: true, job_id: job.id }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     let ok = 0, fail = 0;
-    for (const lead of candidates) {
+    for (const lead of leads) {
       try {
         const nameParts = (lead.name || '').split(' ');
         const res = await fetch(`${supabaseUrl}/functions/v1/enrich-lead-retargetiq`, {
@@ -83,14 +100,14 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 800));
     }
 
-    const newOffset = job.last_offset + leads.length;
-    const newProcessed = job.processed + candidates.length;
+    const newProcessed = job.processed + leads.length;
     const newSucceeded = job.succeeded + ok;
     const newFailed = job.failed + fail;
-    const done = leads.length < BATCH * 4 && candidates.length < BATCH;
+    // If the anti-join returned a full BATCH, there may be more unenriched leads.
+    // If fewer than BATCH returned, we've drained the queue.
+    const done = leads.length < BATCH;
 
     await supabase.from('enrichment_jobs').update({
-      last_offset: newOffset,
       processed: newProcessed,
       succeeded: newSucceeded,
       failed: newFailed,
@@ -98,8 +115,10 @@ Deno.serve(async (req) => {
       finished_at: done ? new Date().toISOString() : null,
     }).eq('id', job.id);
 
+    console.log(`[WORKER] Job ${job.id}: batch=${leads.length} ok=${ok} fail=${fail} done=${done}`);
+
     return new Response(JSON.stringify({
-      success: true, job_id: job.id, batch_processed: candidates.length, ok, fail, done,
+      success: true, job_id: job.id, batch_processed: leads.length, ok, fail, done,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ success: false, error: (err as Error).message }), {

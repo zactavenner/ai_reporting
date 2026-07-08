@@ -20,6 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchVideoAsBlob } from '@/lib/video-proxy';
 import { useImageToVideoGeneration } from '@/hooks/useImageToVideoGeneration';
 import { useSaveAssetFromUrl } from '@/hooks/useAssets';
+import { useSingleJobPersistence } from '@/hooks/useSingleJobPersistence';
 import { SimpleVideoPreviewDialog } from '@/components/batch-video/SimpleVideoPreviewDialog';
 import { SceneTimeline } from '@/components/batch-video/SceneTimeline';
 import type { BatchVideoScene, BatchVideoConfig, ScriptSegment, VideoModel, ExportFormat } from '@/types/batch-video';
@@ -50,6 +51,7 @@ export function VideoGenerationStep({
   const [exportFormat, setExportFormat] = useState<ExportFormat>(config.exportFormat || 'mp4-1080p');
   const { generateVideoFromImage, generatingSceneId } = useImageToVideoGeneration();
   const saveAsset = useSaveAssetFromUrl();
+  const { createJobRecord, updateScene } = useSingleJobPersistence();
 
   const handleGenerateVideo = async (scene: BatchVideoScene) => {
     if (!scene.generatedImageUrl) { toast.error('Generate scene image first'); return; }
@@ -61,6 +63,17 @@ export function VideoGenerationStep({
     const videoPrompt = isBroll
       ? `${cam}Cinematic B-roll. ${scene.segment.sceneDescription || scene.segment.imagePrompt}. Smooth movement. No people.${brandStr}${colorStr}`
       : `${cam}Person maintains eye contact, speaks naturally. ${scene.segment.sceneDescription || scene.segment.imagePrompt}.${scene.segment.text ? ` Says: "${scene.segment.text}".` : ''} Same outfit.${brandStr}`;
+
+    // Persist job record before generation so it survives a reload.
+    const jobIds = await createJobRecord({
+      kind: 'image-to-video',
+      model: videoModel === 'seedance-pro' ? 'seedance-pro' : 'veo3',
+      aspectRatio: config.aspectRatio ?? '16:9',
+      duration: 8,
+      prompt: videoPrompt,
+      clientId: config.clientId,
+      imageUrl: scene.generatedImageUrl,
+    });
 
     await generateVideoFromImage({
       sceneId: scene.id,
@@ -74,9 +87,11 @@ export function VideoGenerationStep({
           const updatedScene = { ...scene, status: 'video_completed' as const, videoUrl: result.videoUrl };
           onUpdateScene(sceneId, { status: 'video_completed', videoUrl: result.videoUrl });
           saveAsset.mutate({ url: result.videoUrl, projectId: config.projectId, clientId: config.clientId, type: 'video', name: `Batch - Scene ${scene.order}` });
+          if (jobIds) updateScene(jobIds.batchId, jobIds.sceneId, 'done', { videoUrl: result.videoUrl });
           onVideoComplete?.(updatedScene);
         } else if (result.status === 'failed') {
           onUpdateScene(sceneId, { status: 'failed', error: result.error });
+          if (jobIds) updateScene(jobIds.batchId, jobIds.sceneId, 'failed', { error: result.error ?? 'Generation failed' });
         } else if (result.status === 'processing') {
           onUpdateScene(sceneId, { status: 'video_generating', operationId: result.operationId });
         }

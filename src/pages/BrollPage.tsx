@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useClients } from '@/hooks/useClients';
 import { useBrollGeneration } from '@/hooks/useBrollGeneration';
+import { useSingleJobPersistence } from '@/hooks/useSingleJobPersistence';
+import { RecentJobsPanel } from '@/components/shared/RecentJobsPanel';
 import { useBrollAssets, useDeleteAsset, useCreateAsset, useUpdateAsset } from '@/hooks/useAssets';
 import { AssetGrid } from '@/components/assets/AssetGrid';
 import { KeyframeUploader, TRANSITION_PRESETS } from '@/components/broll/KeyframeUploader';
@@ -57,6 +59,7 @@ const PROMPT_SUGGESTIONS = [
 export default function BrollPage() {
   const { data: clients = [] } = useClients();
   const { generateVideo, generateFromKeyframes, isGenerating: isApiGenerating, stopPolling } = useBrollGeneration();
+  const { createJobRecord, updateScene } = useSingleJobPersistence();
 
   const { data: brollAssets = [], isLoading: isLoadingAssets, refetch: refetchAssets } = useBrollAssets();
   const deleteAssetMutation = useDeleteAsset();
@@ -80,7 +83,12 @@ export default function BrollPage() {
     return () => stopPolling();
   }, [stopPolling]);
 
-  const handleStatusCallback = (clientId: string | undefined, pendingAssetId: string, customPrompt?: string) =>
+  const handleStatusCallback = (
+    clientId: string | undefined,
+    pendingAssetId: string,
+    customPrompt?: string,
+    jobIds?: { batchId: string; sceneId: string } | null
+  ) =>
     async (result: { status: string; videoUrl?: string }) => {
       if (result.status === 'completed' && result.videoUrl) {
         try {
@@ -106,6 +114,7 @@ export default function BrollPage() {
           });
 
           toast.success('B-roll generated and saved!');
+          if (jobIds) await updateScene(jobIds.batchId, jobIds.sceneId, 'done', { videoUrl: urlData.publicUrl });
           if (!customPrompt) setPrompt('');
         } catch (saveError) {
           console.error('Failed to save video to storage:', saveError);
@@ -115,9 +124,11 @@ export default function BrollPage() {
             public_url: result.videoUrl,
           });
           toast.success('B-roll generated!', { description: 'Saved with external URL' });
+          if (jobIds) await updateScene(jobIds.batchId, jobIds.sceneId, 'done', { videoUrl: result.videoUrl });
         }
       } else if (result.status === 'failed') {
         await updateAssetMutation.mutateAsync({ id: pendingAssetId, status: 'failed' });
+        if (jobIds) await updateScene(jobIds.batchId, jobIds.sceneId, 'failed', { error: 'Generation failed' });
         toast.error('B-roll generation failed');
       }
       refetchAssets();
@@ -170,7 +181,16 @@ export default function BrollPage() {
         metadata,
       });
 
-      const cb = handleStatusCallback(clientId, pendingAsset.id, customPrompt);
+      const finalPromptForJob = mode === 'keyframe' ? 'Keyframe transition' : finalPrompt.trim();
+      const jobIds = await createJobRecord({
+        kind: mode === 'keyframe' ? 'image-to-video' : 'broll',
+        model: 'google/veo-3',
+        aspectRatio: finalAspect,
+        duration: finalDuration,
+        prompt: finalPromptForJob,
+        clientId,
+      });
+      const cb = handleStatusCallback(clientId, pendingAsset.id, customPrompt, jobIds);
 
       if (mode === 'keyframe') {
         toast.info('Analyzing keyframes & generating transition...', {
@@ -447,7 +467,9 @@ export default function BrollPage() {
               <Badge variant="secondary">{brollAssets.length} clips</Badge>
             </div>
 
-            <AssetGrid
+            <RecentJobsPanel kinds={['broll', 'image-to-video']} />
+
+        <AssetGrid
               assets={brollAssets}
               isLoading={isLoadingAssets}
               onDelete={handleDelete}

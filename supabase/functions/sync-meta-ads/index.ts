@@ -1220,6 +1220,19 @@ Deno.serve(async (req) => {
       }
 
       console.log(`Sync complete. Total Meta API calls: ${metaApiCallCount}/${META_API_CALL_LIMIT}`);
+
+      // ── Fire-and-forget recalculate-daily-metrics for this client/range ──
+      try {
+        const recalcStart = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const recalcEnd = endDate || new Date().toISOString().split("T")[0];
+        await supabase.functions.invoke("recalculate-daily-metrics", {
+          body: { client_id: clientId, start_date: recalcStart, end_date: recalcEnd },
+        });
+        console.log(`[sync-meta-ads] recalculate-daily-metrics invoked for ${clientId} (${recalcStart}→${recalcEnd})`);
+      } catch (recalcErr) {
+        console.error("[sync-meta-ads] recalculate-daily-metrics invoke failed (non-fatal):", recalcErr);
+      }
+
       return new Response(JSON.stringify({
         success: true,
         campaigns: campaigns.length,

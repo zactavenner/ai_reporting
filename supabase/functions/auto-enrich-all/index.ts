@@ -7,18 +7,16 @@ const corsHeaders = {
 };
 
 // Sweeps every client that has RetargetIQ auto-enrich ON + slug set + GHL creds,
-// and runs a bounded batch of bulk-enrich for each. Designed to be called by
-// pg_cron on a short interval and/or from the UI ("Run Auto-Enrich Now").
+// and inserts one enrichment_jobs row per client.
+// The heavy lifting (API calls, dedup via SQL anti-join) is done by
+// bulk-enrich-account-worker, which is called by a separate cron.
+// This function is intentionally lightweight: it just enqueues, then returns.
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
-    const perClient: number = Math.min(Math.max(Number(body.per_client) || 50, 1), 200);
-    const newOnly: boolean = body.new_only === true;
-    const sinceHours: number = Math.max(Number(body.since_hours) || 24, 1);
     const requireOptIn: boolean = body.require_opt_in === true; // legacy mode
-    const refreshDays: number = Math.max(Number(body.refresh_days) || 30, 1);
 
     const supabaseUrl = Deno.env.get('ORIGINAL_SUPABASE_URL') || Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('ORIGINAL_SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -36,8 +34,9 @@ serve(async (req) => {
     const ids = (settings || [])
       .filter(s => requireOptIn ? true : (s as any).retargetiq_auto_enrich !== false)
       .map(s => (s as any).client_id);
+
     if (ids.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: 'No eligible clients', clients: 0 }), {
+      return new Response(JSON.stringify({ success: true, message: 'No eligible clients', enqueued: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -49,126 +48,45 @@ serve(async (req) => {
       .in('status', ['active', 'onboarding', 'paused']);
 
     const eligible = (clients || []).filter(c => c.ghl_api_key && c.ghl_location_id);
-    console.log(`[AUTO-ENRICH-ALL] ${eligible.length} eligible clients (perClient=${perClient})`);
+    console.log(`[AUTO-ENRICH-ALL] ${eligible.length} eligible clients — enqueueing enrichment_jobs`);
 
-    const results: any[] = [];
-    for (const c of eligible) {
-      const runStartedAt = Date.now();
-      let succeeded = 0, failed = 0, skippedRecent = 0;
-      try {
-        let leads: any[] = [];
-        // Default behavior: enrich anything not enriched in `refresh_days` window
-        if (newOnly) {
-          // Daily mode: only consider leads created within the last `sinceHours`
-          const sinceIso = new Date(Date.now() - sinceHours * 3600_000).toISOString();
-          const { data: enrichedRows } = await supabase
-            .from('lead_enrichment').select('external_id').eq('client_id', c.id).limit(100000);
-          const enriched = new Set((enrichedRows || []).map(e => e.external_id));
-          const { data: leadRows } = await supabase
-            .from('leads')
-            .select('id, external_id, name, email, phone, created_at')
-            .eq('client_id', c.id)
-            .gte('created_at', sinceIso)
-            .order('created_at', { ascending: false })
-            .limit(perClient * 2);
-          leads = (leadRows || []).filter(l => l.external_id && !enriched.has(l.external_id)).slice(0, perClient);
-        } else {
-          // V2 behavior: pull leads where last_enriched_at is null OR older than `refresh_days`
-          const cutoff = new Date(Date.now() - refreshDays * 86400_000).toISOString();
-          const { data: recentRows } = await supabase
-            .from('lead_enrichment')
-            .select('external_id, last_enriched_at')
-            .eq('client_id', c.id)
-            .gte('last_enriched_at', cutoff)
-            .limit(100000);
-          const skipSet = new Set((recentRows || []).map((e: any) => e.external_id));
-          const { data: leadRows } = await supabase
-            .from('leads')
-            .select('id, external_id, name, email, phone')
-            .eq('client_id', c.id)
-            .not('external_id', 'is', null)
-            .order('created_at', { ascending: false })
-            .limit(perClient * 6);
-          const allRows = leadRows || [];
-          skippedRecent = allRows.filter(l => skipSet.has(l.external_id)).length;
-          leads = allRows.filter(l => !skipSet.has(l.external_id)).slice(0, perClient);
-        }
+    // For each eligible client, insert an enrichment_jobs row (if not already pending/running).
+    // We skip clients that already have a pending/running job to avoid double-queueing.
+    const { data: activeJobs } = await supabase
+      .from('enrichment_jobs')
+      .select('client_id')
+      .in('status', ['pending', 'running'])
+      .in('client_id', eligible.map(c => c.id));
 
-        if (leads.length === 0) {
-          results.push({ client: c.name, processed: 0, succeeded: 0, failed: 0 });
-          continue;
-        }
+    const alreadyQueued = new Set((activeJobs || []).map((j: any) => j.client_id));
 
-        let ok = 0, fail = 0;
-        for (const lead of leads) {
-          try {
-            const nameParts = (lead.name || '').split(' ');
-            const res = await fetch(`${supabaseUrl}/functions/v1/enrich-lead-retargetiq`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-              body: JSON.stringify({
-                client_id: c.id,
-                lead_id: lead.id,
-                external_id: lead.external_id,
-                phone: lead.phone || undefined,
-                email: lead.email || undefined,
-                first_name: nameParts[0] || undefined,
-                last_name: nameParts.slice(1).join(' ') || undefined,
-              }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (data?.success) ok++; else fail++;
-          } catch (e) { fail++; console.error('[AUTO-ENRICH-ALL] lead error', e); }
-          await new Promise(r => setTimeout(r, 1200));
-        }
-        succeeded = ok; failed = fail;
-        results.push({ client: c.name, processed: leads.length, succeeded: ok, failed: fail, skipped_recent: skippedRecent });
-        console.log(`[AUTO-ENRICH-ALL] ${c.name}: ${ok}/${leads.length} enriched`);
-      } catch (e) {
-        console.error(`[AUTO-ENRICH-ALL] ${c.name} failed:`, e);
-        results.push({ client: c.name, error: String((e as Error).message || e) });
-      }
-      // Log run
-      try {
-        await supabase.from('enrichment_run_log').insert({
-          client_id: c.id,
-          processed: succeeded + failed,
-          succeeded,
-          failed,
-          skipped_recent: skippedRecent,
-          duration_ms: Date.now() - runStartedAt,
-        });
-      } catch (logErr) { console.error('[AUTO-ENRICH-ALL] run log failed', logErr); }
-    }
+    const toEnqueue = eligible.filter(c => !alreadyQueued.has(c.id));
 
-    const totals = results.reduce((a, r) => ({
-      processed: a.processed + (r.processed || 0),
-      succeeded: a.succeeded + (r.succeeded || 0),
-      failed: a.failed + (r.failed || 0),
-    }), { processed: 0, succeeded: 0, failed: 0 });
-
-    // After enrichment, immediately propagate to Google Sheets for any client
-    // that had at least one successful enrichment this run. This closes the loop:
-    // new lead -> RetargetIQ -> lead_enrichment (DB) -> GHL note -> Google Sheet row.
-    const writebackClients = results
-      .filter((r: any) => (r.succeeded || 0) > 0)
-      .map((r: any) => eligible.find((c: any) => c.name === r.client)?.id)
-      .filter(Boolean);
-    for (const cid of writebackClients) {
-      try {
-        // Fire-and-forget: don't await response body, but do await request start
-        // so the worker keeps running until the sub-invocation is scheduled.
-        fetch(`${supabaseUrl}/functions/v1/enrich-sheet-writeback`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-          body: JSON.stringify({ client_id: cid }),
-        }).catch((e) => console.error('[AUTO-ENRICH-ALL] writeback fire-and-forget error:', e));
-      } catch (e) {
-        console.error('[AUTO-ENRICH-ALL] writeback invoke failed:', e);
+    let enqueued = 0;
+    const skipped = eligible.length - toEnqueue.length;
+    for (const c of toEnqueue) {
+      const { error: insertErr } = await supabase.from('enrichment_jobs').insert({
+        client_id: c.id,
+        status: 'pending',
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        last_offset: 0,
+      });
+      if (insertErr) {
+        console.error(`[AUTO-ENRICH-ALL] Failed to enqueue ${c.name}:`, insertErr.message);
+      } else {
+        enqueued++;
+        console.log(`[AUTO-ENRICH-ALL] Enqueued ${c.name}`);
       }
     }
 
-    return new Response(JSON.stringify({ success: true, clients: eligible.length, totals, results }), {
+    return new Response(JSON.stringify({
+      success: true,
+      eligible: eligible.length,
+      enqueued,
+      skipped_already_queued: skipped,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

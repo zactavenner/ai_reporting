@@ -20,7 +20,12 @@ const STALE_MINUTES = 10;
 // Map sync_type → edge function name
 const WORKER_MAP: Record<string, string> = {
   lead_upsert: "process-lead-upsert",
-  // future: call_upsert, opportunity_upsert, backfill, etc.
+  // GHL / Meta daily-master-sync job kinds
+  meta_ads_sync: "sync-meta-ads",
+  ghl_contacts_sync: "sync-ghl-contacts",
+  ghl_calendar_sync: "sync-calendar-appointments",
+  ghl_pipelines_sync: "sync-ghl-pipelines",
+  recalculate_metrics: "recalculate-daily-metrics",
 };
 
 function backoffSeconds(attempt: number): number {
@@ -135,17 +140,24 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Compose worker body. payload should already contain { fields, source, provider }
-      // for lead_upsert jobs (set by enqueueLeadUpsert / manual inserts).
+      // Compose worker body.
+      // lead_upsert: uses structured fields from payload.
+      // All other job types: spread payload directly with client_id + job_id.
       const p = (job.payload ?? {}) as Record<string, unknown>;
-      const workerBody: Record<string, unknown> = {
-        client_id: job.client_id,
-        external_id: job.external_id,
-        source: (p.source as string) ?? job.source ?? "manual",
-        provider: (p.provider as string) ?? job.provider ?? null,
-        fields: (p.fields as Record<string, unknown>) ?? {},
-        job_id: job.id,
-      };
+      const workerBody: Record<string, unknown> = job.sync_type === "lead_upsert"
+        ? {
+            client_id: job.client_id,
+            external_id: job.external_id,
+            source: (p.source as string) ?? job.source ?? "manual",
+            provider: (p.provider as string) ?? job.provider ?? null,
+            fields: (p.fields as Record<string, unknown>) ?? {},
+            job_id: job.id,
+          }
+        : {
+            client_id: job.client_id,
+            job_id: job.id,
+            ...p,
+          };
 
       let outcome: { ok: boolean; status: number; bodyText: string };
       try {
