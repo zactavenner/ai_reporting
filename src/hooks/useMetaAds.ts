@@ -271,6 +271,13 @@ export function useSyncMetaAds() {
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Sync failed');
+      if (startDate && endDate) {
+        const { data: dailyData, error: dailyError } = await supabase.functions.invoke('sync-meta-ad-daily-insights', {
+          body: { client_id: clientId, start_date: startDate, end_date: endDate },
+        });
+        if (dailyError) throw dailyError;
+        if (dailyData && dailyData.success === false) throw new Error(dailyData.error || 'Daily Meta insights sync failed');
+      }
       return data;
     },
     onSuccess: (data, { clientId }) => {
