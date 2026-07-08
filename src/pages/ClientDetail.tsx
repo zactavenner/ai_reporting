@@ -55,6 +55,7 @@ const ConnectionsTab = lazy(() => import('@/components/client/ConnectionsTab'));
 const ClientDatabaseTab = lazy(() => import('@/components/client/ClientDatabaseTab').then(m => ({ default: m.ClientDatabaseTab })));
 const ClientWorkflowsTab = lazy(() => import('@/components/ghl/ClientWorkflowsTab').then(m => ({ default: m.ClientWorkflowsTab })));
 const AdsManagerTab = lazy(() => import('@/components/ads-manager/AdsManagerTab').then(m => ({ default: m.AdsManagerTab })));
+const FundLaunchReviewTab = lazy(() => import('@/components/client/FundLaunchReviewTab'));
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
 import { ClientOffersSection } from '@/components/offers/ClientOffersSection';
