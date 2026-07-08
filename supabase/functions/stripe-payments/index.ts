@@ -16,7 +16,7 @@ serve(async (req) => {
       apiVersion: "2025-08-27.basil",
     });
 
-    const { email, clientId, action, customerId, amount, currency, description, daysUntilDue, lineItems, paymentMethodId } = await req.json();
+    const { email, clientId, action, customerId, amount, currency, description, daysUntilDue, lineItems, paymentMethodId, priceId, quantity, subscriptionId, cancelAtPeriodEnd } = await req.json();
     console.log(`Stripe request: action=${action}, email=${email}, customerId=${customerId}`);
 
     // ── get-customer-payments (existing) ──
