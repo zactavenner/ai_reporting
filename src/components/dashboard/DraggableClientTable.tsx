@@ -527,6 +527,7 @@ export function DraggableClientTable({
               <SortableHeader column="rollupLeads" label="Leads" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupCPL" label="CPL" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupCalls" label="Calls" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupShowed" label="Showed" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupCPBC" label="CPBC" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupFunded" label="Funded" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupFundedDollars" label="$" sortConfig={sortConfig} onSort={handleSort} />
