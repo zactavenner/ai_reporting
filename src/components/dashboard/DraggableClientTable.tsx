@@ -515,6 +515,14 @@ export function DraggableClientTable({
               <SortableHeader column="accountManager" label="AM" sortConfig={sortConfig} onSort={handleSort} align="center" />
               <SortableHeader column="adSpend" label="Monthly $" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupSpend" label="Spend" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupLeads" label="Leads" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCPL" label="CPL" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCalls" label="Calls" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCPBC" label="CPBC" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupFunded" label="Funded" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupFundedDollars" label="$" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCoC" label="CoC %" sortConfig={sortConfig} onSort={handleSort} />
               <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[280px]">Quick Links</TableHead>
               {isAdmin && <SortableHeader column="mrr" label="MRR" sortConfig={sortConfig} onSort={handleSort} />}
               <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[150px]">
