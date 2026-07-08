@@ -627,13 +627,57 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
   const current = useSheetMetrics(clientId, parsed?.sheet_id, parsed?.gid, from, to);
   const prior = useSheetMetrics(clientId, parsed?.sheet_id, parsed?.gid, priorFrom, priorTo);
+  const metaCurrent = useMetaDailySummary(clientId, from, to);
+  const metaPrior = useMetaDailySummary(clientId, priorFrom, priorTo);
 
-  const agg = current.data?.aggregated;
-  const aggPrior = prior.data?.aggregated;
+  const agg = useMemo(
+    () => mergeSheetWithMeta(current.data?.aggregated, metaCurrent.data),
+    [current.data?.aggregated, metaCurrent.data],
+  );
+  const aggPrior = useMemo(
+    () => mergeSheetWithMeta(prior.data?.aggregated, metaPrior.data),
+    [prior.data?.aggregated, metaPrior.data],
+  );
   const daily = current.data?.daily ?? [];
 
   const chartData = useMemo(() => {
-    return [...daily]
+    const metaByDate = new Map((metaCurrent.data?.daily || []).map((d) => [d.date, d]));
+    const sheetDates = new Set(daily.map((d) => d.date));
+    const mergedDaily = [
+      ...daily.map((d) => {
+        const metaDay = metaByDate.get(d.date);
+        return metaDay
+          ? {
+              ...d,
+              ad_spend: metaDay.spend,
+              impressions: metaDay.impressions,
+              clicks: metaDay.clicks,
+              leads: metaDay.leads,
+              ctr: metaDay.impressions > 0 ? (metaDay.clicks / metaDay.impressions) * 100 : 0,
+            }
+          : d;
+      }),
+      ...(metaCurrent.data?.daily || [])
+        .filter((d) => !sheetDates.has(d.date))
+        .map((d) => ({
+          date: d.date,
+          ad_spend: d.spend,
+          impressions: d.impressions,
+          clicks: d.clicks,
+          ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0,
+          leads: d.leads,
+          spam_leads: 0,
+          calls: 0,
+          showed_calls: 0,
+          commitments: 0,
+          commitment_dollars: 0,
+          funded_investors: 0,
+          funded_dollars: 0,
+          reconnect_calls: 0,
+          reconnect_showed: 0,
+        })),
+    ];
+    return [...mergedDaily]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((d) => {
         const leads = d.leads || 0;
@@ -653,7 +697,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           cpFunded: funded > 0 ? spend / funded : 0,
         };
       });
-  }, [daily]);
+  }, [daily, metaCurrent.data]);
 
   // Velocity: funded $ WoW and MoM deltas
   const velocity = useMemo(() => {
