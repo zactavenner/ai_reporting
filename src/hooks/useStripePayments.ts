@@ -15,6 +15,8 @@ export interface StripePayment {
 export interface StripeSubscription {
   id: string;
   status: string;
+  cancel_at_period_end?: boolean;
+  pause_collection?: { behavior: string } | null;
   current_period_start: string;
   current_period_end: string;
   items: {
