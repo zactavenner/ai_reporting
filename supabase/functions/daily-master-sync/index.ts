@@ -143,12 +143,21 @@ Deno.serve(async (req) => {
             sinceDateDays: ghlDays,
           }, `${client.name}/ghl-contacts(${ghlDays}d)`);
 
+          // Calendar appointments (booked calls) — dispatched ~15s after contacts so
+          // the leads lookup map (with UTMs) is warm for call → lead linking.
+          setTimeout(() => {
+            fireAndForget(supabaseUrl, supabaseKey, "sync-calendar-appointments", {
+              clientId: client.id,
+              sinceDateDays: ghlDays,
+            }, `${client.name}/ghl-calendar(${ghlDays}d)`);
+          }, 15000);
+
           // Pipelines a few seconds later, same client
           setTimeout(() => {
             fireAndForget(supabaseUrl, supabaseKey, "sync-ghl-pipelines", {
               client_id: client.id,
             }, `${client.name}/ghl-pipelines`);
-          }, 8000);
+          }, 25000);
         }
 
         // Recalculate metrics 60s after dispatch — gives sync functions time to write
