@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, lazy, Suspense, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil, Users } from 'lucide-react';
+import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil, Users, Rocket } from 'lucide-react';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
 import { AdSpendDrillDownModal } from '@/components/drilldown/AdSpendDrillDownModal';
@@ -55,6 +55,7 @@ const ConnectionsTab = lazy(() => import('@/components/client/ConnectionsTab'));
 const ClientDatabaseTab = lazy(() => import('@/components/client/ClientDatabaseTab').then(m => ({ default: m.ClientDatabaseTab })));
 const ClientWorkflowsTab = lazy(() => import('@/components/ghl/ClientWorkflowsTab').then(m => ({ default: m.ClientWorkflowsTab })));
 const AdsManagerTab = lazy(() => import('@/components/ads-manager/AdsManagerTab').then(m => ({ default: m.AdsManagerTab })));
+const FundLaunchReviewTab = lazy(() => import('@/components/client/FundLaunchReviewTab'));
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
 import { ClientOffersSection } from '@/components/offers/ClientOffersSection';
@@ -419,6 +420,12 @@ export default function ClientDetail() {
               <BarChart3 className="h-4 w-4" />
               Ads Manager
             </TabsTrigger>
+            {/^clear summit/i.test(client.name || '') && (
+              <TabsTrigger value="fund-launch-review" className="gap-2 whitespace-nowrap">
+                <Rocket className="h-4 w-4" />
+                Fund Launch Review
+              </TabsTrigger>
+            )}
             <TabsTrigger value="ai-studio" className="gap-2 whitespace-nowrap">
               <Sparkles className="h-4 w-4" />
               AI Studio
@@ -502,6 +509,14 @@ export default function ClientDetail() {
               <AdsManagerTab clientId={client.id} clientName={client.name} />
             </SectionErrorBoundary>
           </TabsContent>
+
+          {/^clear summit/i.test(client.name || '') && (
+            <TabsContent value="fund-launch-review" className="space-y-6">
+              <SectionErrorBoundary sectionName="Fund Launch Review">
+                <FundLaunchReviewTab clientName={client.name} />
+              </SectionErrorBoundary>
+            </TabsContent>
+          )}
 
           <TabsContent value="ai-studio" className="m-0">
             <SectionErrorBoundary sectionName="AI Studio">
