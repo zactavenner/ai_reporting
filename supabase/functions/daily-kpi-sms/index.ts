@@ -30,6 +30,17 @@ function light(actual: number, target: number | null | undefined, lowerIsBetter 
   }
 }
 
+// Returns formatted "$X (Δ+$Y / +Z%)" vs target. Lower-is-better cost metrics.
+function kpiCell(actual: number, target: number | null | undefined): string {
+  const light_ = light(actual, target);
+  const val = money(actual);
+  if (!target || target <= 0) return `${light_}${val}`;
+  const delta = actual - target;
+  const pct = target > 0 ? Math.round((delta / target) * 100) : 0;
+  const sign = delta >= 0 ? "+" : "-";
+  return `${light_}${val} (tgt ${money(target)} ${sign}${money(Math.abs(delta))}/${delta >= 0 ? "+" : ""}${pct}%)`;
+}
+
 async function fetchWindow(sb: any, clientId: string, start: string, end: string) {
   const { data } = await sb
     .from("daily_metrics")
@@ -137,16 +148,17 @@ serve(async (req) => {
       totalLeadsY += y.leads;
       totalFundedY += y.fundedDollars;
 
-      const cplY = light(y.cpl, tgt.target_cpl);
-      const cplW = light(w.cpl, tgt.target_cpl);
-      const cpbcY = light(y.cpbc, tgt.target_cpbc);
-      const cpbcW = light(w.cpbc, tgt.target_cpbc);
-      const cpfY = light(y.cpf, tgt.target_cost_per_funded);
-      const cpfW = light(w.cpf, tgt.target_cost_per_funded);
-
       lines.push(`• ${c.name}`);
-      lines.push(`  Y: ${money(y.spend)} · ${y.leads}L ${cplY}${money(y.cpl)} · ${y.calls}C ${cpbcY}${money(y.cpbc)} · Fnd ${money(y.fundedDollars)} ${cpfY}`);
-      lines.push(`  7: ${money(w.spend)} · ${w.leads}L ${cplW}${money(w.cpl)} · ${w.calls}C ${cpbcW}${money(w.cpbc)} · Fnd ${money(w.fundedDollars)} ${cpfW}`);
+      lines.push(`  Y spend ${money(y.spend)} · ${y.leads}L · ${y.calls}C · Fnd ${money(y.fundedDollars)}`);
+      lines.push(`    CPL ${kpiCell(y.cpl, tgt.target_cpl)}`);
+      lines.push(`    CPBC ${kpiCell(y.cpbc, tgt.target_cpbc)}`);
+      lines.push(`    CPS ${kpiCell(y.cps, tgt.target_cps)}`);
+      lines.push(`    CPF ${kpiCell(y.cpf, tgt.target_cost_per_funded)}`);
+      lines.push(`  7d spend ${money(w.spend)} · ${w.leads}L · ${w.calls}C · Fnd ${money(w.fundedDollars)}`);
+      lines.push(`    CPL ${kpiCell(w.cpl, tgt.target_cpl)}`);
+      lines.push(`    CPBC ${kpiCell(w.cpbc, tgt.target_cpbc)}`);
+      lines.push(`    CPS ${kpiCell(w.cps, tgt.target_cps)}`);
+      lines.push(`    CPF ${kpiCell(w.cpf, tgt.target_cost_per_funded)}`);
     }
 
     lines.splice(2, 0, `Agency Y: ${money(totalSpendY)} spend · ${totalLeadsY} leads · ${money(totalFundedY)} funded`);
