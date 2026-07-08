@@ -11,6 +11,23 @@ function parseSheetUrl(url?: string | null): { sheet_id: string; gid?: string } 
   return { sheet_id: idMatch[1], gid: gidMatch?.[1] };
 }
 
+// Global concurrency limiter — avoid fanning out N parallel edge-function
+// invocations (one per client row) which triggers BOOT_ERROR (503) and
+// Google Sheets 429 quota exhaustion on the dashboard.
+const MAX_CONCURRENT = 3;
+let inflight = 0;
+const waiters: Array<() => void> = [];
+async function acquire(): Promise<void> {
+  if (inflight < MAX_CONCURRENT) { inflight++; return; }
+  await new Promise<void>((resolve) => waiters.push(resolve));
+  inflight++;
+}
+function release(): void {
+  inflight--;
+  const next = waiters.shift();
+  if (next) next();
+}
+
 /**
  * For each client with a configured kpi_google_sheet_url in client_settings,
  * fetches metrics from their KPI sheet via fetch-sheet-metrics.
@@ -39,18 +56,23 @@ export function useSheetClientMetrics(
     queries: targets.map((t) => ({
       queryKey: ['sheet-client-metrics', t.id, t.sheet_id, t.gid, startDate, endDate, t.mapping],
       queryFn: async () => {
-        const { data, error } = await supabase.functions.invoke('fetch-sheet-metrics', {
-          body: {
-            sheet_id: t.sheet_id,
-            gid: t.gid,
-            start_date: startDate,
-            end_date: endDate,
-            mapping: t.mapping,
-          },
-        });
-        if (error) throw error;
-        if ((data as any)?.error) throw new Error((data as any).error);
-        return { id: t.id, aggregated: (data as any)?.aggregated as AggregatedMetrics | null };
+        await acquire();
+        try {
+          const { data, error } = await supabase.functions.invoke('fetch-sheet-metrics', {
+            body: {
+              sheet_id: t.sheet_id,
+              gid: t.gid,
+              start_date: startDate,
+              end_date: endDate,
+              mapping: t.mapping,
+            },
+          });
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
+          return { id: t.id, aggregated: (data as any)?.aggregated as AggregatedMetrics | null };
+        } finally {
+          release();
+        }
       },
       staleTime: 5 * 60 * 1000,
       retry: 0,
