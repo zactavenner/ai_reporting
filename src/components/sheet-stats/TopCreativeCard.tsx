@@ -69,7 +69,24 @@ export function TopCreativeCard({ clientId, from, to }: Props) {
         .sort(([, a], [, b]) => (b.leads - a.leads) || (b.spend - a.spend))
         .slice(0, 3)
         .map(([id]) => id);
-      if (topIds.length === 0) return [];
+      if (topIds.length === 0) {
+        const { data: fallback, error: fallbackErr } = await supabase
+          .from('meta_ads')
+          .select('id,meta_ad_id,name,headline,body,media_type,thumbnail_url,image_url,full_image_url,video_thumbnail_url,video_source_url,preview_url,spend,impressions,clicks,ctr,meta_reported_leads')
+          .eq('client_id', clientId)
+          .gt('spend', 0)
+          .order('meta_reported_leads', { ascending: false })
+          .order('spend', { ascending: false })
+          .limit(3);
+        if (fallbackErr) throw fallbackErr;
+        return (fallback || []).map((ad: any) => ({
+          ...ad,
+          attributed_leads: null,
+          cost_per_lead: (Number(ad.meta_reported_leads) || 0) > 0
+            ? (Number(ad.spend) || 0) / (Number(ad.meta_reported_leads) || 0)
+            : 0,
+        })) as TopAd[];
+      }
 
       // 2. Load creative metadata for those ads.
       const { data: meta, error: metaErr } = await supabase
