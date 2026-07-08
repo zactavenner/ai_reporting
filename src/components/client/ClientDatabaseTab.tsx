@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Download, RefreshCw, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface DBLead {
   id: string;
@@ -26,20 +27,52 @@ interface DBLead {
   opportunity_value: number | null;
 }
 
-interface DBEnrichment {
+type DBEnrichment = Record<string, any> & {
   lead_id: string | null;
   external_id: string | null;
   enriched_at: string | null;
   source: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  city: string | null;
-  state: string | null;
-  household_income: number | null;
   net_worth: number | null;
-  company_name: string | null;
-  company_title: string | null;
-  linkedin_url: string | null;
+};
+
+interface DBCall {
+  id: string;
+  lead_id: string | null;
+  external_id: string;
+  booked_at: string | null;
+  showed: boolean | null;
+  showed_at: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  created_at: string;
+}
+
+interface DBFunded {
+  id: string;
+  lead_id: string | null;
+  external_id: string;
+  name: string | null;
+  funded_amount: number;
+  commitment_amount: number | null;
+  funded_at: string;
+  source: string | null;
+}
+
+type TabKey = 'leads' | 'booked' | 'showed' | 'committed' | 'funded';
+
+interface UnifiedRow {
+  key: string;
+  leadId: string | null;
+  externalId: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  source: string;
+  createdAt: string;
+  deploymentAmount: number;
+  lead: DBLead | null;
+  enrichment: DBEnrichment | null;
 }
 
 function extractTags(cf: Record<string, unknown> | null): string[] {
@@ -64,16 +97,23 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [enrichedOnly, setEnrichedOnly] = useState(false);
+  const [tab, setTab] = useState<TabKey>('leads');
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['client-database', clientId],
     queryFn: async () => {
-      const [leads, enrichments] = await Promise.all([
+      const [leads, enrichments, calls, funded] = await Promise.all([
         fetchAllRows<DBLead>((sb) =>
           sb.from('leads').select('id,external_id,name,email,phone,source,status,is_spam,created_at,custom_fields,ghl_notes,campaign_name,opportunity_stage,opportunity_value').eq('client_id', clientId).order('created_at', { ascending: false })
         ),
         fetchAllRows<DBEnrichment>((sb) =>
-          sb.from('lead_enrichment').select('lead_id,external_id,enriched_at,source,first_name,last_name,city,state,household_income,net_worth,company_name,company_title,linkedin_url').eq('client_id', clientId)
+          sb.from('lead_enrichment').select('*').eq('client_id', clientId)
+        ),
+        fetchAllRows<DBCall>((sb) =>
+          sb.from('calls').select('id,lead_id,external_id,booked_at,showed,showed_at,contact_name,contact_email,contact_phone,created_at').eq('client_id', clientId).order('created_at', { ascending: false })
+        ),
+        fetchAllRows<DBFunded>((sb) =>
+          sb.from('funded_investors').select('id,lead_id,external_id,name,funded_amount,commitment_amount,funded_at,source').eq('client_id', clientId).order('funded_at', { ascending: false })
         ),
       ]);
       const byLeadId = new Map<string, DBEnrichment>();
@@ -82,41 +122,112 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
         if (e.lead_id) byLeadId.set(e.lead_id, e);
         if (e.external_id) byExtId.set(e.external_id, e);
       }
-      return leads.map(l => ({
-        lead: l,
-        enrichment: byLeadId.get(l.id) || (l.external_id ? byExtId.get(l.external_id) : undefined) || null,
-      }));
+      const leadsById = new Map(leads.map(l => [l.id, l]));
+      const findEnrich = (leadId: string | null, extId: string | null) =>
+        (leadId && byLeadId.get(leadId)) || (extId && byExtId.get(extId)) || null;
+      const findLead = (leadId: string | null, extId: string | null) =>
+        (leadId && leadsById.get(leadId)) || leads.find(l => extId && l.external_id === extId) || null;
+      return { leads, enrichments, calls, funded, findEnrich, findLead };
     },
   });
 
-  const rows = data || [];
+  const allRows: UnifiedRow[] = useMemo(() => {
+    if (!data) return [];
+    const { leads, calls, funded, findEnrich, findLead } = data;
+    if (tab === 'leads') {
+      return leads.map(l => ({
+        key: 'l-' + l.id,
+        leadId: l.id,
+        externalId: l.external_id,
+        name: l.name || 'Unknown',
+        email: l.email || '',
+        phone: l.phone || '',
+        source: l.source || '',
+        createdAt: l.created_at,
+        deploymentAmount: Number(l.opportunity_value || 0),
+        lead: l,
+        enrichment: findEnrich(l.id, l.external_id),
+      }));
+    }
+    if (tab === 'booked' || tab === 'showed') {
+      const list = calls.filter(c => tab === 'booked' ? !!c.booked_at : !!c.showed);
+      return list.map(c => {
+        const lead = findLead(c.lead_id, c.external_id);
+        return {
+          key: 'c-' + c.id,
+          leadId: c.lead_id,
+          externalId: c.external_id,
+          name: c.contact_name || lead?.name || 'Unknown',
+          email: c.contact_email || lead?.email || '',
+          phone: c.contact_phone || lead?.phone || '',
+          source: lead?.source || '',
+          createdAt: (tab === 'showed' ? c.showed_at : c.booked_at) || c.created_at,
+          deploymentAmount: Number(lead?.opportunity_value || 0),
+          lead,
+          enrichment: findEnrich(c.lead_id, c.external_id),
+        };
+      });
+    }
+    // committed / funded
+    const list = funded.filter(f => tab === 'funded'
+      ? Number(f.funded_amount) > 0
+      : Number(f.commitment_amount || 0) > 0);
+    return list.map(f => {
+      const lead = findLead(f.lead_id, f.external_id);
+      return {
+        key: 'f-' + f.id,
+        leadId: f.lead_id,
+        externalId: f.external_id,
+        name: f.name || lead?.name || 'Unknown',
+        email: lead?.email || '',
+        phone: lead?.phone || '',
+        source: lead?.source || f.source || '',
+        createdAt: f.funded_at,
+        deploymentAmount: tab === 'funded' ? Number(f.funded_amount) : Number(f.commitment_amount || 0),
+        lead,
+        enrichment: findEnrich(f.lead_id, f.external_id),
+      };
+    });
+  }, [data, tab]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter(({ lead, enrichment }) => {
-      if (enrichedOnly && !enrichment) return false;
+    return allRows.filter(r => {
+      if (enrichedOnly && !r.enrichment) return false;
       if (!q) return true;
-      const hay = [lead.name, lead.email, lead.phone, lead.source, lead.campaign_name, enrichment?.company_name, enrichment?.city, enrichment?.state]
+      const hay = [r.name, r.email, r.phone, r.source, r.enrichment?.company_name, r.enrichment?.city, r.enrichment?.state]
         .filter(Boolean).join(' ').toLowerCase();
       return hay.includes(q);
     });
-  }, [rows, search, enrichedOnly]);
+  }, [allRows, search, enrichedOnly]);
 
-  const enrichedCount = rows.filter(r => r.enrichment).length;
+  const enrichedCount = allRows.filter(r => r.enrichment).length;
+
+  const counts = useMemo(() => {
+    if (!data) return { leads: 0, booked: 0, showed: 0, committed: 0, funded: 0 };
+    return {
+      leads: data.leads.length,
+      booked: data.calls.filter(c => !!c.booked_at).length,
+      showed: data.calls.filter(c => !!c.showed).length,
+      committed: data.funded.filter(f => Number(f.commitment_amount || 0) > 0).length,
+      funded: data.funded.filter(f => Number(f.funded_amount) > 0).length,
+    };
+  }, [data]);
 
   const exportCsv = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Source', 'Campaign', 'Status', 'Tags', 'Notes', 'Created', 'Enriched', 'Enriched At', 'First Name', 'Last Name', 'City', 'State', 'Company', 'Title', 'LinkedIn', 'Household Income', 'Net Worth'];
+    const headers = ['Created', 'Name', 'Email', 'Phone', 'Source', 'Deployment Amount', 'Net Worth', 'Enriched', 'Enriched At', 'City', 'State', 'Company', 'Title', 'LinkedIn', 'Household Income'];
     const lines = [headers.join(',')];
-    for (const { lead, enrichment } of filtered) {
+    for (const r of filtered) {
+      const enrichment = r.enrichment;
       const row = [
-        lead.name, lead.email, lead.phone, lead.source, lead.campaign_name, lead.status,
-        extractTags(lead.custom_fields).join('; '),
-        extractNotes(lead.ghl_notes),
-        lead.created_at,
+        r.createdAt, r.name, r.email, r.phone, r.source,
+        r.deploymentAmount || '',
+        enrichment?.net_worth ?? '',
         enrichment ? 'yes' : 'no',
-        enrichment?.enriched_at, enrichment?.first_name, enrichment?.last_name,
-        enrichment?.city, enrichment?.state, enrichment?.company_name, enrichment?.company_title,
-        enrichment?.linkedin_url, enrichment?.household_income, enrichment?.net_worth,
+        enrichment?.enriched_at ?? '',
+        enrichment?.city ?? '', enrichment?.state ?? '',
+        enrichment?.company_name ?? '', enrichment?.company_title ?? '',
+        enrichment?.linkedin_url ?? '', enrichment?.household_income ?? '',
       ];
       lines.push(row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
     }
@@ -124,17 +235,30 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${clientName.replace(/\s+/g, '-').toLowerCase()}-contacts-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${clientName.replace(/\s+/g, '-').toLowerCase()}-${tab}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  const money = (n: number | null | undefined) =>
+    n && Number(n) > 0 ? `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—';
+
   return (
     <div className="space-y-4">
+      <Tabs value={tab} onValueChange={(v) => { setTab(v as TabKey); setExpanded(null); }}>
+        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
+          <TabsTrigger value="leads">Leads <span className="ml-1.5 text-[10px] opacity-60">{counts.leads.toLocaleString()}</span></TabsTrigger>
+          <TabsTrigger value="booked">Booked <span className="ml-1.5 text-[10px] opacity-60">{counts.booked.toLocaleString()}</span></TabsTrigger>
+          <TabsTrigger value="showed">Showed <span className="ml-1.5 text-[10px] opacity-60">{counts.showed.toLocaleString()}</span></TabsTrigger>
+          <TabsTrigger value="committed">Committed <span className="ml-1.5 text-[10px] opacity-60">{counts.committed.toLocaleString()}</span></TabsTrigger>
+          <TabsTrigger value="funded">Funded <span className="ml-1.5 text-[10px] opacity-60">{counts.funded.toLocaleString()}</span></TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Contacts</p>
-          <p className="text-2xl font-bold">{rows.length.toLocaleString()}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{tab === 'leads' ? 'Total Contacts' : `Total ${tab.charAt(0).toUpperCase() + tab.slice(1)}`}</p>
+          <p className="text-2xl font-bold">{allRows.length.toLocaleString()}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Enriched</p>
@@ -142,11 +266,11 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Enrichment %</p>
-          <p className="text-2xl font-bold">{rows.length ? ((enrichedCount / rows.length) * 100).toFixed(1) : '0'}%</p>
+          <p className="text-2xl font-bold">{allRows.length ? ((enrichedCount / allRows.length) * 100).toFixed(1) : '0'}%</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">With Email + Phone</p>
-          <p className="text-2xl font-bold">{rows.filter(r => r.lead.email && r.lead.phone).length.toLocaleString()}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Deployed</p>
+          <p className="text-2xl font-bold">{money(allRows.reduce((s, r) => s + (r.deploymentAmount || 0), 0))}</p>
         </CardContent></Card>
       </div>
 
@@ -178,82 +302,50 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
+                <TableHead>Created</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Source</TableHead>
-                <TableHead>Tags</TableHead>
-                <TableHead>Enrichment</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Deployment</TableHead>
+                <TableHead className="text-right">Net Worth</TableHead>
+                <TableHead className="text-center">Enrichment</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-sm text-muted-foreground">No contacts found</TableCell></TableRow>
-              ) : filtered.slice(0, 500).map(({ lead, enrichment }) => {
-                const tags = extractTags(lead.custom_fields);
-                const notes = extractNotes(lead.ghl_notes);
-                const isOpen = expanded === lead.id;
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-sm text-muted-foreground">No {tab} found</TableCell></TableRow>
+              ) : filtered.slice(0, 500).map((r) => {
+                const { lead, enrichment } = r;
+                const tags = extractTags(lead?.custom_fields ?? null);
+                const notes = extractNotes(lead?.ghl_notes);
+                const isOpen = expanded === r.key;
                 return (
-                  <>
-                    <TableRow key={lead.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setExpanded(isOpen ? null : lead.id)}>
+                  <React.Fragment key={r.key}>
+                    <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => setExpanded(isOpen ? null : r.key)}>
                       <TableCell>{isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</TableCell>
-                      <TableCell className="font-medium text-sm">{lead.name || '—'}</TableCell>
-                      <TableCell className="text-xs">{lead.email || '—'}</TableCell>
-                      <TableCell className="text-xs">{lead.phone || '—'}</TableCell>
-                      <TableCell className="text-xs">{lead.source || '—'}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1 flex-wrap max-w-[220px]">
-                          {tags.slice(0, 3).map(t => <Badge key={t} variant="outline" className="text-[9px]">{t}</Badge>)}
-                          {tags.length > 3 && <span className="text-[10px] text-muted-foreground">+{tags.length - 3}</span>}
-                        </div>
+                      <TableCell className="text-[10px] text-muted-foreground whitespace-nowrap">{r.createdAt?.split('T')[0]}</TableCell>
+                      <TableCell className="font-medium text-sm">{r.name || '—'}</TableCell>
+                      <TableCell className="text-xs">{r.email || '—'}</TableCell>
+                      <TableCell className="text-xs">{r.phone || '—'}</TableCell>
+                      <TableCell className="text-xs">{r.source || '—'}</TableCell>
+                      <TableCell className="text-xs text-right tabular-nums">{money(r.deploymentAmount)}</TableCell>
+                      <TableCell className="text-xs text-right tabular-nums">{money(enrichment?.net_worth)}</TableCell>
+                      <TableCell className="text-center">
+                        <span
+                          title={enrichment ? `Enriched · ${enrichment.source || ''}` : 'Not enriched'}
+                          className={`inline-block h-2.5 w-2.5 rounded-full ${enrichment ? 'bg-emerald-500' : 'bg-red-500'}`}
+                        />
                       </TableCell>
-                      <TableCell>
-                        {enrichment ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-600 text-[10px]">✓ {enrichment.source || 'Enriched'}</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">—</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-[10px] text-muted-foreground">{lead.created_at?.split('T')[0]}</TableCell>
                     </TableRow>
                     {isOpen && (
-                      <TableRow key={lead.id + '-x'}>
-                        <TableCell colSpan={8} className="bg-muted/20">
-                          <div className="grid md:grid-cols-2 gap-4 p-3 text-xs">
-                            <div>
-                              <p className="font-semibold mb-2 text-sm">Contact</p>
-                              <div className="space-y-1">
-                                <div><span className="text-muted-foreground">Campaign:</span> {lead.campaign_name || '—'}</div>
-                                <div><span className="text-muted-foreground">Status:</span> {lead.status || '—'}</div>
-                                <div><span className="text-muted-foreground">Stage:</span> {lead.opportunity_stage || '—'}</div>
-                                <div><span className="text-muted-foreground">Value:</span> {lead.opportunity_value ? `$${lead.opportunity_value.toLocaleString()}` : '—'}</div>
-                                <div><span className="text-muted-foreground">Tags:</span> {tags.join(', ') || '—'}</div>
-                                <div className="pt-2"><span className="text-muted-foreground">Notes:</span> <span className="whitespace-pre-wrap">{notes || '—'}</span></div>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="font-semibold mb-2 text-sm">Enrichment</p>
-                              {enrichment ? (
-                                <div className="space-y-1">
-                                  <div><span className="text-muted-foreground">Name:</span> {[enrichment.first_name, enrichment.last_name].filter(Boolean).join(' ') || '—'}</div>
-                                  <div><span className="text-muted-foreground">Location:</span> {[enrichment.city, enrichment.state].filter(Boolean).join(', ') || '—'}</div>
-                                  <div><span className="text-muted-foreground">Company:</span> {enrichment.company_name || '—'}</div>
-                                  <div><span className="text-muted-foreground">Title:</span> {enrichment.company_title || '—'}</div>
-                                  <div><span className="text-muted-foreground">Household income:</span> {enrichment.household_income ? `$${Number(enrichment.household_income).toLocaleString()}` : '—'}</div>
-                                  <div><span className="text-muted-foreground">Net worth:</span> {enrichment.net_worth ? `$${Number(enrichment.net_worth).toLocaleString()}` : '—'}</div>
-                                  {enrichment.linkedin_url && <div><a href={enrichment.linkedin_url} target="_blank" rel="noreferrer" className="text-primary underline">LinkedIn</a></div>}
-                                  <div className="pt-1 text-[10px] text-muted-foreground">Source: {enrichment.source || '—'} · {enrichment.enriched_at?.split('T')[0]}</div>
-                                </div>
-                              ) : (
-                                <div className="text-muted-foreground">No enrichment yet.</div>
-                              )}
-                            </div>
-                          </div>
+                      <TableRow>
+                        <TableCell colSpan={9} className="bg-muted/20 p-0">
+                          <ExpandedEnrichment lead={lead} tags={tags} notes={notes} enrichment={enrichment} />
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </TableBody>
@@ -263,6 +355,74 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+const EXCLUDE_FIELDS = new Set([
+  'id', 'client_id', 'lead_id', 'external_id', 'created_at', 'updated_at',
+  'raw_response', 'raw_payload', 'raw_data',
+]);
+
+function formatEnrichLabel(k: string) {
+  return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function formatEnrichValue(k: string, v: any): string {
+  if (v === null || v === undefined || v === '') return '—';
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
+  if (typeof v === 'object') { try { return JSON.stringify(v); } catch { return String(v); } }
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (typeof v === 'number' && /income|worth|value|salary|price/i.test(k)) {
+    return `$${v.toLocaleString()}`;
+  }
+  return String(v);
+}
+
+function ExpandedEnrichment({
+  lead, tags, notes, enrichment,
+}: {
+  lead: DBLead | null;
+  tags: string[];
+  notes: string;
+  enrichment: DBEnrichment | null;
+}) {
+  const fields = enrichment
+    ? Object.entries(enrichment)
+        .filter(([k, v]) => !EXCLUDE_FIELDS.has(k) && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0))
+    : [];
+  return (
+    <div className="p-4 space-y-4">
+      {lead && (
+        <div className="grid md:grid-cols-4 gap-3 text-xs">
+          <div><span className="text-muted-foreground">Campaign:</span> {lead.campaign_name || '—'}</div>
+          <div><span className="text-muted-foreground">Status:</span> {lead.status || '—'}</div>
+          <div><span className="text-muted-foreground">Stage:</span> {lead.opportunity_stage || '—'}</div>
+          <div><span className="text-muted-foreground">Value:</span> {lead.opportunity_value ? `$${Number(lead.opportunity_value).toLocaleString()}` : '—'}</div>
+          {tags.length > 0 && <div className="md:col-span-4"><span className="text-muted-foreground">Tags:</span> {tags.join(', ')}</div>}
+          {notes && <div className="md:col-span-4"><span className="text-muted-foreground">Notes:</span> <span className="whitespace-pre-wrap">{notes}</span></div>}
+        </div>
+      )}
+      <div>
+        <p className="font-semibold text-sm mb-2 flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Full Enrichment
+          {enrichment && <Badge variant="outline" className="text-[9px]">{fields.length} fields</Badge>}
+        </p>
+        {enrichment ? (
+          <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
+            {fields.map(([k, v]) => (
+              <div key={k} className="min-w-0">
+                <span className="text-muted-foreground">{formatEnrichLabel(k)}:</span>{' '}
+                {k === 'linkedin_url' && typeof v === 'string'
+                  ? <a href={v} target="_blank" rel="noreferrer" className="text-primary underline break-all">LinkedIn</a>
+                  : <span className="break-words">{formatEnrichValue(k, v)}</span>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground">No enrichment yet for this contact.</div>
+        )}
+      </div>
     </div>
   );
 }
