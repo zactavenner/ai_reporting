@@ -39,7 +39,7 @@ const fmtPct = (n: number | null | undefined) =>
   n == null ? '—' : `${Number(n).toFixed(2)}%`;
 
 export function TopCreativeCard({ clientId, from, to }: Props) {
-  const { data: ads, isLoading } = useQuery({
+  const { data: adsData, isLoading } = useQuery({
     queryKey: ['top-creative', clientId, from, to],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -62,7 +62,9 @@ export function TopCreativeCard({ clientId, from, to }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
-  if (isLoading || !ads || ads.length === 0) return null;
+  const ads = Array.isArray(adsData) ? adsData : [];
+
+  if (isLoading || ads.length === 0) return null;
 
   const visible = ads.filter((a) => {
     const isVideo = a.media_type === 'video' && !!a.video_source_url;
