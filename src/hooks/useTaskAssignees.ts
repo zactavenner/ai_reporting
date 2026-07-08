@@ -105,7 +105,8 @@ export function useSetTaskAssignees() {
       podIds?: string[]; 
     }) => {
       // Atomic delete + insert via DB function — no partial-state window
-      const { error } = await supabase.rpc('set_task_assignees', {
+      // Cast: types.ts is regenerated after migration apply
+      const { error } = await (supabase.rpc as any)('set_task_assignees', {
         _task_id: taskId,
         _member_ids: memberIds,
         _pod_ids: podIds,
