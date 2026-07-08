@@ -28,21 +28,13 @@ export function useResumeJobs(kinds: SingleJobKind[] = ['broll', 'single-scene',
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const { data, error } = await supabase
-      .from('video_batch_jobs')
-      .select(`
-        id,
-        kind,
-        status,
-        model,
-        aspect_ratio,
-        created_at,
-        video_batch_scenes ( prompt, stored_video_url, scene_order )
-      `)
+    const { data, error } = await (supabase
+      .from('video_batch_jobs') as any)
+      .select('id, kind, status, model, aspect_ratio, created_at, video_batch_scenes ( prompt, stored_video_url, scene_order )')
       .eq('user_id', user.id)
       .in('kind', kinds as string[])
       .order('created_at', { ascending: false })
-      .limit(20) as any;
+      .limit(20);
 
     if (error) { console.error('useResumeJobs', error); setLoading(false); return; }
 
