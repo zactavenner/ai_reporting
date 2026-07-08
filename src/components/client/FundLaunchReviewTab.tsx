@@ -173,14 +173,10 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         </ul>
         <p>Each communication provides the investor with their call details and easy access to the meeting link. The confirmation and reminder emails also help prepare the investor for the upcoming conversation and provide access to the Investor Deck before the call.</p>
         <SubHeading>Final Booked-Call Communications</SubHeading>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <Placeholder label="[ Confirmation Email ]" />
-          <Placeholder label="[ Confirmation SMS ]" />
-          <Placeholder label="[ 24-Hour Email ]" />
-          <Placeholder label="[ 24-Hour SMS ]" />
-          <Placeholder label="[ 1-Hour Email ]" />
-          <Placeholder label="[ 1-Hour SMS ]" />
-        </div>
+        <LinkCard
+          label="Booked-Call Sequence (HubSpot Workflow)"
+          href="https://app-na2.hubspot.com/workflows/47679429/platform/flow/2468392645/edit"
+        />
       </Step>
 
       {/* 5. Does not book */}
