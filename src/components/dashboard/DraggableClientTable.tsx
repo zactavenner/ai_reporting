@@ -385,6 +385,7 @@ export function DraggableClientTable({
         case 'rollupLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
         case 'rollupCPL': aVal = a.metrics.costPerLead || 0; bVal = b.metrics.costPerLead || 0; break;
         case 'rollupCalls': aVal = a.metrics.totalCalls || 0; bVal = b.metrics.totalCalls || 0; break;
+        case 'rollupShowed': aVal = a.metrics.showedCalls || 0; bVal = b.metrics.showedCalls || 0; break;
         case 'rollupCPBC': aVal = a.metrics.costPerCall || 0; bVal = b.metrics.costPerCall || 0; break;
         case 'rollupFunded': aVal = a.metrics.fundedInvestors || 0; bVal = b.metrics.fundedInvestors || 0; break;
         case 'rollupFundedDollars': aVal = a.metrics.fundedDollars || 0; bVal = b.metrics.fundedDollars || 0; break;
@@ -527,6 +528,7 @@ export function DraggableClientTable({
               <SortableHeader column="rollupLeads" label="Leads" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupCPL" label="CPL" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupCalls" label="Calls" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupShowed" label="Showed" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupCPBC" label="CPBC" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupFunded" label="Funded" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="rollupFundedDollars" label="$" sortConfig={sortConfig} onSort={handleSort} />
@@ -703,6 +705,9 @@ export function DraggableClientTable({
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
                       {(m.totalCalls || 0) > 0 ? m.totalCalls.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.showedCalls || 0) > 0 ? m.showedCalls.toLocaleString() : <span className="text-muted-foreground">-</span>}
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
                       {(m.costPerCall || 0) > 0 ? formatCurrency(m.costPerCall) : <span className="text-muted-foreground">-</span>}

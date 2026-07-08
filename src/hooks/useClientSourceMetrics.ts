@@ -82,8 +82,32 @@ export function buildClientMetricsFromRPC(
     dailyByClient[m.client_id].push(m);
   }
 
-  for (const row of rpcData) {
-    const clientDailyMetrics = dailyByClient[row.client_id] || [];
+  // Union of clients that appear in either RPC (CRM) or daily_metrics (ad spend).
+  // Without this, clients that have ad spend but no leads/calls in the window
+  // (or vice versa) are dropped entirely and the rollup columns render blank.
+  const rpcById: Record<string, ClientSourceMetricsRow> = {};
+  for (const row of rpcData) rpcById[row.client_id] = row;
+  const clientIds = new Set<string>([
+    ...Object.keys(rpcById),
+    ...Object.keys(dailyByClient),
+  ]);
+
+  for (const clientId of clientIds) {
+    const row: ClientSourceMetricsRow = rpcById[clientId] ?? {
+      client_id: clientId,
+      total_leads: 0,
+      spam_leads: 0,
+      total_calls: 0,
+      showed_calls: 0,
+      reconnect_calls: 0,
+      reconnect_showed: 0,
+      funded_count: 0,
+      funded_dollars: 0,
+      commitment_dollars: 0,
+      avg_time_to_fund: 0,
+      avg_calls_to_fund: 0,
+    };
+    const clientDailyMetrics = dailyByClient[clientId] || [];
     const dailyTotals = clientDailyMetrics.reduce(
       (acc, day) => ({
         totalAdSpend: acc.totalAdSpend + Number(day.ad_spend || 0),
