@@ -277,40 +277,6 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <p className="mt-3">Meta provides advertising performance data, while investor activity, booked calls, call outcomes, and investment progression are tracked through HubSpot and the connected systems.</p>
       </Step>
 
-      {/* 10. Final Review */}
-      <Step number={10} icon={CheckCircle2} title="Final Review">
-        <p>Please review the investor journey and final assets included in this document. The primary items for review are:</p>
-        <ul className="space-y-1.5 mt-2">
-          {[
-            'Final advertisements.',
-            'Meta Lead Form and qualification process.',
-            'Investor Landing Page.',
-            'Thank You Page.',
-            'Pre-booking email and SMS communications.',
-            'Booked-call confirmation and reminder communications.',
-            'AI Setter experience.',
-            'Investor follow-up process.',
-          ].map((item) => (
-            <li key={item} className="flex items-start gap-2 text-sm">
-              <div className="mt-0.5 h-4 w-4 rounded border border-border shrink-0" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-
-        <SubHeading>Final Feedback / Requested Changes</SubHeading>
-        <Placeholder label="[ Comments or Feedback ]" />
-
-        <SubHeading>Launch Approval</SubHeading>
-        <div className="space-y-2 mt-1">
-          {['Approved for Launch', 'Approved with Changes', 'Additional Revisions Required'].map((opt) => (
-            <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" className="h-4 w-4 rounded border-border" />
-              <span>{opt}</span>
-            </label>
-          ))}
-        </div>
-      </Step>
     </div>
   );
 }
