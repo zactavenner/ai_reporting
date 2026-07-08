@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, AlertTriangle, Trophy, Wand2, Download, Film, Rocket, FileText, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogFooter, DialogHeader } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -27,7 +27,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 import { useQuery } from '@tanstack/react-query';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface AdsManagerTabProps {
   clientId: string;
