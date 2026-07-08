@@ -14,6 +14,8 @@ declare const EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } | undefi
 interface Body {
   days?: number;      // trailing window (default 7)
   client_id?: string; // optional single client
+  start_date?: string;
+  end_date?: string;
 }
 
 function ymd(d: Date) { return d.toISOString().slice(0, 10); }
@@ -61,14 +63,17 @@ async function fetchAllPages(url: string) {
   return rows;
 }
 
-async function syncClient(sb: any, client: any, days: number) {
+async function syncClient(sb: any, client: any, days: number, startDate?: string, endDate?: string) {
   const { token } = resolveMetaToken(client);
   if (!token) return { rows: 0, skipped: "no_token" };
   const acct = String(client.meta_ad_account_id);
   const acctPath = acct.startsWith("act_") ? acct : `act_${acct}`;
 
-  const end = new Date();
-  const start = new Date(end.getTime() - (days - 1) * 86400_000);
+  const end = endDate ? new Date(`${endDate}T00:00:00Z`) : new Date();
+  const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date(end.getTime() - (days - 1) * 86400_000);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    throw new Error("Invalid Meta daily insights date range");
+  }
   const url = new URL(`${META_GRAPH_BASE}/${acctPath}/insights`);
   url.searchParams.set("level", "ad");
   url.searchParams.set("time_increment", "1");
@@ -135,7 +140,7 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     for (const c of clients ?? []) {
       try {
-        const r = await syncClient(sb, c, days);
+        const r = await syncClient(sb, c, days, body.start_date, body.end_date);
         results.push({ client_id: c.id, name: c.name, ...r });
         console.log(`[insights] ${c.name}: ${JSON.stringify(r)}`);
       } catch (e) {
