@@ -194,8 +194,8 @@ function PhoneShell({ children, className, platform }: { children: React.ReactNo
                   <Battery className="h-5 w-5 text-foreground" />
                 </div>
               </div>
-              {/* Screen content */}
-              <div className="w-[320px] h-[620px] overflow-hidden bg-background">
+              {/* Screen content — height grows for vertical video ads */}
+              <div className="w-[320px] min-h-[620px] overflow-hidden bg-background">
                 {children}
               </div>
               {/* Bottom nav */}
