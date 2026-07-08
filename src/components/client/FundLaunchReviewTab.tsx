@@ -127,6 +127,12 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
             Live rotating preview of the approved {clientName} ads — pulled from the Funnel tab's Ads step.
           </p>
         </div>
+        <div className="pt-2">
+          <LinkCard
+            label="Preview All Final Ads"
+            href="https://reporting.highperformanceads.com/public/a9054e897144d71db15e1fda4e2e4638/creatives"
+          />
+        </div>
       </Step>
 
       {/* 2. Qualification */}
