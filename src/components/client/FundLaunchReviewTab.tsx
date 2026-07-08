@@ -22,6 +22,18 @@ const Placeholder = ({ label }: { label: string }) => (
   </div>
 );
 
+const LinkCard = ({ label, href }: { label: string; href: string }) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="block rounded-lg border border-border bg-muted/30 px-4 py-4 hover:bg-muted/60 hover:border-primary/60 transition-colors"
+  >
+    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
+    <div className="text-sm text-primary font-medium mt-1 break-all">{href}</div>
+  </a>
+);
+
 const Step = ({
   number,
   icon: Icon,
@@ -147,10 +159,7 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <p>Investors can review the offering, watch the Investor Video, learn about the three investment paths, and schedule an Investor Call.</p>
         <p>From this point, the investor can take one of two paths.</p>
         <SubHeading>Final Landing Page</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Placeholder label="[ Landing Page Screenshot ]" />
-          <Placeholder label="[ Landing Page Preview Link ]" />
-        </div>
+        <LinkCard label="Landing Page (with Calendar)" href="https://clearsummitinvestment.com/book-a-call" />
       </Step>
 
       {/* 4. Books a Call */}
@@ -180,11 +189,10 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <p>The investor receives a series of emails and text messages designed to provide additional information, continue the conversation, and encourage them to schedule a call. {clientName}'s setter can also follow up directly with new leads by phone.</p>
         <p>If the investor schedules a call at any point, they are automatically removed from the pre-booking nurture sequences and enter the booked-call communication flow.</p>
         <SubHeading>Final Email &amp; SMS Nurture Communications</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Placeholder label="[ Email Previews ]" />
-          <Placeholder label="[ SMS Previews ]" />
-          <Placeholder label="[ Preview Links ]" />
-        </div>
+        <LinkCard
+          label="Nurture Copy — Email & SMS Doc"
+          href="https://docs.google.com/document/d/1w4b6FWmxb2RNfEKZRne3CpclQt7BUJjl7hBbrtzqKio/edit?tab=t.816aurpkg581"
+        />
       </Step>
 
       {/* 6. AI Setter */}
@@ -210,10 +218,7 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
           <li>Access to the Investor Deck.</li>
         </ul>
         <SubHeading>Final Thank You Page</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Placeholder label="[ Thank You Page Screenshot ]" />
-          <Placeholder label="[ Thank You Page Preview Link ]" />
-        </div>
+        <LinkCard label="Thank You Page" href="https://clearsummitinvestment.com/thank-you" />
         <SubHeading>Investor Deck</SubHeading>
         <Placeholder label="[ Investor Deck Preview Link ]" />
       </Step>
