@@ -301,6 +301,126 @@ serve(async (req) => {
       );
     }
 
+    // ── list-prices ── returns active recurring prices with product info
+    if (action === "list-prices") {
+      const prices = await stripe.prices.list({ active: true, limit: 100, expand: ["data.product"] });
+      const formatted = prices.data
+        .filter((p: any) => p.recurring)
+        .map((p: any) => ({
+          id: p.id,
+          nickname: p.nickname,
+          unit_amount: (p.unit_amount || 0) / 100,
+          currency: p.currency,
+          interval: p.recurring?.interval,
+          interval_count: p.recurring?.interval_count,
+          product_name: typeof p.product === "object" ? p.product?.name : null,
+          product_id: typeof p.product === "object" ? p.product?.id : p.product,
+        }));
+      return new Response(
+        JSON.stringify({ prices: formatted }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // ── create-subscription ──
+    if (action === "create-subscription") {
+      if (!customerId || !priceId) {
+        return new Response(
+          JSON.stringify({ error: "customerId and priceId are required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+      const sub = await stripe.subscriptions.create({
+        customer: customerId,
+        items: [{ price: priceId, quantity: quantity || 1 }],
+      });
+      console.log(`Subscription ${sub.id} created for customer ${customerId}`);
+      return new Response(
+        JSON.stringify({ subscription: { id: sub.id, status: sub.status } }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // ── update-subscription ── change price or quantity
+    if (action === "update-subscription") {
+      if (!subscriptionId) {
+        return new Response(
+          JSON.stringify({ error: "subscriptionId is required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+      const current = await stripe.subscriptions.retrieve(subscriptionId);
+      const firstItem = current.items.data[0];
+      const updateItems: any[] = [{
+        id: firstItem.id,
+        ...(priceId ? { price: priceId } : {}),
+        ...(quantity ? { quantity } : {}),
+      }];
+      const sub = await stripe.subscriptions.update(subscriptionId, {
+        items: updateItems,
+        proration_behavior: "create_prorations",
+      });
+      return new Response(
+        JSON.stringify({ subscription: { id: sub.id, status: sub.status } }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // ── cancel-subscription ── immediate or at period end
+    if (action === "cancel-subscription") {
+      if (!subscriptionId) {
+        return new Response(
+          JSON.stringify({ error: "subscriptionId is required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+      let sub;
+      if (cancelAtPeriodEnd) {
+        sub = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+      } else {
+        sub = await stripe.subscriptions.cancel(subscriptionId);
+      }
+      return new Response(
+        JSON.stringify({ subscription: { id: sub.id, status: sub.status, cancel_at_period_end: sub.cancel_at_period_end } }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // ── pause-subscription ──
+    if (action === "pause-subscription") {
+      if (!subscriptionId) {
+        return new Response(
+          JSON.stringify({ error: "subscriptionId is required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+      const sub = await stripe.subscriptions.update(subscriptionId, {
+        pause_collection: { behavior: "void" },
+      });
+      return new Response(
+        JSON.stringify({ subscription: { id: sub.id, status: sub.status, paused: true } }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // ── resume-subscription ──
+    if (action === "resume-subscription") {
+      if (!subscriptionId) {
+        return new Response(
+          JSON.stringify({ error: "subscriptionId is required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        );
+      }
+      const sub = await stripe.subscriptions.update(subscriptionId, {
+        pause_collection: "",
+        cancel_at_period_end: false,
+      } as any);
+      return new Response(
+        JSON.stringify({ subscription: { id: sub.id, status: sub.status } }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: "Invalid action" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
