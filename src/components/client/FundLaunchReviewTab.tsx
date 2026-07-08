@@ -11,6 +11,9 @@ import csiForm3 from '@/assets/csi_form_3.png.asset.json';
 import csiForm4 from '@/assets/csi_form_4.png.asset.json';
 import csiForm5 from '@/assets/csi_form_5.png.asset.json';
 import csiAiSetterExample from '@/assets/csi_ai_setter_example.png.asset.json';
+import csiEmailConfirmation from '@/assets/csi_email_confirmation.png.asset.json';
+import csiEmail24hr from '@/assets/csi_email_24hr.png.asset.json';
+import csiEmail1hr from '@/assets/csi_email_1hr.png.asset.json';
 
 interface FundLaunchReviewTabProps {
   clientId: string;
@@ -183,19 +186,34 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <p className="text-xs text-muted-foreground italic">
           Note: values in brackets (e.g. <code>{'{{ firstname }}'}</code>) are placeholders and will populate with the investor's name and appointment details once a call is booked.
         </p>
-        <div className="grid gap-3 md:grid-cols-2">
-          <LinkCard
-            label="Confirmation Email"
-            href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233042565824?portalId=47679429&preview_key=WLrqmaoW&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
-          />
-          <LinkCard
-            label="24-Hour Reminder Email"
-            href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233054259907?portalId=47679429&preview_key=pChwUbUh&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
-          />
-          <LinkCard
-            label="1-Hour Reminder Email"
-            href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233069063928?portalId=47679429&preview_key=cqJTWbeU&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
-          />
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <LinkCard
+              label="Confirmation Email"
+              href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233042565824?portalId=47679429&preview_key=WLrqmaoW&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
+            />
+            <div className="rounded-lg border border-border bg-white overflow-hidden">
+              <img src={csiEmailConfirmation.url} alt="Confirmation email preview" className="w-full h-auto" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <LinkCard
+              label="24-Hour Reminder Email"
+              href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233054259907?portalId=47679429&preview_key=pChwUbUh&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
+            />
+            <div className="rounded-lg border border-border bg-white overflow-hidden">
+              <img src={csiEmail24hr.url} alt="24-hour reminder email preview" className="w-full h-auto" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <LinkCard
+              label="1-Hour Reminder Email"
+              href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233069063928?portalId=47679429&preview_key=cqJTWbeU&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
+            />
+            <div className="rounded-lg border border-border bg-white overflow-hidden">
+              <img src={csiEmail1hr.url} alt="1-hour reminder email preview" className="w-full h-auto" />
+            </div>
+          </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-lg border border-border bg-muted/30 px-4 py-4">
