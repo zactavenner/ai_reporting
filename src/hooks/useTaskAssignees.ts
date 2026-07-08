@@ -104,27 +104,15 @@ export function useSetTaskAssignees() {
       memberIds?: string[]; 
       podIds?: string[]; 
     }) => {
-      // Delete existing assignees
-      await supabase
-        .from('task_assignees')
-        .delete()
-        .eq('task_id', taskId);
-      
-      // Insert new assignees
-      const assignees: { task_id: string; member_id: string | null; pod_id: string | null }[] = [
-        ...memberIds.map(memberId => ({ task_id: taskId, member_id: memberId, pod_id: null })),
-        ...podIds.map(podId => ({ task_id: taskId, member_id: null, pod_id: podId })),
-      ];
-      
-      if (assignees.length > 0) {
-        const { error } = await supabase
-          .from('task_assignees')
-          .insert(assignees);
-        
-        if (error) throw error;
-      }
+      // Atomic delete + insert via DB function — no partial-state window
+      const { error } = await supabase.rpc('set_task_assignees', {
+        _task_id: taskId,
+        _member_ids: memberIds,
+        _pod_ids: podIds,
+      });
+      if (error) throw error;
 
-      // Notify newly added members (those not already there from previous insert)
+      // Notify newly added members
       for (const memberId of memberIds) {
         supabase.functions
           .invoke('notify-task-assignee', {
@@ -133,7 +121,7 @@ export function useSetTaskAssignees() {
           .catch((e) => console.warn('notify-task-assignee failed', e));
       }
 
-      return assignees;
+      return { taskId, memberIds, podIds };
     },
     onSuccess: (_, { taskId }) => {
       queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });

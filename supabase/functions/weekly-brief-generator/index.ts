@@ -123,8 +123,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "nvidia/nemotron-3-ultra-550b-a55b:free",
-        models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"],
+            model: "openrouter/auto",
             messages: [
               {
                 role: "system",
