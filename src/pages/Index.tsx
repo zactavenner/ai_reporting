@@ -71,7 +71,6 @@ import { toast } from 'sonner';
 // Inline page components for Database, Spam (rendered inside sidebar layout)
 import DatabaseView from './DatabaseView';
 import SpamBlacklist from './SpamBlacklist';
-import { AdminAdsManagerTab } from '@/components/ads-manager/AdminAdsManagerTab';
 import { AdminOffersTab } from '@/components/offers/AdminOffersTab';
 import { QuizBuilderTab } from '@/components/quiz/QuizBuilderTab';
 import { AgentsTab } from '@/components/agents/AgentsTab';
@@ -379,9 +378,6 @@ const Index = () => {
                 <AgencyAIStudioTab />
               </SectionErrorBoundary>
             )}
-
-            {/* Ads Manager */}
-            {activeTab === 'ads-manager' && <AdminAdsManagerTab platform="all" />}
 
             {/* Offers */}
             {activeTab === 'offers' && (

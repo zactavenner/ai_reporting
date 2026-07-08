@@ -137,11 +137,6 @@ const navStructure = [
     icon: Sparkles,
   },
   {
-    title: 'Ads Manager',
-    value: 'ads-manager',
-    icon: Megaphone,
-  },
-  {
     title: 'Creatives',
     value: 'creatives-group',
     icon: Palette,
