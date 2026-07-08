@@ -4150,6 +4150,153 @@ export type Database = {
         }
         Relationships: []
       }
+      client_audit_findings: {
+        Row: {
+          actual: number | null
+          category: string
+          client_id: string
+          created_at: string
+          expected: number | null
+          id: string
+          message: string | null
+          metric: string
+          remediated_at: string | null
+          remediation_action: string | null
+          report_id: string
+          severity: string
+          variance_pct: number | null
+        }
+        Insert: {
+          actual?: number | null
+          category: string
+          client_id: string
+          created_at?: string
+          expected?: number | null
+          id?: string
+          message?: string | null
+          metric: string
+          remediated_at?: string | null
+          remediation_action?: string | null
+          report_id: string
+          severity?: string
+          variance_pct?: number | null
+        }
+        Update: {
+          actual?: number | null
+          category?: string
+          client_id?: string
+          created_at?: string
+          expected?: number | null
+          id?: string
+          message?: string | null
+          metric?: string
+          remediated_at?: string | null
+          remediation_action?: string | null
+          report_id?: string
+          severity?: string
+          variance_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_audit_findings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_audit_findings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_audit_findings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_audit_findings_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "client_audit_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_audit_reports: {
+        Row: {
+          cadence: string
+          client_id: string
+          created_at: string
+          error: string | null
+          failures: number
+          id: string
+          passed: number
+          status: string
+          summary: Json | null
+          total_checks: number
+          warnings: number
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          cadence: string
+          client_id: string
+          created_at?: string
+          error?: string | null
+          failures?: number
+          id?: string
+          passed?: number
+          status?: string
+          summary?: Json | null
+          total_checks?: number
+          warnings?: number
+          window_end: string
+          window_start: string
+        }
+        Update: {
+          cadence?: string
+          client_id?: string
+          created_at?: string
+          error?: string | null
+          failures?: number
+          id?: string
+          passed?: number
+          status?: string
+          summary?: Json | null
+          total_checks?: number
+          warnings?: number
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_audit_reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_audit_reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_audit_reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_brain: {
         Row: {
           brand_guidelines: string | null
