@@ -11,8 +11,9 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { CreditCard, DollarSign, FileText, Send, RefreshCw, Link2, Loader2, ExternalLink, CheckCircle, XCircle, Clock, Zap } from 'lucide-react';
+import { CreditCard, DollarSign, FileText, Send, RefreshCw, Link2, Loader2, ExternalLink, CheckCircle, XCircle, Clock, Zap, Play, Pause, Ban, Settings2, PlusCircle, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface ClientBillingTabProps {
@@ -50,7 +51,98 @@ export function ClientBillingTab({ clientId, clientName }: ClientBillingTabProps
   const [loadingMethods, setLoadingMethods] = useState(false);
   const [submittingCharge, setSubmittingCharge] = useState(false);
 
+  // Subscription management state
+  const [subOpen, setSubOpen] = useState(false);
+  const [prices, setPrices] = useState<any[]>([]);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [selectedPrice, setSelectedPrice] = useState('');
+  const [subQuantity, setSubQuantity] = useState('1');
+  const [subMode, setSubMode] = useState<'create' | 'change'>('create');
+  const [manageSubId, setManageSubId] = useState<string | null>(null);
+  const [subBusy, setSubBusy] = useState(false);
+
   const isLinked = !!(stripeData?.customer);
+
+  const loadPrices = async () => {
+    setLoadingPrices(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-payments', {
+        body: { action: 'list-prices' },
+      });
+      if (error) throw error;
+      setPrices(data?.prices || []);
+    } catch (err: any) {
+      toast.error('Failed to load Stripe prices');
+    } finally {
+      setLoadingPrices(false);
+    }
+  };
+
+  const openCreateSubscription = async () => {
+    setSubMode('create');
+    setManageSubId(null);
+    setSelectedPrice('');
+    setSubQuantity('1');
+    setSubOpen(true);
+    if (prices.length === 0) await loadPrices();
+  };
+
+  const openChangePlan = async (subId: string, currentPriceId?: string, currentQty?: number) => {
+    setSubMode('change');
+    setManageSubId(subId);
+    setSelectedPrice(currentPriceId || '');
+    setSubQuantity(String(currentQty || 1));
+    setSubOpen(true);
+    if (prices.length === 0) await loadPrices();
+  };
+
+  const submitSubscription = async () => {
+    if (!selectedPrice) { toast.error('Select a plan'); return; }
+    const qty = parseInt(subQuantity) || 1;
+    setSubBusy(true);
+    try {
+      if (subMode === 'create') {
+        if (!stripeData?.customer?.id) return;
+        const { error } = await supabase.functions.invoke('stripe-payments', {
+          body: { action: 'create-subscription', customerId: stripeData.customer.id, priceId: selectedPrice, quantity: qty },
+        });
+        if (error) throw error;
+        toast.success('Subscription started');
+      } else if (manageSubId) {
+        const { error } = await supabase.functions.invoke('stripe-payments', {
+          body: { action: 'update-subscription', subscriptionId: manageSubId, priceId: selectedPrice, quantity: qty },
+        });
+        if (error) throw error;
+        toast.success('Subscription updated');
+      }
+      setSubOpen(false);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save subscription');
+    } finally {
+      setSubBusy(false);
+    }
+  };
+
+  const runSubAction = async (
+    action: 'pause-subscription' | 'resume-subscription' | 'cancel-subscription',
+    subscriptionId: string,
+    extra: Record<string, any> = {},
+  ) => {
+    try {
+      const { error } = await supabase.functions.invoke('stripe-payments', {
+        body: { action, subscriptionId, ...extra },
+      });
+      if (error) throw error;
+      toast.success('Subscription updated');
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Action failed');
+    }
+  };
+
+  const priceLabel = (p: any) =>
+    `${p.product_name || p.nickname || p.id} — ${formatCurrency(p.unit_amount, p.currency)}/${p.interval}`;
 
   const handleLinkAccount = async () => {
     if (!linkEmail && !linkCustomerId) {
@@ -274,6 +366,11 @@ export function ClientBillingTab({ clientId, clientName }: ClientBillingTabProps
             <Zap className="h-4 w-4 mr-2" /> Direct Charge
           </Button>
         )}
+        {stripeData?.customer?.id && (
+          <Button size="sm" variant="secondary" onClick={openCreateSubscription}>
+            <PlusCircle className="h-4 w-4 mr-2" /> Start Subscription
+          </Button>
+        )}
       </div>
 
       {/* Subscriptions */}
@@ -291,6 +388,7 @@ export function ClientBillingTab({ clientId, clientName }: ClientBillingTabProps
                   <TableHead>Interval</TableHead>
                   <TableHead>Period End</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Manage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -304,7 +402,58 @@ export function ClientBillingTab({ clientId, clientName }: ClientBillingTabProps
                     </TableCell>
                     <TableCell>{sub.items[0]?.interval || '—'}</TableCell>
                     <TableCell>{format(new Date(sub.current_period_end), 'MMM d, yyyy')}</TableCell>
-                    <TableCell>{statusBadge(sub.status)}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {statusBadge(sub.status)}
+                        {sub.pause_collection && (
+                          <Badge variant="secondary" className="gap-1"><Pause className="h-3 w-3" />paused</Badge>
+                        )}
+                        {sub.cancel_at_period_end && (
+                          <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />cancels at period end</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openChangePlan(sub.id, sub.items[0]?.price_id, sub.items[0]?.quantity)}>
+                            <Settings2 className="h-4 w-4 mr-2" /> Change plan / quantity
+                          </DropdownMenuItem>
+                          {sub.pause_collection ? (
+                            <DropdownMenuItem onClick={() => runSubAction('resume-subscription', sub.id)}>
+                              <Play className="h-4 w-4 mr-2" /> Resume
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => runSubAction('pause-subscription', sub.id)}>
+                              <Pause className="h-4 w-4 mr-2" /> Pause collection
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          {sub.cancel_at_period_end ? (
+                            <DropdownMenuItem onClick={() => runSubAction('resume-subscription', sub.id)}>
+                              <Play className="h-4 w-4 mr-2" /> Undo scheduled cancel
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => runSubAction('cancel-subscription', sub.id, { cancelAtPeriodEnd: true })}>
+                              <Clock className="h-4 w-4 mr-2" /> Cancel at period end
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => {
+                              if (confirm('Cancel this subscription immediately? This cannot be undone.')) {
+                                runSubAction('cancel-subscription', sub.id, { cancelAtPeriodEnd: false });
+                              }
+                            }}
+                          >
+                            <Ban className="h-4 w-4 mr-2" /> Cancel immediately
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -484,6 +633,57 @@ export function ClientBillingTab({ clientId, clientName }: ClientBillingTabProps
             }}>
               {submittingCharge ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
               Charge Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Start / Change Subscription Dialog */}
+      <Dialog open={subOpen} onOpenChange={setSubOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{subMode === 'create' ? `Start Subscription — ${clientName}` : 'Change Plan / Quantity'}</DialogTitle>
+            <DialogDescription>
+              {subMode === 'create'
+                ? `Start a new Stripe subscription for ${stripeData?.customer?.email}. The customer's default payment method will be charged.`
+                : 'Swap the price or adjust quantity. Prorations are created automatically.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Plan (Stripe price)</Label>
+              {loadingPrices ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading plans from Stripe...
+                </div>
+              ) : (
+                <Select value={selectedPrice} onValueChange={setSelectedPrice}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a plan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {prices.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{priceLabel(p)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <div className="mt-2">
+                <Button variant="ghost" size="sm" onClick={loadPrices} disabled={loadingPrices}>
+                  <RefreshCw className="h-3 w-3 mr-2" /> Refresh plans
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label>Quantity</Label>
+              <Input type="number" min="1" value={subQuantity} onChange={(e) => setSubQuantity(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSubOpen(false)}>Cancel</Button>
+            <Button onClick={submitSubscription} disabled={subBusy || !selectedPrice}>
+              {subBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlusCircle className="h-4 w-4 mr-2" />}
+              {subMode === 'create' ? 'Start Subscription' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
