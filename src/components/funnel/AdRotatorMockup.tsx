@@ -17,6 +17,7 @@ interface AdRotatorMockupProps {
 export function AdRotatorMockup({ creatives, platform, deviceType, brandName = 'Your Brand', className }: AdRotatorMockupProps) {
   const slides = useMemo(() => creatives.slice(0, 3), [creatives]);
   const [idx, setIdx] = useState(0);
+  const [detectedAR, setDetectedAR] = useState<string | null>(null);
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -24,15 +25,15 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
     return () => clearInterval(t);
   }, [slides.length]);
 
+  useEffect(() => { setDetectedAR(null); }, [idx]);
+
   const current = slides[idx];
   const isVideo = current?.type === 'video';
-  const aspectRatio = (current as any)?.aspect_ratio || '1:1';
+  // Prefer explicit aspect_ratio; fall back to detected (video) or sensible default.
+  // FB/IG feed vertical video is 4:5, reels/stories 9:16. Default video → 4:5, image → 1:1.
+  const explicitAR = (current as any)?.aspect_ratio as string | undefined | null;
+  const aspectRatio = explicitAR || detectedAR || (isVideo ? '4:5' : '1:1');
   const aspectCss = aspectRatio.replace(':', ' / ');
-  const fitClass = aspectRatio === '9:16' ? 'object-cover' : 'object-contain';
-
-  // Match IPhoneMockup inner screen dimensions so ad previews align with other steps
-  const screenW = 320;
-  const screenH = 620;
 
   if (!current) {
     return (
@@ -54,10 +55,16 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
       muted
       loop
       playsInline
-      className={cn('w-full h-full', fitClass)}
+      onLoadedMetadata={(e) => {
+        const v = e.currentTarget;
+        if (v.videoWidth && v.videoHeight) {
+          setDetectedAR(`${v.videoWidth}:${v.videoHeight}`);
+        }
+      }}
+      className="w-full h-full object-cover"
     />
   ) : (
-    <img key={current.id} src={current.file_url || ''} alt={current.title} className={cn('w-full h-full', fitClass)} />
+    <img key={current.id} src={current.file_url || ''} alt={current.title} className="w-full h-full object-cover" />
   );
 
   if (platform === 'instagram') {
@@ -78,7 +85,7 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
           </div>
           <MoreHorizontal className="w-4 h-4" />
         </div>
-          <div className="relative bg-black flex-1 min-h-0" style={{ maxHeight: screenW * (aspectRatio === '9:16' ? 16/9 : aspectRatio === '16:9' ? 9/16 : 1) }}>
+          <div className="relative bg-black w-full flex-shrink-0" style={{ aspectRatio: aspectCss }}>
           {MediaEl}
           {isVideo && (
             <div className="absolute top-2 right-2 bg-black/40 rounded-full p-1">
@@ -94,15 +101,22 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
           </div>
           <Bookmark className="w-5 h-5" />
         </div>
-          <div className="px-3 pb-2 flex-shrink-0">
-          <p className="text-xs">
-            <span className="font-semibold">{brandName.toLowerCase().replace(/\s+/g, '')}</span>{' '}
-            {current.headline || current.title}
-          </p>
-          {current.body_copy && (
-            <p className="text-[11px] text-neutral-700 mt-0.5 line-clamp-2">{current.body_copy}</p>
-          )}
-        </div>
+          <div className="px-3 pb-2 flex-shrink-0 overflow-hidden">
+            {current.headline && (
+              <p className="text-xs font-semibold leading-snug mb-0.5 line-clamp-2">{current.headline}</p>
+            )}
+            <p className="text-[11px] leading-snug">
+              <span className="font-semibold">{brandName.toLowerCase().replace(/\s+/g, '')}</span>{' '}
+              <span className="text-neutral-800 whitespace-pre-line line-clamp-3">
+                {current.body_copy || current.title}
+              </span>
+            </p>
+            {current.cta_text && (
+              <button className="mt-1.5 w-full bg-[#0095F6] text-white text-xs font-semibold py-1.5 rounded-md">
+                {current.cta_text}
+              </button>
+            )}
+          </div>
           <div className="mt-auto">
             {slides.length > 1 && <RotatorDots count={slides.length} active={idx} />}
           </div>
@@ -125,19 +139,19 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
         </div>
         <MoreHorizontal className="w-4 h-4 text-neutral-500" />
       </div>
-      {(current.body_copy || current.headline) && (
-          <p className="px-3 pb-2 text-xs text-neutral-800 whitespace-pre-line line-clamp-3 flex-shrink-0">
-          {current.body_copy || current.headline}
+      {current.body_copy && (
+          <p className="px-3 pb-2 text-xs text-neutral-800 whitespace-pre-line line-clamp-4 flex-shrink-0">
+          {current.body_copy}
         </p>
       )}
-        <div className="relative bg-black flex-1 min-h-0" style={{ maxHeight: screenW * (aspectRatio === '9:16' ? 16/9 : aspectRatio === '16:9' ? 9/16 : 1) }}>
+        <div className="relative bg-black w-full flex-shrink-0" style={{ aspectRatio: aspectCss }}>
         {MediaEl}
       </div>
       {(current.headline || current.cta_text) && (
           <div className="flex items-center justify-between bg-[#f0f2f5] px-3 py-2 flex-shrink-0">
-          <div className="min-w-0">
+          <div className="min-w-0 pr-2">
             <p className="text-[10px] text-neutral-500 uppercase truncate">Sponsored</p>
-            <p className="text-xs font-semibold truncate">{current.headline || current.title}</p>
+            <p className="text-xs font-semibold line-clamp-2 leading-snug">{current.headline || current.title}</p>
           </div>
           <button className="bg-[#e4e6eb] text-black text-xs font-semibold px-3 py-1.5 rounded-md flex-shrink-0">
             {current.cta_text || 'Learn More'}
