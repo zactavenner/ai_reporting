@@ -42,6 +42,7 @@ import {
 } from 'recharts';
 import { useClientSettings } from '@/hooks/useClientSettings';
 import { useSheetMetrics } from '@/hooks/useSheetMetrics';
+import { useMetaDailySummary, type MetaDailySummary } from '@/hooks/useMetaAds';
 import { TabBreakdownDrilldown } from './TabBreakdownDrilldown';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -152,6 +153,57 @@ function fmtPct(n: number, digits = 1) {
 function pctDelta(curr: number, prev: number): number | null {
   if (!prev) return null;
   return ((curr - prev) / Math.abs(prev)) * 100;
+}
+
+function mergeSheetWithMeta(sheetAgg: any, meta?: MetaDailySummary | null) {
+  const hasMeta = !!meta?.hasData;
+  if (!sheetAgg && !hasMeta) return null;
+  const base = sheetAgg ?? {
+    totalAdSpend: 0,
+    totalLeads: 0,
+    spamLeads: 0,
+    totalCalls: 0,
+    showedCalls: 0,
+    reconnectCalls: 0,
+    reconnectShowed: 0,
+    totalCommitments: 0,
+    commitmentDollars: 0,
+    fundedInvestors: 0,
+    fundedDollars: 0,
+    ctr: 0,
+    avgTimeToFund: 0,
+    avgCallsToFund: 0,
+    pipelineValue: 0,
+  };
+  const totalAdSpend = hasMeta ? Number(meta?.spend || 0) : Number(base.totalAdSpend || 0);
+  const totalLeads = hasMeta ? Number(meta?.leads || 0) : Number(base.totalLeads || 0);
+  const totalCalls = Number(base.totalCalls || 0);
+  const showedCalls = Number(base.showedCalls || 0);
+  const totalCommitments = Number(base.totalCommitments || 0);
+  const fundedInvestors = Number(base.fundedInvestors || 0);
+  const fundedDollars = Number(base.fundedDollars || 0);
+  const reconnectCalls = Number(base.reconnectCalls || 0);
+  const reconnectShowed = Number(base.reconnectShowed || 0);
+
+  return {
+    ...base,
+    totalAdSpend,
+    totalLeads,
+    ctr: hasMeta ? Number(meta?.ctr || 0) : Number(base.ctr || 0),
+    costPerLead: totalLeads > 0 ? totalAdSpend / totalLeads : 0,
+    costPerCall: totalCalls > 0 ? totalAdSpend / totalCalls : 0,
+    showedPercent: totalCalls > 0 ? (showedCalls / totalCalls) * 100 : 0,
+    costPerShow: showedCalls > 0 ? totalAdSpend / showedCalls : 0,
+    costPerInvestor: fundedInvestors > 0 ? totalAdSpend / fundedInvestors : 0,
+    costOfCapital: fundedDollars > 0 ? (totalAdSpend / fundedDollars) * 100 : 0,
+    leadToBookedPercent: totalLeads > 0 ? (totalCalls / totalLeads) * 100 : 0,
+    closeRate: showedCalls > 0 ? (fundedInvestors / showedCalls) * 100 : 0,
+    costPerReconnectCall: reconnectCalls > 0 ? totalAdSpend / reconnectCalls : 0,
+    costPerReconnectShowed: reconnectShowed > 0 ? totalAdSpend / reconnectShowed : 0,
+    totalCommitments,
+    fundedInvestors,
+    fundedDollars,
+  };
 }
 
 /** Parse the lowest dollar amount mentioned in a string like "$50k-$100k" or "$1M+". */
@@ -575,13 +627,57 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
 
   const current = useSheetMetrics(clientId, parsed?.sheet_id, parsed?.gid, from, to);
   const prior = useSheetMetrics(clientId, parsed?.sheet_id, parsed?.gid, priorFrom, priorTo);
+  const metaCurrent = useMetaDailySummary(clientId, from, to);
+  const metaPrior = useMetaDailySummary(clientId, priorFrom, priorTo);
 
-  const agg = current.data?.aggregated;
-  const aggPrior = prior.data?.aggregated;
+  const agg = useMemo(
+    () => mergeSheetWithMeta(current.data?.aggregated, metaCurrent.data),
+    [current.data?.aggregated, metaCurrent.data],
+  );
+  const aggPrior = useMemo(
+    () => mergeSheetWithMeta(prior.data?.aggregated, metaPrior.data),
+    [prior.data?.aggregated, metaPrior.data],
+  );
   const daily = current.data?.daily ?? [];
 
   const chartData = useMemo(() => {
-    return [...daily]
+    const metaByDate = new Map((metaCurrent.data?.daily || []).map((d) => [d.date, d]));
+    const sheetDates = new Set(daily.map((d) => d.date));
+    const mergedDaily = [
+      ...daily.map((d) => {
+        const metaDay = metaByDate.get(d.date);
+        return metaDay
+          ? {
+              ...d,
+              ad_spend: metaDay.spend,
+              impressions: metaDay.impressions,
+              clicks: metaDay.clicks,
+              leads: metaDay.leads,
+              ctr: metaDay.impressions > 0 ? (metaDay.clicks / metaDay.impressions) * 100 : 0,
+            }
+          : d;
+      }),
+      ...(metaCurrent.data?.daily || [])
+        .filter((d) => !sheetDates.has(d.date))
+        .map((d) => ({
+          date: d.date,
+          ad_spend: d.spend,
+          impressions: d.impressions,
+          clicks: d.clicks,
+          ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0,
+          leads: d.leads,
+          spam_leads: 0,
+          calls: 0,
+          showed_calls: 0,
+          commitments: 0,
+          commitment_dollars: 0,
+          funded_investors: 0,
+          funded_dollars: 0,
+          reconnect_calls: 0,
+          reconnect_showed: 0,
+        })),
+    ];
+    return [...mergedDaily]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((d) => {
         const leads = d.leads || 0;
@@ -601,7 +697,7 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           cpFunded: funded > 0 ? spend / funded : 0,
         };
       });
-  }, [daily]);
+  }, [daily, metaCurrent.data]);
 
   // Velocity: funded $ WoW and MoM deltas
   const velocity = useMemo(() => {
