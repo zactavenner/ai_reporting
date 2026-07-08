@@ -217,12 +217,9 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
           <li>Investor FAQ videos.</li>
           <li>Frequently asked questions.</li>
           <li>Information about the {clientName} resort portfolio.</li>
-          <li>Access to the Investor Deck.</li>
         </ul>
         <SubHeading>Final Thank You Page</SubHeading>
         <LinkCard label="Thank You Page" href="https://clearsummitinvestment.com/thank-you" />
-        <SubHeading>Investor Deck</SubHeading>
-        <Placeholder label="[ Investor Deck Preview Link ]" />
       </Step>
 
       {/* 8. Call & Follow Up */}
