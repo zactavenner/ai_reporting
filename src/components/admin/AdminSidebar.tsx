@@ -1,4 +1,4 @@
-import { BarChart3, Users, Code, Settings, Waypoints, MessageSquare } from 'lucide-react';
+import { BarChart3, Users, Code, Settings, Waypoints, MessageSquare, ShieldCheck } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -17,6 +17,7 @@ const items = [
   { title: 'GoHighLevel', value: 'ghl', icon: Waypoints },
   { title: 'Conversations', value: 'conversations', icon: MessageSquare },
   { title: 'Tracking', value: 'tracking', icon: Code },
+  { title: 'Audit Reports', value: 'audit', icon: ShieldCheck },
   { title: 'Settings', value: 'settings', icon: Settings },
 ];
 
