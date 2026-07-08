@@ -103,10 +103,12 @@ function calcROAS(ad: any): number {
 function buildVariationBrief(ad: any): string {
   const spend = fmt$(ad.spend);
   const ctr = fmtPct(ad.ctr);
-  const cpl = fmt$(ad.cost_per_lead);
+    const metaLeads = Number(ad.meta_reported_leads) || 0;
+    const spendValue = Number(ad.spend) || 0;
+    const cpl = fmt$(metaLeads > 0 ? spendValue / metaLeads : 0);
   const cpa = fmt$(ad.cost_per_funded);
   const winning = isWinningAd(ad) ? ' (🏆 Winning Ad)' : '';
-  return `Create variations of ad '${ad.name}'${winning}\n\nTest different headlines, hooks, and CTAs based on this creative's performance:\n• Spend: ${spend}\n• CTR: ${ctr}\n• CPL: ${cpl}\n• CPA: ${cpa}\n\nSuggested variations:\n1. New headline hook\n2. Different CTA angle\n3. Alternative opening copy`;
+    return `Create variations of ad '${ad.name}'${winning}\n\nTest different headlines, hooks, and CTAs based on this creative's performance:\n• Spend: ${spend}\n• CTR: ${ctr}\n• Meta Leads: ${metaLeads}\n• CPL: ${cpl}\n• CPA: ${cpa}\n\nSuggested variations:\n1. New headline hook\n2. Different CTA angle\n3. Alternative opening copy`;
 }
 
 function sortData<T>(data: T[], sort: SortConfig): T[] {
@@ -138,7 +140,7 @@ const METRIC_HEADERS = [
   { column: 'clicks', label: 'Clicks' },
   { column: 'ctr', label: 'CTR' },
   { column: 'cpc', label: 'CPC' },
-  { column: 'attributed_leads', label: 'Leads' },
+  { column: 'meta_reported_leads', label: 'Leads' },
   { column: 'attributed_spam_leads', label: 'Bad' },
   { column: 'cost_per_lead', label: 'CPL' },
   { column: 'attributed_calls', label: 'Calls' },
@@ -162,10 +164,10 @@ function MetricCells({ row }: { row: any }) {
   const attrPct = attributionQualityPct(row);
   const metaLeads = Number(row.meta_reported_leads) || 0;
   const crmLeads = Number(row.attributed_leads) || 0;
-  const displayLeads = Math.max(metaLeads, crmLeads);
+  const displayLeads = metaLeads;
   const spend = Number(row.spend) || 0;
-  const displayCpl = displayLeads > 0 ? spend / displayLeads : Number(row.cost_per_lead) || 0;
-  const leadsTitle = `Meta-reported: ${metaLeads} · CRM-attributed: ${crmLeads}`;
+  const displayCpl = displayLeads > 0 ? spend / displayLeads : 0;
+  const leadsTitle = `Meta source-of-truth: ${metaLeads} · CRM-attributed: ${crmLeads}`;
   return (
     <>
       <TableCell className="text-center tabular-nums font-medium">{fmt$(row.spend)}</TableCell>
@@ -232,8 +234,8 @@ function MobileRowList({
                 <div className="grid grid-cols-3 gap-2 mt-2 text-[11px]">
                   <div><div className="text-muted-foreground">Spend</div><div className="font-semibold tabular-nums">{fmt$(r.spend)}</div></div>
                   <div><div className="text-muted-foreground">CTR</div><div className="font-semibold tabular-nums">{fmtPct(r.ctr)}</div></div>
-                  <div><div className="text-muted-foreground">CPL</div><div className="font-semibold tabular-nums">{fmt$(r.cost_per_lead)}</div></div>
-                  <div><div className="text-muted-foreground">Leads</div><div className="font-semibold tabular-nums">{fmtN(Math.max(Number(r.meta_reported_leads)||0, Number(r.attributed_leads)||0))}</div></div>
+                  <div><div className="text-muted-foreground">CPL</div><div className="font-semibold tabular-nums">{fmt$((Number(r.meta_reported_leads) || 0) > 0 ? (Number(r.spend) || 0) / (Number(r.meta_reported_leads) || 0) : 0)}</div></div>
+                  <div><div className="text-muted-foreground">Leads</div><div className="font-semibold tabular-nums">{fmtN(Number(r.meta_reported_leads) || 0)}</div></div>
                   <div><div className="text-muted-foreground">Funded</div><div className="font-semibold tabular-nums">{fmtN(r.attributed_funded)}</div></div>
                   <div><div className="text-muted-foreground">CPA</div><div className="font-semibold tabular-nums">{fmt$(r.cost_per_funded)}</div></div>
                 </div>
@@ -632,8 +634,9 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
           mode,
           metrics: {
             spend: previewAd.spend, ctr: previewAd.ctr,
-            cpl: previewAd.cost_per_lead, cpa: previewAd.cost_per_funded,
-            leads: previewAd.attributed_leads, funded: previewAd.attributed_funded,
+            cpl: (Number(previewAd.meta_reported_leads) || 0) > 0 ? (Number(previewAd.spend) || 0) / (Number(previewAd.meta_reported_leads) || 0) : 0,
+            cpa: previewAd.cost_per_funded,
+            leads: previewAd.meta_reported_leads, funded: previewAd.attributed_funded,
           },
         },
       });
@@ -794,7 +797,7 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
                 </div>
                 <div className="p-2 rounded-md bg-muted">
                   <div className="text-muted-foreground">CPL</div>
-                  <div className="font-semibold">{fmt$(previewAd.cost_per_lead)}</div>
+                  <div className="font-semibold">{fmt$((Number(previewAd.meta_reported_leads) || 0) > 0 ? (Number(previewAd.spend) || 0) / (Number(previewAd.meta_reported_leads) || 0) : 0)}</div>
                 </div>
                 <div className="p-2 rounded-md bg-muted">
                   <div className="text-muted-foreground">CPA</div>
