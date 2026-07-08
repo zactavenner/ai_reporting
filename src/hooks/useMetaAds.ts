@@ -3,28 +3,148 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { fetchAllRows } from '@/lib/fetchAllRows';
 
-export function useMetaCampaigns(clientId: string | undefined) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Date-range aggregation from meta_ad_daily_insights.
+// The base tables (meta_campaigns / meta_ad_sets / meta_ads) store the
+// snapshot from the LAST sync range, not the user-selected date filter. To
+// keep numbers matching Meta Ads Manager for the current date filter, we
+// aggregate per-day insights across the range and overlay them on each row.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type DailyRow = {
+  meta_ad_id: string;
+  meta_adset_id: string | null;
+  meta_campaign_id: string | null;
+  spend: number | null;
+  impressions: number | null;
+  clicks: number | null;
+  reach: number | null;
+  leads: number | null;
+};
+
+type Agg = {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+  leads: number;
+};
+
+const emptyAgg = (): Agg => ({ spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0 });
+
+function addToAgg(a: Agg, r: DailyRow) {
+  a.spend += Number(r.spend) || 0;
+  a.impressions += Number(r.impressions) || 0;
+  a.clicks += Number(r.clicks) || 0;
+  a.reach += Number(r.reach) || 0;
+  a.leads += Number(r.leads) || 0;
+}
+
+function deriveMetrics(a: Agg) {
+  const ctr = a.impressions > 0 ? (a.clicks / a.impressions) * 100 : 0;
+  const cpc = a.clicks > 0 ? a.spend / a.clicks : 0;
+  const cpm = a.impressions > 0 ? (a.spend / a.impressions) * 1000 : 0;
+  const frequency = a.reach > 0 ? a.impressions / a.reach : 0;
+  const cost_per_lead = a.leads > 0 ? a.spend / a.leads : 0;
+  return {
+    spend: a.spend,
+    impressions: a.impressions,
+    clicks: a.clicks,
+    reach: a.reach,
+    frequency,
+    ctr,
+    cpc,
+    cpm,
+    meta_reported_leads: a.leads,
+    cost_per_lead,
+  };
+}
+
+async function fetchDailyAggregates(
+  clientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<{
+  byAd: Map<string, Agg>;
+  byAdset: Map<string, Agg>;
+  byCampaign: Map<string, Agg>;
+}> {
+  const rows = await fetchAllRows((sb) =>
+    sb
+      .from('meta_ad_daily_insights')
+      .select('meta_ad_id,meta_adset_id,meta_campaign_id,spend,impressions,clicks,reach,leads')
+      .eq('client_id', clientId)
+      .gte('date', startDate)
+      .lte('date', endDate),
+  );
+  const byAd = new Map<string, Agg>();
+  const byAdset = new Map<string, Agg>();
+  const byCampaign = new Map<string, Agg>();
+  for (const raw of (rows || []) as DailyRow[]) {
+    if (raw.meta_ad_id) {
+      let g = byAd.get(raw.meta_ad_id);
+      if (!g) { g = emptyAgg(); byAd.set(raw.meta_ad_id, g); }
+      addToAgg(g, raw);
+    }
+    if (raw.meta_adset_id) {
+      let g = byAdset.get(raw.meta_adset_id);
+      if (!g) { g = emptyAgg(); byAdset.set(raw.meta_adset_id, g); }
+      addToAgg(g, raw);
+    }
+    if (raw.meta_campaign_id) {
+      let g = byCampaign.get(raw.meta_campaign_id);
+      if (!g) { g = emptyAgg(); byCampaign.set(raw.meta_campaign_id, g); }
+      addToAgg(g, raw);
+    }
+  }
+  return { byAd, byAdset, byCampaign };
+}
+
+// When a date range is applied we cannot re-run CRM attribution on the fly,
+// so null out attributed_* metrics to avoid mixing lifetime CRM data with a
+// scoped Meta spend window. Meta-reported leads remain accurate because they
+// come from the daily insights sum.
+function scrubAttribution<T extends Record<string, any>>(row: T): T {
+  return {
+    ...row,
+    attributed_leads: null,
+    attributed_spam_leads: null,
+    attributed_calls: null,
+    attributed_showed: null,
+    attributed_funded: null,
+    attributed_funded_dollars: null,
+    cost_per_funded: null,
+  };
+}
+
+export function useMetaCampaigns(clientId: string | undefined, startDate?: string, endDate?: string) {
   return useQuery({
-    queryKey: ['meta-campaigns', clientId],
+    queryKey: ['meta-campaigns', clientId, startDate ?? null, endDate ?? null],
     queryFn: async () => {
       if (!clientId) return [];
-      return await fetchAllRows((sb) =>
+      const base = await fetchAllRows((sb) =>
         sb.from('meta_campaigns')
           .select('*')
           .eq('client_id', clientId)
           .order('spend', { ascending: false })
       );
+      if (!startDate || !endDate) return base;
+      const { byCampaign } = await fetchDailyAggregates(clientId, startDate, endDate);
+      return base.map((c: any) => {
+        const agg = byCampaign.get(c.meta_campaign_id) || emptyAgg();
+        return scrubAttribution({ ...c, ...deriveMetrics(agg) });
+      });
     },
     enabled: !!clientId,
   });
 }
 
-export function useMetaAdSets(clientId: string | undefined, campaignId?: string) {
+export function useMetaAdSets(clientId: string | undefined, campaignId?: string, startDate?: string, endDate?: string) {
   return useQuery({
-    queryKey: ['meta-ad-sets', clientId, campaignId],
+    queryKey: ['meta-ad-sets', clientId, campaignId, startDate ?? null, endDate ?? null],
     queryFn: async () => {
       if (!clientId) return [];
-      return await fetchAllRows((sb) => {
+      const base = await fetchAllRows((sb) => {
         let query = sb
           .from('meta_ad_sets')
           .select('*')
@@ -35,17 +155,24 @@ export function useMetaAdSets(clientId: string | undefined, campaignId?: string)
         }
         return query;
       });
+      if (!startDate || !endDate) return base;
+      const { byAdset } = await fetchDailyAggregates(clientId, startDate, endDate);
+      return base.map((r: any) => {
+        const key = r.meta_adset_id || r.meta_ad_set_id;
+        const agg = (key && byAdset.get(key)) || emptyAgg();
+        return scrubAttribution({ ...r, ...deriveMetrics(agg) });
+      });
     },
     enabled: !!clientId,
   });
 }
 
-export function useMetaAds(clientId: string | undefined, adSetId?: string) {
+export function useMetaAds(clientId: string | undefined, adSetId?: string, startDate?: string, endDate?: string) {
   return useQuery({
-    queryKey: ['meta-ads', clientId, adSetId],
+    queryKey: ['meta-ads', clientId, adSetId, startDate ?? null, endDate ?? null],
     queryFn: async () => {
       if (!clientId) return [];
-      return await fetchAllRows((sb) => {
+      const base = await fetchAllRows((sb) => {
         let query = sb
           .from('meta_ads')
           .select('*')
@@ -55,6 +182,12 @@ export function useMetaAds(clientId: string | undefined, adSetId?: string) {
           query = query.eq('ad_set_id', adSetId);
         }
         return query;
+      });
+      if (!startDate || !endDate) return base;
+      const { byAd } = await fetchDailyAggregates(clientId, startDate, endDate);
+      return base.map((r: any) => {
+        const agg = (r.meta_ad_id && byAd.get(r.meta_ad_id)) || emptyAgg();
+        return scrubAttribution({ ...r, ...deriveMetrics(agg) });
       });
     },
     enabled: !!clientId,
