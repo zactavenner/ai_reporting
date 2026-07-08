@@ -40,7 +40,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet, FileText, Palette, Layers, Activity as ActivityIcon, Bell, BellOff } from 'lucide-react';
+import { Settings, ExternalLink, Copy, Trash2, GripVertical, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, CheckCircle, Clock, XCircle, AlertTriangle, Pencil, RefreshCw, Sparkles, BarChart, FileSpreadsheet, FileText, Palette, Layers, Activity as ActivityIcon, Bell, BellOff, Plug, Target } from 'lucide-react';
+import { useMetaAccountAssets } from '@/components/ads-manager/shared/useMetaAccountAssets';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -885,6 +886,7 @@ function MetaStatusCell({
   const [bmUrl, setBmUrl] = useState(client.business_manager_url || '');
   const [open, setOpen] = useState(false);
   const updateClient = useUpdateClient();
+  const { allPixels, assets, refresh, isLoading: assetsLoading } = useMetaAccountAssets(open ? client.id : undefined);
 
   const duplicateWith = isDuplicate
     ? clients.filter(c => c.id !== client.id && c.meta_ad_account_id === client.meta_ad_account_id).map(c => c.name)
@@ -1005,6 +1007,67 @@ function MetaStatusCell({
               ⚠️ This ad account is shared with: {duplicateWith.join(', ')}
             </div>
           )}
+          {/* Pixels tied to this ad account */}
+          <div className="space-y-1.5 border-t pt-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1">
+                <Target className="h-3 w-3" /> Pixels ({allPixels.length})
+              </label>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5"
+                onClick={(e) => { e.stopPropagation(); refresh.mutate(); }}
+                disabled={refresh.isPending}
+                title="Refresh from Meta"
+              >
+                <RefreshCw className={cn('h-3 w-3', refresh.isPending && 'animate-spin')} />
+              </Button>
+            </div>
+            {assetsLoading ? (
+              <p className="text-[10px] text-muted-foreground">Loading…</p>
+            ) : allPixels.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground">
+                {assets.length === 0 ? 'No cached assets — click refresh.' : 'No pixels found on this ad account.'}
+              </p>
+            ) : (
+              <div className="max-h-32 overflow-y-auto space-y-0.5 rounded border bg-muted/30 p-1.5">
+                {allPixels.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-1 text-[10px]">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{p.name || 'Untitled pixel'}</div>
+                      <div className="font-mono text-muted-foreground truncate">{p.id}</div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-1">
+                      <span
+                        className={cn(
+                          'text-[9px] px-1 py-0 rounded',
+                          (p as any).last_fired_time
+                            ? 'bg-green-600/15 text-green-600'
+                            : 'bg-red-500/15 text-red-500'
+                        )}
+                      >
+                        {(p as any).last_fired_time ? 'firing' : 'idle'}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(p.id);
+                          toast.success('Pixel ID copied');
+                        }}
+                        title="Copy pixel ID"
+                      >
+                        <Copy className="h-2.5 w-2.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="flex justify-end gap-1.5">
             <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setOpen(false)}>Cancel</Button>
             <Button size="sm" className="h-6 text-[10px]" onClick={handleSave} disabled={updateClient.isPending}>
@@ -1275,6 +1338,34 @@ function QuickLinksCell({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">Activity</TooltipContent>
+        </Tooltip>
+
+        {/* Meta MCP — live if client has a Meta access token */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('ads-manager'); }}
+            >
+              <Plug
+                className={cn(
+                  'h-3 w-3',
+                  alertsMuted
+                    ? 'text-muted-foreground'
+                    : (client as any).meta_access_token
+                      ? 'text-green-600'
+                      : 'text-red-500 animate-pulse'
+                )}
+              />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">
+            {(client as any).meta_access_token
+              ? 'Meta MCP live on this ad account'
+              : 'Meta MCP not connected — no per-client access token'}
+          </TooltipContent>
         </Tooltip>
       </div>
     </TooltipProvider>
