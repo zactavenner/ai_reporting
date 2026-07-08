@@ -683,6 +683,32 @@ export function DraggableClientTable({
                       ) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
 
+                    {/* Rollup: Spend / Leads / CPL / Calls / CPBC / Funded / $ / CoC% — respects DateFilter (defaults to yesterday) */}
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.totalAdSpend || 0) > 0 ? formatCurrency(m.totalAdSpend) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.totalLeads || 0) > 0 ? m.totalLeads.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.costPerLead || 0) > 0 ? formatCurrency(m.costPerLead) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.totalCalls || 0) > 0 ? m.totalCalls.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.costPerCall || 0) > 0 ? formatCurrency(m.costPerCall) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.fundedInvestors || 0) > 0 ? m.fundedInvestors.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.fundedDollars || 0) > 0 ? formatCurrency(m.fundedDollars) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.costOfCapital || 0) > 0 ? `${m.costOfCapital.toFixed(1)}%` : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+
                     {/* Quick Links — Sheet, Doc, Creatives, Funnel, Activity, BM, Meta, CRM */}
                     <TableCell className="py-0 px-1" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1.5">
