@@ -350,11 +350,11 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
   const lastSyncedRange = useRef<string | null>(null);
   const isMobile = useIsMobile();
 
-  const { data: campaigns = [], isLoading: cLoading } = useMetaCampaigns(clientId);
-  const { data: allAdSets = [], isLoading: asLoading } = useMetaAdSets(clientId);
-  const { data: allAds = [], isLoading: adLoading } = useMetaAds(clientId);
   const { data: settings } = useClientSettings(clientId);
   const { startDate, endDate } = useDateFilter();
+  const { data: campaigns = [], isLoading: cLoading } = useMetaCampaigns(clientId, startDate, endDate);
+  const { data: allAdSets = [], isLoading: asLoading } = useMetaAdSets(clientId, undefined, startDate, endDate);
+  const { data: allAds = [], isLoading: adLoading } = useMetaAds(clientId, undefined, startDate, endDate);
   const syncMutation = useSyncMetaAds();
   const attributionMutation = useRunAttribution();
 
