@@ -385,6 +385,7 @@ export function DraggableClientTable({
         case 'rollupLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
         case 'rollupCPL': aVal = a.metrics.costPerLead || 0; bVal = b.metrics.costPerLead || 0; break;
         case 'rollupCalls': aVal = a.metrics.totalCalls || 0; bVal = b.metrics.totalCalls || 0; break;
+        case 'rollupShowed': aVal = a.metrics.showedCalls || 0; bVal = b.metrics.showedCalls || 0; break;
         case 'rollupCPBC': aVal = a.metrics.costPerCall || 0; bVal = b.metrics.costPerCall || 0; break;
         case 'rollupFunded': aVal = a.metrics.fundedInvestors || 0; bVal = b.metrics.fundedInvestors || 0; break;
         case 'rollupFundedDollars': aVal = a.metrics.fundedDollars || 0; bVal = b.metrics.fundedDollars || 0; break;
