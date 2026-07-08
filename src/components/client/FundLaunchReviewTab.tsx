@@ -100,9 +100,20 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <p>Prospective investors will see {clientName} ads designed to introduce the offering and encourage qualified investors to learn more.</p>
         <p>Investors who are interested can click the ad to begin the qualification process.</p>
         <SubHeading>Final Ads</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Placeholder label="[ Ad Previews / Screenshots ]" />
-          <Placeholder label="[ Meta Preview Links ]" />
+        <div className="flex flex-col items-center gap-4 pt-2">
+          {selectedAdCreatives.length > 0 ? (
+            <AdRotatorMockup
+              creatives={selectedAdCreatives}
+              platform={adPlatform}
+              deviceType="phone"
+              brandName={clientName}
+            />
+          ) : (
+            <Placeholder label="Select ads in the Funnel tab's Ads step to see the live preview here." />
+          )}
+          <p className="text-xs text-muted-foreground text-center max-w-md">
+            Live rotating preview of the approved {clientName} ads — pulled from the Funnel tab's Ads step.
+          </p>
         </div>
       </Step>
 
@@ -118,9 +129,15 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <SubHeading>Qualified Investor Next Step</SubHeading>
         <p>Qualified investors are prompted to continue to the {clientName} landing page to learn more and schedule an Investor Call.</p>
         <SubHeading>Final Lead Form</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Placeholder label="[ Lead Form Screenshots ]" />
-          <Placeholder label="[ Meta Form Preview Link ]" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2">
+          {formShots.map((s) => (
+            <figure key={s.label} className="space-y-1.5">
+              <div className="rounded-xl overflow-hidden border border-border bg-muted/30 shadow-sm">
+                <img src={s.src} alt={`${clientName} Meta lead form — ${s.label}`} className="w-full h-auto block" loading="lazy" />
+              </div>
+              <figcaption className="text-[10px] text-center text-muted-foreground font-medium uppercase tracking-wider">{s.label}</figcaption>
+            </figure>
+          ))}
         </div>
       </Step>
 
