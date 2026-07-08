@@ -1,8 +1,18 @@
 import { Rocket, MousePointerClick, ClipboardCheck, Globe, CalendarCheck, MailPlus, Bot, PartyPopper, PhoneCall, LineChart, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { AdRotatorMockup, type AdPlatform } from '@/components/funnel/AdRotatorMockup';
+import { useFunnelSteps } from '@/hooks/useFunnelSteps';
+import { useFunnelStepAds } from '@/hooks/useFunnelStepAds';
+import { useCreatives } from '@/hooks/useCreatives';
+import csiForm1 from '@/assets/csi_form_1.png.asset.json';
+import csiForm2 from '@/assets/csi_form_2.png.asset.json';
+import csiForm3 from '@/assets/csi_form_3.png.asset.json';
+import csiForm4 from '@/assets/csi_form_4.png.asset.json';
+import csiForm5 from '@/assets/csi_form_5.png.asset.json';
 
 interface FundLaunchReviewTabProps {
+  clientId: string;
   clientName: string;
 }
 
@@ -45,7 +55,27 @@ const SubHeading = ({ children }: { children: React.ReactNode }) => (
   <h4 className="font-semibold text-foreground mt-4 mb-1">{children}</h4>
 );
 
-export default function FundLaunchReviewTab({ clientName }: FundLaunchReviewTabProps) {
+export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunchReviewTabProps) {
+  // Pull the same ad creatives shown in the Funnel tab's ads step.
+  const { data: steps = [] } = useFunnelSteps(clientId);
+  const adsStep = steps.find(s => s.step_kind === 'ads');
+  const { data: stepAds = [] } = useFunnelStepAds(adsStep ? [adsStep.id] : []);
+  const { data: allCreatives = [] } = useCreatives(adsStep ? clientId : undefined);
+  const selectedAdCreatives = stepAds
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(a => allCreatives.find(c => c.id === a.creative_id))
+    .filter(Boolean) as typeof allCreatives;
+  const adPlatform: AdPlatform = (adsStep?.ad_platform as AdPlatform) || 'facebook';
+
+  const formShots = [
+    { src: csiForm1.url, label: 'Qualification' },
+    { src: csiForm2.url, label: 'Contact Info' },
+    { src: csiForm3.url, label: 'Phone Verification' },
+    { src: csiForm4.url, label: 'Qualified — Next Step' },
+    { src: csiForm5.url, label: 'Not-a-Fit End Screen' },
+  ];
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-16">
       {/* Hero */}
