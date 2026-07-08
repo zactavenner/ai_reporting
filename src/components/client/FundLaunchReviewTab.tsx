@@ -180,10 +180,37 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         </ul>
         <p>Each communication provides the investor with their call details and easy access to the meeting link. The confirmation and reminder emails also help prepare the investor for the upcoming conversation and provide access to the Investor Deck before the call.</p>
         <SubHeading>Final Booked-Call Communications</SubHeading>
-        <LinkCard
-          label="Booked-Call Sequence (HubSpot Workflow)"
-          href="https://app-na2.hubspot.com/workflows/47679429/platform/flow/2468392645/edit"
-        />
+        <p className="text-xs text-muted-foreground italic">
+          Note: values in brackets (e.g. <code>{'{{ firstname }}'}</code>) are placeholders and will populate with the investor's name and appointment details once a call is booked.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <LinkCard
+            label="Confirmation Email"
+            href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233042565824?portalId=47679429&preview_key=WLrqmaoW&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
+          />
+          <LinkCard
+            label="24-Hour Reminder Email"
+            href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233054259907?portalId=47679429&preview_key=pChwUbUh&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
+          />
+          <LinkCard
+            label="1-Hour Reminder Email"
+            href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233069063928?portalId=47679429&preview_key=cqJTWbeU&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
+          />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-border bg-muted/30 px-4 py-4">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Confirmation Text</div>
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">
+              Hi {'{{ firstname }}'} — you're booked for a {'{{ meeting_duration }}'} min investor call with {'{{ hubspot_owner }}'} from Clear Summit on {'{{ meeting_date }}'} at {'{{ meeting_time }}'} {'{{ invitee_timezone }}'}.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 px-4 py-4">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">15-Minute Reminder Text</div>
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">
+              Hi {'{{ firstname }}'}, your call starts in 15 minutes. Join here when you're ready: {'{{ meeting_link }}'}.
+            </p>
+          </div>
+        </div>
       </Step>
 
       {/* 5. Does not book */}
