@@ -12,6 +12,7 @@ import { fetchAllRows } from '@/lib/fetchAllRows';
 // ─────────────────────────────────────────────────────────────────────────────
 
 type DailyRow = {
+  date?: string;
   meta_ad_id: string;
   meta_adset_id: string | null;
   meta_campaign_id: string | null;
@@ -20,6 +21,25 @@ type DailyRow = {
   clicks: number | null;
   reach: number | null;
   leads: number | null;
+};
+
+export type MetaDailyPoint = {
+  date: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+  leads: number;
+};
+
+export type MetaDailySummary = Agg & {
+  daily: MetaDailyPoint[];
+  hasData: boolean;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+  costPerLead: number;
 };
 
 type Agg = {
@@ -100,21 +120,65 @@ async function fetchDailyAggregates(
   return { byAd, byAdset, byCampaign };
 }
 
-// When a date range is applied we cannot re-run CRM attribution on the fly,
-// so null out attributed_* metrics to avoid mixing lifetime CRM data with a
-// scoped Meta spend window. Meta-reported leads remain accurate because they
-// come from the daily insights sum.
-function scrubAttribution<T extends Record<string, any>>(row: T): T {
+async function fetchDailyRows(clientId: string, startDate: string, endDate: string): Promise<DailyRow[]> {
+  return await fetchAllRows<DailyRow>((sb) =>
+    sb
+      .from('meta_ad_daily_insights')
+      .select('date,meta_ad_id,meta_adset_id,meta_campaign_id,spend,impressions,clicks,reach,leads')
+      .eq('client_id', clientId)
+      .gte('date', startDate)
+      .lte('date', endDate),
+  );
+}
+
+function normalizeMetaLeadMetrics<T extends Record<string, any>>(row: T): T {
+  const spend = Number(row.spend) || 0;
+  const metaLeads = Number(row.meta_reported_leads) || 0;
   return {
     ...row,
-    attributed_leads: null,
-    attributed_spam_leads: null,
-    attributed_calls: null,
-    attributed_showed: null,
-    attributed_funded: null,
-    attributed_funded_dollars: null,
-    cost_per_funded: null,
+    cost_per_lead: metaLeads > 0 ? spend / metaLeads : 0,
   };
+}
+
+function applyMetaAggregate<T extends Record<string, any>>(row: T, agg: Agg): T {
+  return normalizeMetaLeadMetrics({ ...row, ...deriveMetrics(agg) });
+}
+
+export function useMetaDailySummary(clientId: string | undefined, startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ['meta-daily-summary', clientId, startDate ?? null, endDate ?? null],
+    queryFn: async (): Promise<MetaDailySummary> => {
+      if (!clientId || !startDate || !endDate) {
+        return { ...emptyAgg(), daily: [], hasData: false, ctr: 0, cpc: 0, cpm: 0, frequency: 0, costPerLead: 0 };
+      }
+      const rows = await fetchDailyRows(clientId, startDate, endDate);
+      const total = emptyAgg();
+      const byDate = new Map<string, Agg>();
+      for (const row of rows) {
+        addToAgg(total, row);
+        const date = row.date;
+        if (!date) continue;
+        let day = byDate.get(date);
+        if (!day) { day = emptyAgg(); byDate.set(date, day); }
+        addToAgg(day, row);
+      }
+      const derived = deriveMetrics(total);
+      const daily = Array.from(byDate.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, agg]) => ({ date, ...agg }));
+      return {
+        ...total,
+        daily,
+        hasData: rows.length > 0,
+        ctr: derived.ctr,
+        cpc: derived.cpc,
+        cpm: derived.cpm,
+        frequency: derived.frequency,
+        costPerLead: derived.cost_per_lead,
+      };
+    },
+    enabled: !!clientId && !!startDate && !!endDate,
+  });
 }
 
 export function useMetaCampaigns(clientId: string | undefined, startDate?: string, endDate?: string) {
@@ -128,11 +192,12 @@ export function useMetaCampaigns(clientId: string | undefined, startDate?: strin
           .eq('client_id', clientId)
           .order('spend', { ascending: false })
       );
-      if (!startDate || !endDate) return base;
+      if (!startDate || !endDate) return base.map(normalizeMetaLeadMetrics);
       const { byCampaign } = await fetchDailyAggregates(clientId, startDate, endDate);
+      if (byCampaign.size === 0) return base.map(normalizeMetaLeadMetrics);
       return base.map((c: any) => {
         const agg = byCampaign.get(c.meta_campaign_id) || emptyAgg();
-        return scrubAttribution({ ...c, ...deriveMetrics(agg) });
+        return applyMetaAggregate(c, agg);
       });
     },
     enabled: !!clientId,
@@ -155,12 +220,13 @@ export function useMetaAdSets(clientId: string | undefined, campaignId?: string,
         }
         return query;
       });
-      if (!startDate || !endDate) return base;
+      if (!startDate || !endDate) return base.map(normalizeMetaLeadMetrics);
       const { byAdset } = await fetchDailyAggregates(clientId, startDate, endDate);
+      if (byAdset.size === 0) return base.map(normalizeMetaLeadMetrics);
       return base.map((r: any) => {
         const key = r.meta_adset_id || r.meta_ad_set_id;
         const agg = (key && byAdset.get(key)) || emptyAgg();
-        return scrubAttribution({ ...r, ...deriveMetrics(agg) });
+        return applyMetaAggregate(r, agg);
       });
     },
     enabled: !!clientId,
@@ -183,11 +249,12 @@ export function useMetaAds(clientId: string | undefined, adSetId?: string, start
         }
         return query;
       });
-      if (!startDate || !endDate) return base;
+      if (!startDate || !endDate) return base.map(normalizeMetaLeadMetrics);
       const { byAd } = await fetchDailyAggregates(clientId, startDate, endDate);
+      if (byAd.size === 0) return base.map(normalizeMetaLeadMetrics);
       return base.map((r: any) => {
         const agg = (r.meta_ad_id && byAd.get(r.meta_ad_id)) || emptyAgg();
-        return scrubAttribution({ ...r, ...deriveMetrics(agg) });
+        return applyMetaAggregate(r, agg);
       });
     },
     enabled: !!clientId,
@@ -210,6 +277,9 @@ export function useSyncMetaAds() {
       queryClient.invalidateQueries({ queryKey: ['meta-campaigns', clientId] });
       queryClient.invalidateQueries({ queryKey: ['meta-ad-sets', clientId] });
       queryClient.invalidateQueries({ queryKey: ['meta-ads', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['meta-daily-summary', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['top-creative', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['sheet-metrics', clientId] });
       toast.success(`Synced ${data.campaigns} campaigns, ${data.adSets} ad sets, ${data.ads} ads (${data.metaApiCalls} API calls)`);
     },
     onError: (error) => {
