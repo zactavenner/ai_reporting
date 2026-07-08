@@ -42,6 +42,7 @@ import {
 } from 'recharts';
 import { useClientSettings } from '@/hooks/useClientSettings';
 import { useSheetMetrics } from '@/hooks/useSheetMetrics';
+import { useMetaDailySummary, type MetaDailySummary } from '@/hooks/useMetaAds';
 import { TabBreakdownDrilldown } from './TabBreakdownDrilldown';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -152,6 +153,57 @@ function fmtPct(n: number, digits = 1) {
 function pctDelta(curr: number, prev: number): number | null {
   if (!prev) return null;
   return ((curr - prev) / Math.abs(prev)) * 100;
+}
+
+function mergeSheetWithMeta(sheetAgg: any, meta?: MetaDailySummary | null) {
+  const hasMeta = !!meta?.hasData;
+  if (!sheetAgg && !hasMeta) return null;
+  const base = sheetAgg ?? {
+    totalAdSpend: 0,
+    totalLeads: 0,
+    spamLeads: 0,
+    totalCalls: 0,
+    showedCalls: 0,
+    reconnectCalls: 0,
+    reconnectShowed: 0,
+    totalCommitments: 0,
+    commitmentDollars: 0,
+    fundedInvestors: 0,
+    fundedDollars: 0,
+    ctr: 0,
+    avgTimeToFund: 0,
+    avgCallsToFund: 0,
+    pipelineValue: 0,
+  };
+  const totalAdSpend = hasMeta ? Number(meta?.spend || 0) : Number(base.totalAdSpend || 0);
+  const totalLeads = hasMeta ? Number(meta?.leads || 0) : Number(base.totalLeads || 0);
+  const totalCalls = Number(base.totalCalls || 0);
+  const showedCalls = Number(base.showedCalls || 0);
+  const totalCommitments = Number(base.totalCommitments || 0);
+  const fundedInvestors = Number(base.fundedInvestors || 0);
+  const fundedDollars = Number(base.fundedDollars || 0);
+  const reconnectCalls = Number(base.reconnectCalls || 0);
+  const reconnectShowed = Number(base.reconnectShowed || 0);
+
+  return {
+    ...base,
+    totalAdSpend,
+    totalLeads,
+    ctr: hasMeta ? Number(meta?.ctr || 0) : Number(base.ctr || 0),
+    costPerLead: totalLeads > 0 ? totalAdSpend / totalLeads : 0,
+    costPerCall: totalCalls > 0 ? totalAdSpend / totalCalls : 0,
+    showedPercent: totalCalls > 0 ? (showedCalls / totalCalls) * 100 : 0,
+    costPerShow: showedCalls > 0 ? totalAdSpend / showedCalls : 0,
+    costPerInvestor: fundedInvestors > 0 ? totalAdSpend / fundedInvestors : 0,
+    costOfCapital: fundedDollars > 0 ? (totalAdSpend / fundedDollars) * 100 : 0,
+    leadToBookedPercent: totalLeads > 0 ? (totalCalls / totalLeads) * 100 : 0,
+    closeRate: showedCalls > 0 ? (fundedInvestors / showedCalls) * 100 : 0,
+    costPerReconnectCall: reconnectCalls > 0 ? totalAdSpend / reconnectCalls : 0,
+    costPerReconnectShowed: reconnectShowed > 0 ? totalAdSpend / reconnectShowed : 0,
+    totalCommitments,
+    fundedInvestors,
+    fundedDollars,
+  };
 }
 
 /** Parse the lowest dollar amount mentioned in a string like "$50k-$100k" or "$1M+". */
