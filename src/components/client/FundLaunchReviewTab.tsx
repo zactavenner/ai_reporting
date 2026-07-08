@@ -10,6 +10,7 @@ import csiForm2 from '@/assets/csi_form_2.png.asset.json';
 import csiForm3 from '@/assets/csi_form_3.png.asset.json';
 import csiForm4 from '@/assets/csi_form_4.png.asset.json';
 import csiForm5 from '@/assets/csi_form_5.png.asset.json';
+import csiAiSetterExample from '@/assets/csi_ai_setter_example.png.asset.json';
 
 interface FundLaunchReviewTabProps {
   clientId: string;
@@ -203,9 +204,24 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <p>The AI Setter is designed to continue the conversation, answer basic questions about the offering, and guide the investor toward scheduling an Investor Call. It can provide approved information about the fund and direct investors to available resources.</p>
         <p>The AI Setter does not provide investment advice, tax advice, recommend how much an investor should invest, guarantee returns, or make claims outside of the approved offering information. The {clientName} team can monitor conversations and step in manually when needed.</p>
         <SubHeading>Preview the AI Setter</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Placeholder label="[ AI Setter Preview Link ]" />
-          <Placeholder label="[ Example Conversation Screenshot ]" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <LinkCard
+              label="Test the AI Setter Live"
+              href="https://go.nurtureking.com/widget/form/fMR7tGph345P6q00ebNZ"
+            />
+            <p className="text-xs text-muted-foreground">Fill out the form to start a live conversation with the AI Setter.</p>
+          </div>
+          <div className="rounded-lg border border-border overflow-hidden bg-muted/20">
+            <img
+              src={csiAiSetterExample.url}
+              alt="Example AI Setter conversation"
+              className="w-full h-auto block"
+            />
+            <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold border-t border-border">
+              Example Conversation
+            </div>
+          </div>
         </div>
       </Step>
 
