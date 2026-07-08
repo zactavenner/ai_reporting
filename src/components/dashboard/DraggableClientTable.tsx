@@ -1277,6 +1277,34 @@ function QuickLinksCell({
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">Activity</TooltipContent>
         </Tooltip>
+
+        {/* Meta MCP — live if client has a Meta access token */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={(e) => { e.stopPropagation(); onNavigate('ads-manager'); }}
+            >
+              <Plug
+                className={cn(
+                  'h-3 w-3',
+                  alertsMuted
+                    ? 'text-muted-foreground'
+                    : (client as any).meta_access_token
+                      ? 'text-green-600'
+                      : 'text-red-500 animate-pulse'
+                )}
+              />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">
+            {(client as any).meta_access_token
+              ? 'Meta MCP live on this ad account'
+              : 'Meta MCP not connected — no per-client access token'}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </TooltipProvider>
   );
