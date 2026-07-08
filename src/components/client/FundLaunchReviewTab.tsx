@@ -213,27 +213,21 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
               label="Confirmation Email"
               href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233042565824?portalId=47679429&preview_key=WLrqmaoW&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
             />
-            <div className="rounded-lg border border-border bg-white overflow-hidden">
-              <img src={csiEmailConfirmation.url} alt="Confirmation email preview" className="w-full h-auto" />
-            </div>
+            <ExpandableImage src={csiEmailConfirmation.url} alt="Confirmation email preview" />
           </div>
           <div className="space-y-2">
             <LinkCard
               label="24-Hour Reminder Email"
               href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233054259907?portalId=47679429&preview_key=pChwUbUh&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
             />
-            <div className="rounded-lg border border-border bg-white overflow-hidden">
-              <img src={csiEmail24hr.url} alt="24-hour reminder email preview" className="w-full h-auto" />
-            </div>
+            <ExpandableImage src={csiEmail24hr.url} alt="24-hour reminder email preview" />
           </div>
           <div className="space-y-2">
             <LinkCard
               label="1-Hour Reminder Email"
               href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233069063928?portalId=47679429&preview_key=cqJTWbeU&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
             />
-            <div className="rounded-lg border border-border bg-white overflow-hidden">
-              <img src={csiEmail1hr.url} alt="1-hour reminder email preview" className="w-full h-auto" />
-            </div>
+            <ExpandableImage src={csiEmail1hr.url} alt="1-hour reminder email preview" />
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
