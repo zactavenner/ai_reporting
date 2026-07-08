@@ -14,8 +14,49 @@ declare const EdgeRuntime: { waitUntil: (promise: Promise<any>) => void } | unde
  * - showed_calls / calls_showed: counted by calls.scheduled_at (actual appointment date when they showed)
  * - funded_investors / funded_on_day: counted by funded_investors.funded_at (stage change date)
  * - commitments / commitments_on_day: counted by funded_investors.funded_at where commitment_amount > 0
- * - ad_spend / impressions / clicks / ctr: NEVER touched here — owned by sync-meta-ads
+ * - ad_spend: summed from meta_ad_daily_insights by client_id + date (already in account TZ from Meta)
+ *
+ * DATE BUCKETING:
+ * - All UTC timestamps are bucketed into the Meta ad account's timezone (from meta_ad_accounts.timezone_name).
+ * - Fallback: 'UTC'.
  */
+
+/**
+ * Compute the UTC [start, end) bounds for a calendar day expressed in a given IANA timezone.
+ * Uses Intl.DateTimeFormat to derive the UTC offset at noon of that local day (noon avoids
+ * DST-transition edge cases affecting midnight specifically).
+ */
+function getLocalDayUTCBounds(dateStr: string, tz: string): { dayStart: string; dayNext: string } {
+  if (tz === "UTC") {
+    return {
+      dayStart: `${dateStr}T00:00:00.000Z`,
+      dayNext: new Date(new Date(`${dateStr}T00:00:00.000Z`).getTime() + 86400_000).toISOString(),
+    };
+  }
+  // Reference point: noon UTC on the same calendar date
+  const noonUTC = new Date(`${dateStr}T12:00:00Z`);
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(noonUTC);
+  const get = (t: string) => parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
+  const [yr, mo, dy, hr, mn, sc] = [
+    get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"),
+  ];
+  // UTC offset at the reference point: noonUTC = localNoon + offsetMs → offsetMs = noonUTC - localNoon(as UTC)
+  const localNoonAsUTC = Date.UTC(yr, mo, dy, hr, mn, sc);
+  const offsetMs = noonUTC.getTime() - localNoonAsUTC;
+  // Local midnight on dateStr → UTC
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const localMidnightUTC = Date.UTC(y, m - 1, d, 0, 0, 0) + offsetMs;
+  return {
+    dayStart: new Date(localMidnightUTC).toISOString(),
+    dayNext: new Date(localMidnightUTC + 86400_000).toISOString(),
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -32,11 +73,14 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    clientId = body.clientId || null;
-    
-    if (body.startDate && body.endDate) {
-      startDate = body.startDate;
-      endDate = body.endDate;
+    // Accept both snake_case and camelCase keys
+    clientId = body.client_id || body.clientId || null;
+
+    const sd = body.start_date || body.startDate;
+    const ed = body.end_date || body.endDate;
+    if (sd && ed) {
+      startDate = sd;
+      endDate = ed;
     } else {
       const today = new Date();
       const yesterday = new Date(today);
@@ -54,10 +98,10 @@ Deno.serve(async (req) => {
 
   console.log(`[recalculate-daily-metrics] Range: ${startDate} to ${endDate}, client: ${clientId || "all"}`);
 
-  // Get active clients
+  // Get active clients (include meta_ad_account_id so we can resolve timezone)
   let clientsQuery = supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, meta_ad_account_id")
     .in("status", ["active", "onboarding"]);
 
   if (clientId) {
@@ -78,15 +122,26 @@ Deno.serve(async (req) => {
     for (const client of clients) {
       const clientResult = { clientId: client.id, name: client.name, daysUpdated: 0, errors: [] as string[] };
 
+      // ── Resolve account timezone ──
+      let clientTz = "UTC";
+      if (client.meta_ad_account_id) {
+        const { data: adAccount } = await supabase
+          .from("meta_ad_accounts")
+          .select("timezone_name")
+          .eq("ad_account_id", client.meta_ad_account_id)
+          .maybeSingle();
+        clientTz = adAccount?.timezone_name || "UTC";
+      }
+      console.log(`[recalculate-daily-metrics] ${client.name} timezone: ${clientTz}`);
+
       const current = new Date(startDate + "T00:00:00Z");
       const end = new Date(endDate + "T00:00:00Z");
 
       while (current <= end) {
         const dateStr = current.toISOString().split("T")[0];
-        const dayStart = `${dateStr}T00:00:00.000Z`;
-        const next = new Date(current);
-        next.setUTCDate(next.getUTCDate() + 1);
-        const dayNext = `${next.toISOString().split("T")[0]}T00:00:00.000Z`;
+
+        // Compute UTC boundaries for this local calendar day in the account timezone
+        const { dayStart, dayNext } = getLocalDayUTCBounds(dateStr, clientTz);
 
         try {
           // ── Leads: by created_at ──
@@ -178,7 +233,15 @@ Deno.serve(async (req) => {
           const commitmentDollars = (fundedData || []).reduce((sum: number, f: any) => sum + (f.commitment_amount || 0), 0);
           const commitmentCount = (fundedData || []).filter((f: any) => f.commitment_amount && f.commitment_amount > 0).length;
 
-          // UPSERT — only CRM columns, never touch ad_spend/impressions/clicks/ctr
+          // ── Ad spend: from meta_ad_daily_insights (date already in account TZ from Meta) ──
+          const { data: spendRows } = await supabase
+            .from("meta_ad_daily_insights")
+            .select("spend")
+            .eq("client_id", client.id)
+            .eq("date", dateStr);
+          const adSpend = (spendRows ?? []).reduce((s: number, r: any) => s + (Number(r.spend) || 0), 0);
+
+          // UPSERT — CRM columns + ad_spend from Meta insights
           const { error: upsertError } = await supabase
             .from("daily_metrics")
             .upsert(
@@ -200,6 +263,7 @@ Deno.serve(async (req) => {
                 calls_showed: showedCount || 0,
                 commitments_on_day: commitmentCount,
                 funded_on_day: fundedCount || 0,
+                ad_spend: adSpend,
                 updated_at: new Date().toISOString(),
               },
               { onConflict: "client_id,date", ignoreDuplicates: false }

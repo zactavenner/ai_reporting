@@ -25,6 +25,9 @@ import { AgentMcpPanel } from './shared/AgentMcpPanel';
 import { NewCampaignWizard } from './NewCampaignWizard';
 import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
+import { useQuery } from '@tanstack/react-query';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface AdsManagerTabProps {
   clientId: string;
@@ -392,6 +395,22 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
   }, [allAds, filterAdSetId, statusFilter]);
 
   const filterCampaignName = filterCampaignId ? campaigns.find((c: any) => c.id === filterCampaignId)?.name : null;
+
+  // ── Unattributed leads count ──
+  const [showUnattributed, setShowUnattributed] = useState(false);
+  const { data: unattributedLeads = [] } = useQuery({
+    queryKey: ['unattributed-leads', clientId, startDate, endDate],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('leads')
+        .select('id, first_name, last_name, email, created_at')
+        .eq('client_id', clientId)
+        .gte('created_at', startDate + 'T00:00:00Z')
+        .lte('created_at', endDate + 'T23:59:59Z')
+        .or('utm_source.is.null,utm_campaign.is.null');
+      return data || [];
+    },
+  });
   const filterAdSetName = filterAdSetId ? allAdSets.find((a: any) => a.id === filterAdSetId)?.name : null;
 
   const handleSync = () => {
@@ -457,6 +476,20 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           />
         </div>
       </div>
+
+      {/* Unattributed leads chip */}
+      {unattributedLeads.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="outline"
+            className="cursor-pointer border-orange-400 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950 transition-colors gap-1.5"
+            onClick={() => setShowUnattributed(true)}
+          >
+            <AlertTriangle className="h-3 w-3" />
+            {unattributedLeads.length} unattributed lead{unattributedLeads.length !== 1 ? 's' : ''} — missing UTM
+          </Badge>
+        </div>
+      )}
 
       {/* Filter badges */}
       {(filterCampaignName || filterAdSetName) && (
@@ -531,6 +564,34 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
         clientId={clientId}
         clientName={clientName}
       />
+
+      {/* Unattributed leads dialog */}
+      <Dialog open={showUnattributed} onOpenChange={setShowUnattributed}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              Unattributed Leads ({unattributedLeads.length})
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">
+            These leads are missing <code className="text-xs bg-muted px-1 rounded">utm_source</code> or{' '}
+            <code className="text-xs bg-muted px-1 rounded">utm_campaign</code> — they cannot be attributed to a specific ad.
+          </p>
+          <div className="divide-y divide-border max-h-72 overflow-y-auto rounded-md border">
+            {unattributedLeads.map((lead: any) => (
+              <div key={lead.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                <span className="font-medium">
+                  {[lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || 'Unknown'}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(lead.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -682,6 +743,13 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
               const creativeUrl = getCreativeUrl(a);
               const isVideo = a.media_type === 'video';
               const winning = isWinningAd(a);
+              // UTM validator: check destination URL for required params
+              const destUrl = a.website_url || '';
+              const missingUtm = destUrl
+                ? (['utm_source', 'utm_campaign', 'utm_content'] as const).filter(
+                    (p) => !destUrl.includes(p + '='),
+                  )
+                : [];
               return (
                 <TableRow key={a.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium sticky left-0 bg-card z-10">
@@ -708,6 +776,18 @@ function AdsTable({ data, isLoading, clientId }: { data: any[]; isLoading: boole
                         <div className="flex items-center gap-1.5">
                           <span className="whitespace-normal break-words leading-snug text-sm">{a.name}</span>
                           {winning && <Trophy className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />}
+                          {missingUtm.length > 0 && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex"><AlertTriangle className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" /></span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  <p className="text-xs">Missing UTM: {missingUtm.join(', ')}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
                         {(a.headline || a.body) && (
                           <span className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5 block">

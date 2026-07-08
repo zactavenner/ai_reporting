@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAvatars } from '@/hooks/useAvatars';
 import { useVideoGeneration } from '@/hooks/useVideoGeneration';
+import { useSingleJobPersistence } from '@/hooks/useSingleJobPersistence';
 import { useGeminiKey } from '@/hooks/useGeminiKey';
 import { cn } from '@/lib/utils';
 import type { StoryboardScene, IngredientType, VideoGenerationConfig } from '@/types/video';
@@ -48,6 +49,7 @@ export function VideoBatchCreator({ projectId, clientId }: VideoBatchCreatorProp
   
   const { data: avatars = [] } = useAvatars(clientId);
   const { generateScene, generatingSceneId, hasApiKey } = useVideoGeneration();
+  const { createJobRecord, updateScene } = useSingleJobPersistence();
   const { getApiKey: getGeminiKey, hasApiKey: hasGeminiKey } = useGeminiKey();
 
   // Get selected avatar for character consistency
@@ -186,27 +188,32 @@ export function VideoBatchCreator({ projectId, clientId }: VideoBatchCreatorProp
 
     handleUpdateScene(scene.id, { status: 'generating' });
 
+    // Persist to video_batch_jobs so job survives a tab reload
+    const jobIds = await createJobRecord({
+      kind: 'single-scene',
+      model: 'google/veo-3',
+      aspectRatio: config.aspectRatio,
+      duration: scene.duration || 8,
+      prompt: scene.prompt,
+    });
+
     await generateScene(
       scene,
       config.aspectRatio,
-      (sceneId, result) => {
+      async (sceneId, result) => {
         if (result.status === 'completed' && result.videoUrl) {
-          handleUpdateScene(sceneId, { 
-            status: 'completed', 
-            videoUrl: result.videoUrl 
-          });
+          handleUpdateScene(sceneId, { status: 'completed', videoUrl: result.videoUrl });
+          if (jobIds) await updateScene(jobIds.batchId, jobIds.sceneId, 'done', { videoUrl: result.videoUrl });
         } else if (result.status === 'failed') {
-          handleUpdateScene(sceneId, { 
-            status: 'failed',
-            videoUrl: undefined,
-          });
+          handleUpdateScene(sceneId, { status: 'failed', videoUrl: undefined });
+          if (jobIds) await updateScene(jobIds.batchId, jobIds.sceneId, 'failed', { error: 'Generation failed' });
         } else if (result.operationId) {
           handleUpdateScene(sceneId, { operationId: result.operationId });
         }
       },
       selectedAvatar?.image_url // Pass character image for identity consistency
     );
-  }, [generateScene, config.aspectRatio, hasApiKey, handleUpdateScene, selectedAvatar]);
+  }, [generateScene, config.aspectRatio, hasApiKey, handleUpdateScene, selectedAvatar, createJobRecord, updateScene]);
 
   const completedCount = scenes.filter(s => s.status === 'completed').length;
   const totalDuration = scenes.length * 8;
