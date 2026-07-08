@@ -1,6 +1,8 @@
 import { Rocket, MousePointerClick, ClipboardCheck, Globe, CalendarCheck, MailPlus, Bot, PartyPopper, PhoneCall, LineChart, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Expand } from 'lucide-react';
 import { AdRotatorMockup, type AdPlatform } from '@/components/funnel/AdRotatorMockup';
 import { useFunnelSteps } from '@/hooks/useFunnelSteps';
 import { useFunnelStepAds } from '@/hooks/useFunnelStepAds';
@@ -36,6 +38,25 @@ const LinkCard = ({ label, href }: { label: string; href: string }) => (
     <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
     <div className="text-sm text-primary font-medium mt-1 break-all">{href}</div>
   </a>
+);
+
+const ExpandableImage = ({ src, alt }: { src: string; alt: string }) => (
+  <Dialog>
+    <DialogTrigger asChild>
+      <button
+        type="button"
+        className="group relative block w-full rounded-lg border border-border bg-white overflow-hidden cursor-zoom-in hover:border-primary/60 transition-colors"
+      >
+        <img src={src} alt={alt} className="w-full h-auto" />
+        <div className="absolute top-2 right-2 rounded-md bg-black/60 text-white p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Expand className="h-3.5 w-3.5" />
+        </div>
+      </button>
+    </DialogTrigger>
+    <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] overflow-auto p-2 bg-white">
+      <img src={src} alt={alt} className="w-full h-auto" />
+    </DialogContent>
+  </Dialog>
 );
 
 const Step = ({
@@ -192,27 +213,21 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
               label="Confirmation Email"
               href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233042565824?portalId=47679429&preview_key=WLrqmaoW&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
             />
-            <div className="rounded-lg border border-border bg-white overflow-hidden">
-              <img src={csiEmailConfirmation.url} alt="Confirmation email preview" className="w-full h-auto" />
-            </div>
+            <ExpandableImage src={csiEmailConfirmation.url} alt="Confirmation email preview" />
           </div>
           <div className="space-y-2">
             <LinkCard
               label="24-Hour Reminder Email"
               href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233054259907?portalId=47679429&preview_key=pChwUbUh&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
             />
-            <div className="rounded-lg border border-border bg-white overflow-hidden">
-              <img src={csiEmail24hr.url} alt="24-hour reminder email preview" className="w-full h-auto" />
-            </div>
+            <ExpandableImage src={csiEmail24hr.url} alt="24-hour reminder email preview" />
           </div>
           <div className="space-y-2">
             <LinkCard
               label="1-Hour Reminder Email"
               href="https://47679429.hubspotpreview-na2.com/_hcms/preview/email/233069063928?portalId=47679429&preview_key=cqJTWbeU&_preview=true&from_buffer=false&hsPreviewerApp=email&cacheBust=0"
             />
-            <div className="rounded-lg border border-border bg-white overflow-hidden">
-              <img src={csiEmail1hr.url} alt="1-hour reminder email preview" className="w-full h-auto" />
-            </div>
+            <ExpandableImage src={csiEmail1hr.url} alt="1-hour reminder email preview" />
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
