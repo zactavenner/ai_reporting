@@ -1,61 +1,52 @@
-## Phase 3B — Windowed Insights, Dispositions & CAPI Conditioning
+## Goal
+Give operators a one-click "Run sync now" + date-ranged backfill for leads/calls/UTMs, and add an automated audit that reconciles Meta + GHL data on a daily/weekly/monthly cadence and reports discrepancies to the agency.
 
-Large multi-part build. All additive — no existing tables, cron jobs, or agent logic will be restructured.
+## 1. Manual "Run Sync Now" + Backfill UI
+Location: Client detail page → new **Sync & Backfill** card (also expose on `SyncHealthPage`).
 
-### Part 1 — Windowed Ad Insights (extends existing table)
-`meta_ad_daily_insights` already exists from Phase 3B round 1. Additive migration:
-- Add `video_3s_views int`, `video_thruplay int` columns.
-- Extend existing `sync-meta-ad-daily-insights` function to pull those two video action fields (fields list edit only).
-- Shorten the trailing window kickoff from 7 → 3 days for the rolling upsert (late-attribution safe), keep the function accepting `days` param so backfill can still request 30.
-- **One-time backfill:** invoke the function with `{days: 30}` after deploy and report row count for one client.
+Controls:
+- **Run sync now** (buttons): Leads (GHL contacts), Calls (appointments), Meta Ads insights, Enrichment (unenriched leads), Dispositions (custom fields), Pipelines (committed/funded).
+- **Backfill range**: date range preset picker (reuse `DateRangePresetPicker`) + "Run backfill" per data type.
+- Live status: shows last run, records processed, errors — polls `sync_runs` / `sync_health_snapshots`.
 
-Rationale for reusing the existing function (not creating a companion): it's already isolated, background, continue-on-error, and fired from the main sync — a companion would duplicate identical Meta calls.
+Wiring:
+- Reuses existing edge functions: `sync-ghl-contacts` (mode `master_sync`), `sync-calendar-appointments`, `sync-meta-ad-daily-insights`, `enrich-leads-batch`, `sync-ghl-pipelines`, `sync-ghl-custom-fields`.
+- Extend each to accept `{ start_date, end_date }` for windowed backfill (fall back to default lookback when absent).
 
-### Part 2 — Lead Dispositions & Quality
-New tables:
-- `lead_dispositions` (immutable log)
-- `disposition_mappings` (global + per-client overrides, seeded with defaults)
-- `ad_lead_quality` (7d/30d rollups per meta_ad_id)
+## 2. Weekly Accuracy Audit Agent
+New edge function: `audit-client-accuracy` — runs per client, compares source-of-truth (Meta API / GHL API) vs our DB for a window, writes findings to a new `client_audit_reports` table.
 
-Additive columns on `leads`: `current_disposition`, `disposition_updated_at`, `quality_score` (all nullable).
+Checks (each row = one metric, with `expected`, `actual`, `variance_pct`, `severity`):
+- **Ad stats** — Meta spend/impressions/clicks/leads for window vs `meta_ad_daily_insights` sum.
+- **Leads + enrichment** — GHL contact count vs `leads`; enrichment coverage % (`lead_enrichment` join).
+- **Calls + showed** — GHL appointments vs `calls`; showed count parity.
+- **Lead dispositions** — GHL custom-field disposition distribution vs `lead_dispositions`.
+- **Committed / funded** — GHL pipeline stage totals ($) vs `funded_investors` + `pipeline_opportunities`.
 
-New edge functions:
-- `sync-lead-dispositions` — hourly cron. Reads recent leads (`ghl_synced_at` cursor), applies mappings against `opportunity_stage`, `custom_fields` tags, inserts new disposition rows on change, updates `leads.current_disposition`.
-- `lead-quality-rollup` — 2 AM PT daily. Joins `leads.ad_id` → `meta_ad_id` per client, computes 7d/30d qualified/bad/booked/funded rates, upserts `ad_lead_quality`.
+Auto-remediation: when variance > threshold, enqueue the matching sync (leads/calls/insights/pipelines) with the audit window as backfill.
 
-Media-buyer `loadContext` gets `ad_lead_quality` (latest 7d row per ad) appended. No other agent changes.
+## 3. Schedule
+`pg_cron` jobs invoking `audit-client-accuracy`:
+- **Daily** 04:00 UTC — last 2 days, alerts only on >5% variance.
+- **Weekly** Mon 05:00 UTC — last 7 days, full report to agency.
+- **Monthly** 1st 05:30 UTC — prior month, full report + trend.
 
-### Part 3 — Pixel Conditioning (CAPI)
-Discovery result: no pixel/dataset column exists on `clients` or `client_settings`. Additive columns on `clients`: `meta_pixel_id`, `meta_capi_access_token` (nullable). If unset → skip silently.
+## 4. Agency Reporting
+- New tab **Audit Reports** in `FunnelAdminPage` → lists `client_audit_reports` rows grouped by client + cadence with severity chips and drill-down.
+- Weekly/monthly runs post a Slack summary via existing `slack_bot_token` (client channel + agency channel) and optional email.
 
-New:
-- `capi_events_sent` table (dedupe by `lead_disposition_id`).
-- `capi-conversion-feedback` edge function, hourly cron 5 min after disposition sync. Sends `QualifiedLead`/`BookedCall`/`ShowedCall`/`Funded` custom events with SHA-256 hashed email/phone + `fbc`/`fbp` from `leads.custom_fields` when present. Uses `META_SHARED_ACCESS_TOKEN` fallback if per-client token missing.
+## 5. Schema
+New tables (with GRANTs + RLS):
+- `client_audit_reports` — id, client_id, cadence (daily/weekly/monthly), window_start, window_end, status, total_checks, passed, warnings, failures, created_at.
+- `client_audit_findings` — id, report_id, client_id, category, metric, expected, actual, variance_pct, severity, remediation_action, remediated_at.
 
-Media-buyer `daily_review` instruction gets one paragraph appended about disposition-quality signals → audience/form/creative fix proposals via existing gatekeeper flow.
+## Technical notes
+- All manual sync buttons call `supabase.functions.invoke` with `{ client_id, start_date, end_date, mode }` and show progress via existing `useMasterSync` / `useSyncClient` patterns extended for date ranges.
+- Audit function uses existing `META_SHARED_ACCESS_TOKEN` and per-client `ghl_api_key` / `ghl_location_id`.
+- Variance thresholds: 2% info, 5% warning, 10% failure (configurable in `agency_settings`).
 
-### Part 4 — UI: `/lead-quality`
-Single new page + sidebar entry (UserCheck icon). Sections:
-1. Client selector (reuse existing client picker pattern).
-2. 7d summary cards: Leads, Qualified Rate, Bad Rate, Booked Rate, CPL, CPS, CPBC (from `daily_metrics`).
-3. Ads table ranked by qualified_rate showing CPL + spend + qualified_rate + bad_rate (cheap-vs-quality tradeoff).
-4. Disposition feed (latest 50 rows: lead name, disposition badge, reason, rep, relative time).
-5. CAPI health strip (24h events sent by type + failure count).
+## Files (est.)
+- Add: `src/components/client/SyncBackfillCard.tsx`, `src/components/admin/AuditReportsTab.tsx`, `supabase/functions/audit-client-accuracy/index.ts`, migration for audit tables + cron.
+- Edit: `useSyncClient.ts` (add date range + per-type triggers), `sync-*` edge functions (accept date window), `AdminSidebar.tsx` + `FunnelAdminPage.tsx` (new tab), `SyncHealthPage.tsx` (expose backfill).
 
-Mobile responsive. Uses existing glass-card / semantic tokens — no new colors.
-
-### Verification (end of build)
-- Backfill 30d insights for one active client → row count.
-- Trigger `sync-lead-dispositions` once → dispositions detected + mapped count.
-- Trigger `media-buyer-agent` `fatigue_scan` → number of ads with windowed metrics, classifications produced.
-- Report CAPI config status: X of Y clients have `meta_pixel_id` (initially 0/N since column is brand new — expected, will note as configuration work outstanding).
-
-### Files to create/modify
-Migrations: 1 (all new tables + leads columns + clients columns + seed mappings + cron jobs).
-Edge functions: `sync-lead-dispositions`, `lead-quality-rollup`, `capi-conversion-feedback` (new). Modify: `sync-meta-ad-daily-insights` (video fields, 3d default), `media-buyer-agent` (loadContext + daily_review instruction).
-Frontend: `src/pages/LeadQualityPage.tsx`, sidebar entry, route in `App.tsx`.
-
-### Assumptions (flag if wrong)
-- Lead→ad attribution uses `leads.ad_id` (present) — no separate attribution table needed.
-- Disposition source is primarily `leads.opportunity_stage` + `custom_fields` tags synced by existing GHL functions; we read the already-synced data, we don't add new GHL API calls.
-- CAPI dataset/token is not yet configured anywhere; adding columns is Part 3 setup — actual event delivery will start once user populates them.
+Approve and I'll build it end-to-end.

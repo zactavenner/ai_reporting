@@ -7,6 +7,7 @@ import { GHLTab } from '@/components/admin/GHLTab';
 import { ConversationsTab } from '@/components/admin/ConversationsTab';
 import { TrackingTab } from '@/components/admin/TrackingTab';
 import { SettingsTab } from '@/components/admin/SettingsTab';
+import { AuditReportsTab } from '@/components/admin/AuditReportsTab';
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('analytics');
@@ -31,6 +32,7 @@ export default function Admin() {
             {activeTab === 'ghl' && <GHLTab />}
             {activeTab === 'conversations' && <ConversationsTab />}
             {activeTab === 'tracking' && <TrackingTab />}
+            {activeTab === 'audit' && <AuditReportsTab />}
             {activeTab === 'settings' && <SettingsTab />}
           </main>
         </div>
