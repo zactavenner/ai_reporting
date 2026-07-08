@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, Calendar, AlertTriangle, Trophy, Wand2, Download, Film, Rocket, FileText, GraduationCap } from 'lucide-react';
+import { RefreshCw, Loader2, BarChart3, Play, Image as ImageIcon, AlertTriangle, Trophy, Wand2, Download, Film, Rocket, FileText, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import { GenerateBriefButton } from '@/components/briefs/GenerateBriefButton';
 import { useClientSettings } from '@/hooks/useClientSettings';
 import { useCreateTask } from '@/hooks/useTasks';
 import { useDateFilter } from '@/contexts/DateFilterContext';
+import { DateRangePresetPicker } from '@/components/shared/DateRangePresetPicker';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatDistanceToNow, addBusinessDays } from 'date-fns';
 import { toast } from 'sonner';
@@ -353,7 +354,7 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
   const isMobile = useIsMobile();
 
   const { data: settings } = useClientSettings(clientId);
-  const { startDate, endDate } = useDateFilter();
+  const { startDate, endDate, dateRange, setDateRange } = useDateFilter();
   const { data: campaigns = [], isLoading: cLoading } = useMetaCampaigns(clientId, startDate, endDate);
   const { data: allAdSets = [], isLoading: asLoading } = useMetaAdSets(clientId, undefined, startDate, endDate);
   const { data: allAds = [], isLoading: adLoading } = useMetaAds(clientId, undefined, startDate, endDate);
@@ -429,10 +430,7 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
               <SelectItem value="paused">Paused only</SelectItem>
             </SelectContent>
           </Select>
-          <Badge variant="secondary" className="text-xs gap-1.5">
-            <Calendar className="h-3 w-3" />
-            {startDate} → {endDate}
-          </Badge>
+          <DateRangePresetPicker value={dateRange} onChange={setDateRange} />
           <Button size="sm" onClick={() => setWizardOpen(true)} className="gap-1.5">
             <Rocket className="h-4 w-4" />
             New Campaign
