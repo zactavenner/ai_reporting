@@ -706,6 +706,9 @@ export function DraggableClientTable({
                       {(m.totalCalls || 0) > 0 ? m.totalCalls.toLocaleString() : <span className="text-muted-foreground">-</span>}
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.showedCalls || 0) > 0 ? m.showedCalls.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
                       {(m.costPerCall || 0) > 0 ? formatCurrency(m.costPerCall) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
