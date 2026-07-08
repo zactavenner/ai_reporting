@@ -32,7 +32,10 @@ export function AdRotatorMockup({ creatives, platform, deviceType, brandName = '
   // Prefer explicit aspect_ratio; fall back to detected (video) or sensible default.
   // FB/IG feed vertical video is 4:5, reels/stories 9:16. Default video → 4:5, image → 1:1.
   const explicitAR = (current as any)?.aspect_ratio as string | undefined | null;
-  const aspectRatio = explicitAR || detectedAR || (isVideo ? '4:5' : '1:1');
+  // For video, trust the browser-detected ratio over stored metadata (often stale/wrong).
+  const aspectRatio = isVideo
+    ? (detectedAR || explicitAR || '9:16')
+    : (explicitAR || detectedAR || '1:1');
   const aspectCss = aspectRatio.replace(':', ' / ');
 
   if (!current) {
