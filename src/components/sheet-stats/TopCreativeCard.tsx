@@ -42,21 +42,64 @@ export function TopCreativeCard({ clientId, from, to }: Props) {
   const { data: adsData, isLoading } = useQuery({
     queryKey: ['top-creative', clientId, from, to],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('meta_ads')
-        .select('id,name,headline,body,media_type,thumbnail_url,image_url,full_image_url,video_thumbnail_url,video_source_url,preview_url,spend,impressions,clicks,ctr,attributed_leads,meta_reported_leads,cost_per_lead,synced_at')
+      // 1. Aggregate per-day Meta insights for the selected range so the
+      //    "top creatives" reflect actual performance in that window, not the
+      //    lifetime snapshot on meta_ads.
+      const { data: daily, error: dailyErr } = await supabase
+        .from('meta_ad_daily_insights')
+        .select('meta_ad_id,spend,impressions,clicks,leads')
         .eq('client_id', clientId)
-        .gt('spend', 0)
-        .limit(50);
-      if (error) throw error;
-      const trueLeads = (a: TopAd) => Number(a.meta_reported_leads || 0) || Number(a.attributed_leads || 0);
-      return ((data || []) as TopAd[])
-        .sort((a, b) => {
-          const diff = trueLeads(b) - trueLeads(a);
-          if (diff !== 0) return diff;
-          return Number(b.spend || 0) - Number(a.spend || 0);
+        .gte('date', from)
+        .lte('date', to);
+      if (dailyErr) throw dailyErr;
+
+      const agg = new Map<string, { spend: number; impressions: number; clicks: number; leads: number }>();
+      for (const r of daily || []) {
+        const key = (r as any).meta_ad_id as string;
+        if (!key) continue;
+        const g = agg.get(key) || { spend: 0, impressions: 0, clicks: 0, leads: 0 };
+        g.spend += Number((r as any).spend) || 0;
+        g.impressions += Number((r as any).impressions) || 0;
+        g.clicks += Number((r as any).clicks) || 0;
+        g.leads += Number((r as any).leads) || 0;
+        agg.set(key, g);
+      }
+      const topIds = Array.from(agg.entries())
+        .filter(([, g]) => g.spend > 0)
+        .sort(([, a], [, b]) => (b.leads - a.leads) || (b.spend - a.spend))
+        .slice(0, 3)
+        .map(([id]) => id);
+      if (topIds.length === 0) return [];
+
+      // 2. Load creative metadata for those ads.
+      const { data: meta, error: metaErr } = await supabase
+        .from('meta_ads')
+        .select('id,meta_ad_id,name,headline,body,media_type,thumbnail_url,image_url,full_image_url,video_thumbnail_url,video_source_url,preview_url')
+        .eq('client_id', clientId)
+        .in('meta_ad_id', topIds);
+      if (metaErr) throw metaErr;
+
+      // 3. Merge — metrics come from the aggregated daily insights.
+      const merged: TopAd[] = topIds
+        .map((mid) => {
+          const base = (meta || []).find((m: any) => m.meta_ad_id === mid);
+          if (!base) return null;
+          const g = agg.get(mid)!;
+          const ctr = g.impressions > 0 ? (g.clicks / g.impressions) * 100 : 0;
+          const cpl = g.leads > 0 ? g.spend / g.leads : 0;
+          return {
+            ...(base as any),
+            spend: g.spend,
+            impressions: g.impressions,
+            clicks: g.clicks,
+            ctr,
+            meta_reported_leads: g.leads,
+            attributed_leads: null,
+            cost_per_lead: cpl,
+          } as TopAd;
         })
-        .slice(0, 3);
+        .filter(Boolean) as TopAd[];
+      return merged;
     },
     enabled: !!clientId,
     staleTime: 5 * 60 * 1000,
