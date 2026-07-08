@@ -20,16 +20,14 @@ interface DateFilterContextType {
 const DateFilterContext = createContext<DateFilterContextType | undefined>(undefined);
 
 export function DateFilterProvider({ children }: { children: ReactNode }) {
-  // Default to last 7 days (ending yesterday, since today is partial)
+  // Default to yesterday only (today is partial; yesterday is the last complete action day)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  const sevenDaysAgo = new Date(yesterday);
-  sevenDaysAgo.setDate(yesterday.getDate() - 6);
 
   const [dateRange, setDateRange] = useState<DateRange>({
-    from: sevenDaysAgo,
+    from: yesterday,
     to: yesterday,
   });
 

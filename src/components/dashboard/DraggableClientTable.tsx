@@ -381,6 +381,14 @@ export function DraggableClientTable({
 
       switch (sortConfig.column) {
         case 'adSpend': aVal = a.computed.monthlyTarget || 0; bVal = b.computed.monthlyTarget || 0; break;
+        case 'rollupSpend': aVal = a.metrics.totalAdSpend || 0; bVal = b.metrics.totalAdSpend || 0; break;
+        case 'rollupLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
+        case 'rollupCPL': aVal = a.metrics.costPerLead || 0; bVal = b.metrics.costPerLead || 0; break;
+        case 'rollupCalls': aVal = a.metrics.totalCalls || 0; bVal = b.metrics.totalCalls || 0; break;
+        case 'rollupCPBC': aVal = a.metrics.costPerCall || 0; bVal = b.metrics.costPerCall || 0; break;
+        case 'rollupFunded': aVal = a.metrics.fundedInvestors || 0; bVal = b.metrics.fundedInvestors || 0; break;
+        case 'rollupFundedDollars': aVal = a.metrics.fundedDollars || 0; bVal = b.metrics.fundedDollars || 0; break;
+        case 'rollupCoC': aVal = a.metrics.costOfCapital || 0; bVal = b.metrics.costOfCapital || 0; break;
         case 'metaLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
         case 'cpl': aVal = a.metrics.costPerLead || 0; bVal = b.metrics.costPerLead || 0; break;
         case 'costPerCall': aVal = a.metrics.costPerCall || 0; bVal = b.metrics.costPerCall || 0; break;
@@ -515,6 +523,14 @@ export function DraggableClientTable({
               <SortableHeader column="accountManager" label="AM" sortConfig={sortConfig} onSort={handleSort} align="center" />
               <SortableHeader column="adSpend" label="Monthly $" sortConfig={sortConfig} onSort={handleSort} />
               <SortableHeader column="dailyTarget" label="$/Day" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupSpend" label="Spend" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupLeads" label="Leads" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCPL" label="CPL" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCalls" label="Calls" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCPBC" label="CPBC" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupFunded" label="Funded" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupFundedDollars" label="$" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader column="rollupCoC" label="CoC %" sortConfig={sortConfig} onSort={handleSort} />
               <TableHead className="font-bold text-[11px] text-center py-0 px-1 min-w-[280px]">Quick Links</TableHead>
               {isAdmin && <SortableHeader column="mrr" label="MRR" sortConfig={sortConfig} onSort={handleSort} />}
               <TableHead className="font-bold text-[11px] py-0 px-1 min-w-[150px]">
@@ -673,6 +689,32 @@ export function DraggableClientTable({
                           </TooltipContent>
                         </Tooltip>
                       ) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+
+                    {/* Rollup: Spend / Leads / CPL / Calls / CPBC / Funded / $ / CoC% — respects DateFilter (defaults to yesterday) */}
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.totalAdSpend || 0) > 0 ? formatCurrency(m.totalAdSpend) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.totalLeads || 0) > 0 ? m.totalLeads.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.costPerLead || 0) > 0 ? formatCurrency(m.costPerLead) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.totalCalls || 0) > 0 ? m.totalCalls.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.costPerCall || 0) > 0 ? formatCurrency(m.costPerCall) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.fundedInvestors || 0) > 0 ? m.fundedInvestors.toLocaleString() : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.fundedDollars || 0) > 0 ? formatCurrency(m.fundedDollars) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-[11px] py-0 px-1">
+                      {(m.costOfCapital || 0) > 0 ? `${m.costOfCapital.toFixed(1)}%` : <span className="text-muted-foreground">-</span>}
                     </TableCell>
 
                     {/* Quick Links — Sheet, Doc, Creatives, Funnel, Activity, BM, Meta, CRM */}
