@@ -1,8 +1,18 @@
 import { Rocket, MousePointerClick, ClipboardCheck, Globe, CalendarCheck, MailPlus, Bot, PartyPopper, PhoneCall, LineChart, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { AdRotatorMockup, type AdPlatform } from '@/components/funnel/AdRotatorMockup';
+import { useFunnelSteps } from '@/hooks/useFunnelSteps';
+import { useFunnelStepAds } from '@/hooks/useFunnelStepAds';
+import { useCreatives } from '@/hooks/useCreatives';
+import csiForm1 from '@/assets/csi_form_1.png.asset.json';
+import csiForm2 from '@/assets/csi_form_2.png.asset.json';
+import csiForm3 from '@/assets/csi_form_3.png.asset.json';
+import csiForm4 from '@/assets/csi_form_4.png.asset.json';
+import csiForm5 from '@/assets/csi_form_5.png.asset.json';
 
 interface FundLaunchReviewTabProps {
+  clientId: string;
   clientName: string;
 }
 
@@ -45,7 +55,27 @@ const SubHeading = ({ children }: { children: React.ReactNode }) => (
   <h4 className="font-semibold text-foreground mt-4 mb-1">{children}</h4>
 );
 
-export default function FundLaunchReviewTab({ clientName }: FundLaunchReviewTabProps) {
+export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunchReviewTabProps) {
+  // Pull the same ad creatives shown in the Funnel tab's ads step.
+  const { data: steps = [] } = useFunnelSteps(clientId);
+  const adsStep = steps.find(s => s.step_kind === 'ads');
+  const { data: stepAds = [] } = useFunnelStepAds(adsStep ? [adsStep.id] : []);
+  const { data: allCreatives = [] } = useCreatives(adsStep ? clientId : undefined);
+  const selectedAdCreatives = stepAds
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(a => allCreatives.find(c => c.id === a.creative_id))
+    .filter(Boolean) as typeof allCreatives;
+  const adPlatform: AdPlatform = (adsStep?.ad_platform as AdPlatform) || 'facebook';
+
+  const formShots = [
+    { src: csiForm1.url, label: 'Qualification' },
+    { src: csiForm2.url, label: 'Contact Info' },
+    { src: csiForm3.url, label: 'Phone Verification' },
+    { src: csiForm4.url, label: 'Qualified — Next Step' },
+    { src: csiForm5.url, label: 'Not-a-Fit End Screen' },
+  ];
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-16">
       {/* Hero */}
@@ -70,9 +100,20 @@ export default function FundLaunchReviewTab({ clientName }: FundLaunchReviewTabP
         <p>Prospective investors will see {clientName} ads designed to introduce the offering and encourage qualified investors to learn more.</p>
         <p>Investors who are interested can click the ad to begin the qualification process.</p>
         <SubHeading>Final Ads</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Placeholder label="[ Ad Previews / Screenshots ]" />
-          <Placeholder label="[ Meta Preview Links ]" />
+        <div className="flex flex-col items-center gap-4 pt-2">
+          {selectedAdCreatives.length > 0 ? (
+            <AdRotatorMockup
+              creatives={selectedAdCreatives}
+              platform={adPlatform}
+              deviceType="phone"
+              brandName={clientName}
+            />
+          ) : (
+            <Placeholder label="Select ads in the Funnel tab's Ads step to see the live preview here." />
+          )}
+          <p className="text-xs text-muted-foreground text-center max-w-md">
+            Live rotating preview of the approved {clientName} ads — pulled from the Funnel tab's Ads step.
+          </p>
         </div>
       </Step>
 
@@ -88,9 +129,15 @@ export default function FundLaunchReviewTab({ clientName }: FundLaunchReviewTabP
         <SubHeading>Qualified Investor Next Step</SubHeading>
         <p>Qualified investors are prompted to continue to the {clientName} landing page to learn more and schedule an Investor Call.</p>
         <SubHeading>Final Lead Form</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Placeholder label="[ Lead Form Screenshots ]" />
-          <Placeholder label="[ Meta Form Preview Link ]" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2">
+          {formShots.map((s) => (
+            <figure key={s.label} className="space-y-1.5">
+              <div className="rounded-xl overflow-hidden border border-border bg-muted/30 shadow-sm">
+                <img src={s.src} alt={`${clientName} Meta lead form — ${s.label}`} className="w-full h-auto block" loading="lazy" />
+              </div>
+              <figcaption className="text-[10px] text-center text-muted-foreground font-medium uppercase tracking-wider">{s.label}</figcaption>
+            </figure>
+          ))}
         </div>
       </Step>
 
