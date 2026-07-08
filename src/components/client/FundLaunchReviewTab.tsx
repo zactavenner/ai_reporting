@@ -189,8 +189,12 @@ export default function FundLaunchReviewTab({ clientId, clientName }: FundLaunch
         <p>After completing the Meta Lead Form, qualified investors are directed to the {clientName} landing page. The landing page gives the investor an opportunity to learn more about the fund before scheduling a call.</p>
         <p>Investors can review the offering, watch the Investor Video, learn about the three investment paths, and schedule an Investor Call.</p>
         <p>From this point, the investor can take one of two paths.</p>
-        <SubHeading>Final Landing Page</SubHeading>
-        <LinkCard label="Landing Page (with Calendar)" href="https://clearsummitinvestment.com/book-a-call" />
+        <SubHeading>Final Landing Page (Split Test)</SubHeading>
+        <p className="text-xs text-muted-foreground italic">We are currently split testing two variants of the landing page.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <LinkCard label="Variant A" href="https://clearsummitinvestment.com/book-a-call-v1" />
+          <LinkCard label="Variant B" href="https://clearsummitinvestment.com/book-a-call-v2" />
+        </div>
       </Step>
 
       {/* 4. Books a Call */}
