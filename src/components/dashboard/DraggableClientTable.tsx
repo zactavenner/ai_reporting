@@ -381,6 +381,14 @@ export function DraggableClientTable({
 
       switch (sortConfig.column) {
         case 'adSpend': aVal = a.computed.monthlyTarget || 0; bVal = b.computed.monthlyTarget || 0; break;
+        case 'rollupSpend': aVal = a.metrics.totalAdSpend || 0; bVal = b.metrics.totalAdSpend || 0; break;
+        case 'rollupLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
+        case 'rollupCPL': aVal = a.metrics.costPerLead || 0; bVal = b.metrics.costPerLead || 0; break;
+        case 'rollupCalls': aVal = a.metrics.totalCalls || 0; bVal = b.metrics.totalCalls || 0; break;
+        case 'rollupCPBC': aVal = a.metrics.costPerCall || 0; bVal = b.metrics.costPerCall || 0; break;
+        case 'rollupFunded': aVal = a.metrics.fundedInvestors || 0; bVal = b.metrics.fundedInvestors || 0; break;
+        case 'rollupFundedDollars': aVal = a.metrics.fundedDollars || 0; bVal = b.metrics.fundedDollars || 0; break;
+        case 'rollupCoC': aVal = a.metrics.costOfCapital || 0; bVal = b.metrics.costOfCapital || 0; break;
         case 'metaLeads': aVal = a.metrics.totalLeads || 0; bVal = b.metrics.totalLeads || 0; break;
         case 'cpl': aVal = a.metrics.costPerLead || 0; bVal = b.metrics.costPerLead || 0; break;
         case 'costPerCall': aVal = a.metrics.costPerCall || 0; bVal = b.metrics.costPerCall || 0; break;
