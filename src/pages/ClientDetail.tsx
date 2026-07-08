@@ -510,6 +510,14 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
+          {/^clear summit/i.test(client.name || '') && (
+            <TabsContent value="fund-launch-review" className="space-y-6">
+              <SectionErrorBoundary sectionName="Fund Launch Review">
+                <FundLaunchReviewTab clientName={client.name} />
+              </SectionErrorBoundary>
+            </TabsContent>
+          )}
+
           <TabsContent value="ai-studio" className="m-0">
             <SectionErrorBoundary sectionName="AI Studio">
               {/* Bound height so the chat & canvas panels scroll internally and
