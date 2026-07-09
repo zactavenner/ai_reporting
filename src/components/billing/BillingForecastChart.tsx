@@ -189,12 +189,16 @@ export function BillingForecastChart({ stripeDataMap, totalMRR, clientNameMap = 
       });
     }
 
-    // Attach forecast line to last actual bucket so the dashed line connects
+    // Current bucket is partial. Project the remainder so the dashed forecast
+    // line represents the full bucket, not a near-$0 in-progress bar.
     if (history.length > 0) {
-      history[history.length - 1] = {
-        ...history[history.length - 1],
-        forecast: history[history.length - 1].actual,
-      };
+      const last = history[history.length - 1];
+      const bucketEnd = cfg.addBucket(currentBucket, 1);
+      const totalMs = bucketEnd.getTime() - currentBucket.getTime();
+      const elapsedMs = Math.max(0, Math.min(totalMs, now.getTime() - currentBucket.getTime()));
+      const remainingRatio = totalMs > 0 ? 1 - elapsedMs / totalMs : 0;
+      const projected = Math.round(last.actual + projectedPerBucket * remainingRatio);
+      history[history.length - 1] = { ...last, forecast: Math.max(projected, last.actual) };
     }
 
     const chartData = [...history, ...forecast];
@@ -331,7 +335,7 @@ export function BillingForecastChart({ stripeDataMap, totalMRR, clientNameMap = 
             {drilldown?.isForecast
               ? 'This bucket is a forward projection based on active MRR — no charges have settled yet.'
               : `${drilldown?.rows.length ?? 0} succeeded charges · ${fmtMoney(
-                  (drilldown?.rows ?? []).reduce((s, r) => s + (r.amount || 0), 0) / 100,
+                  (drilldown?.rows ?? []).reduce((s, r) => s + (r.amount || 0), 0),
                 )} total`}
           </DialogDescription>
         </DialogHeader>
@@ -358,7 +362,7 @@ export function BillingForecastChart({ stripeDataMap, totalMRR, clientNameMap = 
                       {r.description || r.id}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold">
-                      {fmtMoney((r.amount || 0) / 100)}
+                      {fmtMoney(r.amount || 0)}
                     </TableCell>
                     <TableCell>
                       {r.receipt_url ? (

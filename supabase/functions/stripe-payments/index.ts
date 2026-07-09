@@ -44,10 +44,22 @@ serve(async (req) => {
         );
       }
 
-      const [charges, subscriptions] = await Promise.all([
-        stripe.charges.list({ customer: customer.id, limit: 100 }),
-        stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 10 }),
-      ]);
+      // Paginate ALL charges so historical revenue isn't truncated at 100.
+      const allCharges: any[] = [];
+      let startingAfter: string | undefined = undefined;
+      // Safety cap: 20 pages * 100 = 2000 charges per client.
+      for (let i = 0; i < 20; i++) {
+        const page: any = await stripe.charges.list({
+          customer: customer.id,
+          limit: 100,
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        });
+        allCharges.push(...page.data);
+        if (!page.has_more || page.data.length === 0) break;
+        startingAfter = page.data[page.data.length - 1].id;
+      }
+      const charges = { data: allCharges };
+      const subscriptions = await stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 10 });
 
       const totalPaid = charges.data
         .filter((c: any) => c.status === 'succeeded' && !c.refunded)
