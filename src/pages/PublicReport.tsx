@@ -130,6 +130,10 @@ function PublicReportContent() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="-mx-3 sm:mx-0 overflow-x-auto">
           <TabsList className="bg-muted/50 inline-flex w-max min-w-full px-3 sm:px-1">
+            <TabsTrigger value="fund-launch-review" className="gap-2 whitespace-nowrap">
+              <Rocket className="h-4 w-4" />
+              Fund Launch Review
+            </TabsTrigger>
             <TabsTrigger value="sheet-stats" className="gap-2 whitespace-nowrap">
               <BarChart3 className="h-4 w-4" />
               Reporting
@@ -158,10 +162,6 @@ function PublicReportContent() {
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
-            <TabsTrigger value="fund-launch-review" className="gap-2 whitespace-nowrap">
-                <Rocket className="h-4 w-4" />
-                Fund Launch Review
-              </TabsTrigger>
             <TabsTrigger value="activity" className="gap-2 whitespace-nowrap">
               <ActivityIcon className="h-4 w-4" />
               Activity
