@@ -15,6 +15,7 @@ import { ActivityTabView } from '@/components/activity/ActivityTabView';
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist';
 import { OnboardingIntake } from '@/components/onboarding/OnboardingIntake';
 import { FunnelPreviewTab } from '@/components/funnel/FunnelPreviewTab';
+import FundLaunchReviewTab from '@/components/client/FundLaunchReviewTab';
 import { ClientFolderTab } from '@/components/folder/ClientFolderTab';
 import { SheetStatsTab } from '@/components/sheet-stats/SheetStatsTab';
 import { PublicLinkPasswordGate } from '@/components/auth/PublicLinkPasswordGate';
@@ -32,6 +33,7 @@ import {
   CheckSquare,
   Upload as UploadIcon,
   Activity as ActivityIcon,
+  Rocket,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -57,6 +59,7 @@ function PublicReportContent() {
   }, [activeTab, setSearchParams]);
 
   const clientTasks = (allTasks || []).filter((t: any) => t.client_id === client?.id);
+  const isClearSummit = /^clear summit/i.test(client?.name || '');
 
   if (isLoading) {
     return (
@@ -155,6 +158,12 @@ function PublicReportContent() {
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
+            {isClearSummit && (
+              <TabsTrigger value="fund-launch-review" className="gap-2 whitespace-nowrap">
+                <Rocket className="h-4 w-4" />
+                Fund Launch Review
+              </TabsTrigger>
+            )}
             <TabsTrigger value="activity" className="gap-2 whitespace-nowrap">
               <ActivityIcon className="h-4 w-4" />
               Activity
@@ -222,6 +231,14 @@ function PublicReportContent() {
               <FunnelPreviewTab clientId={client.id} isPublicView={true} />
             </SectionErrorBoundary>
           </TabsContent>
+
+          {isClearSummit && (
+            <TabsContent value="fund-launch-review" className="space-y-6">
+              <SectionErrorBoundary sectionName="Fund Launch Review">
+                <FundLaunchReviewTab clientId={client.id} clientName={client.name} />
+              </SectionErrorBoundary>
+            </TabsContent>
+          )}
 
           <TabsContent value="activity" className="space-y-6">
             <SectionErrorBoundary sectionName="Activity">
