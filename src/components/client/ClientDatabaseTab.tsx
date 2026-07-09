@@ -61,6 +61,23 @@ interface DBFunded {
 }
 
 type TabKey = 'leads' | 'booked' | 'showed' | 'committed' | 'funded';
+
+const ENRICH_META_FIELDS = new Set([
+  'id', 'client_id', 'lead_id', 'external_id', 'created_at', 'updated_at',
+  'enriched_at', 'source', 'raw_response', 'raw_payload', 'raw_data',
+]);
+
+function hasEnrichmentMatch(e: DBEnrichment | null): boolean {
+  if (!e) return false;
+  for (const [k, v] of Object.entries(e)) {
+    if (ENRICH_META_FIELDS.has(k)) continue;
+    if (v === null || v === undefined || v === '') continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0) continue;
+    return true;
+  }
+  return false;
+}
 type DatePreset = 'yesterday' | 'today' | 'last7' | 'last30' | 'mtd' | 'all' | 'custom';
 
 function ymd(d: Date) {
@@ -226,7 +243,7 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allRows.filter(r => {
-      if (enrichedOnly && !r.enrichment) return false;
+      if (enrichedOnly && !hasEnrichmentMatch(r.enrichment)) return false;
       if (dateRange) {
         const d = (r.createdAt || '').slice(0, 10);
         if (!d) return false;
@@ -239,7 +256,7 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
     });
   }, [allRows, search, enrichedOnly, dateRange]);
 
-  const enrichedCount = filtered.filter(r => r.enrichment).length;
+  const enrichedCount = filtered.filter(r => hasEnrichmentMatch(r.enrichment)).length;
 
   const counts = useMemo(() => {
     if (!data) return { leads: 0, booked: 0, showed: 0, committed: 0, funded: 0 };
@@ -388,10 +405,15 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
                       <TableCell className="text-xs text-right tabular-nums">{money(r.deploymentAmount)}</TableCell>
                       <TableCell className="text-xs text-right tabular-nums">{money(enrichment?.net_worth)}</TableCell>
                       <TableCell className="text-center">
-                        <span
-                          title={enrichment ? `Enriched · ${enrichment.source || ''}` : 'Not enriched'}
-                          className={`inline-block h-2.5 w-2.5 rounded-full ${enrichment ? 'bg-emerald-500' : 'bg-red-500'}`}
-                        />
+                        {(() => {
+                          const matched = hasEnrichmentMatch(enrichment);
+                          return (
+                            <span
+                              title={matched ? `Enriched · ${enrichment?.source || ''}` : 'No enrichment match'}
+                              className={`inline-block h-2.5 w-2.5 rounded-full ${matched ? 'bg-emerald-500' : 'bg-red-500'}`}
+                            />
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                     {isOpen && (
@@ -426,7 +448,21 @@ function formatEnrichLabel(k: string) {
 
 function formatEnrichValue(k: string, v: any): string {
   if (v === null || v === undefined || v === '') return '—';
-  if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
+  if (Array.isArray(v)) {
+    if (!v.length) return '—';
+    return v.map((item) => {
+      if (item === null || item === undefined) return '';
+      if (typeof item === 'object') {
+        // Prefer human-readable fields for object arrays (vehicles, addresses, etc.)
+        const o = item as Record<string, any>;
+        const parts = [o.year, o.make, o.model, o.trim, o.name, o.value, o.label, o.email, o.phone]
+          .filter((x) => x !== null && x !== undefined && x !== '');
+        if (parts.length) return parts.join(' ');
+        try { return JSON.stringify(item); } catch { return String(item); }
+      }
+      return String(item);
+    }).filter(Boolean).join(', ');
+  }
   if (typeof v === 'object') { try { return JSON.stringify(v); } catch { return String(v); } }
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (typeof v === 'number' && /income|worth|value|salary|price/i.test(k)) {
@@ -447,6 +483,20 @@ function ExpandedEnrichment({
     ? Object.entries(enrichment)
         .filter(([k, v]) => !EXCLUDE_FIELDS.has(k) && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0))
     : [];
+  const extraEmails: string[] = (() => {
+    const e = enrichment?.enriched_emails;
+    if (Array.isArray(e)) return e.map(String).filter(Boolean);
+    if (typeof e === 'string' && e) return e.split(',').map((s) => s.trim()).filter(Boolean);
+    return [];
+  })();
+  const extraPhones: string[] = (() => {
+    const p = enrichment?.enriched_phones;
+    if (Array.isArray(p)) return p.map(String).filter(Boolean);
+    if (typeof p === 'string' && p) return p.split(',').map((s) => s.trim()).filter(Boolean);
+    return [];
+  })();
+  const vehiclesText = enrichment ? formatEnrichValue('vehicles', enrichment.vehicles) : '—';
+  const hasContactExtras = extraEmails.length || extraPhones.length || (enrichment?.vehicles && vehiclesText !== '—') || enrichment?.vehicle_summary;
   return (
     <div className="p-4 space-y-4">
       {lead && (
@@ -459,12 +509,29 @@ function ExpandedEnrichment({
           {notes && <div className="md:col-span-4"><span className="text-muted-foreground">Notes:</span> <span className="whitespace-pre-wrap">{notes}</span></div>}
         </div>
       )}
+      {hasContactExtras && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-1.5 text-xs">
+          <p className="font-semibold text-emerald-700 dark:text-emerald-400 text-[11px] uppercase tracking-wide">Extra contact & ownership (from enrichment)</p>
+          {extraEmails.length > 0 && (
+            <div><span className="text-muted-foreground">Emails:</span> {extraEmails.join(', ')}</div>
+          )}
+          {extraPhones.length > 0 && (
+            <div><span className="text-muted-foreground">Phones:</span> {extraPhones.join(', ')}</div>
+          )}
+          {enrichment?.vehicle_summary && (
+            <div><span className="text-muted-foreground">Vehicle summary:</span> {String(enrichment.vehicle_summary)}</div>
+          )}
+          {enrichment?.vehicles && vehiclesText !== '—' && (
+            <div><span className="text-muted-foreground">Vehicles owned:</span> {vehiclesText}</div>
+          )}
+        </div>
+      )}
       <div>
         <p className="font-semibold text-sm mb-2 flex items-center gap-2">
           <Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Full Enrichment
           {enrichment && <Badge variant="outline" className="text-[9px]">{fields.length} fields</Badge>}
         </p>
-        {enrichment ? (
+        {enrichment && fields.length > 0 ? (
           <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
             {fields.map(([k, v]) => (
               <div key={k} className="min-w-0">
@@ -476,7 +543,7 @@ function ExpandedEnrichment({
             ))}
           </div>
         ) : (
-          <div className="text-xs text-muted-foreground">No enrichment yet for this contact.</div>
+          <div className="text-xs text-muted-foreground">No enrichment match for this contact.</div>
         )}
       </div>
     </div>
