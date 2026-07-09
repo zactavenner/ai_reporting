@@ -61,6 +61,23 @@ interface DBFunded {
 }
 
 type TabKey = 'leads' | 'booked' | 'showed' | 'committed' | 'funded';
+
+const ENRICH_META_FIELDS = new Set([
+  'id', 'client_id', 'lead_id', 'external_id', 'created_at', 'updated_at',
+  'enriched_at', 'source', 'raw_response', 'raw_payload', 'raw_data',
+]);
+
+function hasEnrichmentMatch(e: DBEnrichment | null): boolean {
+  if (!e) return false;
+  for (const [k, v] of Object.entries(e)) {
+    if (ENRICH_META_FIELDS.has(k)) continue;
+    if (v === null || v === undefined || v === '') continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0) continue;
+    return true;
+  }
+  return false;
+}
 type DatePreset = 'yesterday' | 'today' | 'last7' | 'last30' | 'mtd' | 'all' | 'custom';
 
 function ymd(d: Date) {
@@ -226,7 +243,7 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allRows.filter(r => {
-      if (enrichedOnly && !r.enrichment) return false;
+      if (enrichedOnly && !hasEnrichmentMatch(r.enrichment)) return false;
       if (dateRange) {
         const d = (r.createdAt || '').slice(0, 10);
         if (!d) return false;
@@ -239,7 +256,7 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
     });
   }, [allRows, search, enrichedOnly, dateRange]);
 
-  const enrichedCount = filtered.filter(r => r.enrichment).length;
+  const enrichedCount = filtered.filter(r => hasEnrichmentMatch(r.enrichment)).length;
 
   const counts = useMemo(() => {
     if (!data) return { leads: 0, booked: 0, showed: 0, committed: 0, funded: 0 };
@@ -388,10 +405,15 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
                       <TableCell className="text-xs text-right tabular-nums">{money(r.deploymentAmount)}</TableCell>
                       <TableCell className="text-xs text-right tabular-nums">{money(enrichment?.net_worth)}</TableCell>
                       <TableCell className="text-center">
-                        <span
-                          title={enrichment ? `Enriched · ${enrichment.source || ''}` : 'Not enriched'}
-                          className={`inline-block h-2.5 w-2.5 rounded-full ${enrichment ? 'bg-emerald-500' : 'bg-red-500'}`}
-                        />
+                        {(() => {
+                          const matched = hasEnrichmentMatch(enrichment);
+                          return (
+                            <span
+                              title={matched ? `Enriched · ${enrichment?.source || ''}` : 'No enrichment match'}
+                              className={`inline-block h-2.5 w-2.5 rounded-full ${matched ? 'bg-emerald-500' : 'bg-red-500'}`}
+                            />
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                     {isOpen && (
