@@ -158,12 +158,10 @@ function PublicReportContent() {
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
-            {isClearSummit && (
-              <TabsTrigger value="fund-launch-review" className="gap-2 whitespace-nowrap">
+            <TabsTrigger value="fund-launch-review" className="gap-2 whitespace-nowrap">
                 <Rocket className="h-4 w-4" />
                 Fund Launch Review
               </TabsTrigger>
-            )}
             <TabsTrigger value="activity" className="gap-2 whitespace-nowrap">
               <ActivityIcon className="h-4 w-4" />
               Activity
@@ -232,13 +230,11 @@ function PublicReportContent() {
             </SectionErrorBoundary>
           </TabsContent>
 
-          {isClearSummit && (
-            <TabsContent value="fund-launch-review" className="space-y-6">
+          <TabsContent value="fund-launch-review" className="space-y-6">
               <SectionErrorBoundary sectionName="Fund Launch Review">
                 <FundLaunchReviewTab clientId={client.id} clientName={client.name} />
               </SectionErrorBoundary>
             </TabsContent>
-          )}
 
           <TabsContent value="activity" className="space-y-6">
             <SectionErrorBoundary sectionName="Activity">
