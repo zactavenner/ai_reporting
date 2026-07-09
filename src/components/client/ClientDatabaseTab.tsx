@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface DBLead {
   id: string;
@@ -60,6 +61,27 @@ interface DBFunded {
 }
 
 type TabKey = 'leads' | 'booked' | 'showed' | 'committed' | 'funded';
+type DatePreset = 'yesterday' | 'today' | 'last7' | 'last30' | 'mtd' | 'all' | 'custom';
+
+function ymd(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function presetRange(p: DatePreset): { start: string; end: string } | null {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const y = new Date(today); y.setDate(y.getDate() - 1);
+  if (p === 'all') return null;
+  if (p === 'today') return { start: ymd(today), end: ymd(today) };
+  if (p === 'yesterday') return { start: ymd(y), end: ymd(y) };
+  if (p === 'last7') { const s = new Date(today); s.setDate(s.getDate() - 6); return { start: ymd(s), end: ymd(today) }; }
+  if (p === 'last30') { const s = new Date(today); s.setDate(s.getDate() - 29); return { start: ymd(s), end: ymd(today) }; }
+  if (p === 'mtd') { const s = new Date(now.getFullYear(), now.getMonth(), 1); return { start: ymd(s), end: ymd(today) }; }
+  return null;
+}
 
 interface UnifiedRow {
   key: string;
@@ -98,6 +120,17 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [enrichedOnly, setEnrichedOnly] = useState(false);
   const [tab, setTab] = useState<TabKey>('leads');
+  const [datePreset, setDatePreset] = useState<DatePreset>('yesterday');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
+
+  const dateRange = useMemo(() => {
+    if (datePreset === 'custom') {
+      if (!customStart && !customEnd) return null;
+      return { start: customStart || '0000-01-01', end: customEnd || '9999-12-31' };
+    }
+    return presetRange(datePreset);
+  }, [datePreset, customStart, customEnd]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['client-database', clientId],
@@ -194,14 +227,19 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
     const q = search.trim().toLowerCase();
     return allRows.filter(r => {
       if (enrichedOnly && !r.enrichment) return false;
+      if (dateRange) {
+        const d = (r.createdAt || '').slice(0, 10);
+        if (!d) return false;
+        if (d < dateRange.start || d > dateRange.end) return false;
+      }
       if (!q) return true;
       const hay = [r.name, r.email, r.phone, r.source, r.enrichment?.company_name, r.enrichment?.city, r.enrichment?.state]
         .filter(Boolean).join(' ').toLowerCase();
       return hay.includes(q);
     });
-  }, [allRows, search, enrichedOnly]);
+  }, [allRows, search, enrichedOnly, dateRange]);
 
-  const enrichedCount = allRows.filter(r => r.enrichment).length;
+  const enrichedCount = filtered.filter(r => r.enrichment).length;
 
   const counts = useMemo(() => {
     if (!data) return { leads: 0, booked: 0, showed: 0, committed: 0, funded: 0 };
@@ -258,7 +296,7 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{tab === 'leads' ? 'Total Contacts' : `Total ${tab.charAt(0).toUpperCase() + tab.slice(1)}`}</p>
-          <p className="text-2xl font-bold">{allRows.length.toLocaleString()}</p>
+          <p className="text-2xl font-bold">{filtered.length.toLocaleString()}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Enriched</p>
@@ -266,11 +304,11 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Enrichment %</p>
-          <p className="text-2xl font-bold">{allRows.length ? ((enrichedCount / allRows.length) * 100).toFixed(1) : '0'}%</p>
+          <p className="text-2xl font-bold">{filtered.length ? ((enrichedCount / filtered.length) * 100).toFixed(1) : '0'}%</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Deployed</p>
-          <p className="text-2xl font-bold">{money(allRows.reduce((s, r) => s + (r.deploymentAmount || 0), 0))}</p>
+          <p className="text-2xl font-bold">{money(filtered.reduce((s, r) => s + (r.deploymentAmount || 0), 0))}</p>
         </CardContent></Card>
       </div>
 
@@ -279,6 +317,24 @@ export function ClientDatabaseTab({ clientId, clientName }: { clientId: string; 
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Search name, email, phone, company…" value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
+        <Select value={datePreset} onValueChange={(v) => setDatePreset(v as DatePreset)}>
+          <SelectTrigger className="h-9 w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="yesterday">Yesterday</SelectItem>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="last7">Last 7 days</SelectItem>
+            <SelectItem value="last30">Last 30 days</SelectItem>
+            <SelectItem value="mtd">Month to date</SelectItem>
+            <SelectItem value="all">All time</SelectItem>
+            <SelectItem value="custom">Custom…</SelectItem>
+          </SelectContent>
+        </Select>
+        {datePreset === 'custom' && (
+          <>
+            <Input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="h-9 w-[150px]" />
+          </>
+        )}
         <Button variant={enrichedOnly ? 'default' : 'outline'} size="sm" onClick={() => setEnrichedOnly(v => !v)}>
           <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Enriched only
         </Button>
