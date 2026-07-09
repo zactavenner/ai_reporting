@@ -485,13 +485,29 @@ function ExpandedEnrichment({
     : [];
   const extraEmails: string[] = (() => {
     const e = enrichment?.enriched_emails;
-    if (Array.isArray(e)) return e.map(String).filter(Boolean);
+    if (Array.isArray(e)) {
+      return e
+        .map((item: any) => {
+          if (!item) return '';
+          if (typeof item === 'string') return item;
+          return item.email || item.address || '';
+        })
+        .filter(Boolean);
+    }
     if (typeof e === 'string' && e) return e.split(',').map((s) => s.trim()).filter(Boolean);
     return [];
   })();
   const extraPhones: string[] = (() => {
     const p = enrichment?.enriched_phones;
-    if (Array.isArray(p)) return p.map(String).filter(Boolean);
+    if (Array.isArray(p)) {
+      return p
+        .map((item: any) => {
+          if (!item) return '';
+          if (typeof item === 'string') return item;
+          return item.phone || item.number || '';
+        })
+        .filter(Boolean);
+    }
     if (typeof p === 'string' && p) return p.split(',').map((s) => s.trim()).filter(Boolean);
     return [];
   })();
