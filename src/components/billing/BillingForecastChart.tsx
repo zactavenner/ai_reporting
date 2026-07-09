@@ -335,7 +335,7 @@ export function BillingForecastChart({ stripeDataMap, totalMRR, clientNameMap = 
             {drilldown?.isForecast
               ? 'This bucket is a forward projection based on active MRR — no charges have settled yet.'
               : `${drilldown?.rows.length ?? 0} succeeded charges · ${fmtMoney(
-                  (drilldown?.rows ?? []).reduce((s, r) => s + (r.amount || 0), 0) / 100,
+                  (drilldown?.rows ?? []).reduce((s, r) => s + (r.amount || 0), 0),
                 )} total`}
           </DialogDescription>
         </DialogHeader>
