@@ -1612,13 +1612,10 @@ async function generateSeedanceVideo(opts: {
       body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
   } else if (isHappyHorse) {
-    // HappyHorse 1.1 on OpenRouter — documented /api/v1/videos contract:
-    //   { model, prompt, duration: 15, resolution: "720p"|"1080p",
-    //     aspect_ratio: "9:16"|"16:9"|"1:1", generate_audio: false,
-    //     frame_images: [{ type: "first_frame", image_url }],   // first-frame mode
-    //     input_references: [{ image_url }, ...] }              // reference-image mode
-    // Per spec: when both frames and references are provided, treat as
-    // image-to-video with the first frame taking priority (omit input_references).
+    // HappyHorse 1.1 on OpenRouter — /api/v1/videos schema (verified via ZodError response):
+    //   frame_images: [{ type: "image_url", image_url: { url }, frame_type: "first_frame"|"last_frame" }]
+    //   input_references: [{ type: "image_url", image_url: { url } }, ...]
+    // First frame takes priority; when a first frame is present, omit input_references.
     body.duration = 15;
     body.resolution = effectiveResolution; // "720p" or "1080p"
     body.aspect_ratio = opts.aspectRatio || "9:16";
@@ -1629,15 +1626,32 @@ async function generateSeedanceVideo(opts: {
     delete (body as any).reference_images;
 
     const firstFrameUrl = providerImageUrl || null;
+    const lastFrameForFrames = providerLastFrameUrl && providerLastFrameUrl !== firstFrameUrl ? providerLastFrameUrl : null;
     const referenceUrls: string[] = [];
-    if (providerIngredientUrl && providerIngredientUrl !== firstFrameUrl) referenceUrls.push(providerIngredientUrl);
-    if (providerLastFrameUrl && providerLastFrameUrl !== firstFrameUrl) referenceUrls.push(providerLastFrameUrl);
+    if (providerIngredientUrl && providerIngredientUrl !== firstFrameUrl && providerIngredientUrl !== lastFrameForFrames) {
+      referenceUrls.push(providerIngredientUrl);
+    }
 
     if (firstFrameUrl) {
-      body.frame_images = [{ type: "first_frame", image_url: firstFrameUrl }];
-      // First frame takes priority over references per spec.
+      const frames: any[] = [{
+        type: "image_url",
+        image_url: { url: firstFrameUrl },
+        frame_type: "first_frame",
+      }];
+      if (lastFrameForFrames) {
+        frames.push({
+          type: "image_url",
+          image_url: { url: lastFrameForFrames },
+          frame_type: "last_frame",
+        });
+      }
+      body.frame_images = frames;
+      // First frame takes priority over references; do not also send input_references.
     } else if (referenceUrls.length) {
-      body.input_references = referenceUrls.map((u) => ({ image_url: u }));
+      body.input_references = referenceUrls.map((u) => ({
+        type: "image_url",
+        image_url: { url: u },
+      }));
     }
   } else if (isKling) {
     // Kling on OpenRouter uses the unified video shape: top-level `image_url` for the
