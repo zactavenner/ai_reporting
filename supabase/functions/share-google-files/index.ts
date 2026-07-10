@@ -117,10 +117,10 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     };
 
-    const results = [];
-    for (const id of uniqueIds) {
-      results.push(await shareOne(id, headers, emails, role, makeLinkPublic));
-    }
+    // Fan out per-file in parallel; each shareOne still runs its email grants sequentially.
+    const results = await Promise.all(
+      uniqueIds.map((id) => shareOne(id, headers, emails, role, makeLinkPublic)),
+    );
 
     return new Response(
       JSON.stringify({ ok: true, emails, role, results }),
