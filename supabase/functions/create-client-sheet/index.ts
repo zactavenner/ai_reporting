@@ -6,6 +6,14 @@ const corsHeaders = {
 const MASTER_SHEET_ID = '1tm-qpPRzv38JtIL9-KvZVThqTk4OJcWv3duw8H2KHhY';
 const GATEWAY = 'https://connector-gateway.lovable.dev/google_drive/drive/v3';
 
+// Internal team — always granted writer access so they never see a request-access screen.
+const TEAM_EMAILS = [
+  'ads@highperformanceads.com',
+  'billmediabuyer@gmail.com',
+  'emilyebradshaw01@gmail.com',
+  'louie.jayavila93@gmail.com',
+];
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -49,6 +57,19 @@ Deno.serve(async (req) => {
       });
     } catch (_e) {
       // Non-fatal — owner can still share manually.
+    }
+
+    // Grant the internal team writer access so embeds never show "request access".
+    for (const email of TEAM_EMAILS) {
+      try {
+        await fetch(`${GATEWAY}/files/${newId}/permissions?sendNotificationEmail=false`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ role: 'writer', type: 'user', emailAddress: email }),
+        });
+      } catch (_e) {
+        // Non-fatal.
+      }
     }
 
     const url = copyData.webViewLink || `https://docs.google.com/spreadsheets/d/${newId}/edit`;
