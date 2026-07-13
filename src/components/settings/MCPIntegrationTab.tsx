@@ -119,20 +119,18 @@ export function MCPIntegrationTab() {
         </p>
       </Card>
 
-      <Card className="p-4 space-y-2 bg-muted/30">
-        <h3 className="font-semibold text-sm">Planned tools (roadmap)</h3>
-        <p className="text-xs text-muted-foreground">
-          Coverage gaps identified in the last audit. These features exist in the app but are not
-          yet exposed to MCP clients.
-        </p>
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {PLANNED_TOOLS.map((t) => (
-            <code key={t} className="font-mono text-[11px] bg-background border px-1.5 py-0.5 rounded">
-              {t}
-            </code>
-          ))}
-        </div>
-      </Card>
+      {PLANNED_TOOLS.length > 0 && (
+        <Card className="p-4 space-y-2 bg-muted/30">
+          <h3 className="font-semibold text-sm">Planned tools (roadmap)</h3>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {PLANNED_TOOLS.map((t) => (
+              <code key={t} className="font-mono text-[11px] bg-background border px-1.5 py-0.5 rounded">
+                {t}
+              </code>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
