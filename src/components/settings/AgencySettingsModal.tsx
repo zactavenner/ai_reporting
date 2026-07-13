@@ -813,6 +813,10 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
           <TabsContent value="api-reference" className="mt-4">
             <ApiReferenceTab />
           </TabsContent>
+
+          <TabsContent value="mcp" className="mt-4">
+            <MCPIntegrationTab />
+          </TabsContent>
         </Tabs>
 
         <div className="flex justify-end gap-2 mt-6">
