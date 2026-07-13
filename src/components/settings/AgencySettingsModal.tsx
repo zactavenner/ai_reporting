@@ -183,7 +183,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         </DialogHeader>
 
         <Tabs defaultValue="team" className="mt-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="team" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Team
@@ -207,6 +207,10 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
             <TabsTrigger value="api-reference" className="flex items-center gap-2">
               <Code2 className="h-4 w-4" />
               API
+            </TabsTrigger>
+            <TabsTrigger value="mcp" className="flex items-center gap-2">
+              <Plug className="h-4 w-4" />
+              MCP
             </TabsTrigger>
           </TabsList>
           
