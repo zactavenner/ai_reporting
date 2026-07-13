@@ -19,9 +19,10 @@ import { useSlackChannels } from '@/hooks/useSlackChannels';
 import { supabase } from '@/integrations/supabase/client';
 import { TeamManagementTab } from './TeamManagementTab';
 import { SyncQueueStatus } from './SyncQueueStatus';
-import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet, Sunrise, Send } from 'lucide-react';
+import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet, Sunrise, Send, Plug } from 'lucide-react';
 import { ApiReferenceTab } from './ApiReferenceTab';
 import { HermesIntegrationTab } from './HermesIntegrationTab';
+import { MCPIntegrationTab } from './MCPIntegrationTab';
 
 const OPENAI_MODELS = [
   { value: 'gpt-5', label: 'GPT-5' },
@@ -182,7 +183,7 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
         </DialogHeader>
 
         <Tabs defaultValue="team" className="mt-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="team" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Team
@@ -206,6 +207,10 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
             <TabsTrigger value="api-reference" className="flex items-center gap-2">
               <Code2 className="h-4 w-4" />
               API
+            </TabsTrigger>
+            <TabsTrigger value="mcp" className="flex items-center gap-2">
+              <Plug className="h-4 w-4" />
+              MCP
             </TabsTrigger>
           </TabsList>
           
@@ -807,6 +812,10 @@ export function AgencySettingsModal({ open, onOpenChange }: AgencySettingsModalP
 
           <TabsContent value="api-reference" className="mt-4">
             <ApiReferenceTab />
+          </TabsContent>
+
+          <TabsContent value="mcp" className="mt-4">
+            <MCPIntegrationTab />
           </TabsContent>
         </Tabs>
 
