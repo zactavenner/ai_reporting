@@ -48,7 +48,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
  import { Task, useUpdateTask, useAgencyMembers, AgencyMember, useAddTaskHistory, useBulkUpdateTasks, useBulkDeleteTasks } from '@/hooks/useTasks';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Client } from '@/hooks/useClients';
  import { TaskDetailPanel } from './TaskDetailPanel';
