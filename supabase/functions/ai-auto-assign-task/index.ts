@@ -130,12 +130,41 @@ At least one of member_ids or pod_ids must be non-empty unless nothing fits.`;
     }
 
     // Backwards-compat: collapse legacy single member_id into array.
-    const memberIds = Array.from(new Set([
+    let memberIds = Array.from(new Set([
       ...(parsed.member_ids ?? []),
       ...(parsed.member_id ? [parsed.member_id] : []),
     ])).filter((id) => members.some((m: any) => m.id === id));
-    const podIds = Array.from(new Set(parsed.pod_ids ?? []))
+    let podIds = Array.from(new Set(parsed.pod_ids ?? []))
       .filter((id) => (pods ?? []).some((p: any) => p.id === id));
+
+    // Policy: when the AI routes to a pod, resolve it to ONE individual owner
+    // (round-robin by current open-task load) so every task has a real person
+    // accountable. Pods stay in the assignee set only if a specific member is
+    // also picked; otherwise we drop pod-only rows in favor of that member.
+    if (podIds.length > 0 && memberIds.length === 0) {
+      const podMembers = members.filter((m: any) => podIds.includes((m as any).pod?.id));
+      const candidateIds = (podMembers.length > 0 ? podMembers : members).map((m: any) => m.id);
+      if (candidateIds.length > 0) {
+        // Pick the member with the fewest open (non-done) tasks — simple load balance.
+        const { data: loadRows } = await supabase
+          .from("tasks")
+          .select("assigned_to, status")
+          .in("assigned_to", candidateIds)
+          .neq("status", "done");
+        const load = new Map<string, number>();
+        for (const id of candidateIds) load.set(id, 0);
+        for (const r of (loadRows ?? []) as any[]) {
+          if (r.assigned_to && load.has(r.assigned_to)) {
+            load.set(r.assigned_to, (load.get(r.assigned_to) || 0) + 1);
+          }
+        }
+        const chosen = candidateIds.slice().sort(
+          (a, b) => (load.get(a) ?? 0) - (load.get(b) ?? 0),
+        )[0];
+        memberIds = [chosen];
+      }
+      podIds = []; // never assign to a pod alone
+    }
 
     if (memberIds.length === 0 && podIds.length === 0) {
       return new Response(
