@@ -103,6 +103,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
    const bulkDeleteTasks = useBulkDeleteTasks();
   const { data: agencyMembers = [] } = useAgencyMembers();
   const { currentMember } = useTeamMember();
+  const queryClient = useQueryClient();
    const [searchParams, setSearchParams] = useSearchParams();
    
     // Handle deep link to specific task
