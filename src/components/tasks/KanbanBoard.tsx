@@ -48,7 +48,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
  import { Task, useUpdateTask, useAgencyMembers, AgencyMember, useAddTaskHistory, useBulkUpdateTasks, useBulkDeleteTasks } from '@/hooks/useTasks';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Client } from '@/hooks/useClients';
  import { TaskDetailPanel } from './TaskDetailPanel';
@@ -103,6 +103,7 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
    const bulkDeleteTasks = useBulkDeleteTasks();
   const { data: agencyMembers = [] } = useAgencyMembers();
   const { currentMember } = useTeamMember();
+  const queryClient = useQueryClient();
    const [searchParams, setSearchParams] = useSearchParams();
    
     // Handle deep link to specific task
@@ -441,16 +442,20 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
                 .eq('task_id', taskId);
               const alreadyAssigned = (existing || []).some((r: any) => r.member_id === amMember.id);
               if (!alreadyAssigned) {
-                await supabase.from('task_assignees').insert({
+                const { error: insErr } = await supabase.from('task_assignees').insert({
                   task_id: taskId,
                   member_id: amMember.id,
                   pod_id: null,
                 });
-                supabase.functions
-                  .invoke('notify-task-assignee', {
-                    body: { task_id: taskId, member_id: amMember.id, kind: 'assigned' },
-                  })
-                  .catch((e) => console.warn('notify-task-assignee failed', e));
+                if (!insErr) {
+                  queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });
+                  queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
+                  supabase.functions
+                    .invoke('notify-task-assignee', {
+                      body: { task_id: taskId, member_id: amMember.id, kind: 'assigned' },
+                    })
+                    .catch((e) => console.warn('notify-task-assignee failed', e));
+                }
               }
             }
           } catch (err) {

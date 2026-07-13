@@ -168,10 +168,11 @@ export function useSubtasks(parentTaskId?: string) {
   return useQuery({
     queryKey: ['subtasks', parentTaskId],
     queryFn: async () => {
+      if (!parentTaskId) return [] as Task[];
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('parent_task_id', parentTaskId!)
+        .eq('parent_task_id', parentTaskId)
         .order('created_at', { ascending: true });
       if (error) throw error;
       return data as Task[];
