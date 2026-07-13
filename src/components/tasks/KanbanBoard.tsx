@@ -441,16 +441,20 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
                 .eq('task_id', taskId);
               const alreadyAssigned = (existing || []).some((r: any) => r.member_id === amMember.id);
               if (!alreadyAssigned) {
-                await supabase.from('task_assignees').insert({
+                const { error: insErr } = await supabase.from('task_assignees').insert({
                   task_id: taskId,
                   member_id: amMember.id,
                   pod_id: null,
                 });
-                supabase.functions
-                  .invoke('notify-task-assignee', {
-                    body: { task_id: taskId, member_id: amMember.id, kind: 'assigned' },
-                  })
-                  .catch((e) => console.warn('notify-task-assignee failed', e));
+                if (!insErr) {
+                  queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });
+                  queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
+                  supabase.functions
+                    .invoke('notify-task-assignee', {
+                      body: { task_id: taskId, member_id: amMember.id, kind: 'assigned' },
+                    })
+                    .catch((e) => console.warn('notify-task-assignee failed', e));
+                }
               }
             }
           } catch (err) {
