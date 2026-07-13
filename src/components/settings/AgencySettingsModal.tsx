@@ -19,9 +19,10 @@ import { useSlackChannels } from '@/hooks/useSlackChannels';
 import { supabase } from '@/integrations/supabase/client';
 import { TeamManagementTab } from './TeamManagementTab';
 import { SyncQueueStatus } from './SyncQueueStatus';
-import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet, Sunrise, Send } from 'lucide-react';
+import { Brain, Settings2, Key, DollarSign, Eye, EyeOff, Video, Copy, RefreshCw, Users, Database, Cpu, Code2, FileText, Sheet, Sunrise, Send, Plug } from 'lucide-react';
 import { ApiReferenceTab } from './ApiReferenceTab';
 import { HermesIntegrationTab } from './HermesIntegrationTab';
+import { MCPIntegrationTab } from './MCPIntegrationTab';
 
 const OPENAI_MODELS = [
   { value: 'gpt-5', label: 'GPT-5' },
