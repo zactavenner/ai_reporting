@@ -15,14 +15,20 @@ const CURRENT_TOOLS = [
   { name: 'get_client_metrics', desc: 'Aggregated lead/call/funded metrics per client' },
   { name: 'get_top_performers', desc: 'Top Meta campaign / ad set / ad by funded $' },
   { name: 'list_recent_leads', desc: 'Recent leads for a client' },
+  { name: 'list_tasks', desc: 'Tasks filtered by client, assignee, or status' },
+  { name: 'get_deal_pipeline', desc: 'Deals in the local pipeline for a client' },
+  { name: 'list_creative_briefs', desc: 'Creative briefs for a client' },
+  { name: 'get_meta_ads_daily_insights', desc: 'Daily Meta spend/impression/lead insights' },
+  { name: 'get_lead_enrichment', desc: 'Enrichment data for a specific lead' },
+  { name: 'get_weekly_report', desc: 'Latest weekly sync/recap for a client' },
+  { name: 'list_meetings', desc: 'Recent agency meetings' },
+  { name: 'get_client_settings', desc: 'Client KPI thresholds, targets, integration ids' },
+  { name: 'get_sync_health', desc: 'Aggregate sync queue counts' },
+  { name: 'list_ai_studio_jobs', desc: 'Recent AI Studio batch jobs and status' },
+  { name: 'list_pending_approvals', desc: 'Items in the approval queue' },
 ];
 
-const PLANNED_TOOLS = [
-  'list_tasks', 'get_deal_pipeline', 'list_creative_briefs',
-  'get_meta_ads_daily_insights', 'get_lead_enrichment', 'get_weekly_report',
-  'list_meetings', 'get_client_settings', 'get_sync_health',
-  'list_ai_studio_jobs', 'list_pending_approvals',
-];
+const PLANNED_TOOLS: string[] = [];
 
 const CLIENTS = [
   { name: 'Claude Desktop', url: 'https://modelcontextprotocol.io/quickstart/user' },
