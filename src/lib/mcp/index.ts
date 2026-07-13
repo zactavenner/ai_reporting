@@ -3,6 +3,17 @@ import listClients from "./tools/list-clients";
 import getClientMetrics from "./tools/get-client-metrics";
 import getTopPerformers from "./tools/get-top-performers";
 import listRecentLeads from "./tools/list-recent-leads";
+import listTasks from "./tools/list-tasks";
+import getDealPipeline from "./tools/get-deal-pipeline";
+import listCreativeBriefs from "./tools/list-creative-briefs";
+import getMetaAdsDailyInsights from "./tools/get-meta-ads-daily-insights";
+import getLeadEnrichment from "./tools/get-lead-enrichment";
+import getWeeklyReport from "./tools/get-weekly-report";
+import listMeetings from "./tools/list-meetings";
+import getClientSettings from "./tools/get-client-settings";
+import getSyncHealth from "./tools/get-sync-health";
+import listAiStudioJobs from "./tools/list-ai-studio-jobs";
+import listPendingApprovals from "./tools/list-pending-approvals";
 
 // The OAuth issuer must be the direct Supabase host (not the Cloud proxy).
 const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "project-ref-unset";
@@ -17,5 +28,21 @@ export default defineMcp({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
   }),
-  tools: [listClients, getClientMetrics, getTopPerformers, listRecentLeads],
+  tools: [
+    listClients,
+    getClientMetrics,
+    getTopPerformers,
+    listRecentLeads,
+    listTasks,
+    getDealPipeline,
+    listCreativeBriefs,
+    getMetaAdsDailyInsights,
+    getLeadEnrichment,
+    getWeeklyReport,
+    listMeetings,
+    getClientSettings,
+    getSyncHealth,
+    listAiStudioJobs,
+    listPendingApprovals,
+  ],
 });
