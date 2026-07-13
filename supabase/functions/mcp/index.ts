@@ -141,6 +141,294 @@ var list_recent_leads_default = defineTool4({
   }
 });
 
+// src/lib/mcp/tools/list-tasks.ts
+import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z5 } from "npm:zod@^4.4.3";
+
+// src/lib/mcp/tools/_sb.ts
+import { createClient as createClient5 } from "npm:@supabase/supabase-js@^2.89.0";
+function sb5(ctx) {
+  return createClient5(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var UUID = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
+
+// src/lib/mcp/tools/list-tasks.ts
+var list_tasks_default = defineTool5({
+  name: "list_tasks",
+  title: "List tasks",
+  description: "List tasks visible to the signed-in user, optionally filtered by client, assignee, and status.",
+  inputSchema: {
+    client_id: z5.string().uuid().regex(UUID).optional(),
+    assignee_id: z5.string().uuid().regex(UUID).optional(),
+    status: z5.enum(["open", "in_progress", "done", "cancelled"]).optional(),
+    limit: z5.number().int().min(1).max(100).default(25).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, assignee_id, status, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("tasks").select("*").order("created_at", { ascending: false });
+    if (client_id) q = q.eq("client_id", client_id);
+    if (assignee_id) q = q.eq("assigned_to", assignee_id);
+    if (status) q = q.eq("status", status);
+    const { data, error } = await q.limit(limit ?? 25);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { tasks: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-deal-pipeline.ts
+import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z6 } from "npm:zod@^4.4.3";
+var get_deal_pipeline_default = defineTool6({
+  name: "get_deal_pipeline",
+  title: "Get deal pipeline",
+  description: "Return deals in the local pipeline for a client, optionally filtered by stage.",
+  inputSchema: {
+    client_id: z6.string().uuid().regex(UUID),
+    stage: z6.string().optional(),
+    limit: z6.number().int().min(1).max(200).default(100).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, stage, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("deals").select("*").eq("client_id", client_id).order("updated_at", { ascending: false });
+    if (stage) q = q.eq("stage", stage);
+    const { data, error } = await q.limit(limit ?? 100);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { deals: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/list-creative-briefs.ts
+import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z7 } from "npm:zod@^4.4.3";
+var list_creative_briefs_default = defineTool7({
+  name: "list_creative_briefs",
+  title: "List creative briefs",
+  description: "List creative briefs for a client with optional status filter.",
+  inputSchema: {
+    client_id: z7.string().uuid().regex(UUID),
+    status: z7.string().optional(),
+    limit: z7.number().int().min(1).max(50).default(10).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, status, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("creative_briefs").select("*").eq("client_id", client_id).order("created_at", { ascending: false });
+    if (status) q = q.eq("status", status);
+    const { data, error } = await q.limit(limit ?? 10);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { briefs: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-meta-ads-daily-insights.ts
+import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z8 } from "npm:zod@^4.4.3";
+var get_meta_ads_daily_insights_default = defineTool8({
+  name: "get_meta_ads_daily_insights",
+  title: "Get Meta ads daily insights",
+  description: "Return daily Meta ad spend/impression/lead insights for a client over a date range.",
+  inputSchema: {
+    client_id: z8.string().uuid().regex(UUID),
+    start_date: z8.string().describe("ISO date (YYYY-MM-DD) inclusive."),
+    end_date: z8.string().describe("ISO date (YYYY-MM-DD) inclusive."),
+    limit: z8.number().int().min(1).max(1e3).default(500).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, start_date, end_date, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb5(ctx).from("meta_ad_daily_insights").select("*").eq("client_id", client_id).gte("date_account_tz", start_date).lte("date_account_tz", end_date).order("date_account_tz", { ascending: false }).limit(limit ?? 500);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { rows: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-lead-enrichment.ts
+import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z9 } from "npm:zod@^4.4.3";
+var get_lead_enrichment_default = defineTool9({
+  name: "get_lead_enrichment",
+  title: "Get lead enrichment",
+  description: "Return enrichment data for a lead by id, or by client + external_id.",
+  inputSchema: {
+    lead_id: z9.string().uuid().regex(UUID).optional(),
+    client_id: z9.string().uuid().regex(UUID).optional(),
+    external_id: z9.string().optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ lead_id, client_id, external_id }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("lead_enrichment").select("*").limit(1);
+    if (lead_id) q = q.eq("lead_id", lead_id);
+    else if (client_id && external_id) q = q.eq("client_id", client_id).eq("external_id", external_id);
+    else return { content: [{ type: "text", text: "Provide lead_id or (client_id + external_id)" }], isError: true };
+    const { data, error } = await q.maybeSingle();
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? null, null, 2) }],
+      structuredContent: { enrichment: data ?? null }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-weekly-report.ts
+import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z10 } from "npm:zod@^4.4.3";
+var get_weekly_report_default = defineTool10({
+  name: "get_weekly_report",
+  title: "Get weekly report",
+  description: "Fetch the latest weekly sync/recap for a client (most recent first).",
+  inputSchema: {
+    client_id: z10.string().uuid().regex(UUID),
+    limit: z10.number().int().min(1).max(12).default(1).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb5(ctx).from("weekly_syncs").select("*").eq("client_id", client_id).order("week_of", { ascending: false }).limit(limit ?? 1);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { reports: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/list-meetings.ts
+import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z11 } from "npm:zod@^4.4.3";
+var list_meetings_default = defineTool11({
+  name: "list_meetings",
+  title: "List meetings",
+  description: "List recent agency meetings, optionally filtered by client.",
+  inputSchema: {
+    client_id: z11.string().uuid().regex(UUID).optional(),
+    limit: z11.number().int().min(1).max(50).default(10).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("agency_meetings").select("*").order("meeting_date", { ascending: false });
+    if (client_id) q = q.eq("client_id", client_id);
+    const { data, error } = await q.limit(limit ?? 10);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { meetings: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-client-settings.ts
+import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z12 } from "npm:zod@^4.4.3";
+var get_client_settings_default = defineTool12({
+  name: "get_client_settings",
+  title: "Get client settings",
+  description: "Fetch client configuration (KPI thresholds, integration ids, targets, report cadence).",
+  inputSchema: {
+    client_id: z12.string().uuid().regex(UUID)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb5(ctx).from("client_settings").select("*").eq("client_id", client_id).maybeSingle();
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? null, null, 2) }],
+      structuredContent: { settings: data ?? null }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-sync-health.ts
+import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.20.0";
+var get_sync_health_default = defineTool13({
+  name: "get_sync_health",
+  title: "Get sync queue health",
+  description: "Return aggregate sync queue counts (pending, processing, completed, failed, records processed).",
+  inputSchema: {},
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (_input, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb5(ctx).rpc("get_sync_queue_stats");
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      content: [{ type: "text", text: JSON.stringify(row ?? {}, null, 2) }],
+      structuredContent: { stats: row ?? {} }
+    };
+  }
+});
+
+// src/lib/mcp/tools/list-ai-studio-jobs.ts
+import { defineTool as defineTool14 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z13 } from "npm:zod@^4.4.3";
+var list_ai_studio_jobs_default = defineTool14({
+  name: "list_ai_studio_jobs",
+  title: "List AI Studio jobs",
+  description: "List recent AI Studio batch jobs and their status, optionally filtered by client.",
+  inputSchema: {
+    client_id: z13.string().uuid().regex(UUID).optional(),
+    status: z13.string().optional(),
+    limit: z13.number().int().min(1).max(50).default(20).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, status, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("batch_jobs").select("*").order("created_at", { ascending: false });
+    if (client_id) q = q.eq("client_id", client_id);
+    if (status) q = q.eq("status", status);
+    const { data, error } = await q.limit(limit ?? 20);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { jobs: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/list-pending-approvals.ts
+import { defineTool as defineTool15 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z14 } from "npm:zod@^4.4.3";
+var list_pending_approvals_default = defineTool15({
+  name: "list_pending_approvals",
+  title: "List pending approvals",
+  description: "List items in the approval queue awaiting a human decision.",
+  inputSchema: {
+    client_id: z14.string().uuid().regex(UUID).optional(),
+    limit: z14.number().int().min(1).max(100).default(25).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("approval_queue").select("*").eq("status", "pending").order("created_at", { ascending: false });
+    if (client_id) q = q.eq("client_id", client_id);
+    const { data, error } = await q.limit(limit ?? 25);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { approvals: data ?? [] }
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jgwwmtuvjlmzapwqiabu";
 var mcp_default = defineMcp({
@@ -152,7 +440,23 @@ var mcp_default = defineMcp({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
   }),
-  tools: [list_clients_default, get_client_metrics_default, get_top_performers_default, list_recent_leads_default]
+  tools: [
+    list_clients_default,
+    get_client_metrics_default,
+    get_top_performers_default,
+    list_recent_leads_default,
+    list_tasks_default,
+    get_deal_pipeline_default,
+    list_creative_briefs_default,
+    get_meta_ads_daily_insights_default,
+    get_lead_enrichment_default,
+    get_weekly_report_default,
+    list_meetings_default,
+    get_client_settings_default,
+    get_sync_health_default,
+    list_ai_studio_jobs_default,
+    list_pending_approvals_default
+  ]
 });
 
 // lovable-mcp-supabase-entry.ts
