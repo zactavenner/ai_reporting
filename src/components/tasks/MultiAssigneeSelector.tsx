@@ -13,6 +13,7 @@ import { useAgencyMembers, AgencyMember } from '@/hooks/useTasks';
 import { useAgencyPods } from '@/hooks/useAgencyPods';
 import { useClients, Client } from '@/hooks/useClients';
 import { useTaskAssignees, useSetTaskAssignees, TaskAssignee } from '@/hooks/useTaskAssignees';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -35,6 +36,7 @@ export function MultiAssigneeSelector({
   const { data: clients = [] } = useClients();
   const { data: assignees = [] } = useTaskAssignees(taskId);
   const setAssignees = useSetTaskAssignees();
+  const queryClient = useQueryClient();
 
   // Group members by pod
   const membersByPod = useMemo(() => {
@@ -113,18 +115,24 @@ export function MultiAssigneeSelector({
   };
 
   const selectClient = async (client: Client) => {
-    await supabase
+    const { error } = await supabase
       .from('tasks')
       .update({ assigned_client_name: client.name, client_id: client.id })
       .eq('id', taskId);
+    if (!error) {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    }
     onAssignmentChange?.();
   };
 
   const removeClient = async () => {
-    await supabase
+    const { error } = await supabase
       .from('tasks')
       .update({ assigned_client_name: null })
       .eq('id', taskId);
+    if (!error) {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    }
     onAssignmentChange?.();
   };
 

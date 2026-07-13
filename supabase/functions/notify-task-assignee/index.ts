@@ -126,21 +126,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Look up GHL credentials from the task's own client_id
-    const { data: client } = await supabase
-      .from('clients')
-      .select('ghl_api_key, ghl_location_id')
-      .eq('id', task.client_id)
-      .maybeSingle();
-
-    if (!client?.ghl_api_key || !client?.ghl_location_id) {
-      return new Response(JSON.stringify({ error: 'GHL credentials not configured for this client' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Look up GHL credentials from the task's own client_id (may be null for internal tasks)
+    let client: { ghl_api_key: string | null; ghl_location_id: string | null } | null = null;
+    if (task.client_id) {
+      const { data } = await supabase
+        .from('clients')
+        .select('ghl_api_key, ghl_location_id')
+        .eq('id', task.client_id)
+        .maybeSingle();
+      client = data as any;
     }
+    const canSendGhl = !!(client?.ghl_api_key && client?.ghl_location_id);
 
-    const clientName = (task as any).clients?.name || 'No client';
+    const clientName = (task as any).clients?.name || 'Internal';
     const taskUrl = `${APP_URL}/?task=${task.id}`;
 
     let dueStr = 'No due date';
@@ -197,33 +195,32 @@ Deno.serve(async (req) => {
     const phone = member.phone ? normalizePhone(member.phone) : null;
     const email = member.email || null;
 
-    const contactId = await findOrCreateContact(
-      client.ghl_api_key,
-      client.ghl_location_id,
-      phone,
-      email,
-      member.name,
-    );
-    if (!contactId) {
-      return new Response(JSON.stringify({ error: 'contact create failed' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const results: Record<string, unknown> = {};
-    if (phone) {
-      results.sms = await ghlSend(client.ghl_api_key, contactId, 'SMS', { message: smsBody });
+    if (canSendGhl) {
+      const contactId = await findOrCreateContact(
+        client!.ghl_api_key!,
+        client!.ghl_location_id!,
+        phone,
+        email,
+        member.name,
+      );
+      if (contactId) {
+        results.sms = phone
+          ? await ghlSend(client!.ghl_api_key!, contactId, 'SMS', { message: smsBody })
+          : { ok: false, error: 'no phone' };
+        results.email = email
+          ? await ghlSend(client!.ghl_api_key!, contactId, 'Email', {
+              subject: emailSubject,
+              html: emailHtml,
+            })
+          : { ok: false, error: 'no email' };
+      } else {
+        results.sms = { ok: false, error: 'contact create failed' };
+        results.email = { ok: false, error: 'contact create failed' };
+      }
     } else {
-      results.sms = { ok: false, error: 'no phone' };
-    }
-    if (email) {
-      results.email = await ghlSend(client.ghl_api_key, contactId, 'Email', {
-        subject: emailSubject,
-        html: emailHtml,
-      });
-    } else {
-      results.email = { ok: false, error: 'no email' };
+      results.sms = { ok: false, error: 'ghl not configured' };
+      results.email = { ok: false, error: 'ghl not configured' };
     }
 
     // In-app notification record

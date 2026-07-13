@@ -42,17 +42,17 @@ Deno.serve(async (req) => {
       for (const a of assignees || []) if (a.member_id) memberIds.add(a.member_id);
 
       for (const memberId of memberIds) {
-        // Skip if already notified due-today today
+        // Skip if this member already got a due-today notification for this task today
         const { data: existing } = await supabase
-          .from('task_history')
+          .from('task_notifications')
           .select('id')
           .eq('task_id', task.id)
-          .eq('action', 'notification_due_today')
+          .eq('member_id', memberId)
+          .eq('triggered_by', 'Due-Today Watchdog')
           .gte('created_at', start)
           .lte('created_at', end)
-          .like('new_value', `%${memberId.slice(0, 0)}%`); // dummy; do per-member check below
-        // do explicit member check by name match in new_value
-        // (simpler: just call notify; in-app insert and history will append, but we'll dedupe via task_notifications)
+          .limit(1);
+        if (existing && existing.length > 0) continue;
         try {
           const res = await fetch(
             `${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-task-assignee`,

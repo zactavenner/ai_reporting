@@ -67,6 +67,8 @@ export function useAddTaskAssignee() {
     },
     onSuccess: (_, { taskId }) => {
       queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
     },
   });
 }
@@ -86,6 +88,8 @@ export function useRemoveTaskAssignee() {
     },
     onSuccess: (_, { taskId }) => {
       queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
     },
   });
 }
@@ -104,6 +108,16 @@ export function useSetTaskAssignees() {
       memberIds?: string[]; 
       podIds?: string[]; 
     }) => {
+      // Snapshot existing members so we only notify *newly added* ones
+      const { data: existing } = await supabase
+        .from('task_assignees')
+        .select('member_id')
+        .eq('task_id', taskId)
+        .not('member_id', 'is', null);
+      const previousMemberIds = new Set(
+        (existing ?? []).map((r: { member_id: string | null }) => r.member_id).filter(Boolean) as string[],
+      );
+
       // Atomic delete + insert via DB function — no partial-state window
       // Cast: types.ts is regenerated after migration apply
       const { error } = await (supabase.rpc as any)('set_task_assignees', {
@@ -113,8 +127,9 @@ export function useSetTaskAssignees() {
       });
       if (error) throw error;
 
-      // Notify newly added members
-      for (const memberId of memberIds) {
+      // Notify only members added in this change
+      const newlyAdded = memberIds.filter((id) => !previousMemberIds.has(id));
+      for (const memberId of newlyAdded) {
         supabase.functions
           .invoke('notify-task-assignee', {
             body: { task_id: taskId, member_id: memberId, kind: 'assigned' },
@@ -126,6 +141,8 @@ export function useSetTaskAssignees() {
     },
     onSuccess: (_, { taskId }) => {
       queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
     },
   });
 }
