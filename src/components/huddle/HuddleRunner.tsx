@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Play, Pause, SkipForward, Plus, ChevronRight, Flag, PartyPopper } from 'lucide-react';
 import { useTodayHuddle, useSegmentTiming } from '@/hooks/useHuddle';
+import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
 import { WinsSegment } from './segments/WinsSegment';
 import { NumbersSegment } from './segments/NumbersSegment';
@@ -39,10 +40,19 @@ function playChime() {
 
 export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const { huddle, agenda, loading, updateTimer, updateHuddle, updateAgenda } = useTodayHuddle();
+  const { currentMember } = useTeamMember();
   const chimed = useRef<number>(-1);
 
   const timer = huddle?.timer_state;
   const timing = useSegmentTiming(agenda, timer || { segment_index: 0, segment_started_at: null, paused_at: null, paused_elapsed_s: 0, auto_advance: false, running: false, finished: false, extra_s: 0 });
+
+  const isFacilitator = !!currentMember && !!huddle?.facilitator_id && currentMember.id === huddle.facilitator_id;
+
+  // Reset chime guard whenever the current segment changes (covers viewers who
+  // didn't call next() locally but received the change via Realtime)
+  useEffect(() => {
+    chimed.current = -1;
+  }, [timer?.segment_index, timer?.segment_started_at]);
 
   const meetingElapsed = useMemo(() => {
     if (!huddle?.started_at) return 0;
@@ -50,20 +60,28 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     return Math.max(0, Math.floor((Date.now() - started) / 1000));
   }, [huddle?.started_at, timing.elapsed]);
 
-  // Chime + auto-advance on segment end
+  // Chime + auto-advance on segment end. Only the facilitator auto-advances so
+  // multiple viewers don't race to write the next segment.
   useEffect(() => {
     if (!timer || !timer.running) return;
     if (timing.remaining <= 0 && chimed.current !== timing.idx) {
       chimed.current = timing.idx;
       playChime();
-      if (timer.auto_advance) next();
+      if (timer.auto_advance && isFacilitator) next();
     }
-  }, [timing.remaining, timer?.running]);
+  }, [timing.remaining, timer?.running, isFacilitator]);
 
   const start = async () => {
     if (!huddle) return;
     const now = new Date().toISOString();
-    if (!huddle.started_at) await updateHuddle({ started_at: now, status: 'in_progress' });
+    if (!huddle.started_at) {
+      await updateHuddle({
+        started_at: now,
+        status: 'in_progress',
+        // First presser becomes the facilitator (writer of auto-advance)
+        ...(huddle.facilitator_id ? {} : { facilitator_id: currentMember?.id ?? null }),
+      } as any);
+    }
     await updateTimer({
       running: true,
       segment_started_at: timer?.segment_started_at || now,
