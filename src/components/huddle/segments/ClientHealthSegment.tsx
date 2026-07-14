@@ -40,7 +40,7 @@ export function ClientHealthSegment({ huddleId }: { huddleId: string }) {
       const weekStart = new Date(y);
       weekStart.setDate(weekStart.getDate() - 6);
       const [{ data: clients }, { data: metrics }] = await Promise.all([
-        supabase.from('clients').select('id,name').eq('status', 'active'),
+        supabase.from('clients').select('id,name').in('status', ['active', 'onboarding']),
         supabase.from('daily_metrics').select('client_id,date,ad_spend,leads').gte('date', weekStart.toISOString().slice(0,10)).lte('date', yISO),
       ]);
       const map: Record<string, any[]> = {};
