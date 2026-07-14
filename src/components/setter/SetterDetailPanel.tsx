@@ -415,3 +415,18 @@ function Zap({ className }: { className?: string }) {
     </svg>
   );
 }
+
+function IntelCell({ icon: Icon, label, value, tone = 'default' }: { icon: any; label: string; value: string; tone?: 'default' | 'primary' | 'good' }) {
+  const color =
+    tone === 'primary' ? 'text-primary' :
+    tone === 'good' ? 'text-emerald-500' : 'text-foreground';
+  return (
+    <div className="flex items-start gap-1.5 min-w-0">
+      <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${tone === 'default' ? 'text-muted-foreground' : color}`} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[9px] uppercase tracking-wider text-muted-foreground leading-tight">{label}</div>
+        <div className={`text-xs font-medium truncate ${color}`} title={value}>{value}</div>
+      </div>
+    </div>
+  );
+}
