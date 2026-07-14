@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SetterQueue } from '@/components/setter/SetterQueue';
 import { SetterDetailPanel } from '@/components/setter/SetterDetailPanel';
 import { useSetterLeads, fmtDuration, type SetterLead } from '@/hooks/useSetterLeads';
-import { Zap, RefreshCw, RotateCw } from 'lucide-react';
+import { Zap, RefreshCw, RotateCw, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useClients } from '@/hooks/useClients';
 import { ClientFilterPopover } from '@/components/setter/ClientFilterPopover';
@@ -69,6 +69,8 @@ export default function SetterPage() {
   const { leads, loading, error, refresh, stats } = useSetterLeads(rollupClientIds);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncingConvos, setSyncingConvos] = useState(false);
+  const [lastConvoSync, setLastConvoSync] = useState<Date | null>(null);
 
   const selected: SetterLead | null = useMemo(
     () => leads.find(l => l.id === selectedId) || null,
@@ -86,6 +88,28 @@ export default function SetterPage() {
     } catch (e: any) {
       toast.error(`Sync failed: ${e?.message || e}`);
     } finally { setSyncing(false); }
+  };
+
+  const syncConversations = async () => {
+    if (!rollupClientIds.length) { toast.warning('No clients selected'); return; }
+    setSyncingConvos(true);
+    try {
+      const results = await Promise.allSettled(
+        rollupClientIds.map((cid) =>
+          supabase.functions.invoke('sync-ghl-contacts', {
+            body: { client_id: cid, mode: 'conversations', syncTimeline: true },
+          })
+        )
+      );
+      const ok = results.filter((r) => r.status === 'fulfilled' && !(r as any).value?.error).length;
+      const failed = results.length - ok;
+      setLastConvoSync(new Date());
+      await refresh();
+      if (failed === 0) toast.success(`Conversations synced across ${ok} client${ok === 1 ? '' : 's'}`);
+      else toast.warning(`Synced ${ok}/${results.length} clients — ${failed} failed`);
+    } catch (e: any) {
+      toast.error(`Conversation sync failed: ${e?.message || e}`);
+    } finally { setSyncingConvos(false); }
   };
 
   return (
@@ -110,6 +134,19 @@ export default function SetterPage() {
           <Button variant="outline" size="sm" onClick={runManualSync} disabled={syncing} className="gap-1">
             <RotateCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
             <span className="text-xs">{syncing ? 'Syncing…' : 'Sync now'}</span>
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={syncConversations}
+            disabled={syncingConvos || rollupClientIds.length === 0}
+            className="gap-1"
+            title={lastConvoSync ? `Last conversation sync: ${lastConvoSync.toLocaleTimeString()}` : 'Sync SMS/Email conversations across selected clients'}
+          >
+            <MessageSquare className={`w-3.5 h-3.5 ${syncingConvos ? 'animate-pulse' : ''}`} />
+            <span className="text-xs">
+              {syncingConvos ? 'Syncing convos…' : `Sync conversations (${rollupClientIds.length})`}
+            </span>
           </Button>
           <Button variant="ghost" size="sm" onClick={refresh} title="Refresh view">
             <RefreshCw className="w-4 h-4" />
