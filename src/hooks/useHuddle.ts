@@ -44,7 +44,7 @@ export function useTodayHuddle() {
     const load = async () => {
       // Load or create today's huddle
       const { data: settings } = await supabase.from('huddle_settings').select('agenda').eq('singleton', true).maybeSingle();
-      const settingsAgenda = (settings?.agenda as AgendaSegment[]) || DEFAULT_AGENDA;
+      const settingsAgenda = (settings?.agenda as unknown as AgendaSegment[]) || DEFAULT_AGENDA;
       const planned = settingsAgenda.reduce((a, s) => a + s.duration_s, 0);
 
       const { data: existing } = await supabase
@@ -53,7 +53,7 @@ export function useTodayHuddle() {
         .eq('date', today())
         .maybeSingle();
 
-      let record = existing as HuddleRecord | null;
+      let record = existing as unknown as HuddleRecord | null;
       if (!record) {
         const { data: created } = await supabase
           .from('huddles')
@@ -65,11 +65,11 @@ export function useTodayHuddle() {
           })
           .select('*')
           .single();
-        record = created as HuddleRecord;
+        record = created as unknown as HuddleRecord;
       }
 
       if (cancelled) return;
-      setAgenda((record?.agenda as AgendaSegment[]) || settingsAgenda);
+      setAgenda((record?.agenda as unknown as AgendaSegment[]) || settingsAgenda);
       setHuddle(record);
       setLoading(false);
 
