@@ -15,7 +15,7 @@ interface PasswordGateProps {
 
 function PasswordGateContent({ children }: PasswordGateProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('hpa1234');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
