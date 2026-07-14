@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -182,7 +182,7 @@ export function MultiAssigneeSelector({
     });
   }, [assignees, isPublicView]);
 
-  const activateOnEnter = (action: () => void) => (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const activateOnEnter = (action: () => void) => (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       action();
