@@ -15,6 +15,7 @@ import { useTaskAssignees, useSetTaskAssignees, TaskAssignee } from '@/hooks/use
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface MultiAssigneeSelectorProps {
   taskId: string;
@@ -124,9 +125,11 @@ export function MultiAssigneeSelector({
       .from('tasks')
       .update({ assigned_client_name: client.name, client_id: client.id })
       .eq('id', taskId);
-    if (!error) {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    if (error) {
+      toast.error('Failed to save client assignment', { description: error.message });
+      return;
     }
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
     onAssignmentChange?.();
   };
 
@@ -135,9 +138,11 @@ export function MultiAssigneeSelector({
       .from('tasks')
       .update({ assigned_client_name: null })
       .eq('id', taskId);
-    if (!error) {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    if (error) {
+      toast.error('Failed to remove client assignment', { description: error.message });
+      return;
     }
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
     onAssignmentChange?.();
   };
 
