@@ -1,0 +1,333 @@
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useTeamMember } from '@/contexts/TeamMemberContext';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { toast } from 'sonner';
+import {
+  Mail, Phone, Send, Sparkles, ExternalLink, User, Tag as TagIcon,
+  Clock, MessageSquare, Calendar, StickyNote, ArrowRight,
+} from 'lucide-react';
+import { formatDistanceToNowStrict, format } from 'date-fns';
+import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
+
+interface TimelineEvent {
+  id: string;
+  event_type: string;
+  event_subtype: string | null;
+  title: string | null;
+  body: string | null;
+  event_at: string;
+  metadata: any;
+}
+
+function eventIcon(t: string) {
+  if (t === 'sms') return MessageSquare;
+  if (t === 'email') return Mail;
+  if (t === 'call') return Phone;
+  if (t === 'appointment') return Calendar;
+  if (t === 'note') return StickyNote;
+  if (t === 'task') return ArrowRight;
+  return Clock;
+}
+
+export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null; onChanged?: () => void }) {
+  const { currentMember } = useTeamMember();
+  const [tab, setTab] = useState<'sms' | 'email'>('sms');
+  const [text, setText] = useState('');
+  const [subject, setSubject] = useState('');
+  const [sending, setSending] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [assignee, setAssignee] = useState<string>('');
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
+  const [tlLoading, setTlLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.from('agency_members').select('id, name').then(({ data }) => setMembers((data as any) || []));
+  }, []);
+
+  useEffect(() => {
+    if (!lead) { setTimeline([]); return; }
+    setText(''); setSubject('');
+    setAssignee(lead.assigned_user || '');
+    setTlLoading(true);
+    (async () => {
+      const { data } = await supabase
+        .from('contact_timeline_events')
+        .select('id, event_type, event_subtype, title, body, event_at, metadata')
+        .eq('lead_id', lead.id)
+        .order('event_at', { ascending: false })
+        .limit(100);
+      setTimeline((data as any) || []);
+      setTlLoading(false);
+    })();
+    // Realtime for this lead's events
+    const ch = supabase
+      .channel(`setter-lead-${lead.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_timeline_events', filter: `lead_id=eq.${lead.id}` },
+        async () => {
+          const { data } = await supabase
+            .from('contact_timeline_events').select('id, event_type, event_subtype, title, body, event_at, metadata')
+            .eq('lead_id', lead.id).order('event_at', { ascending: false }).limit(100);
+          setTimeline((data as any) || []);
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [lead?.id]);
+
+  const draftAI = async () => {
+    if (!lead) return;
+    setDrafting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('setter-ai-opener', {
+        body: { password: 'HPA1234$', lead_id: lead.id, channel: tab },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setText(data.text || '');
+      if (tab === 'email' && data.subject) setSubject(data.subject);
+      toast.success('Draft ready');
+    } catch (e: any) {
+      toast.error(`Draft failed: ${e?.message || e}`);
+    } finally { setDrafting(false); }
+  };
+
+  const send = async () => {
+    if (!lead) return;
+    if (!text.trim()) { toast.warning('Message empty'); return; }
+    if (tab === 'sms' && !lead.phone) { toast.error('Lead has no phone'); return; }
+    if (tab === 'email' && !lead.email) { toast.error('Lead has no email'); return; }
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('setter-send-message', {
+        body: {
+          password: 'HPA1234$',
+          client_id: lead.client_id,
+          lead_id: lead.id,
+          channel: tab,
+          to_email: lead.email,
+          to_phone: lead.phone,
+          name: lead.name,
+          subject: subject || undefined,
+          text,
+          sender_name: currentMember?.name || null,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Sent ${tab.toUpperCase()}`);
+      setText(''); setSubject('');
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(`Send failed: ${e?.message || e}`);
+    } finally { setSending(false); }
+  };
+
+  const assign = async (memberName: string) => {
+    if (!lead) return;
+    setAssignee(memberName);
+    await supabase.from('leads').update({ assigned_user: memberName || null }).eq('id', lead.id);
+    toast.success(memberName ? `Assigned to ${memberName}` : 'Unassigned');
+    onChanged?.();
+  };
+
+  const addTag = async () => {
+    if (!lead || !tagInput.trim()) return;
+    const tag = tagInput.trim();
+    await supabase.from('contact_timeline_events').insert({
+      client_id: lead.client_id,
+      lead_id: lead.id,
+      ghl_contact_id: lead.ghl_contact_id || 'unknown',
+      event_type: 'note',
+      event_subtype: 'tag',
+      title: `Tag: ${tag}`,
+      body: tag,
+      event_at: new Date().toISOString(),
+      metadata: { via: 'setter', tag },
+    });
+    setTagInput('');
+    toast.success(`Tagged: ${tag}`);
+  };
+
+  const untouchedFor = lead && lead.touch_count === 0 ? timeSinceISO(lead.created_at) : 0;
+
+  const questions = useMemo(() => {
+    if (!lead || !Array.isArray(lead.questions)) return [];
+    return lead.questions.map((q: any) => ({
+      q: q.question || q.q || '',
+      a: q.answer || q.a || '',
+    })).filter((x: any) => x.q || x.a).slice(0, 8);
+  }, [lead]);
+
+  if (!lead) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm gap-2">
+        <Zap className="w-8 h-8 opacity-30" />
+        <div>Pick a lead to work</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="border-b p-4 flex items-start gap-4">
+        <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <User className="w-5 h-5 text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold truncate">{lead.name || 'Unnamed lead'}</h2>
+            <Badge variant="outline" className="text-[10px]">{lead.client_name}</Badge>
+            {lead.status && <Badge variant="secondary" className="text-[10px]">{lead.status}</Badge>}
+          </div>
+          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground flex-wrap">
+            {lead.email && <span className="inline-flex items-center gap-1"><Mail className="w-3 h-3" />{lead.email}</span>}
+            {lead.phone && <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>}
+            <span>Created {formatDistanceToNowStrict(new Date(lead.created_at))} ago</span>
+          </div>
+        </div>
+        {/* Speed to lead card */}
+        <div className="text-right flex-shrink-0">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Speed to lead</div>
+          {lead.touch_count === 0 ? (
+            <div className={`font-mono tabular-nums text-2xl font-bold ${
+              untouchedFor < 300 ? 'text-emerald-500' : untouchedFor < 900 ? 'text-amber-500' : 'text-destructive'
+            }`}>
+              {fmtDuration(untouchedFor)}
+            </div>
+          ) : (
+            <div className="text-emerald-500 font-mono tabular-nums text-lg font-bold">
+              {fmtDuration(lead.time_to_first_touch_s || 0)}
+            </div>
+          )}
+          <div className="text-[10px] text-muted-foreground">
+            {lead.touch_count === 0 ? 'no touches yet' : `${lead.touch_count} touch${lead.touch_count === 1 ? '' : 'es'}`}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick actions bar */}
+      <div className="border-b p-3 flex items-center gap-2 flex-wrap bg-muted/20">
+        <select
+          value={assignee}
+          onChange={(e) => assign(e.target.value)}
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+        >
+          <option value="">Unassigned</option>
+          {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+        </select>
+        <div className="flex items-center gap-1">
+          <Input
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addTag()}
+            placeholder="Add tag / note"
+            className="h-8 w-40 text-sm"
+          />
+          <Button size="sm" variant="ghost" onClick={addTag}><TagIcon className="w-3.5 h-3.5" /></Button>
+        </div>
+        {lead.ghl_contact_id && (
+          <Button size="sm" variant="outline" asChild className="ml-auto">
+            <a
+              href={`https://app.gohighlevel.com/v2/location/${lead.client_id}/contacts/detail/${lead.ghl_contact_id}`}
+              target="_blank" rel="noreferrer"
+            >
+              <ExternalLink className="w-3.5 h-3.5 mr-1" />GHL
+            </a>
+          </Button>
+        )}
+      </div>
+
+      {/* Form answers if any */}
+      {questions.length > 0 && (
+        <div className="border-b p-3 bg-muted/10">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Form answers</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+            {questions.map((q, i) => (
+              <div key={i}><span className="text-muted-foreground">{q.q}:</span> <span className="font-medium">{q.a}</span></div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Timeline */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Timeline</div>
+        {tlLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
+        {!tlLoading && timeline.length === 0 && (
+          <div className="text-sm text-muted-foreground py-8 text-center border border-dashed rounded-lg">
+            No activity yet. Be first to touch.
+          </div>
+        )}
+        <div className="space-y-2">
+          {timeline.map((e) => {
+            const Icon = eventIcon(e.event_type);
+            const outbound = e.event_subtype === 'outbound';
+            return (
+              <div key={e.id} className={`flex gap-3 text-sm p-2 rounded-lg border ${outbound ? 'bg-primary/5 border-primary/20' : 'bg-muted/30'}`}>
+                <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${outbound ? 'text-primary' : 'text-muted-foreground'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium capitalize">{e.event_type}</span>
+                    {e.event_subtype && <Badge variant="outline" className="text-[10px]">{e.event_subtype}</Badge>}
+                    <span className="text-xs text-muted-foreground ml-auto">{format(new Date(e.event_at), 'MMM d · h:mm a')}</span>
+                  </div>
+                  {e.title && <div className="text-xs text-muted-foreground mt-0.5">{e.title}</div>}
+                  {e.body && <div className="text-sm mt-1 whitespace-pre-wrap">{e.body}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Composer */}
+      <div className="border-t p-3 bg-card">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'email')}>
+          <div className="flex items-center gap-2 mb-2">
+            <TabsList className="h-8">
+              <TabsTrigger value="sms" disabled={!lead.phone} className="text-xs">SMS</TabsTrigger>
+              <TabsTrigger value="email" disabled={!lead.email} className="text-xs">Email</TabsTrigger>
+            </TabsList>
+            <Button size="sm" variant="ghost" onClick={draftAI} disabled={drafting} className="ml-auto text-xs">
+              <Sparkles className="w-3.5 h-3.5 mr-1" />{drafting ? 'Drafting…' : 'AI opener'}
+            </Button>
+          </div>
+          <TabsContent value="sms" className="mt-0 space-y-2">
+            <Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={`Text ${lead.name?.split(' ')[0] || 'lead'}…`} />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{text.length}/320 chars · Sends via client's GHL</span>
+              <Button size="sm" onClick={send} disabled={sending || !text.trim()}>
+                <Send className="w-3.5 h-3.5 mr-1" />{sending ? 'Sending…' : 'Send SMS'}
+              </Button>
+            </div>
+          </TabsContent>
+          <TabsContent value="email" className="mt-0 space-y-2">
+            <Input placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} className="text-sm" />
+            <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write email…" />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Sends via client's GHL</span>
+              <Button size="sm" onClick={send} disabled={sending || !text.trim() || !subject.trim()}>
+                <Send className="w-3.5 h-3.5 mr-1" />{sending ? 'Sending…' : 'Send Email'}
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+function Zap({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+    </svg>
+  );
+}
