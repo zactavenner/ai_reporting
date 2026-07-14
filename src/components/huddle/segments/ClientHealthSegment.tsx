@@ -3,13 +3,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Plus, ExternalLink, TrendingUp } from 'lucide-react';
+import { Plus, ExternalLink, TrendingUp, AlertTriangle, WifiOff } from 'lucide-react';
 
 interface Row {
   id: string;
   name: string;
   status: string;
   meta_ad_account_id?: string | null;
+  hasMetaAccount: boolean;
+  lastMetricDate?: string | null;
+  staleDays?: number | null;
+  dataStatus: 'ok' | 'stale' | 'never_synced' | 'no_account';
   // yesterday
   cpl?: number;
   spend?: number;
@@ -81,20 +85,33 @@ export function ClientHealthSegment({ huddleId }: { huddleId: string }) {
         const spend30 = sum(month, 'ad_spend');
         const leads30 = sum(month, 'leads');
         const cpl30 = leads30 ? spend30 / leads30 : 0;
+        const hasMetaAccount = !!c.meta_ad_account_id;
+        const lastDate = list.map((m: any) => m.date).sort().pop() || null;
+        let staleDays: number | null = null;
+        if (lastDate) staleDays = Math.floor((Date.parse(yISO) - Date.parse(lastDate)) / 86400000);
+        let dataStatus: Row['dataStatus'] = 'ok';
+        if (!hasMetaAccount) dataStatus = 'no_account';
+        else if (!lastDate) dataStatus = 'never_synced';
+        else if (staleDays !== null && staleDays >= 2) dataStatus = 'stale';
         return {
           id: c.id, name: c.name, status: c.status,
           meta_ad_account_id: c.meta_ad_account_id,
+          hasMetaAccount, lastMetricDate: lastDate, staleDays, dataStatus,
           cpl, spend, leads,
           cpl7, spend7, leads7,
           cpl30, spend30, leads30,
           healthY: deriveHealth(cpl, cpl30 || cpl7, spend),
           health7: deriveHealth(cpl7, cpl30, spend7),
-          health30: deriveHealth(cpl30, cpl30, spend30), // baseline itself → green unless no spend
+          health30: deriveHealth(cpl30, cpl30, spend30),
         };
       });
-      // Sort: worst yesterday first, then by name
       const rank = { red: 0, yellow: 1, green: 2 } as const;
-      built.sort((a, b) => (rank[a.healthY!] - rank[b.healthY!]) || a.name.localeCompare(b.name));
+      const dataRank: Record<Row['dataStatus'], number> = { stale: 0, never_synced: 0, no_account: 1, ok: 2 };
+      built.sort((a, b) =>
+        (dataRank[a.dataStatus] - dataRank[b.dataStatus]) ||
+        (rank[a.healthY!] - rank[b.healthY!]) ||
+        a.name.localeCompare(b.name)
+      );
       setRows(built);
     };
     load();
