@@ -182,6 +182,13 @@ export function MultiAssigneeSelector({
     });
   }, [assignees, isPublicView]);
 
+  const activateOnEnter = (action: () => void) => (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      action();
+    }
+  };
+
   return (
     <div className="space-y-2">
       {/* Current assignees */}
@@ -273,15 +280,17 @@ export function MultiAssigneeSelector({
                   Teams
                 </div>
                 {pods.map(pod => (
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={isSaving ? -1 : 0}
                     key={pod.id}
-                    disabled={isSaving}
+                    aria-disabled={isSaving}
                     className={cn(
-                      "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
+                      "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted aria-disabled:cursor-wait aria-disabled:opacity-60",
                       selectedPodIds.includes(pod.id) && "bg-muted"
                     )}
                     onClick={() => togglePod(pod.id)}
+                    onKeyDown={activateOnEnter(() => togglePod(pod.id))}
                   >
                     <Checkbox checked={selectedPodIds.includes(pod.id)} className="pointer-events-none" tabIndex={-1} />
                     <div 
@@ -290,7 +299,7 @@ export function MultiAssigneeSelector({
                     />
                     <Building2 className="h-3 w-3" />
                     <span className="text-sm">{pod.name} Team</span>
-                  </button>
+                  </div>
                 ))}
 
                 {/* Members section */}
@@ -311,20 +320,22 @@ export function MultiAssigneeSelector({
                         {pod.name}
                       </div>
                       {members.map(member => (
-                        <button
-                          type="button"
+                        <div
+                          role="button"
+                          tabIndex={isSaving ? -1 : 0}
                           key={member.id}
-                          disabled={isSaving}
+                          aria-disabled={isSaving}
                           className={cn(
-                            "ml-2 flex w-[calc(100%-0.5rem)] items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
+                            "ml-2 flex w-[calc(100%-0.5rem)] items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted aria-disabled:cursor-wait aria-disabled:opacity-60",
                             selectedMemberIds.includes(member.id) && "bg-muted"
                           )}
                           onClick={() => toggleMember(member.id)}
+                          onKeyDown={activateOnEnter(() => toggleMember(member.id))}
                         >
                           <Checkbox checked={selectedMemberIds.includes(member.id)} className="pointer-events-none" tabIndex={-1} />
                           <User className="h-3 w-3" />
                           <span className="text-sm">{member.name}</span>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   );
@@ -337,20 +348,22 @@ export function MultiAssigneeSelector({
                       Other
                     </div>
                     {membersByPod.unassigned.map(member => (
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={isSaving ? -1 : 0}
                         key={member.id}
-                        disabled={isSaving}
+                        aria-disabled={isSaving}
                         className={cn(
-                          "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
+                          "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted aria-disabled:cursor-wait aria-disabled:opacity-60",
                           selectedMemberIds.includes(member.id) && "bg-muted"
                         )}
                         onClick={() => toggleMember(member.id)}
+                        onKeyDown={activateOnEnter(() => toggleMember(member.id))}
                       >
                         <Checkbox checked={selectedMemberIds.includes(member.id)} className="pointer-events-none" tabIndex={-1} />
                         <User className="h-3 w-3" />
                         <span className="text-sm">{member.name}</span>
-                      </button>
+                      </div>
                     ))}
                   </>
                 )}
@@ -362,20 +375,22 @@ export function MultiAssigneeSelector({
                       Clients
                     </div>
                     {clients.filter(c => c.status === 'active').map(client => (
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={isSaving ? -1 : 0}
                         key={client.id}
-                        disabled={isSaving}
+                        aria-disabled={isSaving}
                         className={cn(
-                          "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
+                          "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted aria-disabled:cursor-wait aria-disabled:opacity-60",
                           currentClientName === client.name && "bg-muted"
                         )}
                         onClick={() => selectClient(client)}
+                        onKeyDown={activateOnEnter(() => selectClient(client))}
                       >
                         <Checkbox checked={currentClientName === client.name} className="pointer-events-none" tabIndex={-1} />
                         <Briefcase className="h-3 w-3 text-primary" />
                         <span className="text-sm">{client.name}</span>
-                      </button>
+                      </div>
                     ))}
                   </>
                 )}
