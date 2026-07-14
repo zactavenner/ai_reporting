@@ -70,6 +70,9 @@ export function useAddTaskAssignee() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
     },
+    onError: (error: Error) => {
+      toast.error('Failed to add assignee', { description: error.message });
+    },
   });
 }
 
@@ -90,6 +93,9 @@ export function useRemoveTaskAssignee() {
       queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to remove assignee', { description: error.message });
     },
   });
 }
@@ -143,6 +149,9 @@ export function useSetTaskAssignees() {
       queryClient.invalidateQueries({ queryKey: ['task-assignees', taskId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['all-task-assignees-full'] });
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to save assignees', { description: error.message });
     },
   });
 }
