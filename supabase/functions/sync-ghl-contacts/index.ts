@@ -2197,31 +2197,47 @@ async function syncContactDeepTimeline(
       });
     }
     
-    // Process messages (SMS, Email, Calls)
+    // Process messages (SMS, Email, Calls, plus custom providers like Sendblue, IG/FB/WebChat)
     for (const msg of messages) {
+      const rawType = String(msg.type ?? msg.messageType ?? msg.conversationType ?? '').toUpperCase();
       let eventType = 'sms';
-      if (msg.type === 'TYPE_EMAIL' || msg.messageType === 'TYPE_EMAIL') {
+      if (rawType.includes('EMAIL')) {
         eventType = 'email';
-      } else if (msg.type === 'TYPE_CALL' || msg.messageType === 'TYPE_CALL' || msg.conversationType === 'TYPE_CALL') {
+      } else if (rawType.includes('CALL') || rawType.includes('VOICEMAIL')) {
         eventType = 'call';
-      } else if (msg.type === 'TYPE_SMS' || msg.messageType === 'TYPE_SMS') {
+      } else if (
+        rawType.includes('SMS') ||
+        rawType.includes('CUSTOM') ||        // Sendblue → TYPE_CUSTOM_SMS / TYPE_CUSTOM_PROVIDER_SMS
+        rawType.includes('WEBCHAT') ||
+        rawType.includes('LIVE_CHAT') ||
+        rawType.includes('FB') ||
+        rawType.includes('IG') ||
+        rawType.includes('WHATSAPP')
+      ) {
         eventType = 'sms';
       }
-      
+
+      // Normalize direction: GHL v2 uses "inbound"/"outbound" strings; some payloads use 1/2
+      const dir = typeof msg.direction === 'string'
+        ? msg.direction
+        : msg.direction === 1 ? 'inbound' : msg.direction === 2 ? 'outbound' : null;
+
       timelineEvents.push({
         client_id: clientId,
         lead_id: leadId,
         ghl_contact_id: contactId,
         event_type: eventType,
-        event_subtype: msg.direction || (msg.direction === 1 ? 'inbound' : 'outbound'),
+        event_subtype: dir,
         title: msg.subject || null,
-        body: msg.body || msg.message,
-        event_at: msg.dateAdded || new Date().toISOString(),
-        metadata: { 
-          messageId: msg.id, 
+        body: msg.body || msg.message || null,
+        event_at: msg.dateAdded || msg.dateUpdated || new Date().toISOString(),
+        metadata: {
+          messageId: msg.id,
           conversationId: msg.conversationId,
           status: msg.status,
-          direction: msg.direction,
+          direction: dir,
+          rawType,
+          source: msg.source || msg.provider || null,
         },
       });
     }
