@@ -59,7 +59,10 @@ export function ClientHealthSegment({ huddleId }: { huddleId: string }) {
         const cplVals = week.map(m => (m.leads ? m.ad_spend / m.leads : 0)).filter(v => v > 0);
         const cplAvg = cplVals.length ? cplVals.reduce((a, b) => a + b, 0) / cplVals.length : 0;
         const health = deriveHealth(cpl, cplAvg, yr?.ad_spend || 0);
-        return { id: c.id, name: c.name, status: c.status, health };
+        return {
+          id: c.id, name: c.name, status: c.status, health,
+          cpl, cplAvg, spend: yr?.ad_spend || 0, leads: yr?.leads || 0,
+        };
       });
       setTotal(rows.length);
       setGreenCount(rows.filter(r => r.health === 'green').length);
