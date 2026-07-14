@@ -2,13 +2,12 @@ import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { User, Users, Building2, X, Plus, Briefcase } from 'lucide-react';
+import { User, Building2, X, Plus, Briefcase, Loader2, AlertCircle } from 'lucide-react';
 import { useAgencyMembers, AgencyMember } from '@/hooks/useTasks';
 import { useAgencyPods } from '@/hooks/useAgencyPods';
 import { useClients, Client } from '@/hooks/useClients';
@@ -31,12 +30,14 @@ export function MultiAssigneeSelector({
   currentClientName,
 }: MultiAssigneeSelectorProps) {
   const [open, setOpen] = useState(false);
-  const { data: agencyMembers = [] } = useAgencyMembers();
-  const { data: pods = [] } = useAgencyPods();
-  const { data: clients = [] } = useClients();
-  const { data: assignees = [] } = useTaskAssignees(taskId);
+  const { data: agencyMembers = [], isLoading: membersLoading, error: membersError } = useAgencyMembers();
+  const { data: pods = [], isLoading: podsLoading, error: podsError } = useAgencyPods();
+  const { data: clients = [], error: clientsError } = useClients();
+  const { data: assignees = [], error: assigneesError } = useTaskAssignees(taskId);
   const setAssignees = useSetTaskAssignees();
   const queryClient = useQueryClient();
+  const isSaving = setAssignees.isPending;
+  const listError = membersError || podsError || clientsError || assigneesError;
 
   // Group members by pod
   const membersByPod = useMemo(() => {
@@ -57,6 +58,7 @@ export function MultiAssigneeSelector({
   const selectedPodIds = assignees.filter(a => a.pod_id).map(a => a.pod_id!);
 
   const toggleMember = async (memberId: string) => {
+    if (isSaving) return;
     const newMemberIds = selectedMemberIds.includes(memberId)
       ? selectedMemberIds.filter(id => id !== memberId)
       : [...selectedMemberIds, memberId];
@@ -70,6 +72,7 @@ export function MultiAssigneeSelector({
   };
 
   const togglePod = async (podId: string) => {
+    if (isSaving) return;
     const isCurrentlySelected = selectedPodIds.includes(podId);
     const newPodIds = isCurrentlySelected
       ? selectedPodIds.filter(id => id !== podId)
@@ -98,6 +101,7 @@ export function MultiAssigneeSelector({
   };
 
   const removeAssignee = async (assignee: TaskAssignee) => {
+    if (isSaving) return;
     if (assignee.member_id) {
       await setAssignees.mutateAsync({
         taskId,
@@ -115,6 +119,7 @@ export function MultiAssigneeSelector({
   };
 
   const selectClient = async (client: Client) => {
+    if (isSaving) return;
     const { error } = await supabase
       .from('tasks')
       .update({ assigned_client_name: client.name, client_id: client.id })
@@ -232,7 +237,7 @@ export function MultiAssigneeSelector({
 
       {/* Add assignee button */}
       {!isPublicView && (
-        <Popover open={open} onOpenChange={setOpen} modal>
+        <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="h-7 text-xs">
               <Plus className="h-3 w-3 mr-1" />
@@ -240,7 +245,7 @@ export function MultiAssigneeSelector({
             </Button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-72 p-0 z-[100]"
+            className="w-72 p-0 z-[100] pointer-events-auto"
             align="start"
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
@@ -249,27 +254,43 @@ export function MultiAssigneeSelector({
               className="max-h-96 overflow-y-auto overscroll-contain p-2 space-y-2"
               onWheel={(e) => e.stopPropagation()}
             >
+                {listError && (
+                  <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>Could not load assignees. Refresh and try again.</span>
+                  </div>
+                )}
+
+                {(membersLoading || podsLoading) && (
+                  <div className="flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading team members…
+                  </div>
+                )}
+
                 {/* Pods section — Teams first */}
                 <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
                   Teams
                 </div>
                 {pods.map(pod => (
-                  <div
+                  <button
+                    type="button"
                     key={pod.id}
+                    disabled={isSaving}
                     className={cn(
-                      "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted",
+                      "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
                       selectedPodIds.includes(pod.id) && "bg-muted"
                     )}
                     onClick={() => togglePod(pod.id)}
                   >
-                    <Checkbox checked={selectedPodIds.includes(pod.id)} />
+                    <Checkbox checked={selectedPodIds.includes(pod.id)} className="pointer-events-none" tabIndex={-1} />
                     <div 
                       className="w-2 h-2 rounded-full" 
                       style={{ backgroundColor: pod.color || '#888' }}
                     />
                     <Building2 className="h-3 w-3" />
                     <span className="text-sm">{pod.name} Team</span>
-                  </div>
+                  </button>
                 ))}
 
                 {/* Members section */}
@@ -290,18 +311,20 @@ export function MultiAssigneeSelector({
                         {pod.name}
                       </div>
                       {members.map(member => (
-                        <div
+                        <button
+                          type="button"
                           key={member.id}
+                          disabled={isSaving}
                           className={cn(
-                            "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted ml-2",
+                            "ml-2 flex w-[calc(100%-0.5rem)] items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
                             selectedMemberIds.includes(member.id) && "bg-muted"
                           )}
                           onClick={() => toggleMember(member.id)}
                         >
-                          <Checkbox checked={selectedMemberIds.includes(member.id)} />
+                          <Checkbox checked={selectedMemberIds.includes(member.id)} className="pointer-events-none" tabIndex={-1} />
                           <User className="h-3 w-3" />
                           <span className="text-sm">{member.name}</span>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   );
@@ -314,18 +337,20 @@ export function MultiAssigneeSelector({
                       Other
                     </div>
                     {membersByPod.unassigned.map(member => (
-                      <div
+                      <button
+                        type="button"
                         key={member.id}
+                        disabled={isSaving}
                         className={cn(
-                          "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted",
+                          "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
                           selectedMemberIds.includes(member.id) && "bg-muted"
                         )}
                         onClick={() => toggleMember(member.id)}
                       >
-                        <Checkbox checked={selectedMemberIds.includes(member.id)} />
+                        <Checkbox checked={selectedMemberIds.includes(member.id)} className="pointer-events-none" tabIndex={-1} />
                         <User className="h-3 w-3" />
                         <span className="text-sm">{member.name}</span>
-                      </div>
+                      </button>
                     ))}
                   </>
                 )}
@@ -337,18 +362,20 @@ export function MultiAssigneeSelector({
                       Clients
                     </div>
                     {clients.filter(c => c.status === 'active').map(client => (
-                      <div
+                      <button
+                        type="button"
                         key={client.id}
+                        disabled={isSaving}
                         className={cn(
-                          "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted",
+                          "flex w-full items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-muted disabled:cursor-wait disabled:opacity-60",
                           currentClientName === client.name && "bg-muted"
                         )}
                         onClick={() => selectClient(client)}
                       >
-                        <Checkbox checked={currentClientName === client.name} />
+                        <Checkbox checked={currentClientName === client.name} className="pointer-events-none" tabIndex={-1} />
                         <Briefcase className="h-3 w-3 text-primary" />
                         <span className="text-sm">{client.name}</span>
-                      </div>
+                      </button>
                     ))}
                   </>
                 )}
