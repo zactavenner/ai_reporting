@@ -387,6 +387,16 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
           <option value="">Unassigned</option>
           {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
         </select>
+        <select
+          value={disposition}
+          onChange={(e) => setDispo(e.target.value)}
+          disabled={savingDispo}
+          className={`h-8 rounded-md border px-2 text-sm ${disposition ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-background'}`}
+          title="Lead disposition (GHL custom field)"
+        >
+          <option value="">Set disposition…</option>
+          {DISPOSITIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
         <div className="flex items-center gap-1">
           <Input
             value={tagInput}
