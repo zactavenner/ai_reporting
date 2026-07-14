@@ -32,6 +32,7 @@ import {
   Sparkles,
   Inbox,
   UserCheck,
+  Timer,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -89,6 +90,12 @@ const navStructure = [
     value: 'weekly-parity',
     icon: FileText,
     href: '/weekly-parity',
+  },
+  {
+    title: 'Daily Huddle',
+    value: 'huddle',
+    icon: Timer,
+    href: '/huddle',
   },
   {
     title: 'Tasks',
