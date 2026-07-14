@@ -49,6 +49,8 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [tlLoading, setTlLoading] = useState(false);
   const [syncingTimeline, setSyncingTimeline] = useState(false);
+  const [disposition, setDisposition] = useState<string>('');
+  const [savingDispo, setSavingDispo] = useState(false);
 
   const loadTimeline = async (l: SetterLead) => {
     // 1) contact_timeline_events by lead_id OR (client_id + ghl_contact_id)
@@ -109,6 +111,7 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     if (!lead) { setTimeline([]); return; }
     setText(''); setSubject('');
     setAssignee(lead.assigned_user || '');
+    setDisposition(lead.current_disposition || '');
     setTlLoading(true);
     (async () => {
       const rows = await loadTimeline(lead);
@@ -207,6 +210,65 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     await supabase.from('leads').update({ assigned_user: memberName || null }).eq('id', lead.id);
     toast.success(memberName ? `Assigned to ${memberName}` : 'Unassigned');
     onChanged?.();
+  };
+
+  const DISPOSITIONS: { value: string; label: string }[] = [
+    { value: 'new', label: 'New' },
+    { value: 'contacted', label: 'Contacted' },
+    { value: 'nurture', label: 'Nurture' },
+    { value: 'qualified', label: 'Qualified' },
+    { value: 'booked', label: 'Booked' },
+    { value: 'showed', label: 'Showed' },
+    { value: 'no_show', label: 'No-show' },
+    { value: 'opportunity', label: 'Opportunity' },
+    { value: 'funded', label: 'Funded' },
+    { value: 'unqualified', label: 'Unqualified' },
+    { value: 'not_accredited', label: 'Not accredited' },
+    { value: 'not_interested', label: 'Not interested' },
+    { value: 'bad_contact_info', label: 'Bad contact info' },
+    { value: 'bad_lead', label: 'Bad lead' },
+  ];
+
+  const setDispo = async (value: string) => {
+    if (!lead || !value) return;
+    const prev = disposition;
+    setDisposition(value);
+    setSavingDispo(true);
+    try {
+      const now = new Date().toISOString();
+      const { error: upErr } = await supabase
+        .from('leads')
+        .update({ current_disposition: value, disposition_updated_at: now })
+        .eq('id', lead.id);
+      if (upErr) throw upErr;
+      const { error: insErr } = await supabase.from('lead_dispositions').insert({
+        lead_id: lead.id,
+        client_id: lead.client_id,
+        disposition: value,
+        disposition_reason: 'Manual — Setter',
+        disposed_by: currentMember?.name || 'setter',
+        source: 'setter_manual',
+        disposed_at: now,
+      });
+      if (insErr) throw insErr;
+      // Log to timeline for visibility
+      await supabase.from('contact_timeline_events').insert({
+        client_id: lead.client_id,
+        lead_id: lead.id,
+        ghl_contact_id: lead.ghl_contact_id || 'unknown',
+        event_type: 'note',
+        event_subtype: 'disposition',
+        title: `Disposition: ${value}`,
+        body: `Set by ${currentMember?.name || 'setter'}`,
+        event_at: now,
+        metadata: { via: 'setter', disposition: value, prev },
+      });
+      toast.success(`Disposition set: ${value}`);
+      onChanged?.();
+    } catch (e: any) {
+      setDisposition(prev);
+      toast.error(`Failed: ${e?.message || e}`);
+    } finally { setSavingDispo(false); }
   };
 
   const addTag = async () => {
@@ -324,6 +386,16 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
         >
           <option value="">Unassigned</option>
           {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+        </select>
+        <select
+          value={disposition}
+          onChange={(e) => setDispo(e.target.value)}
+          disabled={savingDispo}
+          className={`h-8 rounded-md border px-2 text-sm ${disposition ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'bg-background'}`}
+          title="Lead disposition (GHL custom field)"
+        >
+          <option value="">Set disposition…</option>
+          {DISPOSITIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
         </select>
         <div className="flex items-center gap-1">
           <Input
