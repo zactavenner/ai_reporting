@@ -4,16 +4,26 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { AlertCircle, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
+import { AlertCircle, Plus, ChevronRight, ChevronLeft, ExternalLink } from 'lucide-react';
 
 interface Row {
   id: string;
   name: string;
   status: string;
+  meta_ad_account_id?: string | null;
+  // yesterday
   cpl?: number;
-  cplAvg?: number;
   spend?: number;
   leads?: number;
+  // 7-day
+  cpl7?: number;
+  spend7?: number;
+  leads7?: number;
+  // 30-day
+  cpl30?: number;
+  spend30?: number;
+  leads30?: number;
+  cplAvg?: number; // legacy alias = cpl7
   health?: 'green' | 'yellow' | 'red';
 }
 
@@ -45,23 +55,38 @@ export function ClientHealthSegment({ huddleId }: { huddleId: string }) {
       const yISO = y.toISOString().slice(0, 10);
       const weekStart = new Date(y);
       weekStart.setDate(weekStart.getDate() - 6);
+      const weekStartISO = weekStart.toISOString().slice(0, 10);
+      const monthStart = new Date(y);
+      monthStart.setDate(monthStart.getDate() - 29);
+      const monthStartISO = monthStart.toISOString().slice(0, 10);
       const [{ data: clients }, { data: metrics }] = await Promise.all([
-        supabase.from('clients').select('id,name').in('status', ['active', 'onboarding']),
-        supabase.from('daily_metrics').select('client_id,date,ad_spend,leads').gte('date', weekStart.toISOString().slice(0,10)).lte('date', yISO),
+        supabase.from('clients').select('id,name,meta_ad_account_id').in('status', ['active', 'onboarding']),
+        supabase.from('daily_metrics').select('client_id,date,ad_spend,leads').gte('date', monthStartISO).lte('date', yISO),
       ]);
       const map: Record<string, any[]> = {};
       (metrics || []).forEach((m: any) => { (map[m.client_id] ||= []).push(m); });
       const rows: (Row & { health: string })[] = (clients || []).map((c: any) => {
         const list = map[c.id] || [];
         const yr = list.find(m => m.date === yISO);
-        const week = list.filter(m => m.date !== yISO);
-        const cpl = yr?.leads ? yr.ad_spend / yr.leads : 0;
-        const cplVals = week.map(m => (m.leads ? m.ad_spend / m.leads : 0)).filter(v => v > 0);
-        const cplAvg = cplVals.length ? cplVals.reduce((a, b) => a + b, 0) / cplVals.length : 0;
-        const health = deriveHealth(cpl, cplAvg, yr?.ad_spend || 0);
+        const week = list.filter(m => m.date >= weekStartISO && m.date <= yISO);
+        const month = list;
+        const sum = (arr: any[], k: string) => arr.reduce((a, b) => a + (Number(b[k]) || 0), 0);
+        const spend = Number(yr?.ad_spend) || 0;
+        const leads = Number(yr?.leads) || 0;
+        const cpl = leads ? spend / leads : 0;
+        const spend7 = sum(week, 'ad_spend');
+        const leads7 = sum(week, 'leads');
+        const cpl7 = leads7 ? spend7 / leads7 : 0;
+        const spend30 = sum(month, 'ad_spend');
+        const leads30 = sum(month, 'leads');
+        const cpl30 = leads30 ? spend30 / leads30 : 0;
+        const health = deriveHealth(cpl, cpl7, spend);
         return {
           id: c.id, name: c.name, status: c.status, health,
-          cpl, cplAvg, spend: yr?.ad_spend || 0, leads: yr?.leads || 0,
+          meta_ad_account_id: c.meta_ad_account_id,
+          cpl, spend, leads,
+          cpl7, spend7, leads7, cplAvg: cpl7,
+          cpl30, spend30, leads30,
         };
       });
       setTotal(rows.length);
@@ -140,19 +165,38 @@ export function ClientHealthSegment({ huddleId }: { huddleId: string }) {
               {String(Math.max(0, remaining)).padStart(2, '0')}s
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-4 text-center">
-            <div className="p-3 rounded bg-muted/50">
-              <div className="text-xs text-muted-foreground">CPL yesterday</div>
-              <div className="text-lg font-semibold">${(current.cpl || 0).toFixed(2)}</div>
-            </div>
-            <div className="p-3 rounded bg-muted/50">
-              <div className="text-xs text-muted-foreground">7-day avg CPL</div>
-              <div className="text-lg font-semibold">${(current.cplAvg || 0).toFixed(2)}</div>
-            </div>
-            <div className="p-3 rounded bg-muted/50">
-              <div className="text-xs text-muted-foreground">Spend / Leads</div>
-              <div className="text-lg font-semibold">${(current.spend || 0).toFixed(0)} / {current.leads || 0}</div>
-            </div>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {[
+              { label: 'Yesterday', cpl: current.cpl, spend: current.spend, leads: current.leads },
+              { label: 'Last 7 days', cpl: current.cpl7, spend: current.spend7, leads: current.leads7 },
+              { label: 'Last 30 days', cpl: current.cpl30, spend: current.spend30, leads: current.leads30 },
+            ].map((w) => (
+              <div key={w.label} className="p-3 rounded bg-muted/50 text-center">
+                <div className="text-xs text-muted-foreground mb-1">{w.label}</div>
+                <div className="text-lg font-semibold">${(w.cpl || 0).toFixed(2)}<span className="text-xs text-muted-foreground font-normal"> CPL</span></div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  ${Math.round(w.spend || 0).toLocaleString()} spend · {w.leads || 0} leads
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/clients/${current.id}`} target="_blank" rel="noreferrer">
+                <ExternalLink className="w-3.5 h-3.5 mr-1" />Client dashboard
+              </a>
+            </Button>
+            {current.meta_ad_account_id && (
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${String(current.meta_ad_account_id).replace(/^act_/, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 mr-1" />Ads Manager
+                </a>
+              </Button>
+            )}
           </div>
           <div className="flex gap-2">
             <Input
