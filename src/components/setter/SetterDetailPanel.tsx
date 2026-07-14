@@ -465,6 +465,8 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
 
       {/* Composer */}
       <div className="border-t p-3 bg-card">
+        {/* Conversation thread (SMS + Email only, chat-bubble style) */}
+        <ConversationThread events={timeline} leadName={lead.name} />
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'email')}>
           <div className="flex items-center gap-2 mb-2">
             <TabsList className="h-8">
