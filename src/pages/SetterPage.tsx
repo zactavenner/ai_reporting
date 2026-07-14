@@ -66,7 +66,9 @@ export default function SetterPage() {
     return enabledIds.filter(id => id !== '__none__');
   }, [enabledIds, activeClients]);
 
-  const { leads, loading, error, refresh, stats } = useSetterLeads(rollupClientIds);
+  const [win, setWin] = useState<'1d' | '7d' | '30d'>('7d');
+  const windowDays = win === '1d' ? 1 : win === '7d' ? 7 : 30;
+  const { leads, loading, error, refresh, stats } = useSetterLeads(rollupClientIds, windowDays);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncingConvos, setSyncingConvos] = useState(false);
@@ -119,7 +121,7 @@ export default function SetterPage() {
         <div className="flex items-center gap-2">
           <Zap className="w-5 h-5 text-primary" />
           <h1 className="text-lg font-semibold tracking-tight">Setter</h1>
-          <span className="text-xs text-muted-foreground ml-2">Speed-to-lead · rolling 24h</span>
+          <span className="text-xs text-muted-foreground ml-2">Speed-to-lead · last {win === '1d' ? '24h' : win === '7d' ? '7 days' : '30 days'}</span>
         </div>
         <div className="flex items-center gap-5 ml-auto text-sm">
           <Stat label="Leads" value={String(stats.total)} />
@@ -154,7 +156,7 @@ export default function SetterPage() {
         </div>
       </header>
 
-      <SetterRollupBar clientIds={rollupClientIds} />
+      <SetterRollupBar clientIds={rollupClientIds} win={win} onWinChange={setWin} />
 
       {error && (
         <div className="p-3 text-sm text-destructive border-b bg-destructive/5">Error: {error}</div>
