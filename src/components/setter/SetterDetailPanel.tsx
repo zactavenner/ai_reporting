@@ -49,6 +49,8 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [tlLoading, setTlLoading] = useState(false);
   const [syncingTimeline, setSyncingTimeline] = useState(false);
+  const [disposition, setDisposition] = useState<string>('');
+  const [savingDispo, setSavingDispo] = useState(false);
 
   const loadTimeline = async (l: SetterLead) => {
     // 1) contact_timeline_events by lead_id OR (client_id + ghl_contact_id)
@@ -109,6 +111,7 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     if (!lead) { setTimeline([]); return; }
     setText(''); setSubject('');
     setAssignee(lead.assigned_user || '');
+    setDisposition(lead.current_disposition || '');
     setTlLoading(true);
     (async () => {
       const rows = await loadTimeline(lead);
