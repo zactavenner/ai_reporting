@@ -1662,13 +1662,13 @@ async function fetchGHLConversationMessages(
   const messages: any[] = [];
 
   try {
-    // Search for conversations with this contact
+    // Search for conversations with this contact (all of them, not just 5)
     const searchResponse = await fetchGHL(
-      `${GHL_BASE_URL}/conversations/search?locationId=${locationId}&contactId=${contactId}`, 
+      `${GHL_BASE_URL}/conversations/search?locationId=${locationId}&contactId=${contactId}&limit=100`,
       { method: 'GET', headers },
       `conversations/search/${contactId}`
     );
-    
+
     if (!searchResponse.ok) {
       console.error(`GHL conversations search error: ${searchResponse.status}`);
       return [];
@@ -1676,40 +1676,68 @@ async function fetchGHLConversationMessages(
 
     const searchData = await searchResponse.json();
     const conversations = searchData.conversations || [];
+    console.log(`[deep-sync] contact ${contactId}: found ${conversations.length} conversation(s)`);
 
-    // For each conversation, get the messages
-    for (const conv of conversations.slice(0, 5)) { // Limit to 5 conversations
-      try {
-        const messagesResponse = await fetchGHL(
-          `${GHL_BASE_URL}/conversations/${conv.id}/messages?limit=50`,
-          { method: 'GET', headers },
-          `conversation-messages/${conv.id}`
-        );
+    // For each conversation, paginate all messages
+    for (const conv of conversations) {
+      let lastMessageId: string | undefined;
+      let pageCount = 0;
+      const maxPages = 20; // safety cap: 20 * 100 = 2000 msgs per convo
 
-        if (messagesResponse.ok) {
-          const messagesData = await messagesResponse.json();
-          const convMessages = Array.isArray(messagesData.messages) 
-            ? messagesData.messages 
-            : Array.isArray(messagesData) ? messagesData : [];
-          
-          for (const msg of convMessages) {
-            messages.push({
-              ...msg,
-              conversationType: conv.type,
-            });
+      while (pageCount < maxPages) {
+        try {
+          const url = new URL(`${GHL_BASE_URL}/conversations/${conv.id}/messages`);
+          url.searchParams.set('limit', '100');
+          if (lastMessageId) url.searchParams.set('lastMessageId', lastMessageId);
+
+          const messagesResponse = await fetchGHL(
+            url.toString(),
+            { method: 'GET', headers },
+            `conversation-messages/${conv.id}/p${pageCount}`
+          );
+
+          if (!messagesResponse.ok) {
+            console.error(`GHL messages fetch error ${messagesResponse.status} on conv ${conv.id}`);
+            break;
           }
+
+          const messagesData = await messagesResponse.json();
+          // GHL v2 shape: { messages: { messages: [...], nextPage, lastMessageId } }
+          // Older shape:  { messages: [...] }
+          const inner = messagesData?.messages;
+          const convMessages: any[] = Array.isArray(inner)
+            ? inner
+            : Array.isArray(inner?.messages)
+              ? inner.messages
+              : Array.isArray(messagesData)
+                ? messagesData
+                : [];
+
+          for (const msg of convMessages) {
+            messages.push({ ...msg, conversationType: conv.type });
+          }
+
+          const hasNext = (Array.isArray(inner) ? false : inner?.nextPage) === true
+            || (!!inner?.lastMessageId && convMessages.length >= 100);
+          if (!hasNext || convMessages.length === 0) break;
+
+          lastMessageId = inner?.lastMessageId || convMessages[convMessages.length - 1]?.id;
+          if (!lastMessageId) break;
+          pageCount++;
+        } catch (err) {
+          console.error(`Error fetching messages for conversation ${conv.id}:`, err);
+          break;
         }
-      } catch (err) {
-        console.error(`Error fetching messages for conversation ${conv.id}:`, err);
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
-      
-      // Small delay between requests
-      await new Promise(resolve => setTimeout(resolve, 500));
+
+      await new Promise(resolve => setTimeout(resolve, 250));
     }
   } catch (err) {
     console.error('Error fetching GHL conversations:', err);
   }
 
+  console.log(`[deep-sync] contact ${contactId}: fetched ${messages.length} total messages`);
   return messages;
 }
 
