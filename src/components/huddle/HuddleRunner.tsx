@@ -204,33 +204,33 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         {timing.remaining < 0 && <div className="text-destructive text-sm uppercase tracking-widest">Overtime</div>}
       </div>
 
-      <main className="flex-1 px-4 md:px-8 pb-4">
+      <main className="flex-1 px-4 md:px-8 pb-32">
         {body}
       </main>
 
-      <footer className="border-t px-4 md:px-8 py-3 flex items-center gap-2 flex-wrap justify-center bg-card">
+      <footer className="fixed bottom-0 inset-x-0 z-40 border-t px-4 md:px-8 py-5 flex items-center gap-3 flex-wrap justify-center bg-card/95 backdrop-blur shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.15)]">
         {!timer.running && !huddle.started_at && (
-          <Button size="lg" onClick={start}><Play className="w-4 h-4 mr-1" />Start Huddle</Button>
+          <Button size="lg" className="h-12 px-6 text-base" onClick={start}><Play className="w-5 h-5 mr-2" />Start Huddle</Button>
         )}
         {!timer.running && huddle.started_at && !timer.finished && (
-          <Button size="lg" onClick={resume}><Play className="w-4 h-4 mr-1" />Resume</Button>
+          <Button size="lg" className="h-12 px-6 text-base" onClick={resume}><Play className="w-5 h-5 mr-2" />Resume</Button>
         )}
         {timer.running && (
-          <Button size="lg" variant="secondary" onClick={pause}><Pause className="w-4 h-4 mr-1" />Pause</Button>
+          <Button size="lg" variant="secondary" className="h-12 px-6 text-base" onClick={pause}><Pause className="w-5 h-5 mr-2" />Pause</Button>
         )}
-        <Button variant="outline" onClick={bump30}><Plus className="w-4 h-4 mr-1" />30s</Button>
-        <Button variant="outline" onClick={back} disabled={timing.idx === 0}>
-          <ChevronLeft className="w-4 h-4 mr-1" />Back
+        <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={bump30}><Plus className="w-5 h-5 mr-2" />30s</Button>
+        <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={back} disabled={timing.idx === 0}>
+          <ChevronLeft className="w-5 h-5 mr-2" />Back
         </Button>
-        <Button variant="outline" onClick={next}><SkipForward className="w-4 h-4 mr-1" />Skip</Button>
-        <Button onClick={next}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+        <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={next}><SkipForward className="w-5 h-5 mr-2" />Skip</Button>
+        <Button size="lg" className="h-12 px-6 text-base" onClick={next}>Next <ChevronRight className="w-5 h-5 ml-2" /></Button>
         <div className="flex items-center gap-2 ml-2">
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
-          <span className="text-xs text-muted-foreground">Auto-advance</span>
+          <span className="text-sm text-muted-foreground">Auto-advance</span>
         </div>
         {timing.idx >= agenda.length - 1 && (
-          <Button variant="default" onClick={finish} className="ml-2">
-            <PartyPopper className="w-4 h-4 mr-1" />Finish
+          <Button size="lg" variant="default" onClick={finish} className="h-12 px-6 text-base ml-2">
+            <PartyPopper className="w-5 h-5 mr-2" />Finish
           </Button>
         )}
       </footer>
