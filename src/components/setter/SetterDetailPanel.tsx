@@ -51,6 +51,14 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
   const [syncingTimeline, setSyncingTimeline] = useState(false);
   const [disposition, setDisposition] = useState<string>('');
   const [savingDispo, setSavingDispo] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [, setNowTick] = useState(0);
+
+  // Tick every 30s so the "last synced" label stays fresh.
+  useEffect(() => {
+    const t = setInterval(() => setNowTick((x) => x + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const loadTimeline = async (l: SetterLead) => {
     // 1) contact_timeline_events by lead_id OR (client_id + ghl_contact_id)
@@ -117,11 +125,13 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
       const rows = await loadTimeline(lead);
       setTimeline(rows);
       setTlLoading(false);
+      setLastSyncedAt(new Date());
     })();
     // Realtime — refresh on any change touching this lead or contact
     const refresh = async () => {
       const rows = await loadTimeline(lead);
       setTimeline(rows);
+      setLastSyncedAt(new Date());
     };
     const ch = supabase
       .channel(`setter-lead-${lead.id}`)
@@ -148,6 +158,7 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
       if (data?.error) throw new Error(data.error);
       const rows = await loadTimeline(lead);
       setTimeline(rows);
+      setLastSyncedAt(new Date());
       toast.success(`Pulled ${data?.events_count ?? rows.length} events from GHL`);
     } catch (e: any) {
       toast.error(`Sync failed: ${e?.message || e}`);
