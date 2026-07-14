@@ -98,6 +98,12 @@ const navStructure = [
     href: '/huddle',
   },
   {
+    title: 'Setter',
+    value: 'setter',
+    icon: Zap,
+    href: '/setter',
+  },
+  {
     title: 'Tasks',
     value: 'tasks',
     icon: ClipboardCheck,
