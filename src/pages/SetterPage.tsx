@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SetterQueue } from '@/components/setter/SetterQueue';
 import { SetterDetailPanel } from '@/components/setter/SetterDetailPanel';
 import { useSetterLeads, fmtDuration, type SetterLead } from '@/hooks/useSetterLeads';
@@ -12,6 +12,15 @@ import { toast } from 'sonner';
 
 const LS_KEY = 'setter.enabledClientIds.v1';
 
+function readStored(): string[] {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+  } catch { return []; }
+}
+
 export default function SetterPage() {
   const { data: allClients = [] } = useClients();
   const activeClients = useMemo(
@@ -19,16 +28,36 @@ export default function SetterPage() {
     [allClients]
   );
 
-  const [enabledIds, setEnabledIds] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) return JSON.parse(raw) as string[];
-    } catch {}
-    return []; // empty = all
-  });
+  const [enabledIds, _setEnabledIds] = useState<string[]>(readStored);
+  // Write-through setter: persist synchronously so a fast tab switch/unmount can't drop it.
+  const setEnabledIds = useCallback((next: string[] | ((prev: string[]) => string[])) => {
+    _setEnabledIds((prev) => {
+      const value = typeof next === 'function' ? (next as any)(prev) : next;
+      try { localStorage.setItem(LS_KEY, JSON.stringify(value)); } catch {}
+      return value;
+    });
+  }, []);
+
+  // Cross-tab sync
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(enabledIds));
-  }, [enabledIds]);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LS_KEY) _setEnabledIds(readStored());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // Prune stale ids once clients are loaded (client removed / paused / renamed away).
+  // Only prune when we actually have a client list to compare against, so we don't
+  // wipe the user's selection during the first render while clients are still loading.
+  const prunedOnce = useRef(false);
+  useEffect(() => {
+    if (!activeClients.length || prunedOnce.current) return;
+    prunedOnce.current = true;
+    const valid = new Set(activeClients.map(c => c.id));
+    const cleaned = enabledIds.filter(id => id === '__none__' || valid.has(id));
+    if (cleaned.length !== enabledIds.length) setEnabledIds(cleaned);
+  }, [activeClients, enabledIds, setEnabledIds]);
 
   // Effective set for rollup (never empty — fall back to all active)
   const rollupClientIds = useMemo(() => {
