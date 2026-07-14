@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
       return;
     }
 
-    console.log(`[daily-master-sync] enqueuing jobs for ${clients.length} clients (window ${startStr} → ${endStr})`);
+    console.log(`[daily-master-sync] dispatching jobs for ${clients.length} clients (window ${startStr} → ${endStr})`);
 
     await supabase.from("sync_runs").insert({
       function_name: "daily-master-sync",
@@ -86,28 +86,29 @@ Deno.serve(async (req) => {
         source: "master",
         window: `${startStr}→${endStr}`,
         clientCount: clients.length,
-        mode: "sync_queue",
+        mode: "direct_invoke",
         dispatched_at: new Date().toISOString(),
       },
     });
 
-    const now = Date.now();
-    const rows: Record<string, unknown>[] = [];
-
-    for (const client of clients) {
-      // ── Meta Ads ──
-      if (!skipSteps.includes("meta") && client.meta_ad_account_id) {
-        rows.push({
-          client_id: client.id,
-          sync_type: "meta_ads_sync",
-          priority: 2,
-          status: "pending",
-          payload: { startDate: startStr, endDate: endStr },
-          // immediate
-        });
+    // Direct invoke helper (fire-and-forget, but awaited so EdgeRuntime.waitUntil holds them)
+    const invoke = async (fn: string, body: Record<string, unknown>, label: string) => {
+      try {
+        const { error } = await supabase.functions.invoke(fn, { body });
+        if (error) console.error(`[daily-master-sync] ${label} error:`, error.message || error);
+      } catch (e: any) {
+        console.error(`[daily-master-sync] ${label} threw:`, e?.message || e);
       }
+    };
 
-      // ── GHL ──
+    // 1) Meta insights — one call syncs all clients with meta_ad_account_id
+    if (!skipSteps.includes("meta")) {
+      await invoke("sync-meta-ad-daily-insights", { startDate: startStr, endDate: endStr }, "sync-meta-ad-daily-insights");
+    }
+
+    // 2) Per-client GHL + recalc, awaited serially to keep the isolate alive
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    for (const client of clients) {
       if (!skipSteps.includes("ghl") && client.ghl_api_key && client.ghl_location_id) {
         const lastSync = client.last_ghl_sync_at ? new Date(client.last_ghl_sync_at).getTime() : 0;
         const hoursSinceSync = lastSync ? (Date.now() - lastSync) / (1000 * 60 * 60) : Infinity;
@@ -116,57 +117,19 @@ Deno.serve(async (req) => {
         else if (hoursSinceSync > 168) ghlDays = 90;
         else if (hoursSinceSync > 24) ghlDays = 60;
 
-        // Contacts — immediate
-        rows.push({
-          client_id: client.id,
-          sync_type: "ghl_contacts_sync",
-          priority: 2,
-          status: "pending",
-          payload: { syncType: "contacts", sinceDateDays: ghlDays },
-        });
-
-        // Calendar — run after contacts (~15 s) so lead UTM map is warm
-        rows.push({
-          client_id: client.id,
-          sync_type: "ghl_calendar_sync",
-          priority: 3,
-          status: "pending",
-          next_retry_at: new Date(now + 15_000).toISOString(),
-          payload: { sinceDateDays: ghlDays },
-        });
-
-        // Pipelines — slightly after calendar
-        rows.push({
-          client_id: client.id,
-          sync_type: "ghl_pipelines_sync",
-          priority: 3,
-          status: "pending",
-          next_retry_at: new Date(now + 25_000).toISOString(),
-          payload: {},
-        });
+        await invoke("sync-ghl-contacts", { client_id: client.id, syncType: "all", sinceDateDays: ghlDays }, `ghl-contacts:${client.name}`);
+        await invoke("sync-calendar-appointments", { clientId: client.id }, `ghl-calendar:${client.name}`);
+        await invoke("sync-ghl-pipelines", { client_id: client.id, mode: "list" }, `ghl-pipelines:${client.name}`);
       }
 
-      // ── Recalculate metrics — after syncs complete (~60 s) ──
       if (!skipSteps.includes("recalculate")) {
-        rows.push({
-          client_id: client.id,
-          sync_type: "recalculate_metrics",
-          priority: 5,
-          status: "pending",
-          next_retry_at: new Date(now + 60_000).toISOString(),
-          payload: { startDate: startStr, endDate: endStr },
-        });
+        await invoke("recalculate-daily-metrics", { client_id: client.id, startDate: startStr, endDate: endStr }, `recalc:${client.name}`);
       }
+
+      await sleep(500);
     }
 
-    if (rows.length > 0) {
-      const { error: insertErr } = await supabase.from("sync_queue").insert(rows);
-      if (insertErr) {
-        console.error("[daily-master-sync] sync_queue insert error:", insertErr);
-      } else {
-        console.log(`[daily-master-sync] enqueued ${rows.length} jobs for ${clients.length} clients`);
-      }
-    }
+    console.log(`[daily-master-sync] finished dispatch for ${clients.length} clients`);
   };
 
   if (typeof EdgeRuntime !== "undefined") {
