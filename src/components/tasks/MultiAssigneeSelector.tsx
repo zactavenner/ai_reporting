@@ -232,7 +232,7 @@ export function MultiAssigneeSelector({
 
       {/* Add assignee button */}
       {!isPublicView && (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={setOpen} modal>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="h-7 text-xs">
               <Plus className="h-3 w-3 mr-1" />
@@ -240,7 +240,7 @@ export function MultiAssigneeSelector({
             </Button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-72 p-0"
+            className="w-72 p-0 z-[100]"
             align="start"
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
