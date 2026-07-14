@@ -8,13 +8,17 @@ type Win = '1d' | '7d' | '30d';
 
 interface Props {
   clientIds: string[]; // empty = do not query (show 0)
+  win?: Win;
+  onWinChange?: (w: Win) => void;
 }
 
 const pct = (n: number) => `${n.toFixed(1)}%`;
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
-export function SetterRollupBar({ clientIds }: Props) {
-  const [win, setWin] = useState<Win>('7d');
+export function SetterRollupBar({ clientIds, win: winProp, onWinChange }: Props) {
+  const [winLocal, setWinLocal] = useState<Win>('7d');
+  const win = winProp ?? winLocal;
+  const setWin = (w: Win) => { if (onWinChange) onWinChange(w); else setWinLocal(w); };
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState({ leads: 0, qualified: 0, bad: 0, booked: 0, spend: 0, calls: 0, showed: 0 });

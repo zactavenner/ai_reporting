@@ -637,8 +637,8 @@ function ConversationThread({
     .sort((a, b) => new Date(a.event_at).getTime() - new Date(b.event_at).getTime());
 
   const syncedLabel = lastSyncedAt
-    ? `Synced ${formatDistanceToNowStrict(lastSyncedAt)} ago`
-    : 'Not synced yet';
+    ? `Last messages synced ${formatDistanceToNowStrict(lastSyncedAt)} ago`
+    : 'Messages not synced yet';
 
   const Header = (
     <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 rounded-t-lg text-[10px] uppercase tracking-wider text-muted-foreground">
