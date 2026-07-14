@@ -75,7 +75,7 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
       const weekStartISO = weekStart.toISOString().slice(0, 10);
 
       const [{ data: clients }, { data: metrics }] = await Promise.all([
-        supabase.from('clients').select('id,name').eq('status', 'active'),
+        supabase.from('clients').select('id,name').in('status', ['active', 'onboarding']),
         supabase.from('daily_metrics').select('client_id,date,ad_spend,leads,calls,showed_calls,commitments').gte('date', weekStartISO).lte('date', y),
       ]);
 
