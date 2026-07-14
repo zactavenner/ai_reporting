@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Flame, Plus, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Flame, Plus, ChevronDown, ChevronRight, AlertTriangle, Check, X } from 'lucide-react';
 import { yesterdayISO } from '@/hooks/useHuddle';
 
 interface TaskRow {
@@ -190,6 +190,22 @@ export function AccountabilitySegment({ huddleId }: { huddleId: string }) {
 
   const isOverdue = (t: TaskRow) => t.due_date && t.due_date < today;
 
+  // Group yesterday's commitments by client for readability
+  const yesterdayGrouped = useMemo(() => {
+    const byClient: Record<string, { clientName: string; tasks: TaskRow[] }> = {};
+    yesterdayTasks.forEach((t) => {
+      const key = t.client_id || '__agency__';
+      const name = t.client_id ? (clientsMap[t.client_id] || 'Unknown Client') : 'Agency / Internal';
+      (byClient[key] ||= { clientName: name, tasks: [] }).tasks.push(t);
+    });
+    return Object.entries(byClient).sort((a, b) => a[1].clientName.localeCompare(b[1].clientName));
+  }, [yesterdayTasks, clientsMap]);
+
+  const yStats = useMemo(() => {
+    const done = yesterdayTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
+    return { done, total: yesterdayTasks.length, pct: yesterdayTasks.length ? Math.round((done / yesterdayTasks.length) * 100) : 0 };
+  }, [yesterdayTasks]);
+
   return (
     <div className="w-full max-w-6xl mx-auto space-y-4">
       {scoreboard.length > 0 && (
@@ -204,33 +220,59 @@ export function AccountabilitySegment({ huddleId }: { huddleId: string }) {
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
-          <div className="text-sm font-semibold mb-2">Yesterday's Commitments</div>
-          <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-            {yesterdayTasks.length === 0 && <div className="text-sm text-muted-foreground">Nothing to review.</div>}
-            {yesterdayTasks.map((t) => {
-              const done = t.status === 'completed' || t.status === 'done';
-              return (
-                <Card key={t.id} className="p-3">
-                  <div className="flex items-center gap-2">
-                    <Checkbox checked={done} onCheckedChange={(v) => toggleDone(t, !!v)} />
-                    <div className="flex-1">
-                      <div className={`text-sm ${done ? 'line-through text-muted-foreground' : ''}`}>{t.title}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {members[t.assigned_to || ''] || 'Unassigned'} · due {t.due_date || '—'}
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-semibold">Yesterday's Commitments</div>
+            {yStats.total > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                  <Check className="w-3 h-3" />{yStats.done} done
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30">
+                  <X className="w-3 h-3" />{yStats.total - yStats.done} not done
+                </span>
+                <span className="text-muted-foreground">{yStats.pct}%</span>
+              </div>
+            )}
+          </div>
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+            {yesterdayGrouped.length === 0 && <div className="text-sm text-muted-foreground">Nothing to review.</div>}
+            {yesterdayGrouped.map(([key, group]) => (
+              <div key={key} className="border rounded-lg overflow-hidden">
+                <div className="bg-muted/40 px-3 py-1.5 text-xs font-semibold flex items-center justify-between">
+                  <span>{group.clientName}</span>
+                  <span className="text-muted-foreground font-normal">{group.tasks.length}</span>
+                </div>
+                <div className="divide-y">
+                  {group.tasks.map((t) => {
+                    const done = t.status === 'completed' || t.status === 'done';
+                    return (
+                      <div key={t.id} className={`px-3 py-2 ${done ? 'bg-emerald-500/5' : 'bg-destructive/5'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center justify-center h-5 w-5 rounded-full ${done ? 'bg-emerald-500/20 text-emerald-600' : 'bg-destructive/20 text-destructive'}`}>
+                            {done ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                          </span>
+                          <Checkbox checked={done} onCheckedChange={(v) => toggleDone(t, !!v)} />
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-sm truncate ${done ? 'line-through text-muted-foreground' : ''}`}>{t.title}</div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {members[t.assigned_to || ''] || 'Unassigned'} · due {t.due_date || '—'}
+                            </div>
+                          </div>
+                        </div>
+                        {!done && (
+                          <Input
+                            className="mt-2 h-8 text-xs"
+                            placeholder="Reason (required to reschedule)"
+                            value={notDoneReason[t.id] || ''}
+                            onChange={(e) => setNotDoneReason(p => ({ ...p, [t.id]: e.target.value }))}
+                          />
+                        )}
                       </div>
-                    </div>
-                  </div>
-                  {!done && (
-                    <Input
-                      className="mt-2 h-8 text-xs"
-                      placeholder="Reason (required to reschedule)"
-                      value={notDoneReason[t.id] || ''}
-                      onChange={(e) => setNotDoneReason(p => ({ ...p, [t.id]: e.target.value }))}
-                    />
-                  )}
-                </Card>
-              );
-            })}
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
             {eodPriorities.length > 0 && (
               <div className="pt-2">
                 <div className="text-xs font-semibold text-muted-foreground mb-1">From yesterday's EOD reports</div>
@@ -283,18 +325,20 @@ export function AccountabilitySegment({ huddleId }: { huddleId: string }) {
                           <div className="space-y-1">
                             {tasks.map((t) => {
                               const done = t.status === 'completed' || t.status === 'done';
+                              const overdue = isOverdue(t) && !done;
                               return (
-                                <div key={t.id + mid} className="flex items-center gap-2 text-sm py-1 px-2 rounded hover:bg-muted/40">
+                                <div key={t.id + mid} className={`flex items-center gap-2 text-sm py-1.5 px-2 rounded hover:bg-muted/40 ${overdue ? 'border-l-2 border-destructive bg-destructive/5' : ''}`}>
+                                  <span className="w-16 shrink-0">
+                                    {overdue ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-semibold">
+                                        <AlertTriangle className="w-3 h-3" />OVERDUE
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground">{t.due_date || 'today'}</span>
+                                    )}
+                                  </span>
                                   <Checkbox checked={done} onCheckedChange={(v) => toggleTodayDone(t, !!v)} />
                                   <span className={`flex-1 ${done ? 'line-through text-muted-foreground' : ''}`}>{t.title}</span>
-                                  {isOverdue(t) && !done && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive">
-                                      <AlertTriangle className="w-3 h-3" />overdue
-                                    </span>
-                                  )}
-                                  {t.due_date && !isOverdue(t) && (
-                                    <span className="text-[10px] text-muted-foreground">{t.due_date}</span>
-                                  )}
                                 </div>
                               );
                             })}
