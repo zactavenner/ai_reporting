@@ -1,100 +1,75 @@
-# Daily Huddle
+# Daily Huddle — Runner Upgrade Plan
 
-A guided, timed daily stand-up at `/huddle` that pulls tasks, client health, and yesterday's reporting into one screen-share-friendly flow with realtime sync, per-person accountability, and history.
+## What we're fixing
 
-## Navigation
+1. **Back button** — currently one-way; you can't step back.
+2. **Segment timers don't reset/auto-start** — moving forward inherits stale state.
+3. **Today's Tasks aren't real** — Accountability shows only huddle-tagged tasks. Should pull the whole team's real workload.
+4. **Client Health drags** — no per-client pacing, easy to lose the room.
+5. **Data accuracy** — assignee names, completion, and rollovers need to be truthful and live.
 
-- Add "Daily Huddle" to `AppSidebar.tsx` with the `Timer` icon (from `lucide-react`), route `/huddle`.
-- Register `/huddle` in `App.tsx` behind `PasswordGate` (matches every other internal route).
-- Inside the page, two tabs: **Run Huddle** (default) and **History**.
+---
 
-## The Runner (screen-share UI)
+## Changes
 
-Full-viewport layout, large typography (base 20px, timer 96px+), high-contrast on the existing design tokens — no new colors. Layout:
+### 1. Back button + segment reset + auto-start
 
-```text
-┌─────────────────────────────────────────────────────┐
-│  Segment name        ● ● ● ○ ○ ○   Overall 04:32    │
-│                                                     │
-│              [ 01:47 ]  ← 96px countdown            │
-│                                                     │
-│  ── segment body (varies per segment) ──            │
-│                                                     │
-│  Start  Pause  +30s  Skip  Next ▶   ☐ Auto-advance  │
-└─────────────────────────────────────────────────────┘
-```
+- Add a **Back** button next to Next in the runner footer.
+- On Back **or** Next: reset that segment's timer state on the server (`segment_started_at = now()`, `paused_elapsed_s = 0`, `extra_s = 0`, `running = true`), so every arrival at a segment starts a fresh countdown for every viewer.
+- Entries already written (wins, blockers, tasks, ratings, flags) are **kept** — navigation only touches timer state.
+- Chime guard resets on segment change (already in place; verify).
+- Facilitator-agnostic: anyone can navigate; last-write-wins via Realtime (matches current model).
 
-- Timer color: neutral → `amber` at ≤20% remaining → `destructive` when overtime.
-- Soft chime (`<audio>` with a short generated tone / bundled asset) on segment end.
-- One facilitator (first to press Start) writes timer state; all others read via Supabase Realtime on `huddles` + a lightweight `huddle_state` channel.
+### 2. Client Health — 45s per client, auto-advance
 
-### 6 segments (name/duration/order editable in a Settings drawer, stored in `huddle_settings`)
+- Replace the single scrollable list with a **one-client-at-a-time card** (big client name, health color, CPL vs 7-day baseline, spend, leads).
+- 45-second sub-timer per flagged client; auto-advance to next client when it hits 0 or when facilitator clicks "Next client".
+- Segment ends when the last flagged client is done (or segment timer expires, whichever first).
+- Skip-green banner stays at top ("X of Y green — skipped").
+- "Create task" and reason input remain inline on the active card; task writes to real `tasks` table with `source='huddle'`.
 
-1. **Wins — 2:00.** Inline input (name + one line). New wins render as cards; yesterday's wins shown faded below.
-2. **Yesterday's Numbers — 3:00.** Pull yesterday's rows from existing reporting views (`v_client_performance_*` / `daily_metrics`) grouped per client/pod: spend, leads, CPL, CPS, CPBC, booked calls, closes. **CPL/CPS/CPBC always render as a trio in one cell — never CPL alone.** Each row shows delta vs 7-day average with up/down arrows, sorted worst-trending first. "Flag as issue" button creates a huddle task pre-linked to that client.
-3. **Client Health — 3:00.** Read `clients` + latest health status. Show only Yellow/Red as cards with a one-line reason input; Green count collapsed to a banner ("18 of 22 Green — skipped"). "Create task" pre-links the client.
-4. **Accountability — 4:00.** Two panes:
-   - Left: yesterday's huddle commitments (tasks where `source='huddle'` and `due_date=yesterday`) as checkboxes grouped by owner. Marking not-done requires a reason and auto-reschedules to today.
-   - Right: each teammate adds today's Top 3 (title, optional client, due date defaulting to today).
-   - Scoreboard at the top: % of yesterday's commitments completed per person, with streak count.
-5. **Blockers — 2:00.** Quick-add (description + who unblocks). "Convert to task" in one tap.
-6. **Close & Cascade — 1:00.** Auto-compiled plain-text summary preview + 1–10 rating input per attendee.
+### 3. Accountability — real Today's Tasks, grouped by client → assignee
 
-## Accountability layer
+**Data sources merged (deduped by task id):**
+- All open tasks in `tasks` where `due_date <= today` AND `status NOT IN ('completed','done','cancelled')` — resolved via `task_assignees` for multi-assignee accuracy.
+- Yesterday's `daily_reports` (EOD) `top_priorities` — surfaced as commitment chips per member.
+- Rolled-over huddle commitments — yesterday's `tasks` with `source='huddle'` still open.
+- Restrict clients to `status IN ('active','onboarding')`.
 
-- Every item created in the huddle becomes a task with `owner`, `due_date`, optional `client_id`, `source='huddle'`, `huddle_id`.
-- Overdue huddle tasks pin to the top of the Accountability segment until cleared.
-- Attendance auto-logged: on Runner mount insert into `huddle_attendance` (member_id, huddle_id, joined_at); update `left_at` on unmount.
+**Display:**
+- Grouped by **Client** (accordion), then **Assignee** inside each client.
+- Unassigned tasks + agency-level (no client) grouped under "Agency / Unassigned".
+- Each row: checkbox (toggle completed), title, due date pill (red if overdue), assignee avatar/initials.
+- Follow-through scoreboard chips stay at top (uses yesterday's huddle tasks, unchanged logic).
+- Live updates via Realtime on `tasks` + `task_assignees` — check/uncheck by any viewer reflects everywhere within ~1s.
 
-## End of huddle
+**Yesterday's Commitments panel** (left column) stays but pulls from *both* yesterday's huddle tasks AND yesterday's EOD `top_priorities` to catch commitments made outside the huddle.
 
-On "Finish", persist to `huddles` (date, planned_duration, actual_duration, summary_text, ratings_avg) and generate the plain-text summary with a Copy button. Redirect to History tab with the new record highlighted.
+### 4. Data accuracy pass
 
-## History view
+- Resolve assignee names via `task_assignees` join (currently only reads legacy `tasks.assigned_to`), so multi-assignee tasks show every owner.
+- Client name resolution via a single `clients` map fetched once per segment mount.
+- Realtime channels added for `tasks` and `task_assignees` on the Accountability segment only (torn down on unmount).
+- Numbers segment: verify CPL/CPS/CPBC use yesterday's `daily_metrics` for onboarding + active clients (already fixed) — add a "as of" timestamp and a manual refresh button so the room trusts the number.
 
-Table of past huddles: date, duration (actual/planned), avg rating, attendance %. Header shows a 30-day line chart of team follow-through % (recharts, already installed).
+### 5. Suggestions to make it the best huddle possible (opt-in — I'll build the ones you check)
 
-## Data model (new tables only; reuse `clients`, `tasks`, `agency_members`, reporting views)
+- **Attendance roll-call chip strip** at the top of the runner: green dot per member present, gray if not yet joined. One-click "mark present" from a phone.
+- **Speaker rotation** in Wins: 20s per attendee auto-advance so no one hogs the mic.
+- **Blocker → task** button so every blocker leaves the huddle as a real assigned task with a due date.
+- **Yesterday-vs-today delta line** in Numbers (green/red arrows on CPL/CPS/CPBC).
+- **Streak flames** on the scoreboard (7-day, 30-day follow-through) instead of just today's %.
+- **"Copy summary to Slack"** button (in addition to clipboard) — posts to a configured huddle channel via existing Slack integration.
+- **Keyboard shortcuts**: Space = pause, → = next, ← = back, N = new task, R = rate.
+- **Persistent history search + filter by tag** on the History view.
 
-```sql
-huddles(id, date unique, started_at, ended_at, planned_duration_s, actual_duration_s,
-        facilitator_id → agency_members, summary_text, avg_rating, agenda jsonb)
-huddle_wins(id, huddle_id, member_id, text, created_at)
-huddle_blockers(id, huddle_id, member_id, description, unblocker_id, task_id nullable)
-huddle_attendance(id, huddle_id, member_id, joined_at, left_at)
-huddle_ratings(id, huddle_id, member_id unique-per-huddle, rating 1-10, note)
-huddle_settings(id singleton, agenda jsonb)  -- [{key, name, duration_s, order}]
-huddle_flags(id, huddle_id, client_id, reason, task_id nullable) -- from Numbers/Health segments
-```
+## Technical notes
 
-Extend `tasks`: add `source text` and `huddle_id uuid` columns (nullable, defaults preserve existing rows). If the migration detects the extension is unsafe, fall back to a `huddle_tasks` join table — but the direct columns are preferred so overdue queries stay simple.
+- Files touched: `HuddleRunner.tsx` (Back button, reset-on-nav), `useHuddle.ts` (add `resetSegmentTimer(index)`), `AccountabilitySegment.tsx` (rewritten data pull + grouping + realtime), `ClientHealthSegment.tsx` (per-client card + 45s sub-timer), small addition to `summary.ts` for grouped output.
+- No DB migration required for the core fixes. If you pick "Copy to Slack" or "Blocker→task" enhancements, no schema change either — both use existing tables/functions.
+- No changes to existing routes, auth, reporting logic, or agent workflows.
 
-RLS mirrors existing app pattern (authenticated read/write, service_role all); realtime enabled on `huddles`, `huddle_wins`, `huddle_blockers`, `huddle_attendance`, `huddle_ratings` so all viewers sync.
+## Confirm before I build
 
-## Files to add
-
-- `src/pages/HuddlePage.tsx` — tabs shell (Run / History).
-- `src/components/huddle/HuddleRunner.tsx` — full-screen runner + timer engine.
-- `src/components/huddle/segments/{WinsSegment,NumbersSegment,ClientHealthSegment,AccountabilitySegment,BlockersSegment,CloseSegment}.tsx`
-- `src/components/huddle/HuddleHistory.tsx`
-- `src/components/huddle/HuddleSettingsDrawer.tsx`
-- `src/hooks/useHuddle.ts` (create/join/finish), `useHuddleTimer.ts` (realtime state), `useHuddleYesterdayMetrics.ts`, `useHuddleAccountability.ts`.
-- `src/lib/huddle/summary.ts` — plain-text summary builder + copy helper.
-
-## Files to edit (minimal, additive)
-
-- `src/App.tsx` — new lazy route.
-- `src/components/layout/AppSidebar.tsx` — new nav entry (`Timer` icon, `/huddle`).
-- `supabase/migrations/*` — new tables, `tasks` extension, RLS, realtime publication.
-
-## Guardrails
-
-- No changes to existing routes, auth, reporting logic, agent workflows, or the sync pipeline.
-- CPL/CPS/CPBC rendered together always — enforced in the `NumbersSegment` component (single `<MetricTrio>` sub-component; no code path renders CPL alone).
-- Uses only existing design tokens and shadcn components; mobile responsive via the same breakpoint pattern the app already uses.
-
-## Out of scope
-
-- Editing reporting math, task ownership rules, or pod membership.
-- New auth roles — everyone with app access can join a huddle; facilitator is whoever presses Start first.
-- Video/audio conferencing (this is a companion to whatever call tool the team already uses).
+- Green-light the core changes (1–4).
+- Tell me which of the 8 suggestions in section 5 to include — or "all", "none", or a subset.

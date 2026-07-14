@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, Flag, PartyPopper } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, Flag, PartyPopper } from 'lucide-react';
 import { useTodayHuddle, useSegmentTiming } from '@/hooks/useHuddle';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
@@ -127,6 +127,21 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     });
   };
 
+  const back = async () => {
+    if (!timer || !huddle) return;
+    const prevIdx = Math.max(0, timer.segment_index - 1);
+    if (prevIdx === timer.segment_index) return;
+    chimed.current = -1;
+    await updateTimer({
+      segment_index: prevIdx,
+      segment_started_at: new Date().toISOString(),
+      paused_at: null,
+      paused_elapsed_s: 0,
+      extra_s: 0,
+      running: true,
+    });
+  };
+
   const finish = async () => {
     if (!huddle) return;
     const now = new Date().toISOString();
@@ -204,6 +219,9 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           <Button size="lg" variant="secondary" onClick={pause}><Pause className="w-4 h-4 mr-1" />Pause</Button>
         )}
         <Button variant="outline" onClick={bump30}><Plus className="w-4 h-4 mr-1" />30s</Button>
+        <Button variant="outline" onClick={back} disabled={timing.idx === 0}>
+          <ChevronLeft className="w-4 h-4 mr-1" />Back
+        </Button>
         <Button variant="outline" onClick={next}><SkipForward className="w-4 h-4 mr-1" />Skip</Button>
         <Button onClick={next}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
         <div className="flex items-center gap-2 ml-2">
