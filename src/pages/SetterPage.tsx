@@ -1,18 +1,63 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SetterQueue } from '@/components/setter/SetterQueue';
 import { SetterDetailPanel } from '@/components/setter/SetterDetailPanel';
 import { useSetterLeads, fmtDuration, type SetterLead } from '@/hooks/useSetterLeads';
-import { Zap, RefreshCw } from 'lucide-react';
+import { Zap, RefreshCw, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useClients } from '@/hooks/useClients';
+import { ClientFilterPopover } from '@/components/setter/ClientFilterPopover';
+import { SetterRollupBar } from '@/components/setter/SetterRollupBar';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+const LS_KEY = 'setter.enabledClientIds.v1';
 
 export default function SetterPage() {
-  const { leads, loading, error, refresh, stats } = useSetterLeads();
+  const { data: allClients = [] } = useClients();
+  const activeClients = useMemo(
+    () => allClients.filter((c: any) => c.status === 'active').map((c: any) => ({ id: c.id, name: c.name })),
+    [allClients]
+  );
+
+  const [enabledIds, setEnabledIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) return JSON.parse(raw) as string[];
+    } catch {}
+    return []; // empty = all
+  });
+  useEffect(() => {
+    localStorage.setItem(LS_KEY, JSON.stringify(enabledIds));
+  }, [enabledIds]);
+
+  // Effective set for rollup (never empty — fall back to all active)
+  const rollupClientIds = useMemo(() => {
+    if (!enabledIds.length) return activeClients.map(c => c.id);
+    if (enabledIds.length === 1 && enabledIds[0] === '__none__') return [];
+    return enabledIds.filter(id => id !== '__none__');
+  }, [enabledIds, activeClients]);
+
+  const { leads, loading, error, refresh, stats } = useSetterLeads(rollupClientIds);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const selected: SetterLead | null = useMemo(
     () => leads.find(l => l.id === selectedId) || null,
     [leads, selectedId]
   );
+
+  const runManualSync = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('daily-master-sync', { body: {} });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('Sync kicked off — refreshing…');
+      await refresh();
+    } catch (e: any) {
+      toast.error(`Sync failed: ${e?.message || e}`);
+    } finally { setSyncing(false); }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -32,11 +77,18 @@ export default function SetterPage() {
             value={stats.oldestUncontactedS > 0 ? fmtDuration(stats.oldestUncontactedS) : '—'}
             tone={stats.oldestUncontactedS >= 900 ? 'bad' : stats.oldestUncontactedS >= 300 ? 'warn' : 'ok'}
           />
-          <Button variant="ghost" size="sm" onClick={refresh}>
+          <ClientFilterPopover clients={activeClients} selectedIds={enabledIds} onChange={setEnabledIds} />
+          <Button variant="outline" size="sm" onClick={runManualSync} disabled={syncing} className="gap-1">
+            <RotateCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            <span className="text-xs">{syncing ? 'Syncing…' : 'Sync now'}</span>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={refresh} title="Refresh view">
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
       </header>
+
+      <SetterRollupBar clientIds={rollupClientIds} />
 
       {error && (
         <div className="p-3 text-sm text-destructive border-b bg-destructive/5">Error: {error}</div>

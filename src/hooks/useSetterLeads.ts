@@ -70,7 +70,7 @@ function since(iso: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 }
 
-export function useSetterLeads() {
+export function useSetterLeads(enabledClientIds?: string[] | null) {
   const [leads, setLeads] = useState<SetterLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -199,8 +199,11 @@ export function useSetterLeads() {
   }, []);
 
   const stats = useMemo(() => {
-    const uncontacted = leads.filter(l => l.touch_count === 0 && !l.is_spam);
-    const contacted = leads.filter(l => l.touch_count > 0);
+    const filtered = enabledClientIds && enabledClientIds.length
+      ? leads.filter(l => enabledClientIds.includes(l.client_id))
+      : leads;
+    const uncontacted = filtered.filter(l => l.touch_count === 0 && !l.is_spam);
+    const contacted = filtered.filter(l => l.touch_count > 0);
     const avgTtft = contacted.length
       ? Math.round(contacted.reduce((a, l) => a + (l.time_to_first_touch_s || 0), 0) / contacted.length)
       : 0;
@@ -208,15 +211,21 @@ export function useSetterLeads() {
       ? Math.max(...uncontacted.map(l => since(l.created_at)))
       : 0;
     return {
-      total: leads.length,
+      total: filtered.length,
       uncontacted: uncontacted.length,
       contacted: contacted.length,
       avgTtftSec: avgTtft,
       oldestUncontactedS,
     };
-  }, [leads]);
+  }, [leads, enabledClientIds]);
 
-  return { leads, loading, error, refresh: load, stats };
+  const visibleLeads = useMemo(() => (
+    enabledClientIds && enabledClientIds.length
+      ? leads.filter(l => enabledClientIds.includes(l.client_id))
+      : leads
+  ), [leads, enabledClientIds]);
+
+  return { leads: visibleLeads, allLeads: leads, loading, error, refresh: load, stats };
 }
 
 export function fmtDuration(seconds: number): string {

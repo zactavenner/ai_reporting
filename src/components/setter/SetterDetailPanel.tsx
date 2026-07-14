@@ -465,6 +465,8 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
 
       {/* Composer */}
       <div className="border-t p-3 bg-card">
+        {/* Conversation thread (SMS + Email only, chat-bubble style) */}
+        <ConversationThread events={timeline} leadName={lead.name} />
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'email')}>
           <div className="flex items-center gap-2 mb-2">
             <TabsList className="h-8">
@@ -519,6 +521,56 @@ function IntelCell({ icon: Icon, label, value, tone = 'default' }: { icon: any; 
         <div className="text-[9px] uppercase tracking-wider text-muted-foreground leading-tight">{label}</div>
         <div className={`text-xs font-medium truncate ${color}`} title={value}>{value}</div>
       </div>
+    </div>
+  );
+}
+
+function ConversationThread({ events, leadName }: { events: TimelineEvent[]; leadName: string | null }) {
+  // Filter to conversational channels only; sort oldest -> newest so chat reads top-down like GHL.
+  const convo = events
+    .filter((e) => {
+      const t = (e.event_type || '').toLowerCase();
+      return t.includes('sms') || t.includes('text') || t.includes('message') || t.includes('email') || t.includes('mail');
+    })
+    .slice()
+    .sort((a, b) => new Date(a.event_at).getTime() - new Date(b.event_at).getTime());
+
+  if (convo.length === 0) {
+    return (
+      <div className="mb-2 max-h-40 rounded-lg border border-dashed bg-muted/20 flex items-center justify-center text-xs text-muted-foreground py-6">
+        No SMS or email history yet with {leadName?.split(' ')[0] || 'this lead'}.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-2 max-h-64 overflow-y-auto rounded-lg border bg-muted/10 p-3 space-y-2">
+      {convo.map((e) => {
+        const sub = (e.event_subtype || '').toLowerCase();
+        const outbound = sub === 'outbound' || sub.startsWith('out') || sub === 'sent';
+        const t = (e.event_type || '').toLowerCase();
+        const isEmail = t.includes('email') || t.includes('mail');
+        const channel = isEmail ? 'Email' : 'SMS';
+        return (
+          <div key={e.id} className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+              outbound
+                ? 'bg-blue-500 text-white rounded-br-sm'
+                : 'bg-background border rounded-bl-sm'
+            }`}>
+              {isEmail && e.title && (
+                <div className={`text-[10px] font-semibold mb-1 truncate ${outbound ? 'text-blue-50' : 'text-muted-foreground'}`}>
+                  {e.title}
+                </div>
+              )}
+              <div className="whitespace-pre-wrap break-words">{e.body || e.title || '(no content)'}</div>
+              <div className={`text-[10px] mt-1 ${outbound ? 'text-blue-100' : 'text-muted-foreground'}`}>
+                {channel} · {format(new Date(e.event_at), 'MMM d · h:mm a')}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
