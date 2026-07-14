@@ -117,9 +117,11 @@ export function useSetterLeads() {
       });
       ((timelineRes as any).data || []).forEach((e: any) => {
         if (e.ghl_contact_id && !ghlContactByLead[e.lead_id]) ghlContactByLead[e.lead_id] = e.ghl_contact_id;
-        // Treat outbound sms/email and appointments as touches
-        const isOutbound = e.event_subtype === 'outbound' || e.event_type === 'appointment';
-        if (isOutbound || ['sms', 'email', 'call'].includes(e.event_type)) {
+        // A "touch" = the team reached out. Only count outbound events + booked appointments.
+        // Inbound replies must NOT flip a lead to "contacted" — the setter still needs to work it.
+        const isOutbound = e.event_subtype === 'outbound';
+        const isAppt = e.event_type === 'appointment';
+        if (isOutbound || isAppt) {
           (touchesByLead[e.lead_id] ||= []).push(e.event_at);
         }
       });
