@@ -48,6 +48,7 @@ const UnsubscribePage = lazyRetry(() => import("./pages/UnsubscribePage"));
 const LoginPage = lazyRetry(() => import("./pages/LoginPage"));
 const OAuthConsent = lazyRetry(() => import("./pages/OAuthConsent"));
 const HuddlePage = lazyRetry(() => import("./pages/HuddlePage"));
+const SetterPage = lazyRetry(() => import("./pages/SetterPage"));
 
 function PageLoader() {
   return (
@@ -100,6 +101,7 @@ const App = () => (
             <Route path="/lead-quality" element={<PasswordGate><LeadQualityPage /></PasswordGate>} />
             <Route path="/weekly-parity" element={<PasswordGate><WeeklyParityPage /></PasswordGate>} />
             <Route path="/huddle" element={<PasswordGate><HuddlePage /></PasswordGate>} />
+            <Route path="/setter" element={<PasswordGate><SetterPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
