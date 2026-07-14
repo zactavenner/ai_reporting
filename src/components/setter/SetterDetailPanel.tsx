@@ -212,6 +212,65 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     onChanged?.();
   };
 
+  const DISPOSITIONS: { value: string; label: string }[] = [
+    { value: 'new', label: 'New' },
+    { value: 'contacted', label: 'Contacted' },
+    { value: 'nurture', label: 'Nurture' },
+    { value: 'qualified', label: 'Qualified' },
+    { value: 'booked', label: 'Booked' },
+    { value: 'showed', label: 'Showed' },
+    { value: 'no_show', label: 'No-show' },
+    { value: 'opportunity', label: 'Opportunity' },
+    { value: 'funded', label: 'Funded' },
+    { value: 'unqualified', label: 'Unqualified' },
+    { value: 'not_accredited', label: 'Not accredited' },
+    { value: 'not_interested', label: 'Not interested' },
+    { value: 'bad_contact_info', label: 'Bad contact info' },
+    { value: 'bad_lead', label: 'Bad lead' },
+  ];
+
+  const setDispo = async (value: string) => {
+    if (!lead || !value) return;
+    const prev = disposition;
+    setDisposition(value);
+    setSavingDispo(true);
+    try {
+      const now = new Date().toISOString();
+      const { error: upErr } = await supabase
+        .from('leads')
+        .update({ current_disposition: value, disposition_updated_at: now })
+        .eq('id', lead.id);
+      if (upErr) throw upErr;
+      const { error: insErr } = await supabase.from('lead_dispositions').insert({
+        lead_id: lead.id,
+        client_id: lead.client_id,
+        disposition: value,
+        disposition_reason: 'Manual — Setter',
+        disposed_by: currentMember?.name || 'setter',
+        source: 'setter_manual',
+        disposed_at: now,
+      });
+      if (insErr) throw insErr;
+      // Log to timeline for visibility
+      await supabase.from('contact_timeline_events').insert({
+        client_id: lead.client_id,
+        lead_id: lead.id,
+        ghl_contact_id: lead.ghl_contact_id || 'unknown',
+        event_type: 'note',
+        event_subtype: 'disposition',
+        title: `Disposition: ${value}`,
+        body: `Set by ${currentMember?.name || 'setter'}`,
+        event_at: now,
+        metadata: { via: 'setter', disposition: value, prev },
+      });
+      toast.success(`Disposition set: ${value}`);
+      onChanged?.();
+    } catch (e: any) {
+      setDisposition(prev);
+      toast.error(`Failed: ${e?.message || e}`);
+    } finally { setSavingDispo(false); }
+  };
+
   const addTag = async () => {
     if (!lead || !tagInput.trim()) return;
     const tag = tagInput.trim();
