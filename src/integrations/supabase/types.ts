@@ -9589,6 +9589,329 @@ export type Database = {
           },
         ]
       }
+      huddle_attendance: {
+        Row: {
+          huddle_id: string
+          id: string
+          joined_at: string
+          left_at: string | null
+          member_id: string | null
+          member_name: string | null
+        }
+        Insert: {
+          huddle_id: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          member_id?: string | null
+          member_name?: string | null
+        }
+        Update: {
+          huddle_id?: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          member_id?: string | null
+          member_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddle_attendance_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_attendance_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      huddle_blockers: {
+        Row: {
+          created_at: string
+          description: string
+          huddle_id: string
+          id: string
+          member_id: string | null
+          member_name: string | null
+          task_id: string | null
+          unblocker_id: string | null
+          unblocker_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          huddle_id: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          task_id?: string | null
+          unblocker_id?: string | null
+          unblocker_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          huddle_id?: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          task_id?: string | null
+          unblocker_id?: string | null
+          unblocker_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddle_blockers_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_blockers_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_blockers_unblocker_id_fkey"
+            columns: ["unblocker_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      huddle_flags: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          huddle_id: string
+          id: string
+          reason: string | null
+          task_id: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          huddle_id: string
+          id?: string
+          reason?: string | null
+          task_id?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          huddle_id?: string
+          id?: string
+          reason?: string | null
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddle_flags_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "huddle_flags_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_flags_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "huddle_flags_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      huddle_ratings: {
+        Row: {
+          created_at: string
+          huddle_id: string
+          id: string
+          member_id: string | null
+          member_name: string | null
+          note: string | null
+          rating: number
+        }
+        Insert: {
+          created_at?: string
+          huddle_id: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          note?: string | null
+          rating: number
+        }
+        Update: {
+          created_at?: string
+          huddle_id?: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          note?: string | null
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddle_ratings_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_ratings_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      huddle_settings: {
+        Row: {
+          agenda: Json
+          id: string
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          agenda?: Json
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          agenda?: Json
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      huddle_wins: {
+        Row: {
+          created_at: string
+          huddle_id: string
+          id: string
+          member_id: string | null
+          member_name: string | null
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          huddle_id: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          text: string
+        }
+        Update: {
+          created_at?: string
+          huddle_id?: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddle_wins_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_wins_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      huddles: {
+        Row: {
+          actual_duration_s: number | null
+          agenda: Json
+          avg_rating: number | null
+          created_at: string
+          date: string
+          ended_at: string | null
+          facilitator_id: string | null
+          id: string
+          planned_duration_s: number
+          started_at: string | null
+          status: string
+          summary_text: string | null
+          timer_state: Json
+          updated_at: string
+        }
+        Insert: {
+          actual_duration_s?: number | null
+          agenda?: Json
+          avg_rating?: number | null
+          created_at?: string
+          date: string
+          ended_at?: string | null
+          facilitator_id?: string | null
+          id?: string
+          planned_duration_s?: number
+          started_at?: string | null
+          status?: string
+          summary_text?: string | null
+          timer_state?: Json
+          updated_at?: string
+        }
+        Update: {
+          actual_duration_s?: number | null
+          agenda?: Json
+          avg_rating?: number | null
+          created_at?: string
+          date?: string
+          ended_at?: string | null
+          facilitator_id?: string | null
+          id?: string
+          planned_duration_s?: number
+          started_at?: string | null
+          status?: string
+          summary_text?: string | null
+          timer_state?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddles_facilitator_id_fkey"
+            columns: ["facilitator_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instagram_creatives: {
         Row: {
           caption: string | null
@@ -14455,6 +14778,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           due_date: string | null
+          huddle_id: string | null
           id: string
           meeting_id: string | null
           parent_task_id: string | null
@@ -14466,6 +14790,7 @@ export type Database = {
           recurrence_type: string | null
           show_subtasks_to_client: boolean | null
           sort_order: number | null
+          source: string | null
           stage: string
           status: string
           title: string
@@ -14482,6 +14807,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           due_date?: string | null
+          huddle_id?: string | null
           id?: string
           meeting_id?: string | null
           parent_task_id?: string | null
@@ -14493,6 +14819,7 @@ export type Database = {
           recurrence_type?: string | null
           show_subtasks_to_client?: boolean | null
           sort_order?: number | null
+          source?: string | null
           stage?: string
           status?: string
           title: string
@@ -14509,6 +14836,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           due_date?: string | null
+          huddle_id?: string | null
           id?: string
           meeting_id?: string | null
           parent_task_id?: string | null
@@ -14520,6 +14848,7 @@ export type Database = {
           recurrence_type?: string | null
           show_subtasks_to_client?: boolean | null
           sort_order?: number | null
+          source?: string | null
           stage?: string
           status?: string
           title?: string
@@ -14554,6 +14883,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "tasks_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "tasks_meeting_id_fkey"
