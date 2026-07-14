@@ -614,7 +614,19 @@ function IntelCell({ icon: Icon, label, value, tone = 'default' }: { icon: any; 
   );
 }
 
-function ConversationThread({ events, leadName }: { events: TimelineEvent[]; leadName: string | null }) {
+function ConversationThread({
+  events,
+  leadName,
+  lastSyncedAt,
+  syncing,
+  onRefresh,
+}: {
+  events: TimelineEvent[];
+  leadName: string | null;
+  lastSyncedAt?: Date | null;
+  syncing?: boolean;
+  onRefresh?: () => void;
+}) {
   // Filter to conversational channels only; sort oldest -> newest so chat reads top-down like GHL.
   const convo = events
     .filter((e) => {
@@ -624,16 +636,45 @@ function ConversationThread({ events, leadName }: { events: TimelineEvent[]; lea
     .slice()
     .sort((a, b) => new Date(a.event_at).getTime() - new Date(b.event_at).getTime());
 
+  const syncedLabel = lastSyncedAt
+    ? `Synced ${formatDistanceToNowStrict(lastSyncedAt)} ago`
+    : 'Not synced yet';
+
+  const Header = (
+    <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 rounded-t-lg text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span>Conversation {convo.length > 0 && <span className="normal-case text-muted-foreground/70">· {convo.length}</span>}</span>
+      <div className="flex items-center gap-2 normal-case">
+        <span className="text-[10px]">{syncedLabel}</span>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            disabled={syncing}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-background disabled:opacity-50"
+            title="Refresh conversation from GHL"
+          >
+            <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing…' : 'Refresh'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   if (convo.length === 0) {
     return (
-      <div className="mb-2 max-h-40 rounded-lg border border-dashed bg-muted/20 flex items-center justify-center text-xs text-muted-foreground py-6">
-        No SMS or email history yet with {leadName?.split(' ')[0] || 'this lead'}.
+      <div className="mb-3 rounded-lg border border-dashed bg-muted/10">
+        {Header}
+        <div className="flex items-center justify-center text-xs text-muted-foreground py-12">
+          No SMS or email history yet with {leadName?.split(' ')[0] || 'this lead'}.
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mb-2 max-h-64 overflow-y-auto rounded-lg border bg-muted/10 p-3 space-y-2">
+    <div className="mb-3 rounded-lg border bg-muted/10 flex flex-col">
+      {Header}
+      <div className="h-[420px] overflow-y-auto p-4 space-y-3">
       {convo.map((e) => {
         const sub = (e.event_subtype || '').toLowerCase();
         const outbound = sub === 'outbound' || sub.startsWith('out') || sub === 'sent';
@@ -642,7 +683,7 @@ function ConversationThread({ events, leadName }: { events: TimelineEvent[]; lea
         const channel = isEmail ? 'Email' : 'SMS';
         return (
           <div key={e.id} className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+            <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
               outbound
                 ? 'bg-blue-500 text-white rounded-br-sm'
                 : 'bg-background border rounded-bl-sm'
@@ -660,6 +701,7 @@ function ConversationThread({ events, leadName }: { events: TimelineEvent[]; lea
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
