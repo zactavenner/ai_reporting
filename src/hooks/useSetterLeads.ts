@@ -70,7 +70,7 @@ function since(iso: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 }
 
-export function useSetterLeads(enabledClientIds?: string[] | null) {
+export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: number = 1) {
   const [leads, setLeads] = useState<SetterLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,13 +78,14 @@ export function useSetterLeads(enabledClientIds?: string[] | null) {
   const load = async () => {
     setError(null);
     try {
-      const since24 = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const days = Math.max(1, Math.min(90, windowDays));
+      const sinceISO = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
       const { data: rawLeads, error: lErr } = await supabase
         .from('leads')
         .select('id, client_id, name, email, phone, source, campaign_name, utm_source, utm_medium, utm_campaign, utm_content, ad_id, ad_set_name, custom_fields, ghl_notes, opportunity_status, opportunity_stage, opportunity_value, current_disposition, quality_score, pipeline_value, created_at, updated_at, status, assigned_user, is_spam, questions, external_id')
-        .gte('created_at', since24)
+        .gte('created_at', sinceISO)
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(2000);
       if (lErr) throw lErr;
       const ls = (rawLeads || []) as any[];
 
@@ -189,7 +190,7 @@ export function useSetterLeads(enabledClientIds?: string[] | null) {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [windowDays]);
 
   // Tick every second so uncontacted count-up updates live
   const [, setTick] = useState(0);
