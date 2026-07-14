@@ -9,7 +9,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
   Mail, Phone, Send, Sparkles, ExternalLink, User, Tag as TagIcon,
-  Clock, MessageSquare, Calendar, StickyNote, ArrowRight,
+  Clock, MessageSquare, Calendar, StickyNote, ArrowRight, Copy, PhoneCall,
+  MapPin, Briefcase, DollarSign, TrendingUp, Award, Linkedin, Hash,
 } from 'lucide-react';
 import { formatDistanceToNowStrict, format } from 'date-fns';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
@@ -164,6 +165,13 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     })).filter((x: any) => x.q || x.a).slice(0, 8);
   }, [lead]);
 
+  const copyText = (v: string) => {
+    navigator.clipboard.writeText(v).then(() => toast.success('Copied'));
+  };
+  const e = lead?.enrichment || null;
+  const fmtMoney = (n?: number | null) => (n && n > 0 ? `$${Math.round(n).toLocaleString()}` : null);
+  const scorePct = (n?: number | null) => (n == null ? null : (n <= 1 ? Math.round(n * 100) : Math.round(n)));
+
   if (!lead) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm gap-2">
@@ -187,9 +195,22 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
             {lead.status && <Badge variant="secondary" className="text-[10px]">{lead.status}</Badge>}
           </div>
           <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground flex-wrap">
-            {lead.email && <span className="inline-flex items-center gap-1"><Mail className="w-3 h-3" />{lead.email}</span>}
-            {lead.phone && <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>}
+            {lead.email && (
+              <span className="inline-flex items-center gap-1 group">
+                <Mail className="w-3 h-3" />
+                <a href={`mailto:${lead.email}`} className="hover:text-foreground hover:underline">{lead.email}</a>
+                <button onClick={() => copyText(lead.email!)} className="opacity-0 group-hover:opacity-100 transition" title="Copy"><Copy className="w-3 h-3" /></button>
+              </span>
+            )}
+            {lead.phone && (
+              <span className="inline-flex items-center gap-1 group">
+                <Phone className="w-3 h-3" />
+                <a href={`tel:${lead.phone}`} className="hover:text-foreground hover:underline">{lead.phone}</a>
+                <button onClick={() => copyText(lead.phone!)} className="opacity-0 group-hover:opacity-100 transition" title="Copy"><Copy className="w-3 h-3" /></button>
+              </span>
+            )}
             <span>Created {formatDistanceToNowStrict(new Date(lead.created_at))} ago</span>
+            {lead.prior_calls > 0 && <span className="inline-flex items-center gap-1 text-primary"><PhoneCall className="w-3 h-3" />{lead.prior_calls} prior call{lead.prior_calls === 1 ? '' : 's'}</span>}
           </div>
         </div>
         {/* Speed to lead card */}
@@ -214,6 +235,16 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
 
       {/* Quick actions bar */}
       <div className="border-b p-3 flex items-center gap-2 flex-wrap bg-muted/20">
+        {lead.phone && (
+          <Button size="sm" variant="default" asChild>
+            <a href={`tel:${lead.phone}`}><PhoneCall className="w-3.5 h-3.5 mr-1" />Call</a>
+          </Button>
+        )}
+        {lead.email && (
+          <Button size="sm" variant="outline" asChild>
+            <a href={`mailto:${lead.email}`}><Mail className="w-3.5 h-3.5 mr-1" />Mail</a>
+          </Button>
+        )}
         <select
           value={assignee}
           onChange={(e) => assign(e.target.value)}
@@ -244,6 +275,52 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
         )}
       </div>
 
+      {/* Enrichment / intel */}
+      {(e || lead.opportunity_stage || lead.quality_score != null) && (
+        <div className="border-b p-3 bg-gradient-to-r from-primary/5 to-transparent">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Contact intel</div>
+            {e?.enriched_at && <div className="text-[10px] text-muted-foreground">Enriched {formatDistanceToNowStrict(new Date(e.enriched_at))} ago</div>}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            {e?.investor_score != null && (
+              <IntelCell icon={TrendingUp} label="Investor score" value={`${scorePct(e.investor_score)}/100`} tone="primary" />
+            )}
+            {e?.accredited_probability != null && (
+              <IntelCell icon={Award} label="Accredited" value={`${scorePct(e.accredited_probability)}%`} tone={scorePct(e.accredited_probability)! >= 70 ? 'good' : 'default'} />
+            )}
+            {e?.household_income && <IntelCell icon={DollarSign} label="HH income" value={e.household_income} />}
+            {e?.net_worth && <IntelCell icon={DollarSign} label="Net worth" value={e.net_worth} />}
+            {e?.home_value && <IntelCell icon={MapPin} label="Home value" value={fmtMoney(e.home_value)!} />}
+            {e?.home_ownership && <IntelCell icon={MapPin} label="Home" value={e.home_ownership} />}
+            {(e?.city || e?.state) && <IntelCell icon={MapPin} label="Location" value={[e?.city, e?.state, e?.zip].filter(Boolean).join(', ')} />}
+            {(e?.age || e?.gender) && <IntelCell icon={User} label="Demo" value={[e?.age ? `${e.age}yo` : null, e?.gender].filter(Boolean).join(' · ')} />}
+            {(e?.company_title || e?.company_name) && <IntelCell icon={Briefcase} label="Work" value={[e?.company_title, e?.company_name].filter(Boolean).join(' @ ')} />}
+            {e?.occupation && !e?.company_title && <IntelCell icon={Briefcase} label="Occupation" value={e.occupation} />}
+            {e?.is_investor && <IntelCell icon={TrendingUp} label="Flag" value="Known investor" tone="good" />}
+            {e?.business_owner && <IntelCell icon={Briefcase} label="Flag" value="Business owner" tone="good" />}
+            {lead.quality_score != null && <IntelCell icon={Award} label="Quality" value={String(lead.quality_score)} />}
+            {lead.opportunity_stage && <IntelCell icon={Hash} label="Stage" value={lead.opportunity_stage} tone="primary" />}
+            {lead.opportunity_value != null && lead.opportunity_value > 0 && <IntelCell icon={DollarSign} label="Opp value" value={fmtMoney(lead.opportunity_value)!} tone="good" />}
+            {lead.current_disposition && <IntelCell icon={Hash} label="Disposition" value={lead.current_disposition} />}
+          </div>
+          {e?.linkedin_url && (
+            <a href={e.linkedin_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+              <Linkedin className="w-3 h-3" />LinkedIn profile
+            </a>
+          )}
+          {(lead.utm_source || lead.campaign_name || lead.ad_set_name || lead.ad_id) && (
+            <div className="mt-2 pt-2 border-t border-border/50 flex flex-wrap gap-1.5 text-[10px]">
+              {lead.utm_source && <Badge variant="secondary">src:{lead.utm_source}</Badge>}
+              {lead.utm_medium && <Badge variant="secondary">med:{lead.utm_medium}</Badge>}
+              {lead.campaign_name && <Badge variant="outline">📣 {lead.campaign_name}</Badge>}
+              {lead.ad_set_name && <Badge variant="outline">🎯 {lead.ad_set_name}</Badge>}
+              {lead.ad_id && <Badge variant="outline" className="font-mono">ad:{lead.ad_id.slice(-8)}</Badge>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Form answers if any */}
       {questions.length > 0 && (
         <div className="border-b p-3 bg-muted/10">
@@ -253,6 +330,13 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
               <div key={i}><span className="text-muted-foreground">{q.q}:</span> <span className="font-medium">{q.a}</span></div>
             ))}
           </div>
+        </div>
+      )}
+
+      {lead.ghl_notes && (
+        <div className="border-b p-3 bg-amber-500/5">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">GHL notes</div>
+          <div className="text-xs whitespace-pre-wrap">{lead.ghl_notes}</div>
         </div>
       )}
 
