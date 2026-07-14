@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import {
   Mail, Phone, Send, Sparkles, ExternalLink, User, Tag as TagIcon,
   Clock, MessageSquare, Calendar, StickyNote, ArrowRight, Copy, PhoneCall,
-  MapPin, Briefcase, DollarSign, TrendingUp, Award, Linkedin, Hash,
+  MapPin, Briefcase, DollarSign, TrendingUp, Award, Linkedin, Hash, RefreshCw,
 } from 'lucide-react';
 import { formatDistanceToNowStrict, format } from 'date-fns';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
@@ -26,12 +26,13 @@ interface TimelineEvent {
 }
 
 function eventIcon(t: string) {
-  if (t === 'sms') return MessageSquare;
-  if (t === 'email') return Mail;
-  if (t === 'call') return Phone;
-  if (t === 'appointment') return Calendar;
-  if (t === 'note') return StickyNote;
-  if (t === 'task') return ArrowRight;
+  const s = (t || '').toLowerCase();
+  if (s.includes('sms') || s.includes('text') || s.includes('message')) return MessageSquare;
+  if (s.includes('email') || s.includes('mail')) return Mail;
+  if (s.includes('call') || s.includes('phone') || s.includes('voice')) return Phone;
+  if (s.includes('appointment') || s.includes('booking') || s.includes('meeting')) return Calendar;
+  if (s.includes('note')) return StickyNote;
+  if (s.includes('task')) return ArrowRight;
   return Clock;
 }
 
@@ -47,6 +48,58 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [tlLoading, setTlLoading] = useState(false);
+  const [syncingTimeline, setSyncingTimeline] = useState(false);
+
+  const loadTimeline = async (l: SetterLead) => {
+    // 1) contact_timeline_events by lead_id OR (client_id + ghl_contact_id)
+    //    OR-across-columns is a bit ugly, so run two queries and merge.
+    const [byLead, byContact, callsRes] = await Promise.all([
+      supabase
+        .from('contact_timeline_events')
+        .select('id, event_type, event_subtype, title, body, event_at, metadata')
+        .eq('lead_id', l.id)
+        .order('event_at', { ascending: false })
+        .limit(200),
+      l.ghl_contact_id
+        ? supabase
+            .from('contact_timeline_events')
+            .select('id, event_type, event_subtype, title, body, event_at, metadata')
+            .eq('client_id', l.client_id)
+            .eq('ghl_contact_id', l.ghl_contact_id)
+            .order('event_at', { ascending: false })
+            .limit(200)
+        : Promise.resolve({ data: [] as any[] } as any),
+      supabase
+        .from('calls')
+        .select('id, direction, outcome, summary, transcript, recording_url, booked_at, scheduled_at, showed_at, showed, call_duration_seconds, appointment_status, created_at')
+        .eq('lead_id', l.id)
+        .order('created_at', { ascending: false })
+        .limit(50),
+    ]);
+
+    const merged = new Map<string, TimelineEvent>();
+    for (const row of [...((byLead.data as any) || []), ...((byContact.data as any) || [])]) {
+      merged.set(row.id, row);
+    }
+    // Map calls rows into synthetic timeline events (dedup vs GHL events by external_id in metadata)
+    for (const c of (callsRes.data as any[]) || []) {
+      const at = c.booked_at || c.scheduled_at || c.created_at;
+      const dur = c.call_duration_seconds ? ` · ${Math.round(c.call_duration_seconds / 60)}m` : '';
+      const status = c.appointment_status || (c.showed === true ? 'showed' : c.showed === false ? 'no-show' : null);
+      merged.set(`call:${c.id}`, {
+        id: `call:${c.id}`,
+        event_type: c.recording_url || c.transcript ? 'call' : 'appointment',
+        event_subtype: c.direction || null,
+        title: [c.outcome, status].filter(Boolean).join(' · ') || null,
+        body: c.summary || null,
+        event_at: at,
+        metadata: { source: 'calls_table', recording_url: c.recording_url, duration: dur.trim() },
+      });
+    }
+    return Array.from(merged.values()).sort(
+      (a, b) => new Date(b.event_at).getTime() - new Date(a.event_at).getTime(),
+    );
+  };
 
   useEffect(() => {
     supabase.from('agency_members').select('id, name').then(({ data }) => setMembers((data as any) || []));
@@ -58,28 +111,47 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     setAssignee(lead.assigned_user || '');
     setTlLoading(true);
     (async () => {
-      const { data } = await supabase
-        .from('contact_timeline_events')
-        .select('id, event_type, event_subtype, title, body, event_at, metadata')
-        .eq('lead_id', lead.id)
-        .order('event_at', { ascending: false })
-        .limit(100);
-      setTimeline((data as any) || []);
+      const rows = await loadTimeline(lead);
+      setTimeline(rows);
       setTlLoading(false);
     })();
-    // Realtime for this lead's events
+    // Realtime — refresh on any change touching this lead or contact
+    const refresh = async () => {
+      const rows = await loadTimeline(lead);
+      setTimeline(rows);
+    };
     const ch = supabase
       .channel(`setter-lead-${lead.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_timeline_events', filter: `lead_id=eq.${lead.id}` },
-        async () => {
-          const { data } = await supabase
-            .from('contact_timeline_events').select('id, event_type, event_subtype, title, body, event_at, metadata')
-            .eq('lead_id', lead.id).order('event_at', { ascending: false }).limit(100);
-          setTimeline((data as any) || []);
-        })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_timeline_events', filter: `lead_id=eq.${lead.id}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter: `lead_id=eq.${lead.id}` }, refresh)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [lead?.id]);
+
+  const syncTimelineFromGHL = async () => {
+    if (!lead?.ghl_contact_id) { toast.error('No GHL contact linked'); return; }
+    setSyncingTimeline(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-ghl-contacts', {
+        body: {
+          client_id: lead.client_id,
+          mode: 'deep_sync',
+          contactId: lead.ghl_contact_id,
+          contact_id: lead.ghl_contact_id,
+          syncTimeline: true,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const rows = await loadTimeline(lead);
+      setTimeline(rows);
+      toast.success(`Pulled ${data?.events_count ?? rows.length} events from GHL`);
+    } catch (e: any) {
+      toast.error(`Sync failed: ${e?.message || e}`);
+    } finally {
+      setSyncingTimeline(false);
+    }
+  };
 
   const draftAI = async () => {
     if (!lead) return;
@@ -342,28 +414,48 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
 
       {/* Timeline */}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Timeline</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Timeline {timeline.length > 0 && <span className="normal-case text-muted-foreground/70">· {timeline.length} events</span>}
+          </div>
+          {lead.ghl_contact_id && (
+            <Button size="sm" variant="ghost" onClick={syncTimelineFromGHL} disabled={syncingTimeline} className="h-6 text-[10px]">
+              <RefreshCw className={`w-3 h-3 mr-1 ${syncingTimeline ? 'animate-spin' : ''}`} />
+              {syncingTimeline ? 'Syncing…' : 'Sync from GHL'}
+            </Button>
+          )}
+        </div>
         {tlLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
         {!tlLoading && timeline.length === 0 && (
           <div className="text-sm text-muted-foreground py-8 text-center border border-dashed rounded-lg">
-            No activity yet. Be first to touch.
+            No activity yet. Be first to touch — or click "Sync from GHL" to pull existing history.
           </div>
         )}
         <div className="space-y-2">
           {timeline.map((e) => {
             const Icon = eventIcon(e.event_type);
-            const outbound = e.event_subtype === 'outbound';
+            const sub = (e.event_subtype || '').toLowerCase();
+            const outbound = sub === 'outbound' || sub.startsWith('out');
+            const inbound = sub === 'inbound' || sub.startsWith('in') || sub === 'received';
+            const recording = e.metadata?.recording_url as string | undefined;
             return (
-              <div key={e.id} className={`flex gap-3 text-sm p-2 rounded-lg border ${outbound ? 'bg-primary/5 border-primary/20' : 'bg-muted/30'}`}>
-                <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${outbound ? 'text-primary' : 'text-muted-foreground'}`} />
+              <div key={e.id} className={`flex gap-3 text-sm p-2 rounded-lg border ${outbound ? 'bg-primary/5 border-primary/20' : inbound ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-muted/30'}`}>
+                <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${outbound ? 'text-primary' : inbound ? 'text-emerald-500' : 'text-muted-foreground'}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium capitalize">{e.event_type}</span>
                     {e.event_subtype && <Badge variant="outline" className="text-[10px]">{e.event_subtype}</Badge>}
+                    {outbound && <Badge variant="secondary" className="text-[10px]">out</Badge>}
+                    {inbound && <Badge className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">in</Badge>}
                     <span className="text-xs text-muted-foreground ml-auto">{format(new Date(e.event_at), 'MMM d · h:mm a')}</span>
                   </div>
                   {e.title && <div className="text-xs text-muted-foreground mt-0.5">{e.title}</div>}
                   {e.body && <div className="text-sm mt-1 whitespace-pre-wrap">{e.body}</div>}
+                  {recording && (
+                    <a href={recording} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
+                      <Phone className="w-3 h-3" />Recording
+                    </a>
+                  )}
                 </div>
               </div>
             );
