@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNowStrict, format } from 'date-fns';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
-import { SmsThread } from './SmsThread';
 import { markViewed } from '@/lib/setterViewState';
 import { getPhoneTimezone, isBusinessHours } from '@/lib/areaCodeTimezone';
 
@@ -747,15 +746,6 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       {/* Composer */}
       <div className="border-t p-3 bg-card">
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'email')}>
-          {/* Chat-bubble thread scoped to the active channel */}
-          <SmsThread
-            events={timeline}
-            leadName={lead.name}
-            channel={tab}
-            lastSyncedAt={lastSyncedAt}
-            syncing={syncingTimeline}
-            onRefresh={lead.ghl_contact_id ? () => syncTimelineFromGHL(false) : undefined}
-          />
           <div className="flex items-center gap-2 mb-2">
             <TabsList className="h-8">
               <TabsTrigger value="sms" disabled={!lead.phone} className="text-xs">SMS</TabsTrigger>
