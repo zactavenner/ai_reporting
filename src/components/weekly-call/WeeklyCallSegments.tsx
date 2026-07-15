@@ -7,10 +7,43 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, Plus, AlertTriangle, Lightbulb, CheckSquare, Star } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WeeklyRecapCard } from '@/components/weekly-sync/WeeklyRecapCard';
 import { useDeals } from '@/hooks/useDeals';
 import { useTasks } from '@/hooks/useTasks';
 import { toast } from 'sonner';
+
+// ─── Range window helpers (anchored to when the call was started) ─────────
+export type RangeDays = 7 | 14 | 30;
+
+function anchorDate(call: { started_at?: string | null; week_of?: string | null } | null | undefined): Date {
+  if (call?.started_at) return new Date(call.started_at);
+  if (call?.week_of) return new Date(call.week_of);
+  return new Date();
+}
+
+function sinceISO(anchor: Date, days: RangeDays): string {
+  const d = new Date(anchor);
+  d.setDate(d.getDate() - days);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function RangePicker({ value, onChange }: { value: RangeDays; onChange: (v: RangeDays) => void }) {
+  return (
+    <ToggleGroup
+      type="single"
+      value={String(value)}
+      onValueChange={(v) => v && onChange(Number(v) as RangeDays)}
+      size="sm"
+      className="justify-start"
+    >
+      <ToggleGroupItem value="7">7d</ToggleGroupItem>
+      <ToggleGroupItem value="14">14d</ToggleGroupItem>
+      <ToggleGroupItem value="30">30d</ToggleGroupItem>
+    </ToggleGroup>
+  );
+}
 
 interface Item {
   id: string;
@@ -144,19 +177,35 @@ function NotesBlock({ callId, clientId, kind, label }: { callId: string; clientI
   );
 }
 
-export function ScorecardSegment({ callId, clientId, weekStart }: { callId: string; clientId: string; weekStart: string }) {
+export function ScorecardSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
+  const [range, setRange] = useState<RangeDays>(7);
+  const since = sinceISO(anchorDate(call), range);
   return (
     <div className="w-full max-w-5xl mx-auto space-y-4">
-      <WeeklyRecapCard clientId={clientId} sinceDate={weekStart} compact windowLabel="This week" />
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          Rolling window anchored to call start ({anchorDate(call).toLocaleDateString()})
+        </div>
+        <RangePicker value={range} onChange={setRange} />
+      </div>
+      <WeeklyRecapCard clientId={clientId} sinceDate={since} compact windowLabel={`Last ${range} days`} />
       <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="scorecard_note" label="Scorecard commentary" /></Card>
     </div>
   );
 }
 
-export function CreativeReviewSegment({ callId, clientId, weekStart }: { callId: string; clientId: string; weekStart: string }) {
+export function CreativeReviewSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
+  const [range, setRange] = useState<RangeDays>(7);
+  const since = sinceISO(anchorDate(call), range);
   return (
     <div className="w-full max-w-5xl mx-auto space-y-4">
-      <WeeklyRecapCard clientId={clientId} sinceDate={weekStart} windowLabel="Creative — this week" />
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          Rolling window anchored to call start ({anchorDate(call).toLocaleDateString()})
+        </div>
+        <RangePicker value={range} onChange={setRange} />
+      </div>
+      <WeeklyRecapCard clientId={clientId} sinceDate={since} windowLabel={`Creative — last ${range} days`} />
       <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="creative_note" label="Creative notes" /></Card>
     </div>
   );
@@ -191,11 +240,12 @@ export function PipelineSegment({ callId, clientId }: { callId: string; clientId
   );
 }
 
-export function TasksSegment({ callId, clientId, weekStart }: { callId: string; clientId: string; weekStart: string }) {
+export function TasksSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
   const { currentMember } = useTeamMember();
   const { data: tasks = [] } = useTasks(clientId);
   const [title, setTitle] = useState('');
-  const since = new Date(weekStart).getTime();
+  const [range, setRange] = useState<RangeDays>(7);
+  const since = new Date(sinceISO(anchorDate(call), range)).getTime();
   const completedThisWeek = tasks.filter((t: any) => t.status === 'completed' && t.completed_at && new Date(t.completed_at).getTime() >= since);
   const openImportant = tasks.filter((t: any) => t.status !== 'completed').slice(0, 8);
 
@@ -218,8 +268,14 @@ export function TasksSegment({ callId, clientId, weekStart }: { callId: string; 
 
   return (
     <div className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="md:col-span-2 flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          Completed window anchored to call start ({anchorDate(call).toLocaleDateString()})
+        </div>
+        <RangePicker value={range} onChange={setRange} />
+      </div>
       <Card className="p-4">
-        <div className="text-sm font-semibold mb-2">Completed this week ({completedThisWeek.length})</div>
+        <div className="text-sm font-semibold mb-2">Completed in last {range} days ({completedThisWeek.length})</div>
         {completedThisWeek.length === 0 ? (
           <div className="text-xs text-muted-foreground italic">Nothing marked complete yet.</div>
         ) : (
