@@ -203,9 +203,25 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
             </div>
           </div>
           <MetricBreakdown row={r} />
-          <Button variant="outline" size="sm" onClick={() => flagIssue(r)}>
-            <Flag className="w-4 h-4 mr-1" />Flag
-          </Button>
+          <div className="flex items-center gap-2">
+            {r.doc_url && (
+              <Button variant="outline" size="sm" asChild title="Open client doc">
+                <a href={r.doc_url} target="_blank" rel="noopener noreferrer" aria-label="Open client doc">
+                  <FileText className="w-4 h-4" />
+                </a>
+              </Button>
+            )}
+            {r.sheet_url && (
+              <Button variant="outline" size="sm" asChild title="Open KPI sheet">
+                <a href={r.sheet_url} target="_blank" rel="noopener noreferrer" aria-label="Open KPI sheet">
+                  <FileSpreadsheet className="w-4 h-4" />
+                </a>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => flagIssue(r)}>
+              <Flag className="w-4 h-4 mr-1" />Flag
+            </Button>
+          </div>
         </Card>
       ))}
     </div>
