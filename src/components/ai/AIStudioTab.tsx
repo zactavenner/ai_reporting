@@ -970,6 +970,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     try { localStorage.setItem("ai-studio:video-resolution", videoResolution); } catch {}
   }, [videoResolution]);
+  // Target total video length in seconds. HappyHorse/Seedance are hard-capped
+  // to 15s per clip, so 30s renders as two back-to-back 15s clips (same
+  // ingredient/first-frame + same prompt) for character consistency.
+  const [videoTotalDuration, setVideoTotalDuration] = useState<15 | 30>(() => {
+    try {
+      const v = Number(localStorage.getItem("ai-studio:video-total-duration"));
+      return v === 30 ? 30 : 15;
+    } catch { return 15; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-total-duration", String(videoTotalDuration)); } catch {}
+  }, [videoTotalDuration]);
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
