@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, lazy, Suspense, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil, Users, Rocket } from 'lucide-react';
+import { ArrowLeft, Settings, DollarSign, Upload, History, Plus, ExternalLink, X, Phone, Video, BarChart3, Palette, Layers, Cog, FileText, ClipboardList, CheckSquare, Building2, Copy, Sparkles, FolderOpen, Plug, Pencil, Users, Rocket, CalendarClock } from 'lucide-react';
 import { LeadsDrillDownModal } from '@/components/drilldown/LeadsDrillDownModal';
 import { CallsDrillDownModal } from '@/components/drilldown/CallsDrillDownModal';
 import { AdSpendDrillDownModal } from '@/components/drilldown/AdSpendDrillDownModal';
@@ -48,6 +48,7 @@ const CreativesSection = lazy(() => import('@/components/creative/CreativesSecti
 const TaskBoardView = lazy(() => import('@/components/tasks/TaskBoardView').then(m => ({ default: m.TaskBoardView })));
 const FunnelPreviewTab = lazy(() => import('@/components/funnel/FunnelPreviewTab').then(m => ({ default: m.FunnelPreviewTab })));
 const SheetStatsTab = lazy(() => import('@/components/sheet-stats/SheetStatsTab').then(m => ({ default: m.SheetStatsTab })));
+const WeeklyCallTab = lazy(() => import('@/components/weekly-call/WeeklyCallTab').then(m => ({ default: m.WeeklyCallTab })));
 const PropertyManagerTab = lazy(() => import('@/components/properties/PropertyManagerTab').then(m => ({ default: m.PropertyManagerTab })));
 const AIStudioTab = lazy(() => import('@/components/ai/AIStudioTab').then(m => ({ default: m.AIStudioTab })));
 const ClientFolderTab = lazy(() => import('@/components/folder/ClientFolderTab').then(m => ({ default: m.ClientFolderTab })));
@@ -412,6 +413,10 @@ export default function ClientDetail() {
               <CheckSquare className="h-4 w-4" />
               Tasks
             </TabsTrigger>
+            <TabsTrigger value="weekly-call" className="gap-2 whitespace-nowrap">
+              <CalendarClock className="h-4 w-4" />
+              Weekly Call
+            </TabsTrigger>
             <TabsTrigger value="creatives" className="gap-2 whitespace-nowrap">
               <Palette className="h-4 w-4" />
               Creatives
@@ -488,6 +493,14 @@ export default function ClientDetail() {
             <SectionErrorBoundary sectionName="Task Board">
               <h2 className="text-lg font-bold mb-3">Tasks</h2>
               <TaskBoardView clientId={clientId} />
+            </SectionErrorBoundary>
+          </TabsContent>
+
+          {/* ─── WEEKLY CALL TAB ─── */}
+          <TabsContent value="weekly-call" className="space-y-6">
+            <SectionErrorBoundary sectionName="Weekly Call">
+              <h2 className="text-lg font-bold mb-3">Weekly Call</h2>
+              <WeeklyCallTab clientId={client.id} />
             </SectionErrorBoundary>
           </TabsContent>
 

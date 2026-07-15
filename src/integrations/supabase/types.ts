@@ -6105,6 +6105,289 @@ export type Database = {
           },
         ]
       }
+      client_weekly_call_attendance: {
+        Row: {
+          call_id: string
+          id: string
+          joined_at: string
+          member_id: string | null
+          member_name: string | null
+        }
+        Insert: {
+          call_id: string
+          id?: string
+          joined_at?: string
+          member_id?: string | null
+          member_name?: string | null
+        }
+        Update: {
+          call_id?: string
+          id?: string
+          joined_at?: string
+          member_id?: string | null
+          member_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_weekly_call_attendance_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "client_weekly_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_weekly_call_items: {
+        Row: {
+          call_id: string
+          client_id: string
+          created_at: string
+          id: string
+          kind: string
+          member_id: string | null
+          member_name: string | null
+          meta: Json
+          text: string | null
+        }
+        Insert: {
+          call_id: string
+          client_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          member_id?: string | null
+          member_name?: string | null
+          meta?: Json
+          text?: string | null
+        }
+        Update: {
+          call_id?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          member_id?: string | null
+          member_name?: string | null
+          meta?: Json
+          text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_weekly_call_items_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "client_weekly_calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_weekly_call_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_weekly_call_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_weekly_call_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      client_weekly_call_ratings: {
+        Row: {
+          call_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          member_id: string | null
+          member_name: string | null
+          rating: number
+        }
+        Insert: {
+          call_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          rating: number
+        }
+        Update: {
+          call_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          member_id?: string | null
+          member_name?: string | null
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_weekly_call_ratings_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "client_weekly_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_weekly_call_settings: {
+        Row: {
+          agenda: Json
+          client_id: string
+          updated_at: string
+        }
+        Insert: {
+          agenda?: Json
+          client_id: string
+          updated_at?: string
+        }
+        Update: {
+          agenda?: Json
+          client_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_weekly_call_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_weekly_call_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_weekly_call_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      client_weekly_call_tasks: {
+        Row: {
+          action: string
+          call_id: string
+          created_at: string
+          id: string
+          task_id: string
+        }
+        Insert: {
+          action?: string
+          call_id: string
+          created_at?: string
+          id?: string
+          task_id: string
+        }
+        Update: {
+          action?: string
+          call_id?: string
+          created_at?: string
+          id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_weekly_call_tasks_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "client_weekly_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_weekly_calls: {
+        Row: {
+          actual_duration_s: number | null
+          agenda: Json
+          avg_rating: number | null
+          client_id: string
+          created_at: string
+          ended_at: string | null
+          facilitator_id: string | null
+          id: string
+          planned_duration_s: number
+          started_at: string | null
+          status: string
+          summary_text: string | null
+          timer_state: Json
+          updated_at: string
+          week_of: string
+        }
+        Insert: {
+          actual_duration_s?: number | null
+          agenda?: Json
+          avg_rating?: number | null
+          client_id: string
+          created_at?: string
+          ended_at?: string | null
+          facilitator_id?: string | null
+          id?: string
+          planned_duration_s?: number
+          started_at?: string | null
+          status?: string
+          summary_text?: string | null
+          timer_state?: Json
+          updated_at?: string
+          week_of: string
+        }
+        Update: {
+          actual_duration_s?: number | null
+          agenda?: Json
+          avg_rating?: number | null
+          client_id?: string
+          created_at?: string
+          ended_at?: string | null
+          facilitator_id?: string | null
+          id?: string
+          planned_duration_s?: number
+          started_at?: string | null
+          status?: string
+          summary_text?: string | null
+          timer_state?: Json
+          updated_at?: string
+          week_of?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_weekly_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_weekly_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_weekly_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           account_manager: string | null

@@ -1,75 +1,78 @@
-# Daily Huddle — Runner Upgrade Plan
+## Goal
 
-## What we're fixing
+Add a **Weekly Call** tab under each client in `ClientDetail.tsx` that runs a structured, timed weekly meeting for that client — same "flow" as the Daily Huddle (segments, big timer, next/back/pause, auto‑advance, chime, notes captured live) but scoped per client and per week.
 
-1. **Back button** — currently one-way; you can't step back.
-2. **Segment timers don't reset/auto-start** — moving forward inherits stale state.
-3. **Today's Tasks aren't real** — Accountability shows only huddle-tagged tasks. Should pull the whole team's real workload.
-4. **Client Health drags** — no per-client pacing, easy to lose the room.
-5. **Data accuracy** — assignee names, completion, and rollovers need to be truthful and live.
+## Agenda (default segments)
 
----
+1. **Wins (3 min)** — quick wins from the past week, per attendee.
+2. **Scorecard (5 min)** — auto‑pulled KPIs for the last 7d (leads, booked/showed, funded, spend, CPL, blended CPA) with a spot for commentary + red/yellow/green.
+3. **Pipeline & Deals (4 min)** — biggest deals moved, stalled, closest to close (auto from `deals` / `pipeline_opportunities`).
+4. **Creative Review (4 min)** — top creatives from `WeeklyRecapCard` data + notes.
+5. **Tasks / Accountability (5 min)** — last week's tasks (done vs open) + add this week's tasks straight into `tasks` for that client.
+6. **Blockers & Risks (3 min)** — capture blockers, assign owners.
+7. **Ideas / Experiments (3 min)** — parking lot for ideas to test.
+8. **Wrap‑up (2 min)** — recap, next steps, one‑line summary, email/slack recap toggle.
 
-## Changes
+Total default: ~30 min, editable per client via a settings drawer (same UX as `HuddleSettingsDrawer`).
 
-### 1. Back button + segment reset + auto-start
+## Backend (new tables, all with RLS + GRANTs)
 
-- Add a **Back** button next to Next in the runner footer.
-- On Back **or** Next: reset that segment's timer state on the server (`segment_started_at = now()`, `paused_elapsed_s = 0`, `extra_s = 0`, `running = true`), so every arrival at a segment starts a fresh countdown for every viewer.
-- Entries already written (wins, blockers, tasks, ratings, flags) are **kept** — navigation only touches timer state.
-- Chime guard resets on segment change (already in place; verify).
-- Facilitator-agnostic: anyone can navigate; last-write-wins via Realtime (matches current model).
+```text
+client_weekly_calls
+  id, client_id, week_of (date, Mon), started_at, ended_at,
+  planned_duration_s, actual_duration_s, facilitator_id,
+  status, agenda (jsonb), timer_state (jsonb),
+  summary_text, avg_rating
 
-### 2. Client Health — 45s per client, auto-advance
+client_weekly_call_items       -- unified store for wins/blockers/ideas/notes
+  id, call_id, client_id, kind ('win'|'blocker'|'idea'|'note'|'scorecard_note'|'creative_note'),
+  member_id, member_name, text, meta (jsonb), created_at
 
-- Replace the single scrollable list with a **one-client-at-a-time card** (big client name, health color, CPL vs 7-day baseline, spend, leads).
-- 45-second sub-timer per flagged client; auto-advance to next client when it hits 0 or when facilitator clicks "Next client".
-- Segment ends when the last flagged client is done (or segment timer expires, whichever first).
-- Skip-green banner stays at top ("X of Y green — skipped").
-- "Create task" and reason input remain inline on the active card; task writes to real `tasks` table with `source='huddle'`.
+client_weekly_call_tasks       -- tasks reviewed / created in the call
+  id, call_id, task_id (fk tasks), action ('reviewed'|'created'|'completed'),
+  created_at
 
-### 3. Accountability — real Today's Tasks, grouped by client → assignee
+client_weekly_call_ratings
+  id, call_id, member_id, rating (1‑5), comment, created_at
 
-**Data sources merged (deduped by task id):**
-- All open tasks in `tasks` where `due_date <= today` AND `status NOT IN ('completed','done','cancelled')` — resolved via `task_assignees` for multi-assignee accuracy.
-- Yesterday's `daily_reports` (EOD) `top_priorities` — surfaced as commitment chips per member.
-- Rolled-over huddle commitments — yesterday's `tasks` with `source='huddle'` still open.
-- Restrict clients to `status IN ('active','onboarding')`.
+client_weekly_call_settings    -- one row per client for default agenda override
+  client_id (pk), agenda (jsonb)
+```
 
-**Display:**
-- Grouped by **Client** (accordion), then **Assignee** inside each client.
-- Unassigned tasks + agency-level (no client) grouped under "Agency / Unassigned".
-- Each row: checkbox (toggle completed), title, due date pill (red if overdue), assignee avatar/initials.
-- Follow-through scoreboard chips stay at top (uses yesterday's huddle tasks, unchanged logic).
-- Live updates via Realtime on `tasks` + `task_assignees` — check/uncheck by any viewer reflects everywhere within ~1s.
+Realtime enabled on the four content tables so multiple viewers stay in sync (same pattern as `huddle_*`).
 
-**Yesterday's Commitments panel** (left column) stays but pulls from *both* yesterday's huddle tasks AND yesterday's EOD `top_priorities` to catch commitments made outside the huddle.
+## Frontend
 
-### 4. Data accuracy pass
+- **`src/pages/ClientDetail.tsx`** — add `<TabsTrigger value="weekly-call">Weekly Call</TabsTrigger>` (with `CalendarClock` icon) and a matching `<TabsContent>` that renders `<WeeklyCallTab clientId={clientId} />`.
+- **`src/components/weekly-call/`** (new):
+  - `WeeklyCallTab.tsx` — landing view: "This week's call" card + button to Start/Resume, plus a compact history list of past weekly calls with summaries & ratings.
+  - `WeeklyCallRunner.tsx` — mirrors `HuddleRunner`: header with segment name + progress dots, giant timer, per‑segment body, sticky footer with Start/Pause/Resume/+30s/Back/Skip/Next/Auto‑advance/Finish. Reuses `playChime`, `fmt`, timing hook logic (extract shared helpers from `useHuddle` into `src/lib/timedMeeting/*` and reuse for both huddle + weekly).
+  - `segments/WinsSegment.tsx` — same UX as huddle wins, scoped by `call_id`.
+  - `segments/ScorecardSegment.tsx` — pulls from `useWeeklyRecap(clientId, weekStart)` and shows KPI tiles + a notes textarea saved as `scorecard_note`.
+  - `segments/PipelineSegment.tsx` — top movers / stalled / closest deals from `useDeals` filtered to `client_id`, plus notes.
+  - `segments/CreativeSegment.tsx` — top creatives from recap; notes.
+  - `segments/TasksSegment.tsx` — two columns: "Last week" (tasks completed/open from `tasks` where `client_id=` and updated in window) and "This week" quick‑add that inserts new `tasks` rows and links them via `client_weekly_call_tasks`.
+  - `segments/BlockersSegment.tsx` — capture + owner assignment.
+  - `segments/IdeasSegment.tsx` — parking lot.
+  - `segments/WrapupSegment.tsx` — auto‑generated one‑line summary (AI via `lovable-ai` edge function using this call's items), rating widget, toggle "Email recap to team" (reuses existing recap sender if present, otherwise inserts a row into `weekly_syncs` so the current `WeeklyRecapCard`/recap emailer picks it up).
+  - `WeeklyCallSettingsDrawer.tsx` — edit agenda per client.
+  - `WeeklyCallHistory.tsx` — list past calls with duration, avg rating, click → read‑only replay.
+- **`src/hooks/useThisWeekCall.ts`** — mirrors `useTodayHuddle`: loads or creates the row for the current week (`week_of = start of ISO week`), subscribes to realtime updates, exposes `updateTimer` / `updateCall` / `updateAgenda`.
 
-- Resolve assignee names via `task_assignees` join (currently only reads legacy `tasks.assigned_to`), so multi-assignee tasks show every owner.
-- Client name resolution via a single `clients` map fetched once per segment mount.
-- Realtime channels added for `tasks` and `task_assignees` on the Accountability segment only (torn down on unmount).
-- Numbers segment: verify CPL/CPS/CPBC use yesterday's `daily_metrics` for onboarding + active clients (already fixed) — add a "as of" timestamp and a manual refresh button so the room trusts the number.
+## Extras (worth adding while building)
 
-### 5. Suggestions to make it the best huddle possible (opt-in — I'll build the ones you check)
-
-- **Attendance roll-call chip strip** at the top of the runner: green dot per member present, gray if not yet joined. One-click "mark present" from a phone.
-- **Speaker rotation** in Wins: 20s per attendee auto-advance so no one hogs the mic.
-- **Blocker → task** button so every blocker leaves the huddle as a real assigned task with a due date.
-- **Yesterday-vs-today delta line** in Numbers (green/red arrows on CPL/CPS/CPBC).
-- **Streak flames** on the scoreboard (7-day, 30-day follow-through) instead of just today's %.
-- **"Copy summary to Slack"** button (in addition to clipboard) — posts to a configured huddle channel via existing Slack integration.
-- **Keyboard shortcuts**: Space = pause, → = next, ← = back, N = new task, R = rate.
-- **Persistent history search + filter by tag** on the History view.
+- **Auto‑fill from recap** — button in Wrap‑up that pushes the summary + numbers into `weekly_syncs` for that client so the existing `WeeklyRecapCard` and email flow stay in sync.
+- **Attendance** — small avatar row driven by `TeamMemberContext`, stored in a `client_weekly_call_attendance` table (same pattern as `huddle_attendance`).
+- **Post‑call Slack ping** — if `slack_channel_mappings` exists for that client, post the one‑line summary + ratings.
+- **Read‑only replay** — clicking a past call opens the Runner in `readOnly` mode showing what was captured, useful for absent teammates.
+- **Deep link** — `/clients/:id?tab=weekly-call` already works via existing `handleTabChange`; also support `?week=YYYY-MM-DD` to jump to a specific week.
 
 ## Technical notes
 
-- Files touched: `HuddleRunner.tsx` (Back button, reset-on-nav), `useHuddle.ts` (add `resetSegmentTimer(index)`), `AccountabilitySegment.tsx` (rewritten data pull + grouping + realtime), `ClientHealthSegment.tsx` (per-client card + 45s sub-timer), small addition to `summary.ts` for grouped output.
-- No DB migration required for the core fixes. If you pick "Copy to Slack" or "Blocker→task" enhancements, no schema change either — both use existing tables/functions.
-- No changes to existing routes, auth, reporting logic, or agent workflows.
+- ISO week start helper: Monday 00:00 in the browser TZ; store as `date`.
+- All new tables: `ENABLE ROW LEVEL SECURITY`, policies gated by `authenticated`, plus `GRANT SELECT, INSERT, UPDATE, DELETE ... TO authenticated` and `GRANT ALL ... TO service_role` per project rules.
+- Reuse `TeamMemberContext` for `member_id` / `member_name` and facilitator election (first presser).
+- Extract `fmt`, `playChime`, `segmentElapsedS`, `useSegmentTiming` into `src/lib/timedMeeting/` so both `HuddleRunner` and `WeeklyCallRunner` share one implementation — no behavior change for the huddle.
+- No changes to existing huddle tables or `weekly_syncs` schema; we only *write* into `weekly_syncs` from the wrap‑up step.
 
-## Confirm before I build
-
-- Green-light the core changes (1–4).
-- Tell me which of the 8 suggestions in section 5 to include — or "all", "none", or a subset.
+Ship in one pass: migration → shared helpers → hook → segments → runner → tab wiring.
