@@ -12,6 +12,7 @@ import {
   Mail, Phone, Send, Sparkles, ExternalLink, User, Tag as TagIcon,
   Clock, MessageSquare, Calendar, StickyNote, ArrowRight, Copy, PhoneCall,
   MapPin, Briefcase, DollarSign, TrendingUp, Award, Linkedin, Hash, RefreshCw, CalendarClock, X,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { formatDistanceToNowStrict, format } from 'date-fns';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
