@@ -2643,6 +2643,25 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   );
                 })()}
+                {videoModels.length > 0 && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
+                    {([15, 30] as const).map((d) => {
+                      const active = videoTotalDuration === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setVideoTotalDuration(d)}
+                          title={d === 15 ? "Single 15s clip" : "Two 15s clips concatenated (same ingredient/first-frame for character consistency)"}
+                          className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                        >
+                          {d}s{d === 30 ? " (2×15)" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {imageModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image Style:</span>
