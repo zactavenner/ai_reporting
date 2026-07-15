@@ -278,14 +278,13 @@ export function WrapupSegment({ call, clientId, onFinish }: { call: any; clientI
   };
   const pushToWeeklySync = async () => {
     await saveSummary();
-    await (supabase as any).from('weekly_syncs').upsert({
+    const { error } = await (supabase as any).from('weekly_syncs').insert({
       client_id: clientId,
       sync_date: call.week_of,
-      wins: null,
       numbers_notes: summary || null,
-      action_items: null,
-    }, { onConflict: 'client_id,sync_date' } as any);
-    toast.success('Pushed to Weekly Sync');
+    });
+    if (error) toast.error(error.message || 'Failed to push');
+    else toast.success('Pushed to Weekly Sync');
   };
 
   return (
