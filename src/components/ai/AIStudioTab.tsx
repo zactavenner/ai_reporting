@@ -1552,6 +1552,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
+            if (videoTotalDuration === 30) {
+              const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
+              lockLines.push(
+                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${videoModel}", duration=15, resolution="${videoResolution}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s HappyHorse/Seedance render.`,
+              );
+            }
           }
           if (imageModels.length === 1) {
             lockLines.push(`🔒 IMAGE HARD-LOCK: model="${imageModels[0]}". Pass this EXACT value to generate_static_ad / edit_static_ad.`);
