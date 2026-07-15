@@ -500,7 +500,7 @@ export default function ClientDetail() {
           <TabsContent value="weekly-call" className="space-y-6">
             <SectionErrorBoundary sectionName="Weekly Call">
               <h2 className="text-lg font-bold mb-3">Weekly Call</h2>
-              <WeeklyCallTab clientId={clientId} />
+              <WeeklyCallTab clientId={client.id} />
             </SectionErrorBoundary>
           </TabsContent>
 
