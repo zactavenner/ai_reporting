@@ -6,14 +6,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import {
   Mail, Phone, Send, Sparkles, ExternalLink, User, Tag as TagIcon,
   Clock, MessageSquare, Calendar, StickyNote, ArrowRight, Copy, PhoneCall,
-  MapPin, Briefcase, DollarSign, TrendingUp, Award, Linkedin, Hash, RefreshCw,
+  MapPin, Briefcase, DollarSign, TrendingUp, Award, Linkedin, Hash, RefreshCw, CalendarClock, X,
 } from 'lucide-react';
 import { formatDistanceToNowStrict, format } from 'date-fns';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
+import { SmsThread } from './SmsThread';
+import { markViewed } from '@/lib/setterViewState';
 
 interface TimelineEvent {
   id: string;
@@ -54,6 +57,9 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [, setNowTick] = useState(0);
   const activeLeadIdRef = useRef<string | null>(null);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [callbackAt, setCallbackAt] = useState<string>('');
+  const [callbackNote, setCallbackNote] = useState('');
 
   // Tick every 30s so the "last synced" label stays fresh.
   useEffect(() => {
@@ -123,6 +129,8 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
     setDisposition(lead.current_disposition || '');
     setTlLoading(true);
     activeLeadIdRef.current = lead.id;
+    // Mark lead as viewed so any new inbound after this moment lights the unread badge.
+    markViewed(lead.id);
     const myLeadId = lead.id;
     (async () => {
       const rows = await loadTimeline(lead);
@@ -137,6 +145,8 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       if (activeLeadIdRef.current !== myLeadId) return;
       setTimeline(rows);
       setLastSyncedAt(new Date());
+      // Any refresh implies user is looking at the thread — clear unread.
+      markViewed(lead.id);
     };
     const ch = supabase
       .channel(`setter-lead-${lead.id}`)
@@ -231,6 +241,7 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
   const DISPOSITIONS: { value: string; label: string }[] = [
     { value: 'new', label: 'New' },
     { value: 'contacted', label: 'Contacted' },
+    { value: 'callback', label: 'Callback scheduled' },
     { value: 'nurture', label: 'Nurture' },
     { value: 'qualified', label: 'Qualified' },
     { value: 'booked', label: 'Booked' },
@@ -247,6 +258,8 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
 
   const setDispo = async (value: string) => {
     if (!lead || !value) return;
+    // For "callback" the user must schedule via the Snooze popover — open it and stop.
+    if (value === 'callback') { setSnoozeOpen(true); return; }
     const prev = disposition;
     setDisposition(value);
     setSavingDispo(true);
@@ -288,6 +301,91 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       setDisposition(prev);
       toast.error(`Failed: ${e?.message || e}`);
     } finally { setSavingDispo(false); }
+  };
+
+  const scheduleCallback = async (isoDue: string, note: string) => {
+    if (!lead || !isoDue) return;
+    setSavingDispo(true);
+    try {
+      const now = new Date().toISOString();
+      // Timeline event as the source of truth for the due time (queryable by useSetterLeads)
+      await supabase.from('contact_timeline_events').insert({
+        client_id: lead.client_id,
+        lead_id: lead.id,
+        ghl_contact_id: lead.ghl_contact_id || 'unknown',
+        event_type: 'callback',
+        event_subtype: 'scheduled',
+        title: `Callback scheduled for ${format(new Date(isoDue), 'MMM d, h:mm a')}`,
+        body: note || null,
+        event_at: isoDue,
+        metadata: { via: 'setter', note, scheduled_at: now, scheduled_by: currentMember?.name || 'setter' },
+      });
+      // Also flip disposition to 'callback' so it renders in the intel bar
+      await supabase.from('leads').update({ current_disposition: 'callback', disposition_updated_at: now }).eq('id', lead.id);
+      await supabase.from('lead_dispositions').insert({
+        lead_id: lead.id, client_id: lead.client_id, disposition: 'callback',
+        disposition_reason: `Callback scheduled ${format(new Date(isoDue), 'MMM d, h:mm a')}`,
+        disposed_by: currentMember?.name || 'setter', source: 'setter_manual', disposed_at: now,
+      });
+      setDisposition('callback');
+      setSnoozeOpen(false);
+      setCallbackAt('');
+      setCallbackNote('');
+      toast.success(`Callback set for ${format(new Date(isoDue), 'MMM d · h:mm a')}`);
+      onChanged?.();
+      onAdvance?.();
+    } catch (e: any) {
+      toast.error(`Callback failed: ${e?.message || e}`);
+    } finally { setSavingDispo(false); }
+  };
+
+  const clearCallback = async () => {
+    if (!lead) return;
+    try {
+      // Neutralize: log a cancellation event dated in the past so it drops out of "upcoming"
+      await supabase.from('contact_timeline_events').insert({
+        client_id: lead.client_id,
+        lead_id: lead.id,
+        ghl_contact_id: lead.ghl_contact_id || 'unknown',
+        event_type: 'note',
+        event_subtype: 'callback_cancelled',
+        title: 'Callback cancelled',
+        event_at: new Date().toISOString(),
+        metadata: { via: 'setter' },
+      });
+      // Delete future callback events for this lead
+      await supabase.from('contact_timeline_events')
+        .delete()
+        .eq('lead_id', lead.id)
+        .eq('event_type', 'callback')
+        .gte('event_at', new Date().toISOString());
+      toast.success('Callback cleared');
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(`Failed: ${e?.message || e}`);
+    }
+  };
+
+  // Presets for the snooze popover (relative to now)
+  const snoozePresets = useMemo(() => {
+    const now = new Date();
+    const later = (h: number, m = 0) => { const d = new Date(now); d.setHours(d.getHours() + h, m, 0, 0); return d; };
+    const tomorrow9 = () => { const d = new Date(now); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; };
+    const nextMon9 = () => {
+      const d = new Date(now); const dow = d.getDay(); const add = (8 - dow) % 7 || 7;
+      d.setDate(d.getDate() + add); d.setHours(9, 0, 0, 0); return d;
+    };
+    return [
+      { label: 'In 1 hour', date: later(1) },
+      { label: 'In 3 hours', date: later(3) },
+      { label: 'Tomorrow 9am', date: tomorrow9() },
+      { label: 'Next Mon 9am', date: nextMon9() },
+    ];
+  }, []);
+
+  const localDatetimeValue = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
   const addTag = async () => {
@@ -416,6 +514,69 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
           <option value="">Set disposition…</option>
           {DISPOSITIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
         </select>
+        <Popover open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant={lead.next_callback_at ? 'default' : 'outline'} className="gap-1">
+              <CalendarClock className="w-3.5 h-3.5" />
+              {lead.next_callback_at
+                ? `Callback ${formatDistanceToNowStrict(new Date(lead.next_callback_at), { addSuffix: true })}`
+                : 'Snooze / Callback'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-3 space-y-2" align="start">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Schedule a callback</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {snoozePresets.map((p) => (
+                <Button
+                  key={p.label}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs justify-start"
+                  onClick={() => scheduleCallback(p.date.toISOString(), callbackNote)}
+                >
+                  <CalendarClock className="w-3 h-3 mr-1" />{p.label}
+                </Button>
+              ))}
+            </div>
+            <div className="border-t pt-2 space-y-2">
+              <Input
+                type="datetime-local"
+                value={callbackAt}
+                onChange={(e) => setCallbackAt(e.target.value)}
+                min={localDatetimeValue(new Date())}
+                className="h-8 text-sm"
+              />
+              <Textarea
+                rows={2}
+                placeholder="Note (optional) — what to say/ask on callback"
+                value={callbackNote}
+                onChange={(e) => setCallbackNote(e.target.value)}
+                className="text-sm"
+              />
+              <div className="flex items-center justify-between gap-2">
+                {lead.next_callback_at && (
+                  <Button size="sm" variant="ghost" onClick={clearCallback} className="text-destructive gap-1">
+                    <X className="w-3.5 h-3.5" />Clear
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  className="ml-auto"
+                  disabled={!callbackAt || savingDispo}
+                  onClick={() => callbackAt && scheduleCallback(new Date(callbackAt).toISOString(), callbackNote)}
+                >
+                  Schedule
+                </Button>
+              </div>
+              {lead.next_callback_at && (
+                <div className="text-[10px] text-muted-foreground">
+                  Current: {format(new Date(lead.next_callback_at), 'EEE, MMM d · h:mm a')}
+                  {lead.callback_note && <div className="italic mt-0.5">"{lead.callback_note}"</div>}
+                </div>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
         <div className="flex items-center gap-1">
           <Input
             value={tagInput}
@@ -556,15 +717,16 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
 
       {/* Composer */}
       <div className="border-t p-3 bg-card">
-        {/* Conversation thread (SMS + Email only, chat-bubble style) */}
-        <ConversationThread
-          events={timeline}
-          leadName={lead.name}
-          lastSyncedAt={lastSyncedAt}
-          syncing={syncingTimeline}
-          onRefresh={lead.ghl_contact_id ? syncTimelineFromGHL : undefined}
-        />
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'email')}>
+          {/* Chat-bubble thread scoped to the active channel */}
+          <SmsThread
+            events={timeline}
+            leadName={lead.name}
+            channel={tab}
+            lastSyncedAt={lastSyncedAt}
+            syncing={syncingTimeline}
+            onRefresh={lead.ghl_contact_id ? syncTimelineFromGHL : undefined}
+          />
           <div className="flex items-center gap-2 mb-2">
             <TabsList className="h-8">
               <TabsTrigger value="sms" disabled={!lead.phone} className="text-xs">SMS</TabsTrigger>

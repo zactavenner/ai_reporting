@@ -178,7 +178,7 @@ export default function SetterPage() {
           <span className="text-xs text-muted-foreground ml-2">Speed-to-lead · last {win === '1d' ? '24h' : win === '7d' ? '7 days' : '30 days'}</span>
         </div>
         <div className="flex items-center gap-5 ml-auto text-sm">
-          <Stat label="Leads" value={String(stats.total)} />
+          <Stat label="Queue leads" value={String(stats.total)} hint="Live count from the leads table (may cap at 2,000). See rollup tooltip for aggregate figures." />
           <Stat label="Uncontacted" value={String(stats.uncontacted)} tone={stats.uncontacted > 0 ? 'warn' : 'ok'} />
           <Stat label="Avg speed" value={stats.avgTtftSec > 0 ? fmtDuration(stats.avgTtftSec) : '—'} />
           <Stat
@@ -253,13 +253,13 @@ export default function SetterPage() {
   );
 }
 
-function Stat({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'ok' | 'warn' | 'bad' }) {
+function Stat({ label, value, tone = 'default', hint }: { label: string; value: string; tone?: 'default' | 'ok' | 'warn' | 'bad'; hint?: string }) {
   const color =
     tone === 'bad' ? 'text-destructive' :
     tone === 'warn' ? 'text-amber-500' :
     tone === 'ok' ? 'text-emerald-500' : 'text-foreground';
   return (
-    <div className="text-right">
+    <div className="text-right" title={hint}>
       <div className={`font-mono tabular-nums font-semibold ${color}`}>{value}</div>
       <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</div>
     </div>
