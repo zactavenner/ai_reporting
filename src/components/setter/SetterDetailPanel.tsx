@@ -724,7 +724,7 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
             Timeline {timeline.length > 0 && <span className="normal-case text-muted-foreground/70">· {timeline.length} events</span>}
           </div>
           {lead.ghl_contact_id && (
-            <Button size="sm" variant="ghost" onClick={syncTimelineFromGHL} disabled={syncingTimeline} className="h-6 text-[10px]">
+            <Button size="sm" variant="ghost" onClick={() => syncTimelineFromGHL(false)} disabled={syncingTimeline} className="h-6 text-[10px]">
               <RefreshCw className={`w-3 h-3 mr-1 ${syncingTimeline ? 'animate-spin' : ''}`} />
               {syncingTimeline ? 'Syncing…' : 'Sync from GHL'}
             </Button>
@@ -778,7 +778,7 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
             channel={tab}
             lastSyncedAt={lastSyncedAt}
             syncing={syncingTimeline}
-            onRefresh={lead.ghl_contact_id ? syncTimelineFromGHL : undefined}
+            onRefresh={lead.ghl_contact_id ? () => syncTimelineFromGHL(false) : undefined}
           />
           <div className="flex items-center gap-2 mb-2">
             <TabsList className="h-8">
