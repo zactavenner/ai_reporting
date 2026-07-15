@@ -65,9 +65,7 @@ export function SetterQueue({ leads, selectedId, onSelect }: Props) {
       );
     }
     // Sort: callbacks by due-time asc (overdue first); unread by newest inbound; uncontacted oldest-first; else newest
-    if (tab === 'uncontacted') {
-      rows.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    } else if (tab === 'callbacks') {
+    if (tab === 'callbacks') {
       rows.sort((a, b) => new Date(a.next_callback_at!).getTime() - new Date(b.next_callback_at!).getTime());
     } else if (tab === 'unread') {
       rows.sort((a, b) => new Date(b.last_inbound_at || 0).getTime() - new Date(a.last_inbound_at || 0).getTime());
