@@ -139,6 +139,18 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       setTimeline(rows);
       setTlLoading(false);
       setLastSyncedAt(new Date());
+      // Auto-pull live conversation from GHL so the thread is never blank when
+      // the lead is opened. Fires once per lead switch; realtime keeps it fresh after.
+      if (lead.ghl_contact_id) {
+        const hasConvo = rows.some((r) => {
+          const t = (r.event_type || '').toLowerCase();
+          return t.includes('sms') || t.includes('email') || t === 'message' || t.includes('mail');
+        });
+        if (!hasConvo) {
+          // fire and forget — syncTimelineFromGHL handles its own errors + refresh
+          syncTimelineFromGHL();
+        }
+      }
     })();
     // Realtime — refresh on any change touching this lead or contact
     const refresh = async () => {
