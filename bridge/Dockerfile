@@ -1,10 +1,20 @@
-FROM node:20-alpine
+# ---- Build stage ----
+FROM golang:1.22-alpine AS build
+RUN apk add --no-cache build-base git sqlite-dev
+WORKDIR /src
+COPY go.mod ./
+RUN go mod download || true
+COPY . .
+ENV CGO_ENABLED=1
+RUN go mod tidy && go build -tags "sqlite_omit_load_extension" -o /out/bridge .
+
+# ---- Runtime ----
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates sqlite-libs tzdata
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev
-COPY server.js ./
+COPY --from=build /out/bridge /app/bridge
 ENV AUTH_DIR=/data/auth
 RUN mkdir -p /data/auth
 VOLUME ["/data"]
 EXPOSE 8080
-CMD ["node", "server.js"]
+CMD ["/app/bridge"]

@@ -1,78 +1,56 @@
-## Goal
 
-Add a **Weekly Call** tab under each client in `ClientDetail.tsx` that runs a structured, timed weekly meeting for that client — same "flow" as the Daily Huddle (segments, big timer, next/back/pause, auto‑advance, chime, notes captured live) but scoped per client and per week.
+# Swap to whatsmeow + WhatsApp Tab + Jarvis alerts to Zac
 
-## Agenda (default segments)
+## 1. New Go bridge (`bridge/` rewrite)
 
-1. **Wins (3 min)** — quick wins from the past week, per attendee.
-2. **Scorecard (5 min)** — auto‑pulled KPIs for the last 7d (leads, booked/showed, funded, spend, CPL, blended CPA) with a spot for commentary + red/yellow/green.
-3. **Pipeline & Deals (4 min)** — biggest deals moved, stalled, closest to close (auto from `deals` / `pipeline_opportunities`).
-4. **Creative Review (4 min)** — top creatives from `WeeklyRecapCard` data + notes.
-5. **Tasks / Accountability (5 min)** — last week's tasks (done vs open) + add this week's tasks straight into `tasks` for that client.
-6. **Blockers & Risks (3 min)** — capture blockers, assign owners.
-7. **Ideas / Experiments (3 min)** — parking lot for ideas to test.
-8. **Wrap‑up (2 min)** — recap, next steps, one‑line summary, email/slack recap toggle.
+Replace the Node/Baileys bridge with a whatsmeow Go service. Same HTTP contract so the existing edge functions (`whatsapp-inbound`, `whatsapp-send`, `whatsapp-status`) keep working unchanged.
 
-Total default: ~30 min, editable per client via a settings drawer (same UX as `HuddleSettingsDrawer`).
+- `bridge/main.go` — whatsmeow client with SQLite session store, QR endpoint, auto-reconnect
+- Endpoints (identical to today):
+  - `GET /health`
+  - `GET /status` → `{ status, phone_number, qr, qr_at }`
+  - `POST /send` → `{ jid, message }`
+  - `POST /logout`
+  - `POST /reset` (wipe session, force new QR)
+- Event forwarder → posts to `LOVABLE_WEBHOOK_URL` with `x-bridge-secret`:
+  - `qr`, `connection`, `message` (direct + group), `receipt` (delivered/read)
+- Group monitoring: subscribe to all groups, forward `messages.upsert` for `@g.us` JIDs, mark `is_group=true` (already handled by inbound function).
+- `bridge/Dockerfile` — multi-stage Go build, alpine runtime, `/data` volume for session DB
+- `bridge/fly.toml` / `railway.json` — updated start command, same 8080 port, same env vars (`BRIDGE_TOKEN`, `LOVABLE_WEBHOOK_URL`, `WEBHOOK_SECRET`, `SESSION_LABEL`)
+- Delete old Node files: `bridge/server.js`, `bridge/package.json`
 
-## Backend (new tables, all with RLS + GRANTs)
+**Deploy:** user re-deploys `bridge/` to Railway/Fly (same env vars, same URL). New QR scan required once — old Baileys session isn't compatible.
 
-```text
-client_weekly_calls
-  id, client_id, week_of (date, Mon), started_at, ended_at,
-  planned_duration_s, actual_duration_s, facilitator_id,
-  status, agenda (jsonb), timer_state (jsonb),
-  summary_text, avg_rating
+## 2. WhatsApp tab in main nav
 
-client_weekly_call_items       -- unified store for wins/blockers/ideas/notes
-  id, call_id, client_id, kind ('win'|'blocker'|'idea'|'note'|'scorecard_note'|'creative_note'),
-  member_id, member_name, text, meta (jsonb), created_at
+New route `/whatsapp` with a tabbed workspace:
 
-client_weekly_call_tasks       -- tasks reviewed / created in the call
-  id, call_id, task_id (fk tasks), action ('reviewed'|'created'|'completed'),
-  created_at
+- **Chats** — contact list (from `whatsapp_contacts`) + thread view (from `whatsapp_messages`), send composer. Filter: All / Direct / Groups / Unread.
+- **Groups** — dedicated group monitor: list of `@g.us` contacts, message volume, last activity, click through to thread.
+- **Settings** — connection status card (calls `whatsapp-status`), QR display for pairing, phone number, logout/reset buttons, session label, **Jarvis Alerts** panel (toggle + recipient list, seeded with Zac `+19167097345`).
+- **Logs** — recent inbound/outbound events, delivery status.
 
-client_weekly_call_ratings
-  id, call_id, member_id, rating (1‑5), comment, created_at
+Nav: add "WhatsApp" entry (MessageCircle icon) to the main sidebar/menu.
 
-client_weekly_call_settings    -- one row per client for default agenda override
-  client_id (pk), agenda (jsonb)
-```
+## 3. Jarvis → Zac alerts
 
-Realtime enabled on the four content tables so multiple viewers stay in sync (same pattern as `huddle_*`).
+- New table `jarvis_alert_recipients` (id, name, phone_e164, active, alert_types[], created_at) with RLS + GRANTs. Seed row: Zac / `+19167097345` / all types.
+- New helper edge function `jarvis-notify` → looks up active recipients, resolves phone → `<digits>@s.whatsapp.net`, calls existing `whatsapp-send` (service-role) for each. Accepts `{ message, alert_type?, recipients? }`.
+- Wire existing Jarvis paths (agent runs completion, escalations, huddle summaries) to call `jarvis-notify` on notable events. Managed via toggles in the Settings tab.
 
-## Frontend
+## 4. Data / RLS
 
-- **`src/pages/ClientDetail.tsx`** — add `<TabsTrigger value="weekly-call">Weekly Call</TabsTrigger>` (with `CalendarClock` icon) and a matching `<TabsContent>` that renders `<WeeklyCallTab clientId={clientId} />`.
-- **`src/components/weekly-call/`** (new):
-  - `WeeklyCallTab.tsx` — landing view: "This week's call" card + button to Start/Resume, plus a compact history list of past weekly calls with summaries & ratings.
-  - `WeeklyCallRunner.tsx` — mirrors `HuddleRunner`: header with segment name + progress dots, giant timer, per‑segment body, sticky footer with Start/Pause/Resume/+30s/Back/Skip/Next/Auto‑advance/Finish. Reuses `playChime`, `fmt`, timing hook logic (extract shared helpers from `useHuddle` into `src/lib/timedMeeting/*` and reuse for both huddle + weekly).
-  - `segments/WinsSegment.tsx` — same UX as huddle wins, scoped by `call_id`.
-  - `segments/ScorecardSegment.tsx` — pulls from `useWeeklyRecap(clientId, weekStart)` and shows KPI tiles + a notes textarea saved as `scorecard_note`.
-  - `segments/PipelineSegment.tsx` — top movers / stalled / closest deals from `useDeals` filtered to `client_id`, plus notes.
-  - `segments/CreativeSegment.tsx` — top creatives from recap; notes.
-  - `segments/TasksSegment.tsx` — two columns: "Last week" (tasks completed/open from `tasks` where `client_id=` and updated in window) and "This week" quick‑add that inserts new `tasks` rows and links them via `client_weekly_call_tasks`.
-  - `segments/BlockersSegment.tsx` — capture + owner assignment.
-  - `segments/IdeasSegment.tsx` — parking lot.
-  - `segments/WrapupSegment.tsx` — auto‑generated one‑line summary (AI via `lovable-ai` edge function using this call's items), rating widget, toggle "Email recap to team" (reuses existing recap sender if present, otherwise inserts a row into `weekly_syncs` so the current `WeeklyRecapCard`/recap emailer picks it up).
-  - `WeeklyCallSettingsDrawer.tsx` — edit agenda per client.
-  - `WeeklyCallHistory.tsx` — list past calls with duration, avg rating, click → read‑only replay.
-- **`src/hooks/useThisWeekCall.ts`** — mirrors `useTodayHuddle`: loads or creates the row for the current week (`week_of = start of ISO week`), subscribes to realtime updates, exposes `updateTimer` / `updateCall` / `updateAgenda`.
-
-## Extras (worth adding while building)
-
-- **Auto‑fill from recap** — button in Wrap‑up that pushes the summary + numbers into `weekly_syncs` for that client so the existing `WeeklyRecapCard` and email flow stay in sync.
-- **Attendance** — small avatar row driven by `TeamMemberContext`, stored in a `client_weekly_call_attendance` table (same pattern as `huddle_attendance`).
-- **Post‑call Slack ping** — if `slack_channel_mappings` exists for that client, post the one‑line summary + ratings.
-- **Read‑only replay** — clicking a past call opens the Runner in `readOnly` mode showing what was captured, useful for absent teammates.
-- **Deep link** — `/clients/:id?tab=weekly-call` already works via existing `handleTabChange`; also support `?week=YYYY-MM-DD` to jump to a specific week.
+- `jarvis_alert_recipients` — admin-managed, authenticated read/write via `has_role('admin')`, service_role full.
+- No schema changes to existing `whatsapp_*` tables (already support groups).
 
 ## Technical notes
 
-- ISO week start helper: Monday 00:00 in the browser TZ; store as `date`.
-- All new tables: `ENABLE ROW LEVEL SECURITY`, policies gated by `authenticated`, plus `GRANT SELECT, INSERT, UPDATE, DELETE ... TO authenticated` and `GRANT ALL ... TO service_role` per project rules.
-- Reuse `TeamMemberContext` for `member_id` / `member_name` and facilitator election (first presser).
-- Extract `fmt`, `playChime`, `segmentElapsedS`, `useSegmentTiming` into `src/lib/timedMeeting/` so both `HuddleRunner` and `WeeklyCallRunner` share one implementation — no behavior change for the huddle.
-- No changes to existing huddle tables or `weekly_syncs` schema; we only *write* into `weekly_syncs` from the wrap‑up step.
+- whatsmeow lib: `go.mau.fi/whatsmeow` with `mdp/qrterminal` for logs and native QR bytes → base64 PNG for `/status`.
+- Session DB: SQLite at `/data/whatsmeow.db` (whatsmeow's built-in `sqlstore`).
+- Contract with Lovable edge functions unchanged, so `WHATSAPP_BRIDGE_URL` / `WHATSAPP_BRIDGE_TOKEN` secrets stay the same. User just redeploys the bridge folder and re-scans QR once.
+- No client-side secrets. All bridge calls go through the existing authenticated edge functions.
 
-Ship in one pass: migration → shared helpers → hook → segments → runner → tab wiring.
+## Out of scope (ask if wanted)
+
+- Media (image/video/doc) send in composer — inbound already captured, outbound stays text-only for v1.
+- Multi-number support — schema supports it (`session_label`), UI stays single-session for v1.

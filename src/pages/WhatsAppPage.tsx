@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, RefreshCw, Send, LogOut, MessageCircle } from 'lucide-react';
+import { Loader2, RefreshCw, Send, LogOut, MessageCircle, Users, BellRing, Settings as SettingsIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { JarvisAlertsPanel } from '@/components/whatsapp/JarvisAlertsPanel';
 
 const sb = supabase as any;
 
@@ -52,6 +54,8 @@ export default function WhatsAppPage() {
   const [sending, setSending] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(null);
+  const [tab, setTab] = useState<'chats' | 'groups' | 'alerts' | 'settings'>('chats');
+  const [chatFilter, setChatFilter] = useState<'all' | 'direct' | 'groups' | 'unread'>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Load session row + subscribe
@@ -181,6 +185,161 @@ export default function WhatsAppPage() {
 
   const activeContact = contacts.find(c => c.jid === activeJid);
 
+  const directContacts = contacts.filter(c => !c.is_group);
+  const groupContacts = contacts.filter(c => c.is_group);
+
+  const visibleContacts = (() => {
+    switch (chatFilter) {
+      case 'direct': return directContacts;
+      case 'groups': return groupContacts;
+      case 'unread': return contacts.filter(c => c.unread_count > 0);
+      default: return contacts;
+    }
+  })();
+
+  const ConnectionCard = (
+    <Card className="p-6">
+      {bridgeConfigured === false ? (
+        <div className="text-sm space-y-2">
+          <p className="font-medium">Bridge not configured yet.</p>
+          <p className="text-muted-foreground">
+            Deploy <code>bridge/</code> (whatsmeow — see <code>bridge/README.md</code>) to Railway / Fly / your VPS,
+            then add three secrets in this Lovable project:
+          </p>
+          <ul className="list-disc pl-6 text-muted-foreground">
+            <li><code>WHATSAPP_BRIDGE_URL</code> — public URL of your deployed bridge</li>
+            <li><code>WHATSAPP_BRIDGE_TOKEN</code> — same value as bridge's <code>BRIDGE_TOKEN</code></li>
+            <li><code>WHATSAPP_WEBHOOK_SECRET</code> — same value as bridge's <code>WEBHOOK_SECRET</code></li>
+          </ul>
+        </div>
+      ) : session?.status === 'qr' && session.last_qr ? (
+        <div className="flex flex-col items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Open WhatsApp on your phone → Settings → Linked Devices → Link a Device → scan this code.
+          </p>
+          <img src={session.last_qr} alt="WhatsApp QR" className="w-64 h-64 border rounded-lg" />
+          {session.last_qr_at && (
+            <p className="text-xs text-muted-foreground">
+              Generated {formatDistanceToNow(new Date(session.last_qr_at), { addSuffix: true })} — refresh if expired.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="text-sm space-y-2">
+          <p className="font-medium">Status: {session?.status || 'unknown'}</p>
+          {session?.phone_number && <p className="text-muted-foreground">Number: +{session.phone_number}</p>}
+          {session?.last_error && <p className="text-red-600">Last error: {session.last_error}</p>}
+          <p className="text-muted-foreground">
+            Click <strong>Refresh</strong> above to fetch the latest QR / connection state from the bridge.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+
+  const InboxGrid = (
+    <div className="grid grid-cols-12 gap-4 h-[70vh]">
+      <Card className="col-span-4 p-0 flex flex-col overflow-hidden">
+        <div className="p-3 border-b space-y-2">
+          <div className="flex gap-2">
+            <Input
+              placeholder="New chat: 14155551234"
+              value={composeJid}
+              onChange={(e) => setComposeJid(e.target.value)}
+              className="h-8 text-sm"
+            />
+            <Button size="sm" onClick={startNewThread}>Start</Button>
+          </div>
+          <div className="flex gap-1 text-xs">
+            {(['all','direct','groups','unread'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setChatFilter(f)}
+                className={`px-2 py-1 rounded ${chatFilter === f ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/70'}`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+        <ScrollArea className="flex-1">
+          {visibleContacts.length === 0 && (
+            <div className="p-4 text-sm text-muted-foreground">No conversations.</div>
+          )}
+          {visibleContacts.map(c => (
+            <button
+              key={c.id}
+              onClick={() => setActiveJid(c.jid)}
+              className={`w-full text-left px-3 py-2 border-b hover:bg-muted/50 ${activeJid === c.jid ? 'bg-muted' : ''}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium truncate flex items-center gap-1">
+                  {c.is_group && <Users className="h-3 w-3 text-muted-foreground" />}
+                  {c.display_name || c.phone || c.jid}
+                </span>
+                {c.unread_count > 0 && (
+                  <Badge className="ml-2 bg-emerald-500 text-white">{c.unread_count}</Badge>
+                )}
+              </div>
+              {c.last_message_preview && (
+                <p className="text-xs text-muted-foreground truncate mt-0.5">{c.last_message_preview}</p>
+              )}
+            </button>
+          ))}
+        </ScrollArea>
+      </Card>
+
+      <Card className="col-span-8 p-0 flex flex-col overflow-hidden">
+        {!activeJid ? (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+            Pick a conversation
+          </div>
+        ) : (
+          <>
+            <div className="p-3 border-b">
+              <p className="font-medium flex items-center gap-2">
+                {activeContact?.is_group && <Users className="h-4 w-4 text-muted-foreground" />}
+                {activeContact?.display_name || activeJid}
+              </p>
+              <p className="text-xs text-muted-foreground">{activeContact?.phone || activeJid}</p>
+            </div>
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
+              {messages.map(m => (
+                <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
+                    m.direction === 'outbound'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-background border'
+                  }`}>
+                    {activeContact?.is_group && m.direction === 'inbound' && m.sender_name && (
+                      <div className="text-[10px] font-medium text-emerald-700 mb-0.5">{m.sender_name}</div>
+                    )}
+                    {m.body || <em className="opacity-70">[{m.message_type}]</em>}
+                    <div className="text-[10px] opacity-70 mt-1">
+                      {m.wa_timestamp ? new Date(m.wa_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-3 border-t flex gap-2">
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+                placeholder="Type a message…"
+                disabled={sending}
+              />
+              <Button onClick={() => send()} disabled={sending || !draft.trim()}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -208,133 +367,69 @@ export default function WhatsAppPage() {
           </div>
         </div>
 
-        {/* Connection / QR panel */}
-        {(session?.status !== 'connected' || bridgeConfigured === false) && (
-          <Card className="p-6">
-            {bridgeConfigured === false ? (
-              <div className="text-sm space-y-2">
-                <p className="font-medium">Bridge not configured yet.</p>
-                <p className="text-muted-foreground">
-                  Deploy <code>bridge/</code> (see <code>bridge/README.md</code>) to Railway / Fly / your VPS,
-                  then add three secrets in this Lovable project:
-                </p>
-                <ul className="list-disc pl-6 text-muted-foreground">
-                  <li><code>WHATSAPP_BRIDGE_URL</code> — public URL of your deployed bridge</li>
-                  <li><code>WHATSAPP_BRIDGE_TOKEN</code> — same value as bridge's <code>BRIDGE_TOKEN</code></li>
-                  <li><code>WHATSAPP_WEBHOOK_SECRET</code> — same value as bridge's <code>WEBHOOK_SECRET</code></li>
-                </ul>
-              </div>
-            ) : session?.status === 'qr' && session.last_qr ? (
-              <div className="flex flex-col items-center gap-3">
-                <p className="text-sm text-muted-foreground">
-                  Open WhatsApp on your phone → Settings → Linked Devices → Link a Device → scan this code.
-                </p>
-                <img src={session.last_qr} alt="WhatsApp QR" className="w-64 h-64 border rounded-lg" />
-                {session.last_qr_at && (
-                  <p className="text-xs text-muted-foreground">
-                    Generated {formatDistanceToNow(new Date(session.last_qr_at), { addSuffix: true })} — refresh if expired.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="text-sm space-y-2">
-                <p className="font-medium">Status: {session?.status || 'unknown'}</p>
-                {session?.last_error && <p className="text-red-600">Last error: {session.last_error}</p>}
-                <p className="text-muted-foreground">
-                  Click <strong>Refresh</strong> above to fetch the latest QR / connection state from the bridge.
-                </p>
-              </div>
-            )}
-          </Card>
-        )}
+        <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+          <TabsList>
+            <TabsTrigger value="chats"><MessageCircle className="h-4 w-4 mr-1.5" />Chats</TabsTrigger>
+            <TabsTrigger value="groups"><Users className="h-4 w-4 mr-1.5" />Groups ({groupContacts.length})</TabsTrigger>
+            <TabsTrigger value="alerts"><BellRing className="h-4 w-4 mr-1.5" />Jarvis Alerts</TabsTrigger>
+            <TabsTrigger value="settings"><SettingsIcon className="h-4 w-4 mr-1.5" />Settings</TabsTrigger>
+          </TabsList>
 
-        {/* Inbox */}
-        {session?.status === 'connected' && (
-          <div className="grid grid-cols-12 gap-4 h-[70vh]">
-            {/* Contacts list */}
-            <Card className="col-span-4 p-0 flex flex-col overflow-hidden">
-              <div className="p-3 border-b space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="New chat: 14155551234"
-                    value={composeJid}
-                    onChange={(e) => setComposeJid(e.target.value)}
-                    className="h-8 text-sm"
-                  />
-                  <Button size="sm" onClick={startNewThread}>Start</Button>
-                </div>
-              </div>
-              <ScrollArea className="flex-1">
-                {contacts.length === 0 && (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    No conversations yet. Start one above, or wait for an inbound message.
-                  </div>
-                )}
-                {contacts.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => setActiveJid(c.jid)}
-                    className={`w-full text-left px-3 py-2 border-b hover:bg-muted/50 ${activeJid === c.jid ? 'bg-muted' : ''}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium truncate">{c.display_name || c.phone || c.jid}</span>
-                      {c.unread_count > 0 && (
-                        <Badge className="ml-2 bg-emerald-500 text-white">{c.unread_count}</Badge>
-                      )}
-                    </div>
-                    {c.last_message_preview && (
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{c.last_message_preview}</p>
-                    )}
-                  </button>
-                ))}
-              </ScrollArea>
-            </Card>
+          <TabsContent value="chats" className="mt-4 space-y-4">
+            {session?.status !== 'connected' ? ConnectionCard : InboxGrid}
+          </TabsContent>
 
-            {/* Thread */}
-            <Card className="col-span-8 p-0 flex flex-col overflow-hidden">
-              {!activeJid ? (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                  Pick a conversation
+          <TabsContent value="groups" className="mt-4 space-y-4">
+            {session?.status !== 'connected' ? ConnectionCard : (
+              <Card className="p-0">
+                <div className="p-3 border-b flex items-center justify-between">
+                  <p className="font-medium flex items-center gap-2"><Users className="h-4 w-4" /> Monitored Groups</p>
+                  <span className="text-xs text-muted-foreground">{groupContacts.length} total</span>
                 </div>
-              ) : (
-                <>
-                  <div className="p-3 border-b">
-                    <p className="font-medium">{activeContact?.display_name || activeJid}</p>
-                    <p className="text-xs text-muted-foreground">{activeContact?.phone || activeJid}</p>
+                {groupContacts.length === 0 ? (
+                  <div className="p-6 text-sm text-muted-foreground">
+                    No group chats yet. Get added to a WhatsApp group from the paired number and messages will appear here.
                   </div>
-                  <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
-                    {messages.map(m => (
-                      <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
-                          m.direction === 'outbound'
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-background border'
-                        }`}>
-                          {m.body || <em className="opacity-70">[{m.message_type}]</em>}
-                          <div className="text-[10px] opacity-70 mt-1">
-                            {m.wa_timestamp ? new Date(m.wa_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          </div>
+                ) : (
+                  <div className="divide-y">
+                    {groupContacts.map(g => (
+                      <button
+                        key={g.id}
+                        onClick={() => { setActiveJid(g.jid); setTab('chats'); setChatFilter('groups'); }}
+                        className="w-full text-left px-4 py-3 hover:bg-muted/50 flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-medium">{g.display_name || g.jid}</div>
+                          {g.last_message_preview && (
+                            <div className="text-xs text-muted-foreground truncate max-w-md">{g.last_message_preview}</div>
+                          )}
                         </div>
-                      </div>
+                        <div className="text-right">
+                          {g.last_message_at && (
+                            <div className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(g.last_message_at), { addSuffix: true })}
+                            </div>
+                          )}
+                          {g.unread_count > 0 && (
+                            <Badge className="mt-1 bg-emerald-500 text-white">{g.unread_count} unread</Badge>
+                          )}
+                        </div>
+                      </button>
                     ))}
                   </div>
-                  <div className="p-3 border-t flex gap-2">
-                    <Input
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-                      placeholder="Type a message…"
-                      disabled={sending}
-                    />
-                    <Button onClick={() => send()} disabled={sending || !draft.trim()}>
-                      {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </Card>
-          </div>
-        )}
+                )}
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="alerts" className="mt-4 space-y-4">
+            <JarvisAlertsPanel />
+          </TabsContent>
+
+          <TabsContent value="settings" className="mt-4 space-y-4">
+            {ConnectionCard}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

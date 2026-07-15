@@ -33,6 +33,7 @@ import {
   Inbox,
   UserCheck,
   Timer,
+  MessageCircle,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -102,6 +103,12 @@ const navStructure = [
     value: 'setter',
     icon: Zap,
     href: '/setter',
+  },
+  {
+    title: 'WhatsApp',
+    value: 'whatsapp',
+    icon: MessageCircle,
+    href: '/whatsapp',
   },
   {
     title: 'Tasks',
