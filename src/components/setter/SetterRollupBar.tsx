@@ -41,6 +41,8 @@ export function SetterRollupBar({ clientIds, win: winProp, onWinChange }: Props)
             .in('client_id', clientIds)
             .gte('disposed_at', sinceISO),
         ]);
+        if (dailyRes.error) throw dailyRes.error;
+        if (dispoRes.error) throw dispoRes.error;
         const dm = dailyRes.data ?? [];
         const dispos = dispoRes.data ?? [];
         const qSet = new Set(['qualified', 'booked', 'showed', 'opportunity', 'funded']);
@@ -55,6 +57,8 @@ export function SetterRollupBar({ clientIds, win: winProp, onWinChange }: Props)
           bad: dispos.filter((d: any) => bSet.has(d.disposition)).length,
           booked: dispos.filter((d: any) => bookSet.has(d.disposition)).length,
         });
+      } catch (e: any) {
+        console.error('[SetterRollupBar] load failed:', e);
       } finally { setLoading(false); }
     })();
   }, [clientIds.join(','), win]);

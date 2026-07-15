@@ -74,20 +74,25 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
   const [leads, setLeads] = useState<SetterLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [truncated, setTruncated] = useState(false);
+  const [totalMatching, setTotalMatching] = useState<number | null>(null);
 
   const load = async () => {
     setError(null);
     try {
       const days = Math.max(1, Math.min(90, windowDays));
       const sinceISO = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
-      const { data: rawLeads, error: lErr } = await supabase
+      const LIMIT = 2000;
+      const { data: rawLeads, error: lErr, count } = await supabase
         .from('leads')
-        .select('id, client_id, name, email, phone, source, campaign_name, utm_source, utm_medium, utm_campaign, utm_content, ad_id, ad_set_name, custom_fields, ghl_notes, opportunity_status, opportunity_stage, opportunity_value, current_disposition, quality_score, pipeline_value, created_at, updated_at, status, assigned_user, is_spam, questions, external_id')
+        .select('id, client_id, name, email, phone, source, campaign_name, utm_source, utm_medium, utm_campaign, utm_content, ad_id, ad_set_name, custom_fields, ghl_notes, opportunity_status, opportunity_stage, opportunity_value, current_disposition, quality_score, pipeline_value, created_at, updated_at, status, assigned_user, is_spam, questions, external_id', { count: 'exact' })
         .gte('created_at', sinceISO)
         .order('created_at', { ascending: false })
-        .limit(2000);
+        .limit(LIMIT);
       if (lErr) throw lErr;
       const ls = (rawLeads || []) as any[];
+      setTotalMatching(count ?? ls.length);
+      setTruncated((count ?? 0) > LIMIT);
 
       const clientIds = Array.from(new Set(ls.map(l => l.client_id)));
       const leadIds = ls.map(l => l.id);
@@ -182,13 +187,19 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
 
   useEffect(() => {
     load();
+    // Debounce realtime bursts so overlapping loads can't race
+    let t: number | null = null;
+    const bump = () => {
+      if (t) window.clearTimeout(t);
+      t = window.setTimeout(() => { load(); t = null; }, 400);
+    };
     const ch = supabase
       .channel('setter-leads-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => load())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls' }, () => load())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contact_timeline_events' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, bump)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls' }, bump)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contact_timeline_events' }, bump)
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => { if (t) window.clearTimeout(t); supabase.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowDays]);
 
@@ -226,7 +237,7 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
       : leads
   ), [leads, enabledClientIds]);
 
-  return { leads: visibleLeads, allLeads: leads, loading, error, refresh: load, stats };
+  return { leads: visibleLeads, allLeads: leads, loading, error, refresh: load, stats, truncated, totalMatching };
 }
 
 export function fmtDuration(seconds: number): string {

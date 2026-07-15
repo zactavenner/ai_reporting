@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SetterQueue } from '@/components/setter/SetterQueue';
 import { SetterDetailPanel } from '@/components/setter/SetterDetailPanel';
 import { useSetterLeads, fmtDuration, type SetterLead } from '@/hooks/useSetterLeads';
-import { Zap, RefreshCw, RotateCw, MessageSquare } from 'lucide-react';
+import { Zap, RefreshCw, RotateCw, MessageSquare, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useClients } from '@/hooks/useClients';
 import { ClientFilterPopover } from '@/components/setter/ClientFilterPopover';
 import { SetterRollupBar } from '@/components/setter/SetterRollupBar';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatDistanceToNowStrict } from 'date-fns';
 
 const LS_KEY = 'setter.enabledClientIds.v1';
 
@@ -68,16 +69,56 @@ export default function SetterPage() {
 
   const [win, setWin] = useState<'1d' | '7d' | '30d'>('7d');
   const windowDays = win === '1d' ? 1 : win === '7d' ? 7 : 30;
-  const { leads, loading, error, refresh, stats } = useSetterLeads(rollupClientIds, windowDays);
+  const { leads, loading, error, refresh, stats, truncated, totalMatching } = useSetterLeads(rollupClientIds, windowDays);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncingConvos, setSyncingConvos] = useState(false);
   const [lastConvoSync, setLastConvoSync] = useState<Date | null>(null);
+  const [lastFullSync, setLastFullSync] = useState<Date | null>(null);
+  const [, setClockTick] = useState(0);
+
+  // Keep "synced Xs ago" labels fresh without re-rendering the leads list
+  useEffect(() => {
+    const id = window.setInterval(() => setClockTick((t) => t + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const selected: SetterLead | null = useMemo(
     () => leads.find(l => l.id === selectedId) || null,
     [leads, selectedId]
   );
+
+  // Auto-advance: pick the next uncontacted lead after disposition/send
+  const advanceToNext = useCallback(() => {
+    const pool = leads.filter(l => !l.is_spam && l.touch_count === 0);
+    const ordered = pool.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const idx = ordered.findIndex(l => l.id === selectedId);
+    const next = ordered[idx + 1] || ordered[0] || null;
+    if (next && next.id !== selectedId) setSelectedId(next.id);
+  }, [leads, selectedId]);
+
+  // Keyboard shortcuts: j/k navigate, n = next uncontacted, r = refresh
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      const list = leads;
+      const idx = list.findIndex(l => l.id === selectedId);
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        const next = list[idx + 1] || list[0];
+        if (next) { e.preventDefault(); setSelectedId(next.id); }
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        const prev = list[idx - 1] || list[list.length - 1];
+        if (prev) { e.preventDefault(); setSelectedId(prev.id); }
+      } else if (e.key === 'n') {
+        e.preventDefault(); advanceToNext();
+      } else if (e.key === 'r' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault(); refresh();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [leads, selectedId, advanceToNext, refresh]);
 
   const runManualSync = async () => {
     setSyncing(true);
@@ -85,6 +126,7 @@ export default function SetterPage() {
       const { data, error } = await supabase.functions.invoke('daily-master-sync', { body: {} });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      setLastFullSync(new Date());
       toast.success('Sync kicked off — refreshing…');
       await refresh();
     } catch (e: any) {
@@ -96,10 +138,22 @@ export default function SetterPage() {
     if (!rollupClientIds.length) { toast.warning('No clients selected'); return; }
     setSyncingConvos(true);
     try {
+      // FIX: previous body used `mode:'conversations'` which the edge function
+      // does not recognize — it silently ran a full contact+opportunity resync
+      // capped at 500 contacts with no date filter, so leads shown in the 7d/30d
+      // window frequently missed timeline updates. Use the supported branch:
+      // syncType=contacts + syncTimeline=true + sinceDateDays=window so the
+      // fetch is scoped to the exact leads currently visible in the queue.
       const results = await Promise.allSettled(
         rollupClientIds.map((cid) =>
           supabase.functions.invoke('sync-ghl-contacts', {
-            body: { client_id: cid, mode: 'conversations', syncTimeline: true },
+            body: {
+              client_id: cid,
+              mode: 'contacts',
+              syncType: 'contacts',
+              syncTimeline: true,
+              sinceDateDays: windowDays,
+            },
           })
         )
       );
@@ -107,7 +161,7 @@ export default function SetterPage() {
       const failed = results.length - ok;
       setLastConvoSync(new Date());
       await refresh();
-      if (failed === 0) toast.success(`Conversations synced across ${ok} client${ok === 1 ? '' : 's'}`);
+      if (failed === 0) toast.success(`Conversations synced across ${ok} client${ok === 1 ? '' : 's'} (${windowDays}d window)`);
       else toast.warning(`Synced ${ok}/${results.length} clients — ${failed} failed`);
     } catch (e: any) {
       toast.error(`Conversation sync failed: ${e?.message || e}`);
@@ -133,7 +187,14 @@ export default function SetterPage() {
             tone={stats.oldestUncontactedS >= 900 ? 'bad' : stats.oldestUncontactedS >= 300 ? 'warn' : 'ok'}
           />
           <ClientFilterPopover clients={activeClients} selectedIds={enabledIds} onChange={setEnabledIds} />
-          <Button variant="outline" size="sm" onClick={runManualSync} disabled={syncing} className="gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={runManualSync}
+            disabled={syncing}
+            className="gap-1"
+            title={lastFullSync ? `Last full sync: ${formatDistanceToNowStrict(lastFullSync)} ago` : 'Run the master daily sync across all clients'}
+          >
             <RotateCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
             <span className="text-xs">{syncing ? 'Syncing…' : 'Sync now'}</span>
           </Button>
@@ -143,7 +204,7 @@ export default function SetterPage() {
             onClick={syncConversations}
             disabled={syncingConvos || rollupClientIds.length === 0}
             className="gap-1"
-            title={lastConvoSync ? `Last conversation sync: ${lastConvoSync.toLocaleTimeString()}` : 'Sync SMS/Email conversations across selected clients'}
+            title={lastConvoSync ? `Last conversation sync: ${formatDistanceToNowStrict(lastConvoSync)} ago (${windowDays}d window)` : `Pull SMS/email timeline for leads in the last ${windowDays}d across ${rollupClientIds.length} client(s)`}
           >
             <MessageSquare className={`w-3.5 h-3.5 ${syncingConvos ? 'animate-pulse' : ''}`} />
             <span className="text-xs">
@@ -158,6 +219,20 @@ export default function SetterPage() {
 
       <SetterRollupBar clientIds={rollupClientIds} win={win} onWinChange={setWin} />
 
+      {truncated && totalMatching != null && (
+        <div className="px-6 py-1.5 text-xs border-b bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Showing 2,000 of {totalMatching.toLocaleString()} matching leads in the last {win}. Narrow the client filter or shorten the window for full coverage.
+        </div>
+      )}
+      {(lastConvoSync || lastFullSync) && (
+        <div className="px-6 py-1 text-[10px] text-muted-foreground border-b flex items-center gap-4">
+          {lastFullSync && <span>Full sync {formatDistanceToNowStrict(lastFullSync)} ago</span>}
+          {lastConvoSync && <span>Conversations {formatDistanceToNowStrict(lastConvoSync)} ago</span>}
+          <span className="ml-auto opacity-70">Shortcuts: <kbd className="px-1 border rounded">j</kbd>/<kbd className="px-1 border rounded">k</kbd> nav · <kbd className="px-1 border rounded">n</kbd> next · <kbd className="px-1 border rounded">r</kbd> refresh</span>
+        </div>
+      )}
+
       {error && (
         <div className="p-3 text-sm text-destructive border-b bg-destructive/5">Error: {error}</div>
       )}
@@ -171,7 +246,7 @@ export default function SetterPage() {
           )}
         </aside>
         <section className="min-h-0">
-          <SetterDetailPanel lead={selected} onChanged={refresh} />
+          <SetterDetailPanel lead={selected} onChanged={refresh} onAdvance={advanceToNext} />
         </section>
       </div>
     </div>
