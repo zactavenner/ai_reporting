@@ -738,32 +738,7 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
         )}
         <div className="space-y-2">
           {timeline.map((e) => {
-            const Icon = eventIcon(e.event_type);
-            const sub = (e.event_subtype || '').toLowerCase();
-            const outbound = sub === 'outbound' || sub.startsWith('out');
-            const inbound = sub === 'inbound' || sub.startsWith('in') || sub === 'received';
-            const recording = e.metadata?.recording_url as string | undefined;
-            return (
-              <div key={e.id} className={`flex gap-3 text-sm p-2 rounded-lg border ${outbound ? 'bg-primary/5 border-primary/20' : inbound ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-muted/30'}`}>
-                <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${outbound ? 'text-primary' : inbound ? 'text-emerald-500' : 'text-muted-foreground'}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium capitalize">{e.event_type}</span>
-                    {e.event_subtype && <Badge variant="outline" className="text-[10px]">{e.event_subtype}</Badge>}
-                    {outbound && <Badge variant="secondary" className="text-[10px]">out</Badge>}
-                    {inbound && <Badge className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">in</Badge>}
-                    <span className="text-xs text-muted-foreground ml-auto">{format(new Date(e.event_at), 'MMM d · h:mm a')}</span>
-                  </div>
-                  {e.title && <div className="text-xs text-muted-foreground mt-0.5">{e.title}</div>}
-                  {e.body && <div className="text-sm mt-1 whitespace-pre-wrap">{e.body}</div>}
-                  {recording && (
-                    <a href={recording} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
-                      <Phone className="w-3 h-3" />Recording
-                    </a>
-                  )}
-                </div>
-              </div>
-            );
+            return <TimelineRow key={e.id} e={e} />;
           })}
         </div>
       </div>
