@@ -34,6 +34,7 @@ import {
   UserCheck,
   Timer,
   MessageCircle,
+  Activity,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -109,6 +110,12 @@ const navStructure = [
     value: 'whatsapp',
     icon: MessageCircle,
     href: '/whatsapp',
+  },
+  {
+    title: 'Data Health',
+    value: 'data-health',
+    icon: Activity,
+    href: '/data-health',
   },
   {
     title: 'Tasks',
