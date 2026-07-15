@@ -64,6 +64,11 @@ export interface SetterLead {
   touch_count: number;
   time_to_first_touch_s: number | null; // null = never contacted
   prior_calls: number;
+  // NEW: inbound tracking + callbacks
+  last_inbound_at: string | null;
+  inbound_count: number;
+  next_callback_at: string | null; // upcoming/overdue callback due time
+  callback_note: string | null;
 }
 
 function since(iso: string) {
@@ -100,7 +105,7 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
       const [{ data: clients }, callsRes, timelineRes, enrichmentRes] = await Promise.all([
         supabase.from('clients').select('id, name').in('id', clientIds),
         leadIds.length ? supabase.from('calls').select('lead_id, created_at, direction').in('lead_id', leadIds) : Promise.resolve({ data: [] as any[] }),
-        leadIds.length ? supabase.from('contact_timeline_events').select('lead_id, event_at, event_type, event_subtype, ghl_contact_id').in('lead_id', leadIds) : Promise.resolve({ data: [] as any[] }),
+        leadIds.length ? supabase.from('contact_timeline_events').select('lead_id, event_at, event_type, event_subtype, ghl_contact_id, body, metadata').in('lead_id', leadIds) : Promise.resolve({ data: [] as any[] }),
         leadIds.length ? supabase.from('lead_enrichment').select('lead_id, first_name, last_name, city, state, zip, age, gender, household_income, net_worth, home_value, home_ownership, occupation, company_name, company_title, linkedin_url, is_investor, investor_score, accredited_probability, business_owner, confidence_score, last_enriched_at, enriched_at, enriched_phones, enriched_emails').in('lead_id', leadIds) : Promise.resolve({ data: [] as any[] }),
       ]);
 
@@ -115,10 +120,14 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
       const touchesByLead: Record<string, string[]> = {};
       const callsByLead: Record<string, number> = {};
       const ghlContactByLead: Record<string, string | null> = {};
+      const inboundByLead: Record<string, string[]> = {};
+      const callbackByLead: Record<string, { at: string; note: string | null }> = {};
       ((callsRes as any).data || []).forEach((c: any) => {
         callsByLead[c.lead_id] = (callsByLead[c.lead_id] || 0) + 1;
         if (c.direction === 'outbound') {
           (touchesByLead[c.lead_id] ||= []).push(c.created_at);
+        } else if (c.direction === 'inbound') {
+          (inboundByLead[c.lead_id] ||= []).push(c.created_at);
         }
       });
       ((timelineRes as any).data || []).forEach((e: any) => {
@@ -127,8 +136,20 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
         // Inbound replies must NOT flip a lead to "contacted" — the setter still needs to work it.
         const isOutbound = e.event_subtype === 'outbound';
         const isAppt = e.event_type === 'appointment';
+        const isInbound = e.event_subtype === 'inbound' || e.event_subtype === 'received';
+        const isCallback = e.event_type === 'callback' || (e.event_type === 'note' && e.event_subtype === 'callback');
         if (isOutbound || isAppt) {
           (touchesByLead[e.lead_id] ||= []).push(e.event_at);
+        }
+        if (isInbound) {
+          (inboundByLead[e.lead_id] ||= []).push(e.event_at);
+        }
+        if (isCallback) {
+          // Take the latest (most recently scheduled) callback per lead
+          const existing = callbackByLead[e.lead_id];
+          if (!existing || new Date(e.event_at) > new Date(existing.at)) {
+            callbackByLead[e.lead_id] = { at: e.event_at, note: (e.metadata as any)?.note || e.body || null };
+          }
         }
       });
 
@@ -137,6 +158,9 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
         const first = touches[0] || null;
         const last = touches[touches.length - 1] || null;
         const ttft = first ? Math.max(0, Math.floor((new Date(first).getTime() - new Date(l.created_at).getTime()) / 1000)) : null;
+        const inbounds = (inboundByLead[l.id] || []).sort();
+        const lastInbound = inbounds[inbounds.length - 1] || null;
+        const cb = callbackByLead[l.id];
         return {
           id: l.id,
           client_id: l.client_id,
@@ -174,6 +198,10 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
           touch_count: touches.length,
           prior_calls: callsByLead[l.id] || 0,
           time_to_first_touch_s: ttft,
+          last_inbound_at: lastInbound,
+          inbound_count: inbounds.length,
+          next_callback_at: cb?.at || null,
+          callback_note: cb?.note || null,
         };
       });
 
