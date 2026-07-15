@@ -49,6 +49,7 @@ const LoginPage = lazyRetry(() => import("./pages/LoginPage"));
 const OAuthConsent = lazyRetry(() => import("./pages/OAuthConsent"));
 const HuddlePage = lazyRetry(() => import("./pages/HuddlePage"));
 const SetterPage = lazyRetry(() => import("./pages/SetterPage"));
+const DataHealthPage = lazyRetry(() => import("./pages/DataHealthPage"));
 
 function PageLoader() {
   return (
@@ -102,6 +103,7 @@ const App = () => (
             <Route path="/weekly-parity" element={<PasswordGate><WeeklyParityPage /></PasswordGate>} />
             <Route path="/huddle" element={<PasswordGate><HuddlePage /></PasswordGate>} />
             <Route path="/setter" element={<PasswordGate><SetterPage /></PasswordGate>} />
+            <Route path="/data-health" element={<PasswordGate><DataHealthPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
