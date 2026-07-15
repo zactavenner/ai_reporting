@@ -413,6 +413,10 @@ export default function ClientDetail() {
               <CheckSquare className="h-4 w-4" />
               Tasks
             </TabsTrigger>
+            <TabsTrigger value="weekly-call" className="gap-2 whitespace-nowrap">
+              <CalendarClock className="h-4 w-4" />
+              Weekly Call
+            </TabsTrigger>
             <TabsTrigger value="creatives" className="gap-2 whitespace-nowrap">
               <Palette className="h-4 w-4" />
               Creatives
