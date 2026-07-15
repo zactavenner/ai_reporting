@@ -125,10 +125,10 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     if (!seg) return null;
     switch (seg.key) {
       case 'wins':      return <WinsSegment callId={call.id} clientId={clientId} />;
-      case 'scorecard': return <ScorecardSegment callId={call.id} clientId={clientId} weekStart={call.week_of} />;
+      case 'scorecard': return <ScorecardSegment callId={call.id} clientId={clientId} call={call} />;
       case 'pipeline':  return <PipelineSegment callId={call.id} clientId={clientId} />;
-      case 'creative':  return <CreativeReviewSegment callId={call.id} clientId={clientId} weekStart={call.week_of} />;
-      case 'tasks':     return <TasksSegment callId={call.id} clientId={clientId} weekStart={call.week_of} />;
+      case 'creative':  return <CreativeReviewSegment callId={call.id} clientId={clientId} call={call} />;
+      case 'tasks':     return <TasksSegment callId={call.id} clientId={clientId} call={call} />;
       case 'blockers':  return <BlockersSegment callId={call.id} clientId={clientId} />;
       case 'ideas':     return <IdeasSegment callId={call.id} clientId={clientId} />;
       case 'wrapup':    return <WrapupSegment call={call} clientId={clientId} onFinish={finish} />;
