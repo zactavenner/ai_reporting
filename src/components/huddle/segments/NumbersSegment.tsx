@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowDown, ArrowUp, Flag, Minus } from 'lucide-react';
+import { ArrowDown, ArrowUp, Flag, Minus, FileText, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 import { yesterdayISO } from '@/hooks/useHuddle';
 
@@ -20,6 +20,8 @@ interface PeriodStats {
 interface Row {
   client_id: string;
   client_name: string;
+  doc_url: string | null;
+  sheet_url: string | null;
   y: PeriodStats;
   w: PeriodStats;
   m: PeriodStats;
@@ -116,10 +118,16 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
       monthStart.setDate(monthStart.getDate() - 29);
       const monthStartISO = monthStart.toISOString().slice(0, 10);
 
-      const [{ data: clients }, { data: metrics }] = await Promise.all([
-        supabase.from('clients').select('id,name').in('status', ['active', 'onboarding']),
+      const [{ data: clients }, { data: metrics }, { data: settings }] = await Promise.all([
+        supabase.from('clients').select('id,name,google_doc_url').in('status', ['active', 'onboarding']),
         supabase.from('daily_metrics').select('client_id,date,ad_spend,leads,calls,showed_calls,commitments').gte('date', monthStartISO).lte('date', y),
+        supabase.from('client_settings').select('client_id,kpi_google_doc_url,kpi_google_sheet_url'),
       ]);
+
+      const settingsByClient: Record<string, any> = {};
+      (settings || []).forEach((s: any) => {
+        settingsByClient[s.client_id] = s;
+      });
 
       const byClient: Record<string, any[]> = {};
       (metrics || []).forEach((m: any) => {
