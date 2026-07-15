@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,7 @@ function eventIcon(t: string) {
   return Clock;
 }
 
-export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null; onChanged?: () => void }) {
+export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: SetterLead | null; onChanged?: () => void; onAdvance?: () => void }) {
   const { currentMember } = useTeamMember();
   const [tab, setTab] = useState<'sms' | 'email'>('sms');
   const [text, setText] = useState('');
@@ -53,6 +53,7 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
   const [savingDispo, setSavingDispo] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [, setNowTick] = useState(0);
+  const activeLeadIdRef = useRef<string | null>(null);
 
   // Tick every 30s so the "last synced" label stays fresh.
   useEffect(() => {
@@ -121,8 +122,11 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     setAssignee(lead.assigned_user || '');
     setDisposition(lead.current_disposition || '');
     setTlLoading(true);
+    activeLeadIdRef.current = lead.id;
+    const myLeadId = lead.id;
     (async () => {
       const rows = await loadTimeline(lead);
+      if (activeLeadIdRef.current !== myLeadId) return; // stale — user switched leads
       setTimeline(rows);
       setTlLoading(false);
       setLastSyncedAt(new Date());
@@ -130,6 +134,7 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
     // Realtime — refresh on any change touching this lead or contact
     const refresh = async () => {
       const rows = await loadTimeline(lead);
+      if (activeLeadIdRef.current !== myLeadId) return;
       setTimeline(rows);
       setLastSyncedAt(new Date());
     };
@@ -139,7 +144,7 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter: `lead_id=eq.${lead.id}` }, refresh)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [lead?.id]);
+  }, [lead?.id, lead?.ghl_contact_id]);
 
   const syncTimelineFromGHL = async () => {
     if (!lead?.ghl_contact_id) { toast.error('No GHL contact linked'); return; }
@@ -276,6 +281,9 @@ export function SetterDetailPanel({ lead, onChanged }: { lead: SetterLead | null
       });
       toast.success(`Disposition set: ${value}`);
       onChanged?.();
+      // Advance to next uncontacted lead once a terminal-ish disposition is set
+      const advance = new Set(['contacted','nurture','booked','showed','no_show','opportunity','funded','unqualified','not_accredited','not_interested','bad_contact_info','bad_lead']);
+      if (advance.has(value)) onAdvance?.();
     } catch (e: any) {
       setDisposition(prev);
       toast.error(`Failed: ${e?.message || e}`);
