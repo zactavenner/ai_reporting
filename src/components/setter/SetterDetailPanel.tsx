@@ -17,6 +17,7 @@ import { formatDistanceToNowStrict, format } from 'date-fns';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
 import { SmsThread } from './SmsThread';
 import { markViewed } from '@/lib/setterViewState';
+import { getPhoneTimezone, isBusinessHours } from '@/lib/areaCodeTimezone';
 
 interface TimelineEvent {
   id: string;
@@ -445,6 +446,35 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
             <Badge variant="outline" className="text-[10px]">{lead.client_name}</Badge>
             {lead.status && <Badge variant="secondary" className="text-[10px]">{lead.status}</Badge>}
           </div>
+          {/* Location + timezone strip */}
+          {(() => {
+            const tz = getPhoneTimezone(lead.phone);
+            const loc = [lead.enrichment?.city, lead.enrichment?.state, lead.enrichment?.zip].filter(Boolean).join(', ');
+            if (!tz && !loc) return null;
+            const biz = isBusinessHours(lead.phone);
+            return (
+              <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
+                {loc && (
+                  <span className="inline-flex items-center gap-1 text-foreground/80">
+                    <MapPin className="w-3 h-3" />{loc}
+                  </span>
+                )}
+                {tz && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-mono tabular-nums text-[11px] ${
+                      biz === false
+                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                    }`}
+                    title={`${tz.tz} · ${tz.offsetLabel} · area code ${tz.areaCode}${biz === false ? ' · outside 8am–8pm local' : ' · in business hours'}`}
+                  >
+                    <Clock className="w-3 h-3" />{tz.localTime} {tz.abbrev}
+                    {biz === false && <span className="ml-1 text-[10px] uppercase">off-hours</span>}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground flex-wrap">
             {lead.email && (
               <span className="inline-flex items-center gap-1 group">
@@ -458,6 +488,7 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
                 <Phone className="w-3 h-3" />
                 <a href={`tel:${lead.phone}`} className="hover:text-foreground hover:underline">{lead.phone}</a>
                 <button onClick={() => copyText(lead.phone!)} className="opacity-0 group-hover:opacity-100 transition" title="Copy"><Copy className="w-3 h-3" /></button>
+                {(() => { const tz = getPhoneTimezone(lead.phone); return tz ? <span className="text-[10px] opacity-70">({tz.abbrev})</span> : null; })()}
               </span>
             )}
             <span>Created {formatDistanceToNowStrict(new Date(lead.created_at))} ago</span>
