@@ -12,6 +12,7 @@ import {
   Mail, Phone, Send, Sparkles, ExternalLink, User, Tag as TagIcon,
   Clock, MessageSquare, Calendar, StickyNote, ArrowRight, Copy, PhoneCall,
   MapPin, Briefcase, DollarSign, TrendingUp, Award, Linkedin, Hash, RefreshCw, CalendarClock, X,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { formatDistanceToNowStrict, format } from 'date-fns';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
@@ -738,32 +739,7 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
         )}
         <div className="space-y-2">
           {timeline.map((e) => {
-            const Icon = eventIcon(e.event_type);
-            const sub = (e.event_subtype || '').toLowerCase();
-            const outbound = sub === 'outbound' || sub.startsWith('out');
-            const inbound = sub === 'inbound' || sub.startsWith('in') || sub === 'received';
-            const recording = e.metadata?.recording_url as string | undefined;
-            return (
-              <div key={e.id} className={`flex gap-3 text-sm p-2 rounded-lg border ${outbound ? 'bg-primary/5 border-primary/20' : inbound ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-muted/30'}`}>
-                <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${outbound ? 'text-primary' : inbound ? 'text-emerald-500' : 'text-muted-foreground'}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium capitalize">{e.event_type}</span>
-                    {e.event_subtype && <Badge variant="outline" className="text-[10px]">{e.event_subtype}</Badge>}
-                    {outbound && <Badge variant="secondary" className="text-[10px]">out</Badge>}
-                    {inbound && <Badge className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">in</Badge>}
-                    <span className="text-xs text-muted-foreground ml-auto">{format(new Date(e.event_at), 'MMM d · h:mm a')}</span>
-                  </div>
-                  {e.title && <div className="text-xs text-muted-foreground mt-0.5">{e.title}</div>}
-                  {e.body && <div className="text-sm mt-1 whitespace-pre-wrap">{e.body}</div>}
-                  {recording && (
-                    <a href={recording} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
-                      <Phone className="w-3 h-3" />Recording
-                    </a>
-                  )}
-                </div>
-              </div>
-            );
+            return <TimelineRow key={e.id} e={e} />;
           })}
         </div>
       </div>
@@ -833,6 +809,86 @@ function IntelCell({ icon: Icon, label, value, tone = 'default' }: { icon: any; 
         <div className="text-[9px] uppercase tracking-wider text-muted-foreground leading-tight">{label}</div>
         <div className={`text-xs font-medium truncate ${color}`} title={value}>{value}</div>
       </div>
+    </div>
+  );
+}
+
+function TimelineRow({ e }: { e: TimelineEvent }) {
+  const [open, setOpen] = useState(false);
+  const t = (e.event_type || '').toLowerCase();
+  const sub = (e.event_subtype || '').toLowerCase();
+  const outbound = sub === 'outbound' || sub.startsWith('out') || sub === 'sent';
+  const inbound = sub === 'inbound' || sub.startsWith('in') || sub === 'received';
+  const isSms = t.includes('sms') || t.includes('text') || t === 'message';
+  const isEmail = t.includes('email') || t.includes('mail');
+  const isCall = t.includes('call') || t.includes('phone') || t.includes('voice');
+  const isAppt = t.includes('appointment') || t.includes('booking') || t.includes('meeting');
+  const isNote = t.includes('note');
+  const Icon = eventIcon(e.event_type);
+  const recording = e.metadata?.recording_url as string | undefined;
+  const hasContent = Boolean(e.body || (isEmail && e.title));
+
+  const label =
+    isSms ? `SMS ${outbound ? 'sent' : inbound ? 'received' : ''}`.trim()
+    : isEmail ? `Email ${outbound ? 'sent' : inbound ? 'received' : ''}`.trim()
+    : isCall ? `Call ${outbound ? 'made' : inbound ? 'received' : ''}`.trim()
+    : isAppt ? 'Appointment'
+    : isNote ? 'Note created'
+    : (e.event_type || 'Event');
+
+  // Channel accent: SMS = green (iMessage-ish), Email = blue, others = neutral
+  const accent =
+    isSms ? 'bg-emerald-500/5 border-emerald-500/20'
+    : isEmail ? 'bg-blue-500/5 border-blue-500/20'
+    : isCall ? 'bg-primary/5 border-primary/20'
+    : 'bg-muted/30 border-border';
+  const iconColor =
+    isSms ? 'text-emerald-600 dark:text-emerald-400'
+    : isEmail ? 'text-blue-600 dark:text-blue-400'
+    : isCall ? 'text-primary'
+    : 'text-muted-foreground';
+
+  const preview = isEmail
+    ? (e.title || (e.body || '').slice(0, 80))
+    : ((e.body || e.title || '').replace(/\s+/g, ' ').slice(0, 90));
+
+  return (
+    <div className={`rounded-lg border ${accent}`}>
+      <button
+        type="button"
+        onClick={() => hasContent && setOpen((v) => !v)}
+        disabled={!hasContent}
+        className={`w-full flex items-center gap-2 text-left px-2.5 py-1.5 ${hasContent ? 'hover:bg-background/50 cursor-pointer' : 'cursor-default'}`}
+      >
+        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${iconColor}`} />
+        <span className="text-xs font-medium">{label}</span>
+        {inbound && <Badge className="text-[9px] h-4 px-1 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">in</Badge>}
+        {outbound && <Badge variant="secondary" className="text-[9px] h-4 px-1">out</Badge>}
+        {preview && !open && (
+          <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">· {preview}</span>
+        )}
+        <span className="text-[10px] text-muted-foreground ml-auto flex-shrink-0 tabular-nums">
+          {format(new Date(e.event_at), 'MMM d · h:mm a')}
+        </span>
+        {hasContent && (
+          open
+            ? <ChevronDown className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+            : <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+        )}
+      </button>
+      {open && hasContent && (
+        <div className="px-2.5 pb-2 pt-1 border-t border-border/50">
+          {isEmail && e.title && (
+            <div className="text-xs font-semibold mb-1">{e.title}</div>
+          )}
+          {e.body && <div className="text-sm whitespace-pre-wrap break-words">{e.body}</div>}
+          {recording && (
+            <a href={recording} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
+              <Phone className="w-3 h-3" />Recording
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
