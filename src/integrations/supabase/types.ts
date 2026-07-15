@@ -357,6 +357,82 @@ export type Database = {
           },
         ]
       }
+      ad_spend_daily: {
+        Row: {
+          ad_account_id: string
+          campaign_id: string
+          campaign_name: string | null
+          clicks: number
+          client_id: string | null
+          client_name: string | null
+          created_at: string
+          currency: string
+          date: string
+          id: string
+          impressions: number
+          leads: number
+          spend: number
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          campaign_id: string
+          campaign_name?: string | null
+          clicks?: number
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          currency?: string
+          date: string
+          id?: string
+          impressions?: number
+          leads?: number
+          spend?: number
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          campaign_id?: string
+          campaign_name?: string | null
+          clicks?: number
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          currency?: string
+          date?: string
+          id?: string
+          impressions?: number
+          leads?: number
+          spend?: number
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_spend_daily_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ad_spend_daily_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_spend_daily_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       ad_spend_reports: {
         Row: {
           ad_set_name: string | null
@@ -411,6 +487,76 @@ export type Database = {
           },
           {
             foreignKeyName: "ad_spend_reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      ad_spend_sync_runs: {
+        Row: {
+          ad_account_id: string | null
+          client_id: string | null
+          client_name: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          rows_written: number
+          sheet_error: string | null
+          sheet_status: string | null
+          started_at: string
+          status: string
+          sync_date: string | null
+          triggered_by: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          client_id?: string | null
+          client_name?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          rows_written?: number
+          sheet_error?: string | null
+          sheet_status?: string | null
+          started_at?: string
+          status: string
+          sync_date?: string | null
+          triggered_by?: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          client_id?: string | null
+          client_name?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          rows_written?: number
+          sheet_error?: string | null
+          sheet_status?: string | null
+          started_at?: string
+          status?: string
+          sync_date?: string | null
+          triggered_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_spend_sync_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "ad_spend_sync_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_spend_sync_runs_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
@@ -930,6 +1076,7 @@ export type Database = {
           master_pinned_gids: Json
           meetgeek_api_key: string | null
           meetgeek_webhook_secret: string | null
+          meta_spend_sheet_url: string | null
           openai_api_key: string | null
           password_hash: string | null
           selected_gemini_model: string | null
@@ -969,6 +1116,7 @@ export type Database = {
           master_pinned_gids?: Json
           meetgeek_api_key?: string | null
           meetgeek_webhook_secret?: string | null
+          meta_spend_sheet_url?: string | null
           openai_api_key?: string | null
           password_hash?: string | null
           selected_gemini_model?: string | null
@@ -1008,6 +1156,7 @@ export type Database = {
           master_pinned_gids?: Json
           meetgeek_api_key?: string | null
           meetgeek_webhook_secret?: string | null
+          meta_spend_sheet_url?: string | null
           openai_api_key?: string | null
           password_hash?: string | null
           selected_gemini_model?: string | null
@@ -16271,6 +16420,24 @@ export type Database = {
           overall_health: string | null
           recent_leads: number | null
           recent_spend: number | null
+        }
+        Relationships: []
+      }
+      v_ad_spend_health: {
+        Row: {
+          ad_account_id: string | null
+          client_id: string | null
+          client_name: string | null
+          error_message: string | null
+          is_stale: boolean | null
+          last_date: string | null
+          last_run_at: string | null
+          last_status: string | null
+          last_success_at: string | null
+          last_synced_at: string | null
+          rows_written: number | null
+          sheet_error: string | null
+          sheet_status: string | null
         }
         Relationships: []
       }
