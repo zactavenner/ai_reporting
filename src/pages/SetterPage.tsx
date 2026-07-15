@@ -134,25 +134,19 @@ export default function SetterPage() {
     } finally { setSyncing(false); }
   };
 
-  const syncConversations = async () => {
+  const syncConversations = async (silent = false) => {
     if (!rollupClientIds.length) { toast.warning('No clients selected'); return; }
     setSyncingConvos(true);
     try {
-      // FIX: previous body used `mode:'conversations'` which the edge function
-      // does not recognize — it silently ran a full contact+opportunity resync
-      // capped at 500 contacts with no date filter, so leads shown in the 7d/30d
-      // window frequently missed timeline updates. Use the supported branch:
-      // syncType=contacts + syncTimeline=true + sinceDateDays=window so the
-      // fetch is scoped to the exact leads currently visible in the queue.
       const results = await Promise.allSettled(
         rollupClientIds.map((cid) =>
           supabase.functions.invoke('sync-ghl-contacts', {
             body: {
               client_id: cid,
-              mode: 'contacts',
-              syncType: 'contacts',
+              mode: 'recent_conversations',
               syncTimeline: true,
-              sinceDateDays: windowDays,
+              sinceMinutes: Math.max(60, windowDays * 24 * 60),
+              maxConversations: 100,
             },
           })
         )
@@ -161,12 +155,22 @@ export default function SetterPage() {
       const failed = results.length - ok;
       setLastConvoSync(new Date());
       await refresh();
-      if (failed === 0) toast.success(`Conversations synced across ${ok} client${ok === 1 ? '' : 's'} (${windowDays}d window)`);
-      else toast.warning(`Synced ${ok}/${results.length} clients — ${failed} failed`);
+      if (!silent) {
+        if (failed === 0) toast.success(`Recent conversations synced across ${ok} client${ok === 1 ? '' : 's'}`);
+        else toast.warning(`Synced ${ok}/${results.length} clients — ${failed} failed`);
+      }
     } catch (e: any) {
-      toast.error(`Conversation sync failed: ${e?.message || e}`);
+      if (!silent) toast.error(`Conversation sync failed: ${e?.message || e}`);
     } finally { setSyncingConvos(false); }
   };
+
+  useEffect(() => {
+    if (!rollupClientIds.length) return;
+    const id = window.setInterval(() => {
+      if (!syncingConvos) syncConversations(true);
+    }, 15 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, [rollupClientIds.join(','), windowDays, syncingConvos]);
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -201,7 +205,7 @@ export default function SetterPage() {
           <Button
             variant="default"
             size="sm"
-            onClick={syncConversations}
+            onClick={() => syncConversations(false)}
             disabled={syncingConvos || rollupClientIds.length === 0}
             className="gap-1"
             title={lastConvoSync ? `Last conversation sync: ${formatDistanceToNowStrict(lastConvoSync)} ago (${windowDays}d window)` : `Pull SMS/email timeline for leads in the last ${windowDays}d across ${rollupClientIds.length} client(s)`}

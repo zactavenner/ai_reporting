@@ -139,16 +139,18 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       setTimeline(rows);
       setTlLoading(false);
       setLastSyncedAt(new Date());
-      // Auto-pull live conversation from GHL so the thread is never blank when
-      // the lead is opened. Fires once per lead switch; realtime keeps it fresh after.
+      // Auto-pull live conversation from GHL so the thread is never blank/stale
+      // when the lead is opened. Realtime keeps it fresh after inserts land.
       if (lead.ghl_contact_id) {
-        const hasConvo = rows.some((r) => {
+        const convoRows = rows.filter((r) => {
           const t = (r.event_type || '').toLowerCase();
           return t.includes('sms') || t.includes('email') || t === 'message' || t.includes('mail');
         });
-        if (!hasConvo) {
+        const newestConvoAt = convoRows[0]?.event_at ? new Date(convoRows[0].event_at).getTime() : 0;
+        const isStale = !newestConvoAt || Date.now() - newestConvoAt > 15 * 60 * 1000;
+        if (isStale) {
           // fire and forget — syncTimelineFromGHL handles its own errors + refresh
-          syncTimelineFromGHL();
+          syncTimelineFromGHL(true);
         }
       }
     })();
@@ -169,8 +171,8 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
     return () => { supabase.removeChannel(ch); };
   }, [lead?.id, lead?.ghl_contact_id]);
 
-  const syncTimelineFromGHL = async () => {
-    if (!lead?.ghl_contact_id) { toast.error('No GHL contact linked'); return; }
+  const syncTimelineFromGHL = async (silent = false) => {
+    if (!lead?.ghl_contact_id) { if (!silent) toast.error('No GHL contact linked'); return; }
     setSyncingTimeline(true);
     try {
       const { data, error } = await supabase.functions.invoke('sync-ghl-contacts', {
@@ -187,13 +189,21 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       const rows = await loadTimeline(lead);
       setTimeline(rows);
       setLastSyncedAt(new Date());
-      toast.success(`Pulled ${data?.events_count ?? rows.length} events from GHL`);
+      if (!silent) toast.success(`Pulled ${data?.events_count ?? rows.length} events from GHL`);
     } catch (e: any) {
-      toast.error(`Sync failed: ${e?.message || e}`);
+      if (!silent) toast.error(`Sync failed: ${e?.message || e}`);
     } finally {
       setSyncingTimeline(false);
     }
   };
+
+  useEffect(() => {
+    if (!lead?.ghl_contact_id) return;
+    const id = window.setInterval(() => {
+      if (!syncingTimeline) syncTimelineFromGHL(true);
+    }, 15 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, [lead?.id, lead?.ghl_contact_id, syncingTimeline]);
 
   const draftAI = async () => {
     if (!lead) return;
