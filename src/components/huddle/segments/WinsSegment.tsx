@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Trophy, Plus } from 'lucide-react';
 import { yesterdayISO } from '@/hooks/useHuddle';
+import { AttendancePanel } from '../AttendancePanel';
 
 interface Props { huddleId: string; }
 interface Win { id: string; member_name: string | null; text: string; huddle_id: string }
@@ -48,6 +49,7 @@ export function WinsSegment({ huddleId }: Props) {
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
+      <AttendancePanel huddleId={huddleId} />
       <div className="flex gap-2">
         <Input
           value={text}
