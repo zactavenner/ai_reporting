@@ -191,7 +191,9 @@ export function useSetterLeads(enabledClientIds?: string[] | null, windowDays: n
           assigned_user: l.assigned_user,
           is_spam: l.is_spam,
           questions: l.questions,
-          ghl_contact_id: ghlContactByLead[l.id] || null,
+          // GHL contact id is the lead external_id. Do not wait for a timeline
+          // row to exist before allowing Setter to pull/live-sync conversations.
+          ghl_contact_id: l.external_id || ghlContactByLead[l.id] || null,
           enrichment: enrichMap[l.id] || null,
           first_touch_at: first,
           last_touch_at: last,

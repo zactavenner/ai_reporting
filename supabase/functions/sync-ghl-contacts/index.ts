@@ -422,6 +422,75 @@ async function fetchGHLConversations(
   return calls;
 }
 
+async function fetchGHLRecentConversationContacts(
+  apiKey: string,
+  locationId: string,
+  sinceDate: Date,
+  maxConversations: number = 100,
+): Promise<Array<{ contactId: string; conversationId: string; lastMessageDate: string | null; type: string | null }>> {
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'Version': '2021-07-28',
+  };
+
+  const recent: Array<{ contactId: string; conversationId: string; lastMessageDate: string | null; type: string | null }> = [];
+  const seenContactIds = new Set<string>();
+  const seenConversationIds = new Set<string>();
+  let startAfterId: string | undefined;
+  let pageCount = 0;
+  const MAX_PAGES = 10;
+
+  while (pageCount < MAX_PAGES && recent.length < maxConversations) {
+    const url = new URL(`${GHL_BASE_URL}/conversations/search`);
+    url.searchParams.set('locationId', locationId);
+    url.searchParams.set('limit', '100');
+    if (startAfterId) url.searchParams.set('startAfterId', startAfterId);
+
+    const response = await fetchGHL(url.toString(), { method: 'GET', headers }, `recent-conversations/p${pageCount + 1}`);
+    if (!response.ok) {
+      const err = await response.text().catch(() => '');
+      throw new Error(`GHL conversations search failed (${response.status}): ${err.substring(0, 200)}`);
+    }
+
+    const data = await response.json();
+    const conversations: any[] = data.conversations || [];
+    if (conversations.length === 0) break;
+
+    let pageHadRecent = false;
+    for (const conv of conversations) {
+      const conversationId = String(conv.id || conv.conversationId || '');
+      if (!conversationId || seenConversationIds.has(conversationId)) continue;
+      seenConversationIds.add(conversationId);
+
+      const contactId = String(conv.contactId || conv.contact?.id || conv.contact_id || '');
+      const lastMessageDate = conv.lastMessageDate || conv.lastMessageAt || conv.lastMessage?.dateAdded || conv.dateUpdated || conv.updatedAt || null;
+      const lastAt = lastMessageDate ? new Date(lastMessageDate) : null;
+      const isRecent = !lastAt || Number.isNaN(lastAt.getTime()) || lastAt >= sinceDate;
+      if (!isRecent) continue;
+
+      pageHadRecent = true;
+      if (contactId && !seenContactIds.has(contactId)) {
+        seenContactIds.add(contactId);
+        recent.push({ contactId, conversationId, lastMessageDate, type: conv.type || null });
+        if (recent.length >= maxConversations) break;
+      }
+    }
+
+    const meta = data.meta || {};
+    startAfterId = meta.startAfterId || meta.startAfter || data.startAfterId || conversations[conversations.length - 1]?.id;
+    pageCount++;
+
+    // GHL returns newest conversations first; once a full page has no recent rows,
+    // stop instead of burning API calls.
+    if (!pageHadRecent || !startAfterId) break;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+
+  console.log(`[recent-conversations] found ${recent.length} contact(s) with conversation activity since ${sinceDate.toISOString()}`);
+  return recent;
+}
+
 async function syncCallToDatabase(
   supabase: any,
   clientId: string,
@@ -489,6 +558,74 @@ async function syncClientCallLogs(
   }
 
   console.log(`GHL call sync complete for ${client.name}: enriched=${result.enriched}, skipped=${result.skipped}`);
+  return result;
+}
+
+async function syncRecentConversationsForClient(
+  supabase: any,
+  client: { id: string; name: string; ghl_api_key: string; ghl_location_id: string },
+  sinceDate: Date,
+  maxConversations: number = 100,
+): Promise<{ conversations_seen: number; contacts_synced: number; timelines_synced: number; events_synced: number; leads_created_or_updated: number; errors: string[] }> {
+  const result = { conversations_seen: 0, contacts_synced: 0, timelines_synced: 0, events_synced: 0, leads_created_or_updated: 0, errors: [] as string[] };
+  console.log(`[recent-conversations] ${client.name}: syncing since ${sinceDate.toISOString()}, max=${maxConversations}`);
+
+  const conversations = await fetchGHLRecentConversationContacts(client.ghl_api_key, client.ghl_location_id, sinceDate, maxConversations);
+  result.conversations_seen = conversations.length;
+  const fieldNameMap = conversations.length > 0
+    ? await fetchGHLCustomFieldDefinitions(client.ghl_api_key, client.ghl_location_id)
+    : {};
+
+  for (const conv of conversations) {
+    try {
+      const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('client_id', client.id)
+        .eq('external_id', conv.contactId)
+        .maybeSingle();
+
+      if (!existingLead) {
+        const contact = await fetchSingleGHLContact(client.ghl_api_key, conv.contactId);
+        if (contact) {
+          const syncResult = await syncContactToDatabase(supabase, client.id, contact, undefined, fieldNameMap);
+          if (syncResult.action === 'created' || syncResult.action === 'updated') {
+            result.leads_created_or_updated++;
+          }
+        }
+      }
+
+      const timelineResult = await syncContactDeepTimeline(
+        supabase,
+        client.id,
+        conv.contactId,
+        client.ghl_api_key,
+        client.ghl_location_id,
+      );
+
+      result.contacts_synced++;
+      if (timelineResult.success) {
+        result.timelines_synced++;
+        result.events_synced += timelineResult.events_count;
+      } else if (timelineResult.error) {
+        result.errors.push(`${conv.contactId}: ${timelineResult.error}`);
+      }
+    } catch (err) {
+      result.errors.push(`${conv.contactId}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }
+
+  await supabase
+    .from('clients')
+    .update({
+      last_timeline_sync_at: new Date().toISOString(),
+      last_ghl_sync_at: new Date().toISOString(),
+      ghl_sync_status: result.errors.length > 0 ? 'partial' : 'healthy',
+      ghl_sync_error: result.errors.length > 0 ? result.errors.slice(0, 3).join('; ') : null,
+    })
+    .eq('id', client.id);
+
+  console.log(`[recent-conversations] ${client.name}: ${result.timelines_synced}/${result.conversations_seen} timelines, ${result.events_synced} events, errors=${result.errors.length}`);
   return result;
 }
 
@@ -3188,6 +3325,8 @@ serve(async (req) => {
     let singleContactId: string | null = null;
     let mode: string | null = null;
     let syncTimeline: boolean = false;
+    let sinceMinutes: number | undefined;
+    let maxConversations: number = 100;
     
     try {
       const body = await req.json();
@@ -3196,6 +3335,12 @@ serve(async (req) => {
       singleContactId = body?.contactId || body?.contact_id || null;
       mode = body?.mode || null;
       syncTimeline = body?.syncTimeline === true;
+      if (body?.sinceMinutes) {
+        sinceMinutes = Math.min(Math.max(parseInt(body.sinceMinutes) || 60, 15), 60 * 24 * 30);
+      }
+      if (body?.maxConversations) {
+        maxConversations = Math.min(Math.max(parseInt(body.maxConversations) || 100, 1), 250);
+      }
 
       // Normalize mode aliases for backward compatibility
       if (mode === 'single_contact') mode = 'single';
@@ -3752,6 +3897,83 @@ serve(async (req) => {
           status: result.success ? 200 : 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
+      );
+    }
+
+    if (mode === 'recent_conversations') {
+      const since = new Date(Date.now() - (sinceMinutes || 60) * 60 * 1000);
+      let query = supabase
+        .from('clients')
+        .select('id, name, ghl_api_key, ghl_location_id')
+        .eq('status', 'active')
+        .not('ghl_api_key', 'is', null)
+        .not('ghl_location_id', 'is', null);
+
+      if (targetClientId) query = query.eq('id', targetClientId);
+
+      const { data: clients, error: clientsError } = await query;
+      if (clientsError) throw new Error(`Failed to fetch clients: ${clientsError.message}`);
+      if (!clients || clients.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, message: 'No active GHL clients found', results: [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const runRecentSync = async () => {
+        const results: any[] = [];
+        for (const client of clients) {
+          const { data: syncLog } = await supabase
+            .from('sync_logs')
+            .insert({
+              client_id: client.id,
+              sync_type: 'ghl_recent_conversations',
+              status: 'running',
+              started_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+
+          try {
+            const result = await syncRecentConversationsForClient(supabase, client as any, since, maxConversations);
+            results.push({ client_id: client.id, client_name: client.name, ...result });
+            await supabase
+              .from('sync_logs')
+              .update({
+                status: result.errors.length > 0 ? 'partial' : 'success',
+                records_synced: result.events_synced,
+                error_message: result.errors.length > 0 ? result.errors.slice(0, 5).join('; ') : null,
+                completed_at: new Date().toISOString(),
+              })
+              .eq('id', syncLog?.id);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Unknown recent conversation sync error';
+            results.push({ client_id: client.id, client_name: client.name, conversations_seen: 0, contacts_synced: 0, timelines_synced: 0, events_synced: 0, errors: [msg] });
+            await supabase
+              .from('sync_logs')
+              .update({ status: 'error', error_message: msg, completed_at: new Date().toISOString() })
+              .eq('id', syncLog?.id);
+          }
+        }
+        return results;
+      };
+
+      // Cron/all-client runs return immediately; single-client UI/manual calls wait
+      // for completion so the Setter screen can refresh with the new messages.
+      if (!targetClientId && typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+        EdgeRuntime.waitUntil(runRecentSync());
+        return new Response(
+          JSON.stringify({ success: true, message: `Recent conversation sync started for ${clients.length} clients`, since: since.toISOString() }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const results = await runRecentSync();
+      const totalEvents = results.reduce((sum, r) => sum + (r.events_synced || 0), 0);
+      const totalTimelines = results.reduce((sum, r) => sum + (r.timelines_synced || 0), 0);
+      return new Response(
+        JSON.stringify({ success: true, since: since.toISOString(), summary: { clients_synced: clients.length, total_timelines_synced: totalTimelines, total_events_synced: totalEvents }, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
