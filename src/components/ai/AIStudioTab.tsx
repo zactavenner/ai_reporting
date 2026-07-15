@@ -970,6 +970,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     try { localStorage.setItem("ai-studio:video-resolution", videoResolution); } catch {}
   }, [videoResolution]);
+  // Target total video length in seconds. HappyHorse/Seedance are hard-capped
+  // to 15s per clip, so 30s renders as two back-to-back 15s clips (same
+  // ingredient/first-frame + same prompt) for character consistency.
+  const [videoTotalDuration, setVideoTotalDuration] = useState<15 | 30>(() => {
+    try {
+      const v = Number(localStorage.getItem("ai-studio:video-total-duration"));
+      return v === 30 ? 30 : 15;
+    } catch { return 15; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-total-duration", String(videoTotalDuration)); } catch {}
+  }, [videoTotalDuration]);
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
@@ -1540,6 +1552,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
+            if (videoTotalDuration === 30) {
+              const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
+              lockLines.push(
+                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${videoModel}", duration=15, resolution="${videoResolution}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s HappyHorse/Seedance render.`,
+              );
+            }
           }
           if (imageModels.length === 1) {
             lockLines.push(`🔒 IMAGE HARD-LOCK: model="${imageModels[0]}". Pass this EXACT value to generate_static_ad / edit_static_ad.`);
@@ -2625,6 +2643,25 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   );
                 })()}
+                {videoModels.length > 0 && (
+                  <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
+                    {([15, 30] as const).map((d) => {
+                      const active = videoTotalDuration === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setVideoTotalDuration(d)}
+                          title={d === 15 ? "Single 15s clip" : "Two 15s clips concatenated (same ingredient/first-frame for character consistency)"}
+                          className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                        >
+                          {d}s{d === 30 ? " (2×15)" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {imageModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image Style:</span>
