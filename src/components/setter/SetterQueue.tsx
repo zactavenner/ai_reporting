@@ -1,11 +1,12 @@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Zap, Search, Flame, Mail, Phone, Bell, CalendarClock } from 'lucide-react';
+import { Zap, Search, Flame, Mail, Phone, Bell, CalendarClock, Clock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { List, type RowComponentProps } from 'react-window';
 import { fmtDuration, timeSinceISO, type SetterLead } from '@/hooks/useSetterLeads';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { getAllLastViewed, subscribeViewed } from '@/lib/setterViewState';
+import { getPhoneTimezone, isBusinessHours } from '@/lib/areaCodeTimezone';
 
 interface Props {
   leads: SetterLead[];
@@ -231,6 +232,21 @@ function QueueRow({ index, style, rows, selectedId, onSelect, viewedMap }: RowCo
         {l.email && <Mail className="w-3 h-3" />}
         {l.phone && <Phone className="w-3 h-3" />}
         {l.inbound_count > 0 && <span className="text-[10px]">{l.inbound_count} reply{l.inbound_count === 1 ? '' : 'ies'}</span>}
+        {(() => {
+          const tz = getPhoneTimezone(l.phone);
+          if (!tz) return null;
+          const biz = isBusinessHours(l.phone);
+          return (
+            <span
+              className={`inline-flex items-center gap-0.5 font-mono tabular-nums ${
+                biz === false ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+              }`}
+              title={`${tz.tz} · ${tz.offsetLabel}${biz === false ? ' · outside 8am–8pm local' : ''}`}
+            >
+              <Clock className="w-3 h-3" />{tz.localTime} {tz.abbrev}
+            </span>
+          );
+        })()}
         <span className="ml-auto">
           created {formatDistanceToNowStrict(new Date(l.created_at))} ago
         </span>
