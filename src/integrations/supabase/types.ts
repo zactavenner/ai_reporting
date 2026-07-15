@@ -10426,6 +10426,39 @@ export type Database = {
           },
         ]
       }
+      jarvis_alert_recipients: {
+        Row: {
+          active: boolean
+          alert_types: string[]
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          phone_e164: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          alert_types?: string[]
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          phone_e164: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          alert_types?: string[]
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          phone_e164?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       jarvis_conversations: {
         Row: {
           created_at: string
