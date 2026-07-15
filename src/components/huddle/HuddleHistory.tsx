@@ -12,6 +12,7 @@ interface Row {
   avg_rating: number | null;
   attendance_pct: number;
   followthrough_pct: number;
+  attendees: string[];
 }
 
 function fmt(s: number | null) {
@@ -30,10 +31,11 @@ export function HuddleHistory() {
 
       const enriched: Row[] = [];
       for (const h of (huddles as any[] || [])) {
-        const [{ count: att }, { data: tasks }] = await Promise.all([
-          supabase.from('huddle_attendance').select('*', { count: 'exact', head: true }).eq('huddle_id', h.id),
+        const [{ data: attRows }, { data: tasks }] = await Promise.all([
+          supabase.from('huddle_attendance').select('member_name').eq('huddle_id', h.id),
           supabase.from('tasks').select('id,status').eq('huddle_id', h.id),
         ]);
+        const attendees = ((attRows as any[]) || []).map(a => a.member_name).filter(Boolean);
         const total = (tasks || []).length;
         const done = (tasks || []).filter((t: any) => t.status === 'completed' || t.status === 'done').length;
         enriched.push({
@@ -42,8 +44,9 @@ export function HuddleHistory() {
           actual_duration_s: h.actual_duration_s,
           planned_duration_s: h.planned_duration_s,
           avg_rating: h.avg_rating,
-          attendance_pct: Math.round(((att || 0) / totalMembers) * 100),
+          attendance_pct: Math.round((attendees.length / totalMembers) * 100),
           followthrough_pct: total ? Math.round((done / total) * 100) : 0,
+          attendees,
         });
       }
       setRows(enriched);
@@ -76,6 +79,7 @@ export function HuddleHistory() {
               <TableHead>Duration (actual/planned)</TableHead>
               <TableHead>Avg rating</TableHead>
               <TableHead>Attendance</TableHead>
+              <TableHead>Attendees</TableHead>
               <TableHead>Follow-through</TableHead>
             </TableRow>
           </TableHeader>
@@ -85,12 +89,21 @@ export function HuddleHistory() {
                 <TableCell className="font-medium">{r.date}</TableCell>
                 <TableCell>{fmt(r.actual_duration_s)} / {fmt(r.planned_duration_s)}</TableCell>
                 <TableCell>{r.avg_rating ? r.avg_rating.toFixed(1) : '—'}</TableCell>
-                <TableCell>{r.attendance_pct}%</TableCell>
+                <TableCell>{r.attendees.length} · {r.attendance_pct}%</TableCell>
+                <TableCell className="max-w-[280px]">
+                  <div className="flex flex-wrap gap-1">
+                    {r.attendees.slice(0, 6).map((n, i) => (
+                      <span key={i} className="inline-block rounded-full bg-primary/10 text-primary text-[10px] px-2 py-0.5">{n}</span>
+                    ))}
+                    {r.attendees.length > 6 && <span className="text-[10px] text-muted-foreground">+{r.attendees.length - 6}</span>}
+                    {r.attendees.length === 0 && <span className="text-[10px] text-muted-foreground">—</span>}
+                  </div>
+                </TableCell>
                 <TableCell>{r.followthrough_pct}%</TableCell>
               </TableRow>
             ))}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No huddles yet.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No huddles yet.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>

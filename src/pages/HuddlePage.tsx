@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { HuddleRunner } from '@/components/huddle/HuddleRunner';
 import { HuddleHistory } from '@/components/huddle/HuddleHistory';
+import { HuddleMonthlyRecap } from '@/components/huddle/HuddleMonthlyRecap';
 
 export default function HuddlePage() {
   const [tab, setTab] = useState('run');
@@ -13,6 +14,7 @@ export default function HuddlePage() {
           <TabsList>
             <TabsTrigger value="run">Run Huddle</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
+            <TabsTrigger value="recap">Monthly Recap</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="run" className="mt-0">
@@ -20,6 +22,9 @@ export default function HuddlePage() {
         </TabsContent>
         <TabsContent value="history" className="mt-0 p-4 md:p-8">
           <HuddleHistory />
+        </TabsContent>
+        <TabsContent value="recap" className="mt-0 p-4 md:p-8">
+          <HuddleMonthlyRecap />
         </TabsContent>
       </Tabs>
     </div>
