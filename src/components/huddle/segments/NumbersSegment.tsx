@@ -147,9 +147,12 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
           delta(yStats.cpbc, mStats.cpbc),
           delta(yStats.cps, mStats.cps),
         );
+        const s = settingsByClient[c.id];
         return {
           client_id: c.id,
           client_name: c.name,
+          doc_url: c.google_doc_url || s?.kpi_google_doc_url || null,
+          sheet_url: s?.kpi_google_sheet_url || null,
           y: yStats,
           w: wStats,
           m: mStats,
