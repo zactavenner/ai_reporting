@@ -6,20 +6,24 @@ import { ArrowDown, ArrowUp, Flag, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import { yesterdayISO } from '@/hooks/useHuddle';
 
+interface PeriodStats {
+  spend: number;
+  leads: number;
+  booked: number;
+  showed: number;
+  closes: number;
+  cpl: number;
+  cpbc: number;
+  cps: number;
+}
+
 interface Row {
   client_id: string;
   client_name: string;
-  spend: number;
-  leads: number;
-  cpl: number;      // cost per lead
-  cps: number;      // cost per show
-  cpbc: number;     // cost per booked call
-  booked: number;
-  closes: number;
-  cpl_avg: number;
-  cps_avg: number;
-  cpbc_avg: number;
-  worst_delta: number; // positive = worse
+  y: PeriodStats;
+  w: PeriodStats;
+  m: PeriodStats;
+  worst_delta: number;
 }
 
 function delta(cur: number, avg: number) {
@@ -29,7 +33,7 @@ function delta(cur: number, avg: number) {
 
 function DeltaBadge({ pct }: { pct: number }) {
   if (!isFinite(pct) || Math.abs(pct) < 0.02) return <span className="text-muted-foreground text-xs inline-flex items-center gap-0.5"><Minus className="w-3 h-3" />0%</span>;
-  const bad = pct > 0; // higher CPX = worse
+  const bad = pct > 0; // higher CP$ = worse
   return (
     <span className={`text-xs inline-flex items-center gap-0.5 ${bad ? 'text-destructive' : 'text-emerald-500'}`}>
       {bad ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
@@ -38,27 +42,63 @@ function DeltaBadge({ pct }: { pct: number }) {
   );
 }
 
-function MetricTrio({ cpl, cps, cpbc, cplAvg, cpsAvg, cpbcAvg }: {
-  cpl: number; cps: number; cpbc: number; cplAvg: number; cpsAvg: number; cpbcAvg: number;
-}) {
+function money(n: number) {
+  if (!isFinite(n) || n <= 0) return '—';
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
+function aggregate(list: any[]): PeriodStats {
+  const spend = list.reduce((a, m) => a + (Number(m.ad_spend) || 0), 0);
+  const leads = list.reduce((a, m) => a + (Number(m.leads) || 0), 0);
+  const booked = list.reduce((a, m) => a + (Number(m.calls) || 0), 0);
+  const showed = list.reduce((a, m) => a + (Number(m.showed_calls) || 0), 0);
+  const closes = list.reduce((a, m) => a + (Number(m.commitments) || 0), 0);
+  return {
+    spend, leads, booked, showed, closes,
+    cpl: leads ? spend / leads : 0,
+    cpbc: booked ? spend / booked : 0,
+    cps: showed ? spend / showed : 0,
+  };
+}
+
+function MetricBreakdown({ row }: { row: Row }) {
+  const cell = (v: number) => (
+    <td className="px-2 py-1 text-right font-semibold text-sm tabular-nums">{money(v)}</td>
+  );
+  const deltaRow = (cur: number, avg: number) => (
+    <div className="text-[10px]"><DeltaBadge pct={delta(cur, avg)} /></div>
+  );
   return (
-    <div className="grid grid-cols-3 gap-3 min-w-[280px]">
-      <div>
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">CPL</div>
-        <div className="text-lg font-semibold">${cpl.toFixed(0)}</div>
-        <DeltaBadge pct={delta(cpl, cplAvg)} />
-      </div>
-      <div>
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">CPS</div>
-        <div className="text-lg font-semibold">${cps.toFixed(0)}</div>
-        <DeltaBadge pct={delta(cps, cpsAvg)} />
-      </div>
-      <div>
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">CPBC</div>
-        <div className="text-lg font-semibold">${cpbc.toFixed(0)}</div>
-        <DeltaBadge pct={delta(cpbc, cpbcAvg)} />
-      </div>
-    </div>
+    <table className="text-xs min-w-[340px]">
+      <thead>
+        <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <th className="text-left font-normal pr-2"></th>
+          <th className="text-right font-normal px-2">Yesterday</th>
+          <th className="text-right font-normal px-2">7d</th>
+          <th className="text-right font-normal px-2">30d</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="pr-2 text-muted-foreground">CPL</td>
+          {cell(row.y.cpl)}{cell(row.w.cpl)}{cell(row.m.cpl)}
+        </tr>
+        <tr>
+          <td className="pr-2 text-muted-foreground">Cost / Call</td>
+          {cell(row.y.cpbc)}{cell(row.w.cpbc)}{cell(row.m.cpbc)}
+        </tr>
+        <tr>
+          <td className="pr-2 text-muted-foreground">Cost / Showed</td>
+          {cell(row.y.cps)}{cell(row.w.cps)}{cell(row.m.cps)}
+        </tr>
+        <tr>
+          <td></td>
+          <td className="px-2 text-right">{deltaRow(row.y.cpl, row.m.cpl)}</td>
+          <td className="px-2 text-right">{deltaRow(row.w.cpl, row.m.cpl)}</td>
+          <td className="px-2 text-right text-muted-foreground text-[10px]">baseline</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
@@ -69,14 +109,16 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
   useEffect(() => {
     const load = async () => {
       const y = yesterdayISO();
-      const start = new Date(y);
       const weekStart = new Date(y);
       weekStart.setDate(weekStart.getDate() - 6);
       const weekStartISO = weekStart.toISOString().slice(0, 10);
+      const monthStart = new Date(y);
+      monthStart.setDate(monthStart.getDate() - 29);
+      const monthStartISO = monthStart.toISOString().slice(0, 10);
 
       const [{ data: clients }, { data: metrics }] = await Promise.all([
         supabase.from('clients').select('id,name').in('status', ['active', 'onboarding']),
-        supabase.from('daily_metrics').select('client_id,date,ad_spend,leads,calls,showed_calls,commitments').gte('date', weekStartISO).lte('date', y),
+        supabase.from('daily_metrics').select('client_id,date,ad_spend,leads,calls,showed_calls,commitments').gte('date', monthStartISO).lte('date', y),
       ]);
 
       const byClient: Record<string, any[]> = {};
@@ -86,34 +128,29 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
 
       const result: Row[] = (clients || []).map((c: any) => {
         const list = byClient[c.id] || [];
-        const yRow = list.find((m) => m.date === y) || { ad_spend: 0, leads: 0, calls: 0, showed_calls: 0, commitments: 0 };
-        const week = list.filter((m) => m.date !== y);
-        const avg = (fn: (m: any) => number) => {
-          const vals = week.map(fn).filter((v) => v > 0);
-          return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-        };
-        const cpl = yRow.leads ? yRow.ad_spend / yRow.leads : 0;
-        const cps = yRow.showed_calls ? yRow.ad_spend / yRow.showed_calls : 0;
-        const cpbc = yRow.calls ? yRow.ad_spend / yRow.calls : 0;
-        const cplAvg = avg((m) => (m.leads ? m.ad_spend / m.leads : 0));
-        const cpsAvg = avg((m) => (m.showed_calls ? m.ad_spend / m.showed_calls : 0));
-        const cpbcAvg = avg((m) => (m.calls ? m.ad_spend / m.calls : 0));
-        const worst = Math.max(delta(cpl, cplAvg), delta(cps, cpsAvg), delta(cpbc, cpbcAvg));
+        const yList = list.filter((m) => m.date === y);
+        const wList = list.filter((m) => m.date >= weekStartISO && m.date <= y);
+        const mList = list;
+        const yStats = aggregate(yList);
+        const wStats = aggregate(wList);
+        const mStats = aggregate(mList);
+        const worst = Math.max(
+          delta(yStats.cpl, mStats.cpl),
+          delta(yStats.cpbc, mStats.cpbc),
+          delta(yStats.cps, mStats.cps),
+        );
         return {
           client_id: c.id,
           client_name: c.name,
-          spend: yRow.ad_spend || 0,
-          leads: yRow.leads || 0,
-          cpl, cps, cpbc,
-          booked: yRow.calls || 0,
-          closes: yRow.commitments || 0,
-          cpl_avg: cplAvg, cps_avg: cpsAvg, cpbc_avg: cpbcAvg,
+          y: yStats,
+          w: wStats,
+          m: mStats,
           worst_delta: isFinite(worst) ? worst : 0,
         };
       });
 
       result.sort((a, b) => b.worst_delta - a.worst_delta);
-      setRows(result.filter((r) => r.spend > 0 || r.leads > 0));
+      setRows(result.filter((r) => r.m.spend > 0 || r.m.leads > 0));
       setLoading(false);
     };
     load();
@@ -123,7 +160,7 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
     await supabase.from('huddle_flags').insert({
       huddle_id: huddleId,
       client_id: row.client_id,
-      reason: `Numbers off: CPL $${row.cpl.toFixed(0)} / CPS $${row.cps.toFixed(0)} / CPBC $${row.cpbc.toFixed(0)}`,
+      reason: `Numbers off: CPL ${money(row.y.cpl)} · Cost/Call ${money(row.y.cpbc)} · Cost/Showed ${money(row.y.cps)} (yday) vs 30d ${money(row.m.cpl)}/${money(row.m.cpbc)}/${money(row.m.cps)}`,
     });
     await supabase.from('tasks').insert({
       client_id: row.client_id,
@@ -139,19 +176,22 @@ export function NumbersSegment({ huddleId }: { huddleId: string }) {
   };
 
   if (loading) return <div className="text-center text-muted-foreground">Loading yesterday's numbers…</div>;
-  if (rows.length === 0) return <div className="text-center text-muted-foreground">No spend or leads yesterday.</div>;
+  if (rows.length === 0) return <div className="text-center text-muted-foreground">No spend or leads in the last 30 days.</div>;
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-2 max-h-[55vh] overflow-y-auto">
+    <div className="w-full max-w-6xl mx-auto space-y-2 max-h-[60vh] overflow-y-auto">
       {rows.map((r) => (
-        <Card key={r.client_id} className="p-4 flex items-center gap-4 justify-between">
-          <div className="flex-1 min-w-0">
+        <Card key={r.client_id} className="p-4 flex items-start gap-4 justify-between flex-wrap md:flex-nowrap">
+          <div className="flex-1 min-w-[220px]">
             <div className="font-semibold text-lg truncate">{r.client_name}</div>
-            <div className="text-xs text-muted-foreground">
-              Spend ${r.spend.toFixed(0)} · Leads {r.leads} · Booked {r.booked} · Closes {r.closes}
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Yday: Spend ${r.y.spend.toFixed(0)} · Leads {r.y.leads} · Booked {r.y.booked} · Showed {r.y.showed} · Closes {r.y.closes}
+            </div>
+            <div className="text-[11px] text-muted-foreground/80 mt-0.5">
+              30d: Spend ${r.m.spend.toFixed(0)} · Leads {r.m.leads} · Booked {r.m.booked} · Showed {r.m.showed}
             </div>
           </div>
-          <MetricTrio cpl={r.cpl} cps={r.cps} cpbc={r.cpbc} cplAvg={r.cpl_avg} cpsAvg={r.cps_avg} cpbcAvg={r.cpbc_avg} />
+          <MetricBreakdown row={r} />
           <Button variant="outline" size="sm" onClick={() => flagIssue(r)}>
             <Flag className="w-4 h-4 mr-1" />Flag
           </Button>
