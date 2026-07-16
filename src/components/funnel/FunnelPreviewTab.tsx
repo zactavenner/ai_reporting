@@ -748,6 +748,7 @@ function SmsCadenceEditor({
   const [pasteText, setPasteText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
 
   const runParse = async () => {
     if (!pasteText.trim()) return;
@@ -1046,7 +1047,47 @@ function EmailCadenceEditor({
           </div>
         </div>
       )}
-      {messages.map((m, i) => (
+      {messages.length > 0 && !showEditor && (
+        <div className="rounded-2xl border border-border bg-gradient-to-b from-muted/40 to-muted/10 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Mail className="h-3.5 w-3.5 text-[#EA4335]" />
+              Email Sequence Preview
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setShowEditor(true)}>
+              Edit emails
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {messages.map((m, i) => (
+              <div key={i} className="rounded-xl bg-background border border-border overflow-hidden shadow-sm">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border">
+                  <span className="inline-flex items-center rounded-full bg-background border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {m.delay_days === 0 ? 'Day 0 · Immediately' : `Day ${m.delay_days} · +${m.delay_days}d`}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Email #{i + 1}</span>
+                </div>
+                <div className="px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <div className="h-6 w-6 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-semibold">
+                      {(m.from_name || 'B').trim().charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-medium text-foreground truncate">{m.from_name || 'Sender'}</span>
+                    <span className="text-muted-foreground">to lead</span>
+                  </div>
+                  <div className="text-[13px] font-semibold leading-tight">
+                    {m.subject || <span className="text-muted-foreground italic">(no subject)</span>}
+                  </div>
+                  <div className="text-[12px] leading-snug text-muted-foreground whitespace-pre-wrap line-clamp-4">
+                    {m.body || <span className="italic">(empty body)</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {(showEditor || messages.length === 0) && messages.map((m, i) => (
         <div key={i} className="rounded-lg border border-border p-3 space-y-2 bg-muted/30">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -1091,9 +1132,18 @@ function EmailCadenceEditor({
           />
         </div>
       ))}
-      <Button variant="outline" size="sm" onClick={add} className="w-full">
-        <Plus className="h-3 w-3 mr-1" /> Add follow-up email
-      </Button>
+      {(showEditor || messages.length === 0) && (
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={add} className="flex-1">
+            <Plus className="h-3 w-3 mr-1" /> Add follow-up email
+          </Button>
+          {messages.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setShowEditor(false)}>
+              Done editing
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
