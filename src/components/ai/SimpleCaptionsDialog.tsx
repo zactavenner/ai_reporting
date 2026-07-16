@@ -599,6 +599,74 @@ export function SimpleCaptionsDialog({
             </div>
 
             <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Caption lines</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCues((prev) => {
+                      const last = prev[prev.length - 1];
+                      const start = last ? last.end + 0.1 : 0;
+                      const next = [...prev, { start, end: start + 1.2, text: "NEW LINE" }];
+                      return next;
+                    });
+                    setCaptionsVersion((v) => v + 1);
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-input bg-card px-1.5 py-0.5 text-[10px] hover:bg-muted/50"
+                >
+                  <Plus className="h-3 w-3" /> Add line
+                </button>
+              </div>
+              <div className="max-h-56 overflow-y-auto rounded border border-input divide-y divide-border">
+                {cues.length === 0 && (
+                  <div className="p-2 text-[10px] text-muted-foreground">
+                    {transcribing ? "Transcribing…" : "No lines yet."}
+                  </div>
+                )}
+                {cues.map((c, i) => (
+                  <div key={i} className="flex items-center gap-1.5 p-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = videoRef.current;
+                        if (el) {
+                          try { el.currentTime = Math.max(0, c.start + 0.001); setCurrentTime(c.start); } catch { /* noop */ }
+                        }
+                      }}
+                      className="shrink-0 w-10 text-[9px] font-mono text-muted-foreground hover:text-foreground text-left"
+                      title="Jump to this cue"
+                    >
+                      {c.start.toFixed(2)}s
+                    </button>
+                    <Input
+                      value={c.text}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCues((prev) => prev.map((x, idx) => idx === i ? { ...x, text: val } : x));
+                        setCaptionsVersion((v) => v + 1);
+                      }}
+                      className="h-7 text-xs px-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCues((prev) => prev.filter((_, idx) => idx !== i));
+                        setCaptionsVersion((v) => v + 1);
+                      }}
+                      className="shrink-0 h-7 w-7 grid place-items-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      title="Delete line"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Edit any line — add $, punctuation, or fix typos. Click the timestamp to jump the preview.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
               <div className="text-[11px] text-muted-foreground">
                 {cues.length > 0 ? `${cues.length} caption cue${cues.length === 1 ? "" : "s"} ready.` : transcribing ? "Generating word-level timestamps…" : "No captions yet."}
               </div>
