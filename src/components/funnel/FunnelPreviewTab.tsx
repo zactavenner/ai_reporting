@@ -748,7 +748,6 @@ function SmsCadenceEditor({
   const [pasteText, setPasteText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
-  const [showEditor, setShowEditor] = useState(false);
 
   const runParse = async () => {
     if (!pasteText.trim()) return;
