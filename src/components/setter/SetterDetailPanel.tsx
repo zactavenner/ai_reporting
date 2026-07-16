@@ -747,9 +747,13 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       <div className="border-t p-3 bg-card">
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'email')}>
           <div className="flex items-center gap-2 mb-2">
-            <TabsList className="h-8">
-              <TabsTrigger value="sms" disabled={!lead.phone} className="text-xs">SMS</TabsTrigger>
-              <TabsTrigger value="email" disabled={!lead.email} className="text-xs">Email</TabsTrigger>
+            <TabsList className="h-8 p-0.5 bg-muted">
+              <TabsTrigger value="sms" disabled={!lead.phone} className="text-xs gap-1 data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm">
+                <MessageSquare className="w-3 h-3" /> SMS
+              </TabsTrigger>
+              <TabsTrigger value="email" disabled={!lead.email} className="text-xs gap-1 data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-sm">
+                <Mail className="w-3 h-3" /> Email
+              </TabsTrigger>
             </TabsList>
             <Button size="sm" variant="ghost" onClick={draftAI} disabled={drafting} className="ml-auto text-xs">
               <Sparkles className="w-3.5 h-3.5 mr-1" />{drafting ? 'Drafting…' : 'AI opener'}
