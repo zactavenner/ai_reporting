@@ -822,42 +822,61 @@ function TimelineRow({ e }: { e: TimelineEvent }) {
   const recording = e.metadata?.recording_url as string | undefined;
   const hasContent = Boolean(e.body || (isEmail && e.title));
 
+  const directionLabel = outbound ? 'sent' : inbound ? 'received' : '';
   const label =
-    isSms ? `SMS ${outbound ? 'sent' : inbound ? 'received' : ''}`.trim()
-    : isEmail ? `Email ${outbound ? 'sent' : inbound ? 'received' : ''}`.trim()
+    isSms ? `SMS ${directionLabel}`.trim()
+    : isEmail ? `Email ${directionLabel}`.trim()
     : isCall ? `Call ${outbound ? 'made' : inbound ? 'received' : ''}`.trim()
     : isAppt ? 'Appointment'
     : isNote ? 'Note created'
     : (e.event_type || 'Event');
 
-  // Channel accent: SMS = green (iMessage-ish), Email = blue, others = neutral
-  const accent =
-    isSms ? 'bg-emerald-500/5 border-emerald-500/20'
-    : isEmail ? 'bg-blue-500/5 border-blue-500/20'
-    : isCall ? 'bg-primary/5 border-primary/20'
-    : 'bg-muted/30 border-border';
-  const iconColor =
-    isSms ? 'text-emerald-600 dark:text-emerald-400'
-    : isEmail ? 'text-blue-600 dark:text-blue-400'
-    : isCall ? 'text-primary'
-    : 'text-muted-foreground';
+  const channel = isSms ? 'sms' : isEmail ? 'email' : isCall ? 'call' : 'other';
+  const styles = {
+    sms: {
+      wrap: 'bg-emerald-50/40 border-emerald-200/50 dark:bg-emerald-950/20 dark:border-emerald-800/40',
+      bar: 'border-l-emerald-500',
+      icon: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
+      badge: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-800/40',
+    },
+    email: {
+      wrap: 'bg-blue-50/40 border-blue-200/50 dark:bg-blue-950/20 dark:border-blue-800/40',
+      bar: 'border-l-blue-500',
+      icon: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+      badge: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-400 dark:border-blue-800/40',
+    },
+    call: {
+      wrap: 'bg-primary/5 border-primary/15',
+      bar: 'border-l-primary',
+      icon: 'bg-primary/15 text-primary',
+      badge: 'bg-primary/10 text-primary border-primary/20',
+    },
+    other: {
+      wrap: 'bg-muted/30 border-border',
+      bar: 'border-l-muted-foreground/30',
+      icon: 'bg-muted text-muted-foreground',
+      badge: 'bg-muted text-muted-foreground border-border',
+    },
+  }[channel];
 
   const preview = isEmail
     ? (e.title || (e.body || '').slice(0, 80))
     : ((e.body || e.title || '').replace(/\s+/g, ' ').slice(0, 90));
 
   return (
-    <div className={`rounded-lg border ${accent}`}>
+    <div className={`rounded-lg border border-l-4 overflow-hidden ${styles.wrap} ${styles.bar}`}>
       <button
         type="button"
         onClick={() => hasContent && setOpen((v) => !v)}
         disabled={!hasContent}
-        className={`w-full flex items-center gap-2 text-left px-2.5 py-1.5 ${hasContent ? 'hover:bg-background/50 cursor-pointer' : 'cursor-default'}`}
+        className={`w-full flex items-center gap-2 text-left px-2.5 py-2 ${hasContent ? 'hover:bg-background/50 cursor-pointer' : 'cursor-default'}`}
       >
-        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${iconColor}`} />
-        <span className="text-xs font-medium">{label}</span>
-        {inbound && <Badge className="text-[9px] h-4 px-1 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">in</Badge>}
-        {outbound && <Badge variant="secondary" className="text-[9px] h-4 px-1">out</Badge>}
+        <div className={`rounded-md p-1.5 flex-shrink-0 ${styles.icon}`}>
+          <Icon className="w-3.5 h-3.5" />
+        </div>
+        <Badge className={`text-[10px] h-5 px-1.5 gap-1 border font-medium ${styles.badge}`} variant="outline">
+          {label}
+        </Badge>
         {preview && !open && (
           <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">· {preview}</span>
         )}
@@ -871,7 +890,7 @@ function TimelineRow({ e }: { e: TimelineEvent }) {
         )}
       </button>
       {open && hasContent && (
-        <div className="px-2.5 pb-2 pt-1 border-t border-border/50">
+        <div className="px-2.5 pb-2.5 pt-1.5 border-t border-border/50 bg-background/40">
           {isEmail && e.title && (
             <div className="text-xs font-semibold mb-1">{e.title}</div>
           )}
