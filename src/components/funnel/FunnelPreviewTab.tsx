@@ -747,6 +747,7 @@ function SmsCadenceEditor({
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [parsing, setParsing] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
 
   const runParse = async () => {
     if (!pasteText.trim()) return;
@@ -765,6 +766,7 @@ function SmsCadenceEditor({
       toast.success(`Parsed ${parsed.length} SMS message${parsed.length === 1 ? '' : 's'}`);
       setPasteOpen(false);
       setPasteText('');
+      setShowEditor(false);
     } catch (e: any) {
       toast.error(`Parse failed: ${e?.message || 'unknown'}`);
     } finally {
