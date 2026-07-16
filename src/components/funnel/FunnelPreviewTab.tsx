@@ -832,7 +832,43 @@ function SmsCadenceEditor({
           </div>
         </div>
       )}
-      {messages.map((m, i) => (
+      {messages.length > 0 && !showEditor && (
+        <div className="rounded-2xl border border-border bg-gradient-to-b from-muted/40 to-muted/10 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <MessageSquare className="h-3.5 w-3.5 text-[#25D366]" />
+              SMS Sequence Preview
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setShowEditor(true)}>
+              Edit messages
+            </Button>
+          </div>
+          <div className="space-y-2.5">
+            {messages.map((m, i) => (
+              <div key={i} className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="inline-flex items-center rounded-full bg-background border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {m.delay_days === 0 ? 'Day 0 · Immediately' : `Day ${m.delay_days} · +${m.delay_days}d`}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">SMS #{i + 1}</span>
+                </div>
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-[#e9e9eb] text-black px-3 py-2 text-[13px] leading-snug whitespace-pre-wrap shadow-sm">
+                    {m.media_url && (m.media_type || '').startsWith('image') && (
+                      <img src={m.media_url} alt="" className="mb-1.5 rounded-lg max-h-40 object-cover" />
+                    )}
+                    {m.media_url && (m.media_type || '').startsWith('video') && (
+                      <video src={m.media_url} className="mb-1.5 rounded-lg max-h-40 bg-black" muted playsInline />
+                    )}
+                    {m.body || <span className="text-neutral-500 italic">(empty message)</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {(showEditor || messages.length === 0) && messages.map((m, i) => (
         <div key={i} className="rounded-lg border border-border p-3 space-y-2 bg-muted/30">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -909,9 +945,18 @@ function SmsCadenceEditor({
           )}
         </div>
       ))}
-      <Button variant="outline" size="sm" onClick={add} className="w-full">
-        <Plus className="h-3 w-3 mr-1" /> Add follow-up SMS
-      </Button>
+      {(showEditor || messages.length === 0) && (
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={add} className="flex-1">
+            <Plus className="h-3 w-3 mr-1" /> Add follow-up SMS
+          </Button>
+          {messages.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setShowEditor(false)}>
+              Done editing
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
