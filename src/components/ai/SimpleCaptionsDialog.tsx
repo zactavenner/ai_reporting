@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Subtitles, Download as DownloadIcon, Send } from "lucide-react";
+import { Loader2, Subtitles, Download as DownloadIcon, Send, Plus, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { transcodeWebmToMp4 } from "./hyperframes/transcodeMp4";
@@ -324,6 +325,13 @@ export function SimpleCaptionsDialog({
       ff.on("progress", ({ progress }: { progress: number }) => {
         setRenderProgress(Math.max(0, Math.min(1, progress)));
       });
+      // Capture ffmpeg logs so a failed render surfaces a real reason in the toast
+      // instead of a silent "Render failed: undefined".
+      const ffLogs: string[] = [];
+      ff.on("log", ({ message }: { message: string }) => {
+        ffLogs.push(message);
+        if (ffLogs.length > 400) ffLogs.shift();
+      });
 
       // Download source video
       const dl = await fetch(videoUrl);
@@ -351,19 +359,38 @@ export function SimpleCaptionsDialog({
       });
       await ff.writeFile("subs.ass", new TextEncoder().encode(ass));
 
-      await ff.exec([
-        "-i", "in.mp4",
-        "-vf", `subtitles=subs.ass:fontsdir=.`,
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "20",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        "-c:a", "copy",
-        "out.mp4",
-      ]);
+      // Re-encode audio to AAC so WebM/Opus sources (very common from our
+      // generators) don't blow up with "could not find tag for codec opus"
+      // when muxing into MP4. If there's no audio, this is a no-op.
+      const runFfmpeg = async (extraArgs: string[]) => {
+        return ff.exec([
+          "-y",
+          "-i", "in.mp4",
+          "-vf", `subtitles=subs.ass:fontsdir=.`,
+          "-c:v", "libx264",
+          "-preset", "veryfast",
+          "-crf", "20",
+          "-pix_fmt", "yuv420p",
+          "-movflags", "+faststart",
+          ...extraArgs,
+          "out.mp4",
+        ]);
+      };
+      let exitCode = await runFfmpeg(["-c:a", "aac", "-b:a", "160k"]);
+      if (exitCode !== 0) {
+        // Retry without audio — some sources have no audio track at all.
+        exitCode = await runFfmpeg(["-an"]);
+      }
+      if (exitCode !== 0) {
+        const tail = ffLogs.slice(-8).join(" | ");
+        throw new Error(`ffmpeg exited with code ${exitCode}. ${tail}`);
+      }
 
       const outData = (await ff.readFile("out.mp4")) as Uint8Array;
+      if (!outData || outData.byteLength === 0) {
+        const tail = ffLogs.slice(-8).join(" | ");
+        throw new Error(`ffmpeg produced empty output. ${tail}`);
+      }
       const outBlob = new Blob([outData as BlobPart], { type: "video/mp4" });
 
       // Upload to creatives bucket
@@ -568,6 +595,74 @@ export function SimpleCaptionsDialog({
               </div>
               <p className="text-[10px] text-muted-foreground">
                 Nudge captions to land exactly on the voice. Updates the preview live.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Caption lines</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCues((prev) => {
+                      const last = prev[prev.length - 1];
+                      const start = last ? last.end + 0.1 : 0;
+                      const next = [...prev, { start, end: start + 1.2, text: "NEW LINE" }];
+                      return next;
+                    });
+                    setCaptionsVersion((v) => v + 1);
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-input bg-card px-1.5 py-0.5 text-[10px] hover:bg-muted/50"
+                >
+                  <Plus className="h-3 w-3" /> Add line
+                </button>
+              </div>
+              <div className="max-h-56 overflow-y-auto rounded border border-input divide-y divide-border">
+                {cues.length === 0 && (
+                  <div className="p-2 text-[10px] text-muted-foreground">
+                    {transcribing ? "Transcribing…" : "No lines yet."}
+                  </div>
+                )}
+                {cues.map((c, i) => (
+                  <div key={i} className="flex items-center gap-1.5 p-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = videoRef.current;
+                        if (el) {
+                          try { el.currentTime = Math.max(0, c.start + 0.001); setCurrentTime(c.start); } catch { /* noop */ }
+                        }
+                      }}
+                      className="shrink-0 w-10 text-[9px] font-mono text-muted-foreground hover:text-foreground text-left"
+                      title="Jump to this cue"
+                    >
+                      {c.start.toFixed(2)}s
+                    </button>
+                    <Input
+                      value={c.text}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCues((prev) => prev.map((x, idx) => idx === i ? { ...x, text: val } : x));
+                        setCaptionsVersion((v) => v + 1);
+                      }}
+                      className="h-7 text-xs px-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCues((prev) => prev.filter((_, idx) => idx !== i));
+                        setCaptionsVersion((v) => v + 1);
+                      }}
+                      className="shrink-0 h-7 w-7 grid place-items-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      title="Delete line"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Edit any line — add $, punctuation, or fix typos. Click the timestamp to jump the preview.
               </p>
             </div>
 
