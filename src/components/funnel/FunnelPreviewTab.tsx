@@ -978,6 +978,7 @@ function EmailCadenceEditor({
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [parsing, setParsing] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
 
   const runParse = async () => {
     if (!pasteText.trim()) return;
