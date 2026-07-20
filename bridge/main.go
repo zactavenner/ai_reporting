@@ -164,11 +164,11 @@ func startClient(ctx context.Context) error {
 	}
 	dbPath := filepath.Join(state.authDir, "whatsmeow.db")
 	logger := waLog.Stdout("wm", "INFO", true)
-	container, err := sqlstore.New("sqlite3", "file:"+dbPath+"?_foreign_keys=on", logger)
+	container, err := sqlstore.New(ctx, "sqlite3", "file:"+dbPath+"?_foreign_keys=on", logger)
 	if err != nil {
 		return fmt.Errorf("sqlstore: %w", err)
 	}
-	deviceStore, err := container.GetFirstDevice()
+	deviceStore, err := container.GetFirstDevice(ctx)
 	if err != nil {
 		return fmt.Errorf("get device: %w", err)
 	}
@@ -320,7 +320,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": true})
 		return
 	}
-	if err := cli.Logout(); err != nil {
+	if err := cli.Logout(r.Context()); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
