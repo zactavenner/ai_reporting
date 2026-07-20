@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Trophy, Plus, AlertTriangle, Lightbulb, ExternalLink, Settings2, DollarSign, PhoneCall, Users, CalendarCheck, Percent } from 'lucide-react';
+import { Trophy, Plus, ExternalLink, Settings2, DollarSign, PhoneCall, Users, CalendarCheck, Percent } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WeeklyRecapCard } from '@/components/weekly-sync/WeeklyRecapCard';
 import { CreativeApproval } from '@/components/creative/CreativeApproval';
@@ -197,13 +197,6 @@ function ListSegment({
 export function WinsSegment(p: { callId: string; clientId: string }) {
   return <ListSegment callId={p.callId} clientId={p.clientId} kind="win" placeholder="A quick win from this week…" icon={Trophy} />;
 }
-export function BlockersSegment(p: { callId: string; clientId: string }) {
-  return <ListSegment callId={p.callId} clientId={p.clientId} kind="blocker" placeholder="What's blocking us? Who owns unblocking?" icon={AlertTriangle} />;
-}
-export function IdeasSegment(p: { callId: string; clientId: string }) {
-  return <ListSegment callId={p.callId} clientId={p.clientId} kind="idea" placeholder="Idea to test next week…" icon={Lightbulb} />;
-}
-
 // ─── Notes-only segment (auto-saved textarea backed by a single item row) ──
 function NotesBlock({ callId, clientId, kind, label }: { callId: string; clientId: string; kind: string; label: string }) {
   const { currentMember } = useTeamMember();
@@ -380,11 +373,6 @@ export function CreativeReviewSegment({ callId, clientId, call }: { callId: stri
   );
 }
 
-export function PipelineSegment({ callId, clientId }: { callId: string; clientId: string }) {
-  // Deprecated: removed from default agenda. Kept as a no-op stub for backwards compat.
-  return null;
-}
-
 export function TasksSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
   return (
     <div className="w-full max-w-[1400px] mx-auto space-y-2">
@@ -392,12 +380,6 @@ export function TasksSegment({ callId, clientId, call }: { callId: string; clien
       <TaskBoardView clientId={clientId} isPublicView />
     </div>
   );
-}
-
-export function WrapupSegment({ call, clientId, onFinish }: { call: any; clientId: string; onFinish: () => void }) {
-  // Deprecated: agenda no longer includes a wrap-up segment; the sticky Finish button
-  // in the runner handles ending the call and kicks off recording finalize.
-  return null;
 }
 
 export function RecapSegment({ callId, clientId }: { callId: string; clientId: string }) {
