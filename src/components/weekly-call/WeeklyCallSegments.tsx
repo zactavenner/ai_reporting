@@ -196,49 +196,21 @@ export function ScorecardSegment({ callId, clientId, call }: { callId: string; c
 }
 
 export function CreativeReviewSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
-  const [range, setRange] = useState<RangeDays>(7);
-  const since = sinceISO(anchorDate(call), range);
+  const { data: client } = useClient(clientId);
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">
-          Rolling window anchored to call start ({anchorDate(call).toLocaleDateString()})
-        </div>
-        <RangePicker value={range} onChange={setRange} />
+    <div className="w-full max-w-6xl mx-auto space-y-4">
+      <div className="text-xs text-muted-foreground">
+        Review any creatives still pending approval. Approve, request revisions, reject, or comment inline.
       </div>
-      <WeeklyRecapCard clientId={clientId} sinceDate={since} windowLabel={`Creative — last ${range} days`} />
+      <CreativeApproval clientId={clientId} clientName={client?.name || 'client'} />
       <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="creative_note" label="Creative notes" /></Card>
     </div>
   );
 }
 
 export function PipelineSegment({ callId, clientId }: { callId: string; clientId: string }) {
-  const { data: deals = [] } = useDeals(clientId);
-  const active = deals.filter((d: any) => !['closed_won', 'closed_lost'].includes(d.stage));
-  const closest = [...active].sort((a: any, b: any) => (b.amount || 0) - (a.amount || 0)).slice(0, 6);
-  return (
-    <div className="w-full max-w-5xl mx-auto space-y-4">
-      <Card className="p-4">
-        <div className="text-sm font-semibold mb-3">Top open deals ({active.length} active)</div>
-        {closest.length === 0 ? (
-          <div className="text-sm text-muted-foreground italic">No open deals.</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {closest.map((d: any) => (
-              <div key={d.id} className="flex items-center justify-between border rounded p-2 text-sm">
-                <span className="truncate">{d.deal_name || d.name || 'Deal'}</span>
-                <div className="flex gap-2 items-center">
-                  <Badge variant="outline" className="text-[10px]">{d.stage}</Badge>
-                  <span className="text-muted-foreground">${Number(d.amount || 0).toLocaleString()}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-      <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="pipeline_note" label="Pipeline notes" /></Card>
-    </div>
-  );
+  // Deprecated: removed from default agenda. Kept as a no-op stub for backwards compat.
+  return null;
 }
 
 export function TasksSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
