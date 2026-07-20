@@ -62,7 +62,7 @@ function playChime() {
 }
 
 export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onFinish?: () => void }) {
-  const { call, agenda, loading, updateTimer, updateCall, updateAgenda } = useThisWeekCall(clientId);
+  const { call, agenda, loading, updateTimer, updateCall, updateAgenda, resetForNewCall } = useThisWeekCall(clientId);
   const { currentMember } = useTeamMember();
   const chimed = useRef<number>(-1);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -250,6 +250,10 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     }
     setFinalizing(false);
     onFinish?.();
+    // Reset the runner to a fresh call at segment 0 so another meeting the
+    // same week can be started immediately. Delay slightly to let the celebrate
+    // animation play; the finished call stays archived in Past calls.
+    setTimeout(() => { resetForNewCall(); }, 2800);
   };
 
   const cancel = async () => {
