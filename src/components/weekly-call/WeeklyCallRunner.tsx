@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2 } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2, X } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';
@@ -44,12 +44,14 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const [finalizing, setFinalizing] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const autoFinishedRef = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const timer = call?.timer_state;
   const timing = useSegmentTiming(
     agenda,
     timer || { segment_index: 0, segment_started_at: null, paused_at: null, paused_elapsed_s: 0, auto_advance: false, running: false, finished: false, extra_s: 0 }
   );
+  const isLastSegment = (timer?.segment_index ?? 0) >= agenda.length - 1;
   const isFacilitator = !!currentMember && !!call?.facilitator_id && currentMember.id === call.facilitator_id;
 
   useEffect(() => { chimed.current = -1; }, [timer?.segment_index, timer?.segment_started_at]);
@@ -153,7 +155,11 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     if (timer.paused_at && timer.segment_started_at) pe += Math.floor((Date.now() - new Date(timer.paused_at).getTime()) / 1000);
     await updateTimer({ running: true, paused_at: null, paused_elapsed_s: pe });
   };
-  const bump30 = async () => { if (timer) await updateTimer({ extra_s: (timer.extra_s || 0) + 30 }); };
+  const bump30 = async () => {
+    if (!timer) return;
+    if (isLastSegment) { toast.error('No overtime on the recap step'); return; }
+    await updateTimer({ extra_s: (timer.extra_s || 0) + 30 });
+  };
   const next = async () => {
     if (!timer || !call) return;
     const nextIdx = timer.segment_index + 1;
@@ -201,12 +207,39 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     onFinish?.();
   };
 
+  const cancel = async () => {
+    if (!call || cancelling) return;
+    if (!window.confirm('Cancel this call? Recording will be discarded and no transcript or tasks will be generated.')) return;
+    setCancelling(true);
+    try {
+      const rec = mediaRecorderRef.current;
+      if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch {} }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      chunksRef.current = [];
+      setIsRecording(false);
+      await updateTimer({ finished: true, running: false });
+      await updateCall({
+        ended_at: new Date().toISOString(),
+        status: 'cancelled',
+        finalize_status: 'cancelled',
+      } as any);
+      toast.success('Call cancelled — no transcript generated');
+      onFinish?.();
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (loading || !call || !timer) {
     return <div className="min-h-[40vh] flex items-center justify-center text-muted-foreground">Loading weekly call…</div>;
   }
 
-  const pct = timing.planned > 0 ? timing.remaining / timing.planned : 0;
-  const timerColor = timing.remaining < 0 ? 'text-destructive' : pct <= 0.2 ? 'text-amber-500' : 'text-foreground';
+  // Hard-lock: no overtime on the last (recap) segment.
+  const rawRemaining = timing.remaining;
+  const displayRemaining = isLastSegment ? Math.max(0, rawRemaining) : rawRemaining;
+  const pct = timing.planned > 0 ? displayRemaining / timing.planned : 0;
+  const timerColor = displayRemaining < 0 ? 'text-destructive' : pct <= 0.2 ? 'text-amber-500' : 'text-foreground';
   const seg = timing.seg;
 
   const body = (() => {
@@ -255,8 +288,9 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       </header>
 
       <div className="flex flex-col items-center justify-center py-4 gap-1">
-        <div className={`font-mono tabular-nums text-6xl md:text-7xl font-bold ${timerColor}`}>{fmt(timing.remaining)}</div>
-        {timing.remaining < 0 && <div className="text-destructive text-xs uppercase tracking-widest">Overtime</div>}
+        <div className={`font-mono tabular-nums text-6xl md:text-7xl font-bold ${timerColor}`}>{fmt(displayRemaining)}</div>
+        {displayRemaining < 0 && !isLastSegment && <div className="text-destructive text-xs uppercase tracking-widest">Overtime</div>}
+        {isLastSegment && <div className="text-muted-foreground text-xs uppercase tracking-widest">Final segment — no overtime</div>}
       </div>
 
       <main className="pb-6 min-h-[300px]">{body}</main>
@@ -271,7 +305,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         {timer.running && (
           <Button variant="secondary" onClick={pause}><Pause className="w-4 h-4 mr-2" />Pause</Button>
         )}
-        <Button variant="outline" onClick={bump30}><Plus className="w-4 h-4 mr-2" />30s</Button>
+        <Button variant="outline" onClick={bump30} disabled={isLastSegment}><Plus className="w-4 h-4 mr-2" />30s</Button>
         <Button variant="outline" onClick={back} disabled={timing.idx === 0}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
         <Button variant="outline" onClick={next}><SkipForward className="w-4 h-4 mr-2" />Skip</Button>
         {timing.idx < agenda.length - 1 && (
@@ -282,10 +316,15 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           <span className="text-xs text-muted-foreground">Auto-advance</span>
         </div>
         {call.started_at && !timer.finished && (
-          <Button variant="default" onClick={finish} className="ml-2" disabled={finalizing}>
-            {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PartyPopper className="w-4 h-4 mr-2" />}
-            Finish call
-          </Button>
+          <>
+            <Button variant="ghost" onClick={cancel} className="ml-2 text-destructive hover:text-destructive" disabled={finalizing || cancelling}>
+              <X className="w-4 h-4 mr-2" />Cancel call
+            </Button>
+            <Button variant="default" onClick={finish} disabled={finalizing || cancelling}>
+              {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PartyPopper className="w-4 h-4 mr-2" />}
+              Finish call
+            </Button>
+          </>
         )}
       </footer>
     </div>
