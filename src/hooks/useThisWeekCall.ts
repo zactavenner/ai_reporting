@@ -45,6 +45,9 @@ export function useThisWeekCall(clientId: string | undefined) {
         .select('*')
         .eq('client_id', clientId)
         .eq('week_of', week)
+        .not('status', 'in', '("completed","cancelled")')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       let record = existing as WeeklyCallRecord | null;
@@ -132,5 +135,25 @@ export function useThisWeekCall(clientId: string | undefined) {
     }
   };
 
-  return { call, agenda, loading, updateTimer, updateCall, updateAgenda };
+  // Create a brand-new call row for this week (used after a call is finished
+  // so a second meeting the same week starts fresh at segment 0).
+  const resetForNewCall = async () => {
+    if (!clientId) return;
+    const week = weekOfISO();
+    const planned = agenda.reduce((a, s) => a + s.duration_s, 0);
+    const { data: created } = await (supabase as any)
+      .from('client_weekly_calls')
+      .insert({
+        client_id: clientId,
+        week_of: week,
+        planned_duration_s: planned,
+        agenda: agenda as any,
+        timer_state: DEFAULT_WEEKLY_TIMER as any,
+      })
+      .select('*')
+      .single();
+    if (created) setCall(created as WeeklyCallRecord);
+  };
+
+  return { call, agenda, loading, updateTimer, updateCall, updateAgenda, resetForNewCall };
 }
