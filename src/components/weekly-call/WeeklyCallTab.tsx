@@ -84,7 +84,7 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
           <CalendarClock className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">This week's call</h2>
         </div>
-        <WeeklyCallRunner clientId={clientId} />
+          <WeeklyCallRunner clientId={clientId} onFinish={load} />
       </Card>
 
       <div>
