@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2, X } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2, X, Upload, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';
@@ -42,6 +42,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const streamRef = useRef<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const autoFinishedRef = useRef(false);
   const [cancelling, setCancelling] = useState(false);
@@ -116,14 +117,17 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           setIsRecording(false);
           if (blob.size < 5000) { resolve(null); return; }
           const path = `${callId}-${Date.now()}.webm`;
+        setUploading(true);
           const { error: upErr } = await supabase.storage.from('weekly-call-recordings').upload(path, blob, {
             contentType: 'audio/webm', upsert: true,
           });
-          if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
+        setUploading(false);
+        if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
           const { data } = supabase.storage.from('weekly-call-recordings').getPublicUrl(path);
           resolve(data.publicUrl);
         } catch (e) {
           console.warn('stop/upload failed:', e);
+        setUploading(false);
           resolve(null);
         }
       };
@@ -315,6 +319,11 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
           <span className="text-xs text-muted-foreground">Auto-advance</span>
         </div>
+        <StatusIndicators
+          isRecording={isRecording}
+          uploading={uploading}
+          finalizeStatus={(call as any)?.finalize_status ?? null}
+        />
         {call.started_at && !timer.finished && (
           <>
             <Button variant="ghost" onClick={cancel} className="ml-2 text-destructive hover:text-destructive" disabled={finalizing || cancelling}>
