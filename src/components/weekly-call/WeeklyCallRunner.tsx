@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2 } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
-  WinsSegment, ScorecardSegment, PipelineSegment, CreativeReviewSegment,
-  TasksSegment, BlockersSegment, IdeasSegment, WrapupSegment,
+  WinsSegment, ScorecardSegment, CreativeReviewSegment, TasksSegment,
 } from './WeeklyCallSegments';
 import { WeeklyCallSettingsDrawer } from './WeeklyCallSettingsDrawer';
 
@@ -38,6 +37,12 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const { call, agenda, loading, updateTimer, updateCall, updateAgenda } = useThisWeekCall(clientId);
   const { currentMember } = useTeamMember();
   const chimed = useRef<number>(-1);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const autoFinishedRef = useRef(false);
 
   const timer = call?.timer_state;
   const timing = useSegmentTiming(
@@ -63,6 +68,65 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timing.remaining, timer?.running, isFacilitator]);
 
+  // Auto-finish when total planned duration is exhausted
+  useEffect(() => {
+    if (!call?.started_at || timer?.finished || autoFinishedRef.current) return;
+    const totalPlanned = agenda.reduce((a, s) => a + s.duration_s, 0);
+    if (meetingElapsed >= totalPlanned + 60) {
+      autoFinishedRef.current = true;
+      finish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingElapsed, call?.started_at, timer?.finished, agenda]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const rec = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
+      });
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.start(2000);
+      mediaRecorderRef.current = rec;
+      setIsRecording(true);
+    } catch (e) {
+      console.warn('mic denied:', e);
+      toast.error('Microphone denied — call will run without recording');
+    }
+  };
+
+  const stopAndUploadRecording = async (callId: string): Promise<string | null> => {
+    const rec = mediaRecorderRef.current;
+    if (!rec || rec.state === 'inactive') return null;
+    return new Promise<string | null>((resolve) => {
+      rec.onstop = async () => {
+        try {
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          chunksRef.current = [];
+          setIsRecording(false);
+          if (blob.size < 5000) { resolve(null); return; }
+          const path = `${callId}-${Date.now()}.webm`;
+          const { error: upErr } = await supabase.storage.from('weekly-call-recordings').upload(path, blob, {
+            contentType: 'audio/webm', upsert: true,
+          });
+          if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
+          const { data } = supabase.storage.from('weekly-call-recordings').getPublicUrl(path);
+          resolve(data.publicUrl);
+        } catch (e) {
+          console.warn('stop/upload failed:', e);
+          resolve(null);
+        }
+      };
+      rec.stop();
+    });
+  };
+
   const start = async () => {
     if (!call) return;
     const now = new Date().toISOString();
@@ -71,6 +135,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         started_at: now, status: 'in_progress',
         ...(call.facilitator_id ? {} : { facilitator_id: currentMember?.id ?? null }),
       } as any);
+      startRecording();
     }
     await updateTimer({
       running: true,
@@ -102,14 +167,30 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     await updateTimer({ segment_index: prevIdx, segment_started_at: new Date().toISOString(), paused_at: null, paused_elapsed_s: 0, extra_s: 0, running: true });
   };
   const finish = async () => {
-    if (!call) return;
+    if (!call || finalizing) return;
+    setFinalizing(true);
     const now = new Date().toISOString();
     const actual = call.started_at ? Math.floor((Date.now() - new Date(call.started_at).getTime()) / 1000) : 0;
     const { data: ratings } = await (supabase as any).from('client_weekly_call_ratings').select('rating').eq('call_id', call.id);
     const avg = (ratings && ratings.length) ? (ratings.reduce((a: number, r: any) => a + r.rating, 0) / ratings.length) : null;
     await updateTimer({ finished: true, running: false });
-    await updateCall({ ended_at: now, actual_duration_s: actual, status: 'completed', avg_rating: avg as any });
-    toast.success('Weekly call wrapped');
+    const recordingUrl = await stopAndUploadRecording(call.id);
+    await updateCall({
+      ended_at: now,
+      actual_duration_s: actual,
+      status: 'completed',
+      avg_rating: avg as any,
+      ...(recordingUrl ? { recording_url: recordingUrl, finalize_status: 'pending' } as any : {}),
+    });
+    toast.success('Call wrapped — transcribing in the background');
+    if (recordingUrl) {
+      supabase.functions.invoke('weekly-call-finalize', { body: { call_id: call.id } })
+        .then((res) => {
+          if (res.error) toast.error('Transcription failed');
+        })
+        .catch(() => {});
+    }
+    setFinalizing(false);
     onFinish?.();
   };
 
@@ -126,12 +207,8 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     switch (seg.key) {
       case 'wins':      return <WinsSegment callId={call.id} clientId={clientId} />;
       case 'scorecard': return <ScorecardSegment callId={call.id} clientId={clientId} call={call} />;
-      case 'pipeline':  return <PipelineSegment callId={call.id} clientId={clientId} />;
       case 'creative':  return <CreativeReviewSegment callId={call.id} clientId={clientId} call={call} />;
       case 'tasks':     return <TasksSegment callId={call.id} clientId={clientId} call={call} />;
-      case 'blockers':  return <BlockersSegment callId={call.id} clientId={clientId} />;
-      case 'ideas':     return <IdeasSegment callId={call.id} clientId={clientId} />;
-      case 'wrapup':    return <WrapupSegment call={call} clientId={clientId} onFinish={finish} />;
       default: return null;
     }
   })();
@@ -142,6 +219,11 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         <div className="flex items-center gap-3 min-w-0">
           <div className="text-xs text-muted-foreground">Segment</div>
           <div className="text-lg font-semibold truncate">{seg?.name}</div>
+          {isRecording && (
+            <span className="flex items-center gap-1 text-xs text-destructive">
+              <Circle className="w-2 h-2 fill-current animate-pulse" /> REC
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {agenda.map((_, i) => (
@@ -175,13 +257,18 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         <Button variant="outline" onClick={bump30}><Plus className="w-4 h-4 mr-2" />30s</Button>
         <Button variant="outline" onClick={back} disabled={timing.idx === 0}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
         <Button variant="outline" onClick={next}><SkipForward className="w-4 h-4 mr-2" />Skip</Button>
-        <Button onClick={next}>Next<ChevronRight className="w-4 h-4 ml-2" /></Button>
+        {timing.idx < agenda.length - 1 && (
+          <Button onClick={next}>Next<ChevronRight className="w-4 h-4 ml-2" /></Button>
+        )}
         <div className="flex items-center gap-2 ml-2">
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
           <span className="text-xs text-muted-foreground">Auto-advance</span>
         </div>
-        {timing.idx >= agenda.length - 1 && (
-          <Button variant="default" onClick={finish} className="ml-2"><PartyPopper className="w-4 h-4 mr-2" />Finish</Button>
+        {call.started_at && !timer.finished && (
+          <Button variant="default" onClick={finish} className="ml-2" disabled={finalizing}>
+            {finalizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PartyPopper className="w-4 h-4 mr-2" />}
+            Finish call
+          </Button>
         )}
       </footer>
     </div>
