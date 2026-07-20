@@ -1024,21 +1024,24 @@ Deno.serve(async (req) => {
         "omni_purchase",
         "web_in_store_purchase",
       ]);
+      // Match Meta Ads Manager's "Leads (Form)" — pick the single highest-priority
+      // lead action_type, never sum multiple (which double-counts the same conversion).
+      // Mirrors extractLeads() in sync-meta-ad-daily-insights.
+      const LEAD_PRIORITY = [
+        "onsite_conversion.lead_grouped",
+        "lead",
+        "offsite_conversion.fb_pixel_lead",
+      ];
       function extractMetaReported(actions: any[] | undefined, actionValues: any[] | undefined) {
-        let leads = 0, purchases = 0, conversions = 0, conversionValue = 0;
-        // Track unknown action types for debugging
-        const unknownActionTypes = new Set<string>();
+        let purchases = 0, conversions = 0, conversionValue = 0;
+        const leadByType = new Map<string, number>();
         for (const a of actions || []) {
           const t = a.action_type;
           const v = Number(a.value) || 0;
-          if (LEAD_TYPES.has(t)) leads += v;
-          if (PURCHASE_TYPES.has(t)) purchases += v;
-          // Catch any action type containing "lead" we missed
-          else if (t && typeof t === "string" && t.toLowerCase().includes("lead") && !LEAD_TYPES.has(t)) {
-            unknownActionTypes.add(t);
-            leads += v; // best-effort include
+          if (LEAD_TYPES.has(t) || (typeof t === "string" && t.endsWith(".lead"))) {
+            leadByType.set(t, (leadByType.get(t) ?? 0) + v);
           }
-          // Treat any "offsite_conversion" or "onsite_conversion" or core conversion event as a conversion
+          if (PURCHASE_TYPES.has(t)) purchases += v;
           if (
             LEAD_TYPES.has(t) ||
             PURCHASE_TYPES.has(t) ||
@@ -1050,8 +1053,15 @@ Deno.serve(async (req) => {
             conversions += v;
           }
         }
-        if (unknownActionTypes.size > 0) {
-          console.log(`Auto-included unknown lead-like action types:`, Array.from(unknownActionTypes));
+        let leads = 0;
+        for (const key of LEAD_PRIORITY) {
+          const v = leadByType.get(key);
+          if (v && v > 0) { leads = v; break; }
+        }
+        if (leads === 0) {
+          for (const [k, v] of leadByType) {
+            if (v > 0 && k.endsWith(".lead")) { leads = v; break; }
+          }
         }
         for (const av of actionValues || []) {
           const t = av.action_type;
