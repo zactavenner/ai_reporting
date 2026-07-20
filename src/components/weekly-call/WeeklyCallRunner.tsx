@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2, X } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2, X, Upload, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';
@@ -18,6 +18,34 @@ function fmt(s: number) {
   const m = Math.floor(abs / 60);
   const sec = abs % 60;
   return `${neg ? '-' : ''}${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+}
+
+function StatusIndicators({
+  isRecording, uploading, finalizeStatus,
+}: { isRecording: boolean; uploading: boolean; finalizeStatus: string | null }) {
+  const items: Array<{ key: string; icon: any; label: string; className: string; spin?: boolean; pulse?: boolean }> = [];
+  if (isRecording) items.push({ key: 'rec', icon: Circle, label: 'Recording', className: 'text-destructive', pulse: true });
+  if (uploading) items.push({ key: 'up', icon: Upload, label: 'Uploading…', className: 'text-amber-500', spin: false });
+  if (finalizeStatus === 'pending' || finalizeStatus === 'processing') {
+    items.push({ key: 'tx', icon: Loader2, label: 'Transcribing…', className: 'text-blue-500', spin: true });
+  }
+  if (finalizeStatus === 'done') items.push({ key: 'done', icon: CheckCircle2, label: 'Tasks ready', className: 'text-emerald-500' });
+  if (finalizeStatus === 'error') items.push({ key: 'err', icon: AlertCircle, label: 'Transcript failed', className: 'text-destructive' });
+  if (!items.length) return null;
+  return (
+    <div className="flex items-center gap-2 ml-2" aria-live="polite">
+      {items.map((it) => (
+        <span
+          key={it.key}
+          className={`inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] ${it.className}`}
+          title={it.label}
+        >
+          <it.icon className={`w-3 h-3 ${it.spin ? 'animate-spin' : ''} ${it.pulse ? 'fill-current animate-pulse' : ''}`} />
+          {it.label}
+        </span>
+      ))}
+    </div>
+  );
 }
 function playChime() {
   try {
@@ -42,6 +70,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const streamRef = useRef<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const autoFinishedRef = useRef(false);
   const [cancelling, setCancelling] = useState(false);
@@ -116,14 +145,17 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           setIsRecording(false);
           if (blob.size < 5000) { resolve(null); return; }
           const path = `${callId}-${Date.now()}.webm`;
+        setUploading(true);
           const { error: upErr } = await supabase.storage.from('weekly-call-recordings').upload(path, blob, {
             contentType: 'audio/webm', upsert: true,
           });
-          if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
+        setUploading(false);
+        if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
           const { data } = supabase.storage.from('weekly-call-recordings').getPublicUrl(path);
           resolve(data.publicUrl);
         } catch (e) {
           console.warn('stop/upload failed:', e);
+        setUploading(false);
           resolve(null);
         }
       };
@@ -315,6 +347,11 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
           <span className="text-xs text-muted-foreground">Auto-advance</span>
         </div>
+        <StatusIndicators
+          isRecording={isRecording}
+          uploading={uploading}
+          finalizeStatus={(call as any)?.finalize_status ?? null}
+        />
         {call.started_at && !timer.finished && (
           <>
             <Button variant="ghost" onClick={cancel} className="ml-2 text-destructive hover:text-destructive" disabled={finalizing || cancelling}>
