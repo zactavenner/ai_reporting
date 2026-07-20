@@ -19,6 +19,34 @@ function fmt(s: number) {
   const sec = abs % 60;
   return `${neg ? '-' : ''}${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
 }
+
+function StatusIndicators({
+  isRecording, uploading, finalizeStatus,
+}: { isRecording: boolean; uploading: boolean; finalizeStatus: string | null }) {
+  const items: Array<{ key: string; icon: any; label: string; className: string; spin?: boolean; pulse?: boolean }> = [];
+  if (isRecording) items.push({ key: 'rec', icon: Circle, label: 'Recording', className: 'text-destructive', pulse: true });
+  if (uploading) items.push({ key: 'up', icon: Upload, label: 'Uploading…', className: 'text-amber-500', spin: false });
+  if (finalizeStatus === 'pending' || finalizeStatus === 'processing') {
+    items.push({ key: 'tx', icon: Loader2, label: 'Transcribing…', className: 'text-blue-500', spin: true });
+  }
+  if (finalizeStatus === 'done') items.push({ key: 'done', icon: CheckCircle2, label: 'Tasks ready', className: 'text-emerald-500' });
+  if (finalizeStatus === 'error') items.push({ key: 'err', icon: AlertCircle, label: 'Transcript failed', className: 'text-destructive' });
+  if (!items.length) return null;
+  return (
+    <div className="flex items-center gap-2 ml-2" aria-live="polite">
+      {items.map((it) => (
+        <span
+          key={it.key}
+          className={`inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] ${it.className}`}
+          title={it.label}
+        >
+          <it.icon className={`w-3 h-3 ${it.spin ? 'animate-spin' : ''} ${it.pulse ? 'fill-current animate-pulse' : ''}`} />
+          {it.label}
+        </span>
+      ))}
+    </div>
+  );
+}
 function playChime() {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
