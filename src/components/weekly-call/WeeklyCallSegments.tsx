@@ -289,9 +289,11 @@ export function RecapSegment({ callId, clientId }: { callId: string; clientId: s
   return (
     <div className="w-full max-w-4xl mx-auto space-y-3">
       <div className="text-xs text-muted-foreground">
-        Add anything worth remembering. When time runs out the call will finish, transcribe, and generate proposed tasks automatically.
+        Type the recap and any action items below. Anything here is saved into this call and folded into the auto-generated summary + proposed tasks. When the timer hits 0 the call auto-finishes — no overtime on this step.
       </div>
-      <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="recap_note" label="Recap notes" /></Card>
+      <Card className="p-4">
+        <NotesBlock callId={callId} clientId={clientId} kind="recap_note" label="Recap notes & action items" />
+      </Card>
     </div>
   );
 }
