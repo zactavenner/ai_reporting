@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, Plus, AlertTriangle, Lightbulb, CheckSquare, Star } from 'lucide-react';
+import { Trophy, Plus, AlertTriangle, Lightbulb, CheckSquare, Star, X } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WeeklyRecapCard } from '@/components/weekly-sync/WeeklyRecapCard';
 import { useTasks } from '@/hooks/useTasks';
