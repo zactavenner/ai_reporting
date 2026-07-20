@@ -28,6 +28,31 @@ serve(async (req) => {
 
     await supabase.from("client_weekly_calls").update({ finalize_status: "processing" }).eq("id", call_id);
 
+    // Fetch facilitator-authored recap notes / wins so the summary + task extractor
+    // can incorporate what the team explicitly flagged, not just the transcript.
+    let recapNotes = "";
+    let winsText = "";
+    try {
+      const { data: items } = await supabase
+        .from("client_weekly_call_items")
+        .select("kind, text, member_name")
+        .eq("call_id", call_id)
+        .in("kind", ["recap_note", "scorecard_note", "creative_note", "win"]);
+      if (Array.isArray(items)) {
+        recapNotes = items
+          .filter((i: any) => i.kind === "recap_note" || i.kind === "scorecard_note" || i.kind === "creative_note")
+          .map((i: any) => `[${i.kind}] ${i.text || ""}`.trim())
+          .filter(Boolean)
+          .join("\n\n");
+        winsText = items
+          .filter((i: any) => i.kind === "win")
+          .map((i: any) => `- ${i.member_name || "Team"}: ${i.text || ""}`)
+          .join("\n");
+      }
+    } catch (e) {
+      console.warn("recap notes fetch failed:", e);
+    }
+
     let transcript = "";
     if (call.recording_url) {
       // Extract storage path from public/signed URL
@@ -65,12 +90,19 @@ serve(async (req) => {
 
     let summary = "";
     let proposedTasks: Array<{ title: string; assignee?: string; priority?: string }> = [];
-    if (transcript) {
+    const hasSource = transcript || recapNotes || winsText;
+    if (hasSource) {
+      const contextBlock = [
+        winsText ? `WINS:\n${winsText}` : "",
+        recapNotes ? `FACILITATOR RECAP NOTES (authoritative — reflect these in the summary and tasks):\n${recapNotes}` : "",
+        transcript ? `TRANSCRIPT:\n${transcript.slice(0, 18000)}` : "",
+      ].filter(Boolean).join("\n\n");
+
       // Summary
       try {
         const sumRes = await callOpenRouter([
-          { role: "system", content: "You summarize weekly client marketing calls. Be terse, 4-6 bullet points, focus on decisions and outcomes. No preamble." },
-          { role: "user", content: `Weekly call transcript:\n\n${transcript.slice(0, 20000)}` },
+          { role: "system", content: "You summarize weekly client marketing calls. Be terse, 4-6 bullet points, focus on decisions and outcomes. Always integrate the FACILITATOR RECAP NOTES if present — those override transcript inference. No preamble." },
+          { role: "user", content: contextBlock },
         ], { temperature: 0.3, max_tokens: 500 });
         summary = sumRes.text.trim();
       } catch (e) {
@@ -79,8 +111,8 @@ serve(async (req) => {
       // Task extraction
       try {
         const taskRes = await callOpenRouterJSON<{ tasks: Array<{ title: string; priority?: string }> }>([
-          { role: "system", content: 'Extract action items from a weekly client call transcript. Return strict JSON: {"tasks":[{"title":"...","priority":"low|medium|high"}]}. Only concrete owner-actionable tasks discussed. Max 10.' },
-          { role: "user", content: transcript.slice(0, 20000) },
+          { role: "system", content: 'Extract action items from a weekly client call. Return strict JSON: {"tasks":[{"title":"...","priority":"low|medium|high"}]}. Prioritize items explicitly listed in FACILITATOR RECAP NOTES, then transcript-derived actions. Only concrete owner-actionable tasks. Max 10.' },
+          { role: "user", content: contextBlock },
         ], { temperature: 0.1, max_tokens: 800 });
         proposedTasks = Array.isArray(taskRes?.tasks) ? taskRes.tasks.slice(0, 10) : [];
       } catch (e) {
