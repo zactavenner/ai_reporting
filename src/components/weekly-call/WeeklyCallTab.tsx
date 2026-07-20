@@ -121,7 +121,7 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
               const mins = r.actual_duration_s != null ? Math.round(r.actual_duration_s / 60) : null;
               const title = r.title?.trim() || `Weekly call — ${format(new Date(r.week_of), 'MMM d, yyyy')}`;
               return (
-                <Card key={r.id} className="p-4 text-sm space-y-3">
+              <Card key={r.id} className="p-4 text-sm space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="font-semibold leading-tight truncate">{title}</div>
@@ -163,23 +163,30 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
                     </div>
                   )}
 
-                  {r.summary_text ? (
-                    <div className="text-xs whitespace-pre-wrap bg-muted/40 rounded p-2 border">{r.summary_text}</div>
-                  ) : r.finalize_status === 'processing' ? (
-                    <div className="text-xs italic text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Generating summary…
-                    </div>
-                  ) : null}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-foreground">Summary of call</div>
+                    {r.summary_text ? (
+                      <div className="text-xs whitespace-pre-wrap bg-muted/40 rounded p-2 border leading-relaxed">{r.summary_text}</div>
+                    ) : r.finalize_status === 'processing' ? (
+                      <div className="text-xs italic text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Generating summary…
+                      </div>
+                    ) : (
+                      <div className="text-xs italic text-muted-foreground">No summary available.</div>
+                    )}
+                  </div>
 
-                  {r.proposed_tasks && r.proposed_tasks.length > 0 && (
-                    <div className="space-y-2 border-t pt-2">
-                      <div className="text-xs font-semibold flex items-center justify-between">
-                        <span>Action items to approve ({r.proposed_tasks.length})</span>
+                  <div className="space-y-2 border-t pt-2">
+                    <div className="text-xs font-semibold flex items-center justify-between">
+                      <span>Action items ({r.proposed_tasks?.length || 0})</span>
+                      {r.proposed_tasks && r.proposed_tasks.length > 0 && (
                         <Button size="sm" onClick={() => approveTasks(r)} disabled={creatingFor === r.id}>
                           <CheckSquare className="w-3.5 h-3.5 mr-1" />
                           {creatingFor === r.id ? 'Creating…' : 'Approve all'}
                         </Button>
-                      </div>
+                      )}
+                    </div>
+                    {r.proposed_tasks && r.proposed_tasks.length > 0 ? (
                       <ul className="space-y-1">
                         {r.proposed_tasks.map((t, i) => (
                           <li key={i} className="text-xs flex items-start gap-2">
@@ -189,8 +196,10 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
                           </li>
                         ))}
                       </ul>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="text-xs italic text-muted-foreground">No action items proposed.</div>
+                    )}
+                  </div>
 
                   {r.transcript && (
                     <div className="border-t pt-2">
@@ -199,7 +208,7 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
                         className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground"
                       >
                         <FileText className="w-3 h-3" />
-                        {isOpen ? 'Hide transcript' : 'View full transcript'}
+                        {isOpen ? 'Hide full transcript' : 'Click to expand full transcript'}
                         {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                       </button>
                       {isOpen && (
