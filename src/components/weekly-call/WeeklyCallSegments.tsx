@@ -284,3 +284,14 @@ export function WrapupSegment({ call, clientId, onFinish }: { call: any; clientI
   // in the runner handles ending the call and kicks off recording finalize.
   return null;
 }
+
+export function RecapSegment({ callId, clientId }: { callId: string; clientId: string }) {
+  return (
+    <div className="w-full max-w-4xl mx-auto space-y-3">
+      <div className="text-xs text-muted-foreground">
+        Add anything worth remembering. When time runs out the call will finish, transcribe, and generate proposed tasks automatically.
+      </div>
+      <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="recap_note" label="Recap notes" /></Card>
+    </div>
+  );
+}
