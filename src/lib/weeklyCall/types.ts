@@ -11,6 +11,22 @@ export const DEFAULT_WEEKLY_AGENDA: AgendaSegment[] = [
   { key: 'recap',         name: 'Recap',               duration_s: 120 },
 ];
 
+const WEEKLY_ALLOWED_KEYS = new Set(DEFAULT_WEEKLY_AGENDA.map((segment) => segment.key));
+
+export function sanitizeWeeklyAgenda(agenda: AgendaSegment[] | null | undefined): AgendaSegment[] {
+  if (!Array.isArray(agenda) || agenda.length === 0) return DEFAULT_WEEKLY_AGENDA;
+  const byKey = new Map(agenda.map((segment) => [segment.key, segment]));
+  return DEFAULT_WEEKLY_AGENDA.map((fallback) => {
+    const saved = byKey.get(fallback.key);
+    if (!saved || !WEEKLY_ALLOWED_KEYS.has(saved.key)) return fallback;
+    return {
+      ...fallback,
+      name: fallback.name,
+      duration_s: Number(saved.duration_s) > 0 ? Number(saved.duration_s) : fallback.duration_s,
+    };
+  });
+}
+
 export const DEFAULT_WEEKLY_TIMER: TimerState = {
   segment_index: 0,
   segment_started_at: null,

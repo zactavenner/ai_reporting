@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2, X, Upload, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, X, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';
@@ -23,24 +23,28 @@ function fmt(s: number) {
 function StatusIndicators({
   isRecording, uploading, finalizeStatus,
 }: { isRecording: boolean; uploading: boolean; finalizeStatus: string | null }) {
-  const items: Array<{ key: string; icon: any; label: string; className: string; spin?: boolean; pulse?: boolean }> = [];
-  if (isRecording) items.push({ key: 'rec', icon: Circle, label: 'Recording', className: 'text-destructive', pulse: true });
+  const items: Array<{ key: string; icon: any; label: string; className: string; spin?: boolean }> = [];
   if (uploading) items.push({ key: 'up', icon: Upload, label: 'Uploading…', className: 'text-amber-500', spin: false });
   if (finalizeStatus === 'pending' || finalizeStatus === 'processing') {
     items.push({ key: 'tx', icon: Loader2, label: 'Transcribing…', className: 'text-blue-500', spin: true });
   }
   if (finalizeStatus === 'done') items.push({ key: 'done', icon: CheckCircle2, label: 'Tasks ready', className: 'text-emerald-500' });
   if (finalizeStatus === 'error') items.push({ key: 'err', icon: AlertCircle, label: 'Transcript failed', className: 'text-destructive' });
-  if (!items.length) return null;
+  if (!isRecording && !items.length) return null;
   return (
     <div className="flex items-center gap-2 ml-2" aria-live="polite">
+      <span
+        className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'}`}
+        title={isRecording ? 'Recording active' : 'Recording inactive'}
+        aria-label={isRecording ? 'Recording active' : 'Recording inactive'}
+      />
       {items.map((it) => (
         <span
           key={it.key}
           className={`inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] ${it.className}`}
           title={it.label}
         >
-          <it.icon className={`w-3 h-3 ${it.spin ? 'animate-spin' : ''} ${it.pulse ? 'fill-current animate-pulse' : ''}`} />
+          <it.icon className={`w-3 h-3 ${it.spin ? 'animate-spin' : ''}`} />
           {it.label}
         </span>
       ))}
@@ -318,11 +322,6 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         <div className="flex items-center gap-3 min-w-0">
           <div className="text-xs text-muted-foreground">Segment</div>
           <div className="text-lg font-semibold truncate">{seg?.name}</div>
-          {isRecording && (
-            <span className="flex items-center gap-1 text-xs text-destructive">
-              <Circle className="w-2 h-2 fill-current animate-pulse" /> REC
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-2">
           {agenda.map((_, i) => (
@@ -352,7 +351,14 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           <Button onClick={resume}><Play className="w-4 h-4 mr-2" />Resume</Button>
         )}
         {timer.running && (
-          <Button variant="secondary" onClick={pause}><Pause className="w-4 h-4 mr-2" />Pause</Button>
+          <>
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'}`}
+              title={isRecording ? 'Recording active' : 'Recording inactive'}
+              aria-label={isRecording ? 'Recording active' : 'Recording inactive'}
+            />
+            <Button variant="secondary" onClick={pause}><Pause className="w-4 h-4 mr-2" />Pause</Button>
+          </>
         )}
         <Button variant="outline" onClick={bump30} disabled={isLastSegment}><Plus className="w-4 h-4 mr-2" />30s</Button>
         <Button variant="outline" onClick={back} disabled={timing.idx === 0}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
@@ -364,11 +370,13 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
           <span className="text-xs text-muted-foreground">Auto-advance</span>
         </div>
-        <StatusIndicators
-          isRecording={isRecording}
-          uploading={uploading}
-          finalizeStatus={(call as any)?.finalize_status ?? null}
-        />
+        {(!timer.running || uploading || ['pending', 'processing', 'done', 'error'].includes(String((call as any)?.finalize_status ?? ''))) && (
+          <StatusIndicators
+            isRecording={isRecording}
+            uploading={uploading}
+            finalizeStatus={(call as any)?.finalize_status ?? null}
+          />
+        )}
         {call.started_at && !timer.finished && (
           <>
             <Button variant="ghost" onClick={cancel} className="ml-2 text-destructive hover:text-destructive" disabled={finalizing || cancelling}>
