@@ -2,3 +2,5 @@ node_modules
 auth
 .env
 package-lock.json
+hpa-whatsmeow-bridge
+*.db
