@@ -15,6 +15,5 @@ WORKDIR /app
 COPY --from=build /out/bridge /app/bridge
 ENV AUTH_DIR=/data/auth
 RUN mkdir -p /data/auth
-VOLUME ["/data"]
 EXPOSE 8080
 CMD ["/app/bridge"]
