@@ -171,6 +171,9 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const finish = async () => {
     if (!call || finalizing) return;
     setFinalizing(true);
+    // Flush any pending textarea (recap notes save on blur) before we upload.
+    try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+    await new Promise((r) => setTimeout(r, 250));
     const now = new Date().toISOString();
     const actual = call.started_at ? Math.floor((Date.now() - new Date(call.started_at).getTime()) / 1000) : 0;
     const { data: ratings } = await (supabase as any).from('client_weekly_call_ratings').select('rating').eq('call_id', call.id);
