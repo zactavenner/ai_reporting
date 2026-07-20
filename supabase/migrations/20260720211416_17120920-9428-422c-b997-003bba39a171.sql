@@ -1,0 +1,1 @@
+ALTER TABLE public.client_weekly_calls DROP CONSTRAINT IF EXISTS client_weekly_calls_client_id_week_of_key;
