@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Circle, Loader2, X, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, X, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';

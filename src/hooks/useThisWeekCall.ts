@@ -68,7 +68,8 @@ export function useThisWeekCall(clientId: string | undefined) {
       if (cancelled) return;
       const recordAgenda = sanitizeWeeklyAgenda((record?.agenda as AgendaSegment[] | null | undefined) || settingsAgenda);
       setAgenda(recordAgenda);
-      setCall(record);
+      const sanitizedRecord = record ? { ...record, agenda: recordAgenda, planned_duration_s: recordAgenda.reduce((a, s) => a + s.duration_s, 0) } : record;
+      setCall(sanitizedRecord);
       setLoading(false);
 
       if (record && JSON.stringify(record.agenda || []) !== JSON.stringify(recordAgenda)) {
