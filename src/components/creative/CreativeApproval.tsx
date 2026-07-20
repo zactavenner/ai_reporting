@@ -70,9 +70,10 @@ interface CreativeApprovalProps {
   clientId: string;
   clientName: string;
   isPublicView?: boolean;
+  defaultTab?: string;
 }
 
-export function CreativeApproval({ clientId, clientName, isPublicView = false }: CreativeApprovalProps) {
+export function CreativeApproval({ clientId, clientName, isPublicView = false, defaultTab = 'all' }: CreativeApprovalProps) {
   const { data: allCreatives = [], isLoading } = useCreatives(clientId);
   const { clientId: routeClientId } = useParams<{ clientId: string }>();
   const { data: client } = useClient(routeClientId || clientId);
@@ -94,7 +95,7 @@ export function CreativeApproval({ clientId, clientName, isPublicView = false }:
   const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null);
   const [commentText, setCommentText] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [cardComments, setCardComments] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
