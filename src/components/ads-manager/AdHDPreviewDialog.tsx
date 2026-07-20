@@ -117,12 +117,18 @@ export function AdHDPreviewDialog({ ad, open, onOpenChange }: Props) {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <Stat label="Meta-reported leads" value={fmtN(ad.meta_reported_leads)} highlight />
                 <Stat label="CRM attributed leads" value={fmtN(ad.attributed_leads)} highlight />
-                <Stat label="Cost / Lead" value={(() => {
-                  const leads = Number(ad.attributed_leads || 0) || Number(ad.meta_reported_leads || 0);
-                  const spend = Number(ad.spend || 0);
-                  const cpl = ad.cost_per_lead && Number(ad.cost_per_lead) > 0 ? Number(ad.cost_per_lead) : (leads > 0 ? spend / leads : 0);
-                  return cpl > 0 ? fmt$(cpl) : '—';
-                })()} highlight />
+                <Stat label="Cost / Lead (Meta)" value={(() => {
+                   const leads = Number(ad.meta_reported_leads || 0);
+                   const spend = Number(ad.spend || 0);
+                   const cpl = leads > 0 ? spend / leads : 0;
+                   return cpl > 0 ? fmt$(cpl) : '—';
+                 })()} highlight />
+                <Stat label="Cost / Lead (CRM)" value={(() => {
+                   const leads = Number(ad.attributed_leads || 0);
+                   const spend = Number(ad.spend || 0);
+                   const cpl = leads > 0 ? spend / leads : 0;
+                   return cpl > 0 ? fmt$(cpl) : '—';
+                 })()} />
                 <Stat label="Calls booked" value={fmtN(ad.attributed_calls)} />
                 <Stat label="Cost / Call" value={(() => {
                   const calls = Number(ad.attributed_calls || 0);

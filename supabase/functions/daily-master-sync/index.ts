@@ -106,6 +106,20 @@ Deno.serve(async (req) => {
       await invoke("sync-meta-ad-daily-insights", { startDate: startStr, endDate: endStr }, "sync-meta-ad-daily-insights");
     }
 
+    // 1b) Refresh Meta base tables (campaign/adset/ad names, status, budgets,
+    // meta_reported_leads) — without this the Ads Manager tab shows stale
+    // objects between manual syncs.
+    if (!skipSteps.includes("meta")) {
+      for (const client of clients) {
+        if (!client.meta_ad_account_id) continue;
+        await invoke(
+          "sync-meta-ads",
+          { clientId: client.id, startDate: startStr, endDate: endStr },
+          `sync-meta-ads:${client.name}`,
+        );
+      }
+    }
+
     // 2) Per-client GHL + recalc, awaited serially to keep the isolate alive
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     for (const client of clients) {
@@ -124,6 +138,16 @@ Deno.serve(async (req) => {
 
       if (!skipSteps.includes("recalculate")) {
         await invoke("recalculate-daily-metrics", { client_id: client.id, startDate: startStr, endDate: endStr }, `recalc:${client.name}`);
+      }
+
+      // Run CRM→Ad attribution so ROAS / attributed_leads / attributed_funded
+      // on the Ads Manager tab don't silently go stale.
+      if (!skipSteps.includes("attribution")) {
+        await invoke(
+          "run-attribution",
+          { clientId: client.id, startDate: startStr, endDate: endStr },
+          `attribution:${client.name}`,
+        );
       }
 
       await sleep(500);
