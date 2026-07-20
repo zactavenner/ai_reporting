@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
-import { DEFAULT_WEEKLY_AGENDA, DEFAULT_WEEKLY_TIMER, weekOfISO, type AgendaSegment, type TimerState } from '@/lib/weeklyCall/types';
+import { DEFAULT_WEEKLY_AGENDA, DEFAULT_WEEKLY_TIMER, sanitizeWeeklyAgenda, weekOfISO, type AgendaSegment, type TimerState } from '@/lib/weeklyCall/types';
 
 export interface WeeklyCallRecord {
   id: string;
@@ -36,8 +36,7 @@ export function useThisWeekCall(clientId: string | undefined) {
         .select('agenda')
         .eq('client_id', clientId)
         .maybeSingle();
-      const settingsAgenda: AgendaSegment[] =
-        (Array.isArray(settings?.agenda) && settings.agenda.length ? settings.agenda : DEFAULT_WEEKLY_AGENDA) as AgendaSegment[];
+      const settingsAgenda = sanitizeWeeklyAgenda(settings?.agenda as AgendaSegment[] | null | undefined);
       const planned = settingsAgenda.reduce((a, s) => a + s.duration_s, 0);
 
       const { data: existing } = await (supabase as any)
@@ -67,9 +66,18 @@ export function useThisWeekCall(clientId: string | undefined) {
       }
 
       if (cancelled) return;
-      setAgenda((record?.agenda as AgendaSegment[]) || settingsAgenda);
+      const recordAgenda = sanitizeWeeklyAgenda((record?.agenda as AgendaSegment[] | null | undefined) || settingsAgenda);
+      setAgenda(recordAgenda);
       setCall(record);
       setLoading(false);
+
+      if (record && JSON.stringify(record.agenda || []) !== JSON.stringify(recordAgenda)) {
+        const plannedSanitized = recordAgenda.reduce((a, s) => a + s.duration_s, 0);
+        await (supabase as any)
+          .from('client_weekly_calls')
+          .update({ agenda: recordAgenda as any, planned_duration_s: plannedSanitized })
+          .eq('id', record.id);
+      }
 
       if (record && currentMember) {
         await (supabase as any)
@@ -120,18 +128,19 @@ export function useThisWeekCall(clientId: string | undefined) {
   };
 
   const updateAgenda = async (next: AgendaSegment[]) => {
-    setAgenda(next);
+    const sanitized = sanitizeWeeklyAgenda(next);
+    setAgenda(sanitized);
     if (call) {
-      const planned = next.reduce((a, s) => a + s.duration_s, 0);
+      const planned = sanitized.reduce((a, s) => a + s.duration_s, 0);
       await (supabase as any)
         .from('client_weekly_calls')
-        .update({ agenda: next as any, planned_duration_s: planned })
+        .update({ agenda: sanitized as any, planned_duration_s: planned })
         .eq('id', call.id);
     }
     if (clientId) {
       await (supabase as any)
         .from('client_weekly_call_settings')
-        .upsert({ client_id: clientId, agenda: next as any });
+        .upsert({ client_id: clientId, agenda: sanitized as any });
     }
   };
 
@@ -140,14 +149,15 @@ export function useThisWeekCall(clientId: string | undefined) {
   const resetForNewCall = async () => {
     if (!clientId) return;
     const week = weekOfISO();
-    const planned = agenda.reduce((a, s) => a + s.duration_s, 0);
+    const sanitized = sanitizeWeeklyAgenda(agenda);
+    const planned = sanitized.reduce((a, s) => a + s.duration_s, 0);
     const { data: created } = await (supabase as any)
       .from('client_weekly_calls')
       .insert({
         client_id: clientId,
         week_of: week,
         planned_duration_s: planned,
-        agenda: agenda as any,
+        agenda: sanitized as any,
         timer_state: DEFAULT_WEEKLY_TIMER as any,
       })
       .select('*')
