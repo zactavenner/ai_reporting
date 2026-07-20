@@ -1,0 +1,1 @@
+ALTER TABLE public.client_weekly_calls ADD COLUMN IF NOT EXISTS title TEXT;
