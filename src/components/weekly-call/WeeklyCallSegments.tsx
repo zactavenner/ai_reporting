@@ -284,59 +284,67 @@ export function TasksSegment({ callId, clientId, call }: { callId: string; clien
 
 export function WrapupSegment({ call, clientId, onFinish }: { call: any; clientId: string; onFinish: () => void }) {
   const { currentMember } = useTeamMember();
-  const [summary, setSummary] = useState(call.summary_text || '');
-  const [rating, setRating] = useState<number>(0);
-  const [comment, setComment] = useState('');
+  const [drafts, setDrafts] = useState<string[]>(['']);
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => { setSummary(call.summary_text || ''); }, [call.id]);
+  const update = (i: number, v: string) => setDrafts((p) => p.map((x, idx) => (idx === i ? v : x)));
+  const remove = (i: number) => setDrafts((p) => p.filter((_, idx) => idx !== i));
+  const addRow = () => setDrafts((p) => [...p, '']);
 
-  const saveSummary = async () => {
-    await (supabase as any).from('client_weekly_calls').update({ summary_text: summary }).eq('id', call.id);
-  };
-  const submitRating = async () => {
-    if (!rating) return;
-    await (supabase as any).from('client_weekly_call_ratings').insert({
-      call_id: call.id,
-      member_id: currentMember?.id ?? null,
-      member_name: currentMember?.name ?? 'Team',
-      rating,
-      comment: comment || null,
-    });
-    setRating(0); setComment('');
-    toast.success('Rating recorded');
-  };
-  const pushToWeeklySync = async () => {
-    await saveSummary();
-    const { error } = await (supabase as any).from('weekly_syncs').insert({
-      client_id: clientId,
-      sync_date: call.week_of,
-      numbers_notes: summary || null,
-    });
-    if (error) toast.error(error.message || 'Failed to push');
-    else toast.success('Pushed to Weekly Sync');
+  const approveAll = async () => {
+    const clean = drafts.map((t) => t.trim()).filter(Boolean);
+    if (!clean.length) { toast.error('Add at least one task'); return; }
+    setCreating(true);
+    try {
+      for (const title of clean) {
+        const { data: task } = await (supabase as any).from('tasks').insert({
+          client_id: clientId,
+          title,
+          status: 'todo',
+          stage: 'to-do',
+          priority: 'medium',
+          created_by: currentMember?.id ?? null,
+        }).select('id').single();
+        if (task?.id) {
+          await (supabase as any).from('client_weekly_call_tasks').insert({ call_id: call.id, task_id: task.id, action: 'created' });
+        }
+      }
+      setDrafts(['']);
+      toast.success(`Created ${clean.length} task${clean.length === 1 ? '' : 's'}`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to create tasks');
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-4">
+    <div className="w-full max-w-3xl mx-auto space-y-4">
       <Card className="p-4 space-y-3">
-        <div className="text-sm font-semibold">Recap</div>
-        <Textarea value={summary} onChange={(e) => setSummary(e.target.value)} onBlur={saveSummary} rows={4} placeholder="One-paragraph recap of the call…" />
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" onClick={pushToWeeklySync}>Push to Weekly Sync</Button>
-        </div>
-      </Card>
-      <Card className="p-4 space-y-3">
-        <div className="text-sm font-semibold">Rate the call</div>
-        <div className="flex gap-1">
-          {[1,2,3,4,5].map((n) => (
-            <button key={n} onClick={() => setRating(n)} aria-label={`Rate ${n}`}>
-              <Star className={`w-7 h-7 ${n <= rating ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
-            </button>
+        <div className="text-sm font-semibold">Tasks to create from this call</div>
+        <div className="text-xs text-muted-foreground">Add each task discussed. Approve to create them all at once before finishing.</div>
+        <div className="space-y-2">
+          {drafts.map((t, i) => (
+            <div key={i} className="flex gap-2">
+              <Input value={t} onChange={(e) => update(i, e.target.value)} placeholder={`Task ${i + 1}…`} />
+              {drafts.length > 1 && (
+                <Button variant="ghost" size="icon" onClick={() => remove(i)} aria-label="Remove"><X className="w-4 h-4" /></Button>
+              )}
+            </div>
           ))}
         </div>
-        <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment" />
-        <div className="flex justify-end"><Button onClick={submitRating} disabled={!rating}>Submit rating</Button></div>
+        <div className="flex gap-2 justify-between">
+          <Button variant="outline" size="sm" onClick={addRow}><Plus className="w-4 h-4 mr-1" />Add row</Button>
+          <Button onClick={approveAll} disabled={creating}>
+            <CheckSquare className="w-4 h-4 mr-2" />{creating ? 'Creating…' : 'Approve & create all'}
+          </Button>
+        </div>
       </Card>
+
+      <Card className="p-4 text-xs text-muted-foreground">
+        This call is auto-recorded, transcribed, and summarized. You'll find the recap under <span className="font-medium text-foreground">Past calls</span> once it finishes.
+      </Card>
+
       <div className="flex justify-center">
         <Button size="lg" onClick={onFinish}>Finish call</Button>
       </div>
