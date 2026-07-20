@@ -4,11 +4,8 @@ export type { AgendaSegment, TimerState };
 export const DEFAULT_WEEKLY_AGENDA: AgendaSegment[] = [
   { key: 'wins',          name: 'Wins',                duration_s: 180 },
   { key: 'scorecard',     name: 'Scorecard',           duration_s: 300 },
-  { key: 'pipeline',      name: 'Pipeline & Deals',    duration_s: 240 },
-  { key: 'creative',      name: 'Creative Review',     duration_s: 240 },
-  { key: 'tasks',         name: 'Tasks & Accountability', duration_s: 300 },
-  { key: 'blockers',      name: 'Blockers & Risks',    duration_s: 180 },
-  { key: 'ideas',         name: 'Ideas / Experiments', duration_s: 180 },
+  { key: 'creative',      name: 'Creative Approvals',  duration_s: 360 },
+  { key: 'tasks',         name: 'Task Review',         duration_s: 300 },
   { key: 'wrapup',        name: 'Wrap-up',             duration_s: 120 },
 ];
 
