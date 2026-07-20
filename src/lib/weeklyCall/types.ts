@@ -2,10 +2,12 @@ import type { AgendaSegment, TimerState } from '@/lib/huddle/types';
 export type { AgendaSegment, TimerState };
 
 export const DEFAULT_WEEKLY_AGENDA: AgendaSegment[] = [
+  // Total 20 min. 3m wins, 2m recap; remainder split between scorecard & tasks,
+  // with a light window for creative approvals.
   { key: 'wins',          name: 'Wins',                duration_s: 180 },
-  { key: 'scorecard',     name: 'Scorecard',           duration_s: 300 },
-  { key: 'creative',      name: 'Creative Approvals',  duration_s: 360 },
-  { key: 'tasks',         name: 'Task Review',         duration_s: 300 },
+  { key: 'scorecard',     name: 'Scorecard',           duration_s: 390 },
+  { key: 'creative',      name: 'Creative Approvals',  duration_s: 120 },
+  { key: 'tasks',         name: 'Task Review',         duration_s: 390 },
   { key: 'recap',         name: 'Recap',               duration_s: 120 },
 ];
 
@@ -14,7 +16,7 @@ export const DEFAULT_WEEKLY_TIMER: TimerState = {
   segment_started_at: null,
   paused_at: null,
   paused_elapsed_s: 0,
-  auto_advance: false,
+  auto_advance: true,
   running: false,
   finished: false,
   extra_s: 0,
