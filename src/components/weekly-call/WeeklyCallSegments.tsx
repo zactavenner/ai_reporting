@@ -9,8 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Trophy, Plus, AlertTriangle, Lightbulb, CheckSquare, Star } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WeeklyRecapCard } from '@/components/weekly-sync/WeeklyRecapCard';
-import { useDeals } from '@/hooks/useDeals';
 import { useTasks } from '@/hooks/useTasks';
+import { CreativeApproval } from '@/components/creative/CreativeApproval';
+import { useClient } from '@/hooks/useClients';
 import { toast } from 'sonner';
 
 // ─── Range window helpers (anchored to when the call was started) ─────────
