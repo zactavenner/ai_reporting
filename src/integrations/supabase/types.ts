@@ -6393,16 +6393,19 @@ export type Database = {
         Row: {
           agenda: Json
           client_id: string
+          scorecard_sheet_url: string | null
           updated_at: string
         }
         Insert: {
           agenda?: Json
           client_id: string
+          scorecard_sheet_url?: string | null
           updated_at?: string
         }
         Update: {
           agenda?: Json
           client_id?: string
+          scorecard_sheet_url?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -6470,12 +6473,16 @@ export type Database = {
           created_at: string
           ended_at: string | null
           facilitator_id: string | null
+          finalize_status: string | null
           id: string
           planned_duration_s: number
+          proposed_tasks: Json
+          recording_url: string | null
           started_at: string | null
           status: string
           summary_text: string | null
           timer_state: Json
+          transcript: string | null
           updated_at: string
           week_of: string
         }
@@ -6487,12 +6494,16 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           facilitator_id?: string | null
+          finalize_status?: string | null
           id?: string
           planned_duration_s?: number
+          proposed_tasks?: Json
+          recording_url?: string | null
           started_at?: string | null
           status?: string
           summary_text?: string | null
           timer_state?: Json
+          transcript?: string | null
           updated_at?: string
           week_of: string
         }
@@ -6504,12 +6515,16 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           facilitator_id?: string | null
+          finalize_status?: string | null
           id?: string
           planned_duration_s?: number
+          proposed_tasks?: Json
+          recording_url?: string | null
           started_at?: string | null
           status?: string
           summary_text?: string | null
           timer_state?: Json
+          transcript?: string | null
           updated_at?: string
           week_of?: string
         }
