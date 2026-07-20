@@ -6,7 +6,6 @@ export const DEFAULT_WEEKLY_AGENDA: AgendaSegment[] = [
   { key: 'scorecard',     name: 'Scorecard',           duration_s: 300 },
   { key: 'creative',      name: 'Creative Approvals',  duration_s: 360 },
   { key: 'tasks',         name: 'Task Review',         duration_s: 300 },
-  { key: 'wrapup',        name: 'Wrap-up',             duration_s: 120 },
 ];
 
 export const DEFAULT_WEEKLY_TIMER: TimerState = {
