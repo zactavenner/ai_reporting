@@ -8,7 +8,7 @@ import { useSegmentTiming } from '@/hooks/useHuddle';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
-  WinsSegment, ScorecardSegment, CreativeReviewSegment, TasksSegment,
+  WinsSegment, ScorecardSegment, CreativeReviewSegment, TasksSegment, RecapSegment,
 } from './WeeklyCallSegments';
 import { WeeklyCallSettingsDrawer } from './WeeklyCallSettingsDrawer';
 
@@ -42,6 +42,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const streamRef = useRef<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
   const autoFinishedRef = useRef(false);
 
   const timer = call?.timer_state;
@@ -184,6 +185,8 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       ...(recordingUrl ? { recording_url: recordingUrl, finalize_status: 'pending' } as any : {}),
     });
     toast.success('Call wrapped — transcribing in the background');
+    setCelebrate(true);
+    setTimeout(() => setCelebrate(false), 2600);
     if (recordingUrl) {
       supabase.functions.invoke('weekly-call-finalize', { body: { call_id: call.id } })
         .then((res) => {
@@ -210,12 +213,22 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       case 'scorecard': return <ScorecardSegment callId={call.id} clientId={clientId} call={call} />;
       case 'creative':  return <CreativeReviewSegment callId={call.id} clientId={clientId} call={call} />;
       case 'tasks':     return <TasksSegment callId={call.id} clientId={clientId} call={call} />;
+      case 'recap':     return <RecapSegment callId={call.id} clientId={clientId} />;
       default: return null;
     }
   })();
 
   return (
     <div className="flex flex-col">
+      {celebrate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm pointer-events-none animate-fade-in">
+          <div className="animate-scale-in text-center space-y-3">
+            <PartyPopper className="w-24 h-24 mx-auto text-primary animate-bounce" />
+            <div className="text-3xl font-bold">Call complete!</div>
+            <div className="text-sm text-muted-foreground">Transcribing & drafting tasks…</div>
+          </div>
+        </div>
+      )}
       <header className="border-b py-3 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <div className="text-xs text-muted-foreground">Segment</div>
