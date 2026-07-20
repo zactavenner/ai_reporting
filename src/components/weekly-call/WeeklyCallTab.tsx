@@ -9,6 +9,7 @@ import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { PastCallsChat } from './PastCallsChat';
+import { ClientCallNotesPanel } from './ClientCallNotesPanel';
 
 interface Row {
   id: string;
@@ -216,6 +217,7 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
       </div>
 
       <PastCallsChat clientId={clientId} />
+      <ClientCallNotesPanel clientId={clientId} />
     </div>
   );
 }
