@@ -29,6 +29,14 @@ serve(async (req) => {
       .limit(52);
     if (error) throw error;
 
+    // External notes / pasted transcripts (not tied to a live call).
+    const { data: extNotes } = await supabase
+      .from("client_call_notes")
+      .select("id, title, kind, content, source, occurred_at, created_at")
+      .eq("client_id", client_id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
     const summarised = (calls || []).map((c: any) => ({
       id: c.id,
       week_of: c.week_of,
@@ -41,6 +49,16 @@ serve(async (req) => {
     const summaryLayer = summarised
       .map((c) => `## ${c.title} — ${c.week_of}\n${c.summary}\n${c.tasks.length ? `Action items:\n- ${c.tasks.join("\n- ")}` : ""}`)
       .join("\n\n");
+
+    const notesLayer = (extNotes || [])
+      .map((n: any) => {
+        const when = n.occurred_at || n.created_at;
+        const label = n.title || `${n.kind || "note"} — ${when?.slice(0, 10) || ""}`;
+        const src = n.source ? ` (source: ${n.source})` : "";
+        const body = String(n.content || "").slice(0, 6000);
+        return `## ${label}${src}\n${body}`;
+      })
+      .join("\n\n---\n\n");
 
     // Heuristic: if the question mentions a specific week / date or asks about "exact/quote/said/verbatim",
     // pull transcript for the most relevant calls too.
@@ -59,6 +77,7 @@ serve(async (req) => {
       `You are an assistant answering questions about past weekly client calls. Cite the call date (e.g. "Week of Jul 12") when referencing specifics. If the info is not in the notes, say so plainly.`,
       `TOTAL PAST CALLS: ${summarised.length}`,
       `\n# CALL SUMMARIES\n${summaryLayer || "(none)"}`,
+      notesLayer ? `\n# PASTED NOTES & TRANSCRIPTS\n${notesLayer}` : "",
       transcriptLayer ? `\n# RELEVANT TRANSCRIPTS\n${transcriptLayer}` : "",
     ].filter(Boolean).join("\n\n");
 
