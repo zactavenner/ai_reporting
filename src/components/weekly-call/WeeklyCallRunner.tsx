@@ -30,11 +30,11 @@ function StatusIndicators({
   }
   if (finalizeStatus === 'done') items.push({ key: 'done', icon: CheckCircle2, label: 'Tasks ready', className: 'text-emerald-500' });
   if (finalizeStatus === 'error') items.push({ key: 'err', icon: AlertCircle, label: 'Transcript failed', className: 'text-destructive' });
-  if (!items.length) return null;
+  if (!isRecording && !items.length) return null;
   return (
     <div className="flex items-center gap-2 ml-2" aria-live="polite">
       <span
-        className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/30'}`}
+        className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'}`}
         title={isRecording ? 'Recording active' : 'Recording inactive'}
         aria-label={isRecording ? 'Recording active' : 'Recording inactive'}
       />
@@ -353,7 +353,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         {timer.running && (
           <>
             <span
-              className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/30'}`}
+              className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'}`}
               title={isRecording ? 'Recording active' : 'Recording inactive'}
               aria-label={isRecording ? 'Recording active' : 'Recording inactive'}
             />
