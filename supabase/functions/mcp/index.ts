@@ -429,6 +429,53 @@ var list_pending_approvals_default = defineTool15({
   }
 });
 
+// src/lib/mcp/tools/list-weekly-calls.ts
+import { defineTool as defineTool16 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z15 } from "npm:zod@^4.4.3";
+var list_weekly_calls_default = defineTool16({
+  name: "list_weekly_calls",
+  title: "List weekly client calls",
+  description: "List past weekly client calls with titles, dates, summaries, and proposed action items. Filter by client_id.",
+  inputSchema: {
+    client_id: z15.string().uuid().regex(UUID).optional(),
+    limit: z15.number().int().min(1).max(50).default(10).optional()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from("client_weekly_calls").select("id, client_id, week_of, title, summary_text, proposed_tasks, actual_duration_s, avg_rating, ended_at, status").neq("status", "cancelled").order("week_of", { ascending: false });
+    if (client_id) q = q.eq("client_id", client_id);
+    const { data, error } = await q.limit(limit ?? 10);
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { calls: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-weekly-call.ts
+import { defineTool as defineTool17 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z16 } from "npm:zod@^4.4.3";
+var get_weekly_call_default = defineTool17({
+  name: "get_weekly_call",
+  title: "Get a weekly call (with transcript)",
+  description: "Fetch a single weekly client call by id, including full transcript, summary, and proposed action items.",
+  inputSchema: {
+    call_id: z16.string().uuid().regex(UUID)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ call_id }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb5(ctx).from("client_weekly_calls").select("id, client_id, week_of, title, summary_text, transcript, proposed_tasks, actual_duration_s, avg_rating, started_at, ended_at, recording_url, status").eq("id", call_id).maybeSingle();
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? {}, null, 2) }],
+      structuredContent: { call: data ?? null }
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jgwwmtuvjlmzapwqiabu";
 var mcp_default = defineMcp({
@@ -455,7 +502,9 @@ var mcp_default = defineMcp({
     get_client_settings_default,
     get_sync_health_default,
     list_ai_studio_jobs_default,
-    list_pending_approvals_default
+    list_pending_approvals_default,
+    list_weekly_calls_default,
+    get_weekly_call_default
   ]
 });
 

@@ -6482,6 +6482,7 @@ export type Database = {
           status: string
           summary_text: string | null
           timer_state: Json
+          title: string | null
           transcript: string | null
           updated_at: string
           week_of: string
@@ -6503,6 +6504,7 @@ export type Database = {
           status?: string
           summary_text?: string | null
           timer_state?: Json
+          title?: string | null
           transcript?: string | null
           updated_at?: string
           week_of: string
@@ -6524,6 +6526,7 @@ export type Database = {
           status?: string
           summary_text?: string | null
           timer_state?: Json
+          title?: string | null
           transcript?: string | null
           updated_at?: string
           week_of?: string

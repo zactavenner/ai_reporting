@@ -89,6 +89,7 @@ serve(async (req) => {
     }
 
     let summary = "";
+    let title = "";
     let proposedTasks: Array<{ title: string; assignee?: string; priority?: string }> = [];
     const hasSource = transcript || recapNotes || winsText;
     if (hasSource) {
@@ -108,6 +109,16 @@ serve(async (req) => {
       } catch (e) {
         console.warn("summary failed:", e);
       }
+      // Title
+      try {
+        const titleRes = await callOpenRouter([
+          { role: "system", content: "You write concise 3-8 word titles for weekly client marketing calls. Capture the single most important theme or decision. Return the title only — no quotes, no preamble, no trailing punctuation." },
+          { role: "user", content: (summary ? `SUMMARY:\n${summary}\n\n` : "") + contextBlock.slice(0, 6000) },
+        ], { temperature: 0.4, max_tokens: 40 });
+        title = titleRes.text.replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
+      } catch (e) {
+        console.warn("title failed:", e);
+      }
       // Task extraction
       try {
         const taskRes = await callOpenRouterJSON<{ tasks: Array<{ title: string; priority?: string }> }>([
@@ -123,6 +134,7 @@ serve(async (req) => {
     await supabase.from("client_weekly_calls").update({
       transcript: transcript || null,
       summary_text: summary || null,
+      title: title || null,
       proposed_tasks: proposedTasks as any,
       finalize_status: "done",
     }).eq("id", call_id);
