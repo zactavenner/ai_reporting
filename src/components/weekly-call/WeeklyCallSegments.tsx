@@ -6,12 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, Plus, AlertTriangle, Lightbulb, CheckSquare, Star, X } from 'lucide-react';
+import { Trophy, Plus, AlertTriangle, Lightbulb, CheckSquare, Star, X, ExternalLink, Settings2 } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { WeeklyRecapCard } from '@/components/weekly-sync/WeeklyRecapCard';
 import { useTasks } from '@/hooks/useTasks';
 import { CreativeApproval } from '@/components/creative/CreativeApproval';
 import { useClient } from '@/hooks/useClients';
+import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import { toast } from 'sonner';
 
 // ─── Range window helpers (anchored to when the call was started) ─────────
@@ -181,15 +182,71 @@ function NotesBlock({ callId, clientId, kind, label }: { callId: string; clientI
 export function ScorecardSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
   const [range, setRange] = useState<RangeDays>(7);
   const since = sinceISO(anchorDate(call), range);
+  const [sheetUrl, setSheetUrl] = useState<string>('');
+  const [editingUrl, setEditingUrl] = useState(false);
+  const [tmpUrl, setTmpUrl] = useState('');
+  useEffect(() => {
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('client_weekly_call_settings')
+        .select('scorecard_sheet_url')
+        .eq('client_id', clientId)
+        .maybeSingle();
+      setSheetUrl(data?.scorecard_sheet_url || '');
+      setTmpUrl(data?.scorecard_sheet_url || '');
+    })();
+  }, [clientId]);
+  const saveUrl = async () => {
+    await (supabase as any)
+      .from('client_weekly_call_settings')
+      .upsert({ client_id: clientId, scorecard_sheet_url: tmpUrl.trim() || null });
+    setSheetUrl(tmpUrl.trim());
+    setEditingUrl(false);
+    toast.success('Scorecard sheet saved');
+  };
+  const embedUrl = (u: string) => {
+    if (!u) return '';
+    // Force embed mode on Google Sheets share links
+    return u.includes('/pubhtml') || u.includes('output=') || u.includes('widget=')
+      ? u
+      : u.replace(/\/edit.*$/, '/preview').replace(/\/view.*$/, '/preview');
+  };
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-4">
+    <div className="w-full max-w-6xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
           Rolling window anchored to call start ({anchorDate(call).toLocaleDateString()})
         </div>
-        <RangePicker value={range} onChange={setRange} />
+        <div className="flex items-center gap-2">
+          {sheetUrl && (
+            <Button size="sm" variant="outline" asChild>
+              <a href={sheetUrl} target="_blank" rel="noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1" />Open sheet</a>
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setEditingUrl((v) => !v)}>
+            <Settings2 className="w-3.5 h-3.5" />
+          </Button>
+          <RangePicker value={range} onChange={setRange} />
+        </div>
       </div>
+      {editingUrl && (
+        <div className="flex gap-2">
+          <Input value={tmpUrl} onChange={(e) => setTmpUrl(e.target.value)} placeholder="Paste Google Sheet URL (share link)" />
+          <Button size="sm" onClick={saveUrl}>Save</Button>
+        </div>
+      )}
       <WeeklyRecapCard clientId={clientId} sinceDate={since} compact windowLabel={`Last ${range} days`} />
+      {sheetUrl && (
+        <Card className="p-0 overflow-hidden">
+          <iframe
+            src={embedUrl(sheetUrl)}
+            title="Scorecard sheet"
+            className="w-full"
+            style={{ height: 560, border: 0 }}
+            loading="lazy"
+          />
+        </Card>
+      )}
       <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="scorecard_note" label="Scorecard commentary" /></Card>
     </div>
   );
@@ -200,9 +257,9 @@ export function CreativeReviewSegment({ callId, clientId, call }: { callId: stri
   return (
     <div className="w-full max-w-6xl mx-auto space-y-4">
       <div className="text-xs text-muted-foreground">
-        Review any creatives still pending approval. Approve, request revisions, reject, or comment inline.
+        Pending creatives only. Approve, request revisions, reject, or comment inline.
       </div>
-      <CreativeApproval clientId={clientId} clientName={client?.name || 'client'} />
+      <CreativeApproval clientId={clientId} clientName={client?.name || 'client'} defaultTab="pending" />
       <Card className="p-4"><NotesBlock callId={callId} clientId={clientId} kind="creative_note" label="Creative notes" /></Card>
     </div>
   );
@@ -214,140 +271,16 @@ export function PipelineSegment({ callId, clientId }: { callId: string; clientId
 }
 
 export function TasksSegment({ callId, clientId, call }: { callId: string; clientId: string; call: any }) {
-  const { currentMember } = useTeamMember();
-  const { data: tasks = [] } = useTasks(clientId);
-  const [title, setTitle] = useState('');
-  const [range, setRange] = useState<RangeDays>(7);
-  const since = new Date(sinceISO(anchorDate(call), range)).getTime();
-  const completedThisWeek = tasks.filter((t: any) => t.status === 'completed' && t.completed_at && new Date(t.completed_at).getTime() >= since);
-  const openImportant = tasks.filter((t: any) => t.status !== 'completed').slice(0, 8);
-
-  const addTask = async () => {
-    if (!title.trim()) return;
-    const { data: task } = await (supabase as any).from('tasks').insert({
-      client_id: clientId,
-      title: title.trim(),
-      status: 'todo',
-      stage: 'to-do',
-      priority: 'medium',
-      created_by: currentMember?.id ?? null,
-    }).select('id').single();
-    if (task?.id) {
-      await (supabase as any).from('client_weekly_call_tasks').insert({ call_id: callId, task_id: task.id, action: 'created' });
-    }
-    setTitle('');
-    toast.success('Task created');
-  };
-
   return (
-    <div className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="md:col-span-2 flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">
-          Completed window anchored to call start ({anchorDate(call).toLocaleDateString()})
-        </div>
-        <RangePicker value={range} onChange={setRange} />
-      </div>
-      <Card className="p-4">
-        <div className="text-sm font-semibold mb-2">Completed in last {range} days ({completedThisWeek.length})</div>
-        {completedThisWeek.length === 0 ? (
-          <div className="text-xs text-muted-foreground italic">Nothing marked complete yet.</div>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {completedThisWeek.map((t: any) => (
-              <li key={t.id} className="flex items-center gap-2"><CheckSquare className="w-3.5 h-3.5 text-primary" />{t.title}</li>
-            ))}
-          </ul>
-        )}
-      </Card>
-      <Card className="p-4 space-y-3">
-        <div className="text-sm font-semibold">Open tasks</div>
-        <ul className="space-y-1 text-sm">
-          {openImportant.map((t: any) => (
-            <li key={t.id} className="flex items-center justify-between border-b border-border/40 pb-1 last:border-0">
-              <span className="truncate">{t.title}</span>
-              <Badge variant="outline" className="text-[10px]">{t.stage}</Badge>
-            </li>
-          ))}
-          {openImportant.length === 0 && <li className="text-xs text-muted-foreground italic">No open tasks.</li>}
-        </ul>
-        <div className="pt-2 border-t space-y-2">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Add task for this week</div>
-          <div className="flex gap-2">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} placeholder="New task…" />
-            <Button onClick={addTask}><Plus className="w-4 h-4" /></Button>
-          </div>
-        </div>
-      </Card>
+    <div className="w-full max-w-[1400px] mx-auto space-y-2">
+      <div className="text-xs text-muted-foreground">Client-visible task board. Hidden and agency-review tasks are excluded.</div>
+      <TaskBoardView clientId={clientId} isPublicView />
     </div>
   );
 }
 
 export function WrapupSegment({ call, clientId, onFinish }: { call: any; clientId: string; onFinish: () => void }) {
-  const { currentMember } = useTeamMember();
-  const [drafts, setDrafts] = useState<string[]>(['']);
-  const [creating, setCreating] = useState(false);
-
-  const update = (i: number, v: string) => setDrafts((p) => p.map((x, idx) => (idx === i ? v : x)));
-  const remove = (i: number) => setDrafts((p) => p.filter((_, idx) => idx !== i));
-  const addRow = () => setDrafts((p) => [...p, '']);
-
-  const approveAll = async () => {
-    const clean = drafts.map((t) => t.trim()).filter(Boolean);
-    if (!clean.length) { toast.error('Add at least one task'); return; }
-    setCreating(true);
-    try {
-      for (const title of clean) {
-        const { data: task } = await (supabase as any).from('tasks').insert({
-          client_id: clientId,
-          title,
-          status: 'todo',
-          stage: 'to-do',
-          priority: 'medium',
-          created_by: currentMember?.id ?? null,
-        }).select('id').single();
-        if (task?.id) {
-          await (supabase as any).from('client_weekly_call_tasks').insert({ call_id: call.id, task_id: task.id, action: 'created' });
-        }
-      }
-      setDrafts(['']);
-      toast.success(`Created ${clean.length} task${clean.length === 1 ? '' : 's'}`);
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to create tasks');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  return (
-    <div className="w-full max-w-3xl mx-auto space-y-4">
-      <Card className="p-4 space-y-3">
-        <div className="text-sm font-semibold">Tasks to create from this call</div>
-        <div className="text-xs text-muted-foreground">Add each task discussed. Approve to create them all at once before finishing.</div>
-        <div className="space-y-2">
-          {drafts.map((t, i) => (
-            <div key={i} className="flex gap-2">
-              <Input value={t} onChange={(e) => update(i, e.target.value)} placeholder={`Task ${i + 1}…`} />
-              {drafts.length > 1 && (
-                <Button variant="ghost" size="icon" onClick={() => remove(i)} aria-label="Remove"><X className="w-4 h-4" /></Button>
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2 justify-between">
-          <Button variant="outline" size="sm" onClick={addRow}><Plus className="w-4 h-4 mr-1" />Add row</Button>
-          <Button onClick={approveAll} disabled={creating}>
-            <CheckSquare className="w-4 h-4 mr-2" />{creating ? 'Creating…' : 'Approve & create all'}
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-4 text-xs text-muted-foreground">
-        This call is auto-recorded, transcribed, and summarized. You'll find the recap under <span className="font-medium text-foreground">Past calls</span> once it finishes.
-      </Card>
-
-      <div className="flex justify-center">
-        <Button size="lg" onClick={onFinish}>Finish call</Button>
-      </div>
-    </div>
-  );
+  // Deprecated: agenda no longer includes a wrap-up segment; the sticky Finish button
+  // in the runner handles ending the call and kicks off recording finalize.
+  return null;
 }
