@@ -112,6 +112,19 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timing.remaining, timer?.segment_index, timer?.finished, call?.started_at, agenda.length]);
 
+  // Hard cap: nothing runs forever. After 60 minutes from start, auto-finish
+  // (uploads recording + kicks off transcription/task extraction).
+  const HARD_CAP_S = 3600;
+  useEffect(() => {
+    if (!call?.started_at || timer?.finished || autoFinishedRef.current) return;
+    if (meetingElapsed >= HARD_CAP_S) {
+      autoFinishedRef.current = true;
+      toast.message('60-minute cap reached — wrapping call automatically');
+      finish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingElapsed, timer?.finished, call?.started_at]);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
