@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Star, CheckSquare, FileAudio, Loader2, ChevronDown, ChevronUp, FileText, Clock } from 'lucide-react';
+import { CalendarClock, Star, CheckSquare, FileAudio, Loader2, ChevronDown, ChevronUp, FileText, Clock, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WeeklyCallRunner } from './WeeklyCallRunner';
 import { format, formatDistanceToNowStrict } from 'date-fns';
@@ -31,6 +31,7 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
   const { currentMember } = useTeamMember();
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = async () => {
     const { data } = await (supabase as any)
@@ -81,6 +82,21 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
     }
   };
 
+  const deleteCall = async (row: Row) => {
+    if (!window.confirm(`Delete "${row.title || 'this weekly call'}"? This removes the recording, transcript, action items, and it will no longer be available to the AI review chat.`)) return;
+    setDeletingId(row.id);
+    try {
+      const { error } = await (supabase as any).from('client_weekly_calls').delete().eq('id', row.id);
+      if (error) throw error;
+      setHistory((h) => h.filter((x) => x.id !== row.id));
+      toast.success('Call deleted');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to delete');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card className="p-4 md:p-6">
@@ -120,6 +136,16 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
                         <Badge variant="outline" className="text-[10px] gap-1"><Loader2 className="w-3 h-3 animate-spin" />transcribing</Badge>
                       )}
                       <Badge variant="outline" className="text-[10px]">{r.status}</Badge>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteCall(r)}
+                        disabled={deletingId === r.id}
+                        title="Delete call"
+                      >
+                        {deletingId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                      </Button>
                     </div>
                   </div>
 
