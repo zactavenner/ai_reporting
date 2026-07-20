@@ -20,11 +20,26 @@ interface DateFilterContextType {
 const DateFilterContext = createContext<DateFilterContextType | undefined>(undefined);
 
 export function DateFilterProvider({ children }: { children: ReactNode }) {
-  // Default to yesterday only (today is partial; yesterday is the last complete action day)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+  // Default to "yesterday" in the Meta ad-account reporting timezone
+  // (America/Los_Angeles). Using the browser TZ can shift the date by a
+  // day for viewers outside PT and cause the dashboard to disagree with
+  // Ads Manager. See mem://architecture/reporting/meta-ads-compliance-and-logging.
+  const AD_TZ = 'America/Los_Angeles';
+  const partsInTz = (d: Date) => {
+    const p = new Intl.DateTimeFormat('en-CA', {
+      timeZone: AD_TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(d).reduce<Record<string, string>>((a, x) => {
+      if (x.type !== 'literal') a[x.type] = x.value;
+      return a;
+    }, {});
+    return { y: Number(p.year), m: Number(p.month), d: Number(p.day) };
+  };
+  const now = new Date();
+  const { y, m, d } = partsInTz(now);
+  // Build a Date whose local Y/M/D match yesterday-in-PT; time-of-day is
+  // irrelevant because we format via formatLocalDate below.
+  const yesterday = new Date(y, m - 1, d - 1);
 
   const [dateRange, setDateRange] = useState<DateRange>({
     from: yesterday,
