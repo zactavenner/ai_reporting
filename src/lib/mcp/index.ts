@@ -14,6 +14,8 @@ import getClientSettings from "./tools/get-client-settings";
 import getSyncHealth from "./tools/get-sync-health";
 import listAiStudioJobs from "./tools/list-ai-studio-jobs";
 import listPendingApprovals from "./tools/list-pending-approvals";
+import listWeeklyCalls from "./tools/list-weekly-calls";
+import getWeeklyCall from "./tools/get-weekly-call";
 
 // The OAuth issuer must be the direct Supabase host (not the Cloud proxy).
 const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "project-ref-unset";
@@ -44,5 +46,7 @@ export default defineMcp({
     getSyncHealth,
     listAiStudioJobs,
     listPendingApprovals,
+    listWeeklyCalls,
+    getWeeklyCall,
   ],
 });
