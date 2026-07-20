@@ -71,13 +71,14 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   // Auto-finish when total planned duration is exhausted
   useEffect(() => {
     if (!call?.started_at || timer?.finished || autoFinishedRef.current) return;
-    const totalPlanned = agenda.reduce((a, s) => a + s.duration_s, 0);
-    if (meetingElapsed >= totalPlanned + 60) {
+    // Auto-finish only when timer expires on the LAST segment
+    const isLast = (timer?.segment_index ?? 0) >= agenda.length - 1;
+    if (isLast && timing.remaining <= 0) {
       autoFinishedRef.current = true;
       finish();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetingElapsed, call?.started_at, timer?.finished, agenda]);
+  }, [timing.remaining, timer?.segment_index, timer?.finished, call?.started_at, agenda.length]);
 
   const startRecording = async () => {
     try {
