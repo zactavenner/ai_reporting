@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Copy, Check, Trophy, Users, Star, ListChecks, TrendingUp } from 'lucide-react';
+import { Copy, Check, Trophy, Users, Star, ListChecks, TrendingUp, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -22,6 +22,7 @@ function currentYearMonth(): string {
 }
 
 interface MemberStat { name: string; attended: number; wins: number }
+interface ClientTimeStat { client_id: string; name: string; total_s: number; sessions: number; avg_s: number }
 
 export function HuddleMonthlyRecap() {
   const [ym, setYm] = useState<string>(currentYearMonth());
@@ -36,7 +37,9 @@ export function HuddleMonthlyRecap() {
     memberStats: MemberStat[];
     topWins: { name: string; text: string; date: string }[];
     improvements: { text: string; date: string }[];
-  }>({ loading: true, huddles: [], totalMembers: 0, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: [], topWins: [], improvements: [] });
+    clientTime: ClientTimeStat[];
+    totalClientSeconds: number;
+  }>({ loading: true, huddles: [], totalMembers: 0, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: [], topWins: [], improvements: [], clientTime: [], totalClientSeconds: 0 });
 
   useEffect(() => {
     const load = async () => {
@@ -53,15 +56,16 @@ export function HuddleMonthlyRecap() {
       const totalMembers = (members || []).length || 1;
 
       if (ids.length === 0) {
-        setState({ loading: false, huddles: [], totalMembers, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: (members || []).map((m: any) => ({ name: m.name, attended: 0, wins: 0 })), topWins: [], improvements: [] });
+        setState({ loading: false, huddles: [], totalMembers, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: (members || []).map((m: any) => ({ name: m.name, attended: 0, wins: 0 })), topWins: [], improvements: [], clientTime: [], totalClientSeconds: 0 });
         return;
       }
 
-      const [{ data: att }, { data: wins }, { data: tasks }, { data: blockers }] = await Promise.all([
+      const [{ data: att }, { data: wins }, { data: tasks }, { data: blockers }, { data: reviews }] = await Promise.all([
         supabase.from('huddle_attendance').select('huddle_id,member_id,member_name').in('huddle_id', ids),
         supabase.from('huddle_wins').select('huddle_id,member_name,text,created_at').in('huddle_id', ids),
         supabase.from('tasks').select('huddle_id,status').in('huddle_id', ids),
         supabase.from('huddle_blockers').select('huddle_id,description,created_at').in('huddle_id', ids),
+        supabase.from('huddle_client_reviews').select('huddle_id,client_id,duration_s,status,clients(name)').in('huddle_id', ids),
       ]);
 
       // Attendance aggregation
@@ -94,7 +98,22 @@ export function HuddleMonthlyRecap() {
       const topWins = (wins || []).map((w: any) => ({ name: w.member_name || 'Team', text: w.text, date: huddleDateMap[w.huddle_id] })).slice(0, 25);
       const improvements = (blockers || []).map((b: any) => ({ text: b.description, date: huddleDateMap[b.huddle_id] })).slice(0, 25);
 
-      setState({ loading: false, huddles: huddles || [], totalMembers, attendancePct, avgRating, followThroughPct, memberStats, topWins, improvements });
+      // Per-client time roll-up
+      const timeMap = new Map<string, ClientTimeStat>();
+      (reviews || []).forEach((r: any) => {
+        const d = Number(r.duration_s) || 0;
+        if (!r.client_id) return;
+        const cur = timeMap.get(r.client_id) || { client_id: r.client_id, name: r?.clients?.name || 'Unknown', total_s: 0, sessions: 0, avg_s: 0 };
+        cur.total_s += d;
+        if (d > 0) cur.sessions += 1;
+        timeMap.set(r.client_id, cur);
+      });
+      const clientTime = Array.from(timeMap.values())
+        .map(c => ({ ...c, avg_s: c.sessions ? Math.round(c.total_s / c.sessions) : 0 }))
+        .sort((a, b) => b.total_s - a.total_s);
+      const totalClientSeconds = clientTime.reduce((sum, c) => sum + c.total_s, 0);
+
+      setState({ loading: false, huddles: huddles || [], totalMembers, attendancePct, avgRating, followThroughPct, memberStats, topWins, improvements, clientTime, totalClientSeconds });
     };
     load();
   }, [ym]);
@@ -111,9 +130,15 @@ export function HuddleMonthlyRecap() {
     lines.push(`Team attendance: ${state.attendancePct}%`);
     lines.push(`Avg huddle rating: ${state.avgRating ? state.avgRating.toFixed(1) : '—'}`);
     lines.push(`Follow-through on tasks: ${state.followThroughPct}%`);
+    lines.push(`Total time on clients: ${fmtDuration(state.totalClientSeconds)}`);
     lines.push('');
     lines.push('Attendance leaderboard:');
     state.memberStats.forEach(m => lines.push(`  - ${m.name}: ${m.attended}/${state.huddles.length} (${state.huddles.length ? Math.round(m.attended / state.huddles.length * 100) : 0}%)  · ${m.wins} wins`));
+    if (state.clientTime.length) {
+      lines.push('');
+      lines.push('Time per client:');
+      state.clientTime.forEach(c => lines.push(`  - ${c.name}: ${fmtDuration(c.total_s)} across ${c.sessions} huddle${c.sessions === 1 ? '' : 's'} (avg ${fmtDuration(c.avg_s)})`));
+    }
     if (state.topWins.length) {
       lines.push('');
       lines.push('Wins:');
