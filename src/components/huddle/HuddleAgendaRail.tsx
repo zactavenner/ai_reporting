@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Users } from 'lucide-react';
+import { CheckCircle2, Circle, Clock3, Users } from 'lucide-react';
 import type { AgendaSegment } from '@/lib/huddle/types';
 import type { Client } from '@/hooks/useClients';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,10 +11,15 @@ interface Props {
 }
 
 export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentClientIdx }: Props) {
+  const clientIndex = currentClientIdx ?? 0;
+
   return (
     <div className="flex flex-col h-full">
       <div className="mb-6 px-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Agenda</h3>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agenda</h3>
+          <span className="text-[11px] text-muted-foreground">{currentSegmentIdx + 1}/{agenda.length}</span>
+        </div>
         <div className="space-y-4">
           {agenda.map((seg, i) => {
             const isCompleted = i < currentSegmentIdx;
@@ -34,23 +39,26 @@ export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentCl
                   ) : isCurrent ? (
                     <Circle className="w-4 h-4 text-primary fill-primary animate-pulse" />
                   ) : (
-                    <Circle className="w-4 h-4 text-muted-foreground/30" />
+                    <Clock3 className="w-4 h-4 text-muted-foreground/30" />
                   )}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className={`text-sm font-medium ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
                     {seg.name}
                   </div>
-                  {isCurrent && seg.key === 'clients' && clients && (
+                  <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+                    {isCompleted ? 'Completed' : isCurrent ? 'Now' : 'Upcoming'} · {Math.round(seg.duration_s / 60)}m
+                  </div>
+                  {seg.key === 'clients' && clients && (
                     <div className="mt-3 ml-1 border-l pl-3 space-y-2">
                       <div className="text-[10px] uppercase font-semibold text-muted-foreground flex items-center gap-1 mb-2">
                         <Users className="w-3 h-3" /> Clients ({clients.length})
                       </div>
-                      <ScrollArea className="h-[calc(100vh-400px)]">
+                      <ScrollArea className={isCurrent ? 'h-[calc(100vh-400px)]' : 'max-h-48'}>
                         <div className="space-y-2 pr-4">
                           {clients.map((c, ci) => {
-                            const cCompleted = ci < (currentClientIdx || 0);
-                            const cCurrent = ci === (currentClientIdx || 0);
+                            const cCompleted = i < currentSegmentIdx || (isCurrent && ci < clientIndex);
+                            const cCurrent = isCurrent && ci === clientIndex;
                             return (
                               <div
                                 key={c.id}
