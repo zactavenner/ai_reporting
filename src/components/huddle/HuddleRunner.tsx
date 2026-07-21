@@ -266,7 +266,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       avg_rating: avg as any,
       finalize_status: 'pending',
       ...(recordingUrl ? { recording_url: recordingUrl } as any : {}),
-    });
+    } as any);
     toast.success(recordingUrl ? 'Huddle wrapped — transcribing in the background' : 'Huddle wrapped — summarizing notes; no usable recording captured');
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2600);

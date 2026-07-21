@@ -274,7 +274,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       avg_rating: avg as any,
       finalize_status: 'pending',
       ...(recordingUrl ? { recording_url: recordingUrl } as any : {}),
-    });
+    } as any);
     toast.success(recordingUrl ? 'Call wrapped — transcribing in the background' : 'Call wrapped — summarizing notes; no usable recording captured');
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2600);
