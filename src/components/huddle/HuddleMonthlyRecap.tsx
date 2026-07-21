@@ -21,6 +21,16 @@ function currentYearMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function fmtDuration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
 interface MemberStat { name: string; attended: number; wins: number }
 interface ClientTimeStat { client_id: string; name: string; total_s: number; sessions: number; avg_s: number }
 
