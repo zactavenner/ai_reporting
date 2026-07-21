@@ -21,6 +21,12 @@ verify_jwt = false
 [functions.huddle-finalize]
 verify_jwt = false
 
+[functions.weekly-call-finalize]
+verify_jwt = false
+
+[functions.weekly-call-chat]
+verify_jwt = false
+
 [functions.parse-nurture-sequence]
 verify_jwt = false
 
