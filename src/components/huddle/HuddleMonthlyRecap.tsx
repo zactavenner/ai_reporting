@@ -182,7 +182,7 @@ export function HuddleMonthlyRecap() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi icon={<Users className="w-4 h-4" />} label="Attendance" value={`${state.attendancePct}%`} />
         <Kpi icon={<ListChecks className="w-4 h-4" />} label="Huddles" value={state.huddles.length.toString()} />
-        <Kpi icon={<Star className="w-4 h-4" />} label="Avg rating" value={state.avgRating ? state.avgRating.toFixed(1) : '—'} />
+        <Kpi icon={<Clock className="w-4 h-4" />} label="Time on clients" value={fmtDuration(state.totalClientSeconds)} />
         <Kpi icon={<TrendingUp className="w-4 h-4" />} label="Follow-through" value={`${state.followThroughPct}%`} />
       </div>
 
