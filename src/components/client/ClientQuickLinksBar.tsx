@@ -40,11 +40,47 @@ export function ClientQuickLinksBar({ client }: ClientQuickLinksBarProps) {
     }
 
     lines.push('\n## Integrations');
-    if (client.meta_ad_account_id) lines.push(`- Meta Ad Account: ${client.meta_ad_account_id}`);
-    if (client.ghl_location_id) lines.push(`- GHL Location: ${client.ghl_location_id}`);
-    if (client.hubspot_portal_id) lines.push(`- HubSpot Portal: ${client.hubspot_portal_id}`);
     if (client.media_buyer) lines.push(`- Media Buyer: ${client.media_buyer}`);
     if (client.account_manager) lines.push(`- Account Manager: ${client.account_manager}`);
+    if (client.notification_email) lines.push(`- Notification Email: ${client.notification_email}`);
+    if (client.notification_phone) lines.push(`- Notification Phone: ${client.notification_phone}`);
+    if (Array.isArray(client.whatsapp_notify_numbers) && client.whatsapp_notify_numbers.length) {
+      lines.push(`- WhatsApp Notify: ${client.whatsapp_notify_numbers.join(', ')}`);
+    }
+
+    lines.push('\n### GoHighLevel (GHL)');
+    if (client.ghl_location_id) lines.push(`- Location ID: ${client.ghl_location_id}`);
+    if (client.ghl_account_url) lines.push(`- Account URL: ${client.ghl_account_url}`);
+    if (client.ghl_api_key) lines.push(`- Private API Key: ${client.ghl_api_key}`);
+    if (client.ghl_firebase_refresh_token) lines.push(`- Firebase Refresh Token: ${client.ghl_firebase_refresh_token}`);
+    if (client.ghl_sync_status) lines.push(`- Sync Status: ${client.ghl_sync_status}`);
+    if (client.last_ghl_sync_at) lines.push(`- Last Sync: ${client.last_ghl_sync_at}`);
+
+    lines.push('\n### Meta / Facebook Ads');
+    if (client.meta_ad_account_id) lines.push(`- Ad Account: ${client.meta_ad_account_id}`);
+    if (Array.isArray(client.meta_ad_account_ids) && client.meta_ad_account_ids.length) {
+      lines.push(`- Additional Ad Accounts: ${client.meta_ad_account_ids.join(', ')}`);
+    }
+    if (client.business_manager_url) lines.push(`- Business Manager: ${client.business_manager_url}`);
+    if (client.meta_access_token) lines.push(`- Access Token: ${client.meta_access_token}`);
+    if (client.meta_system_user_token) lines.push(`- System User Token: ${client.meta_system_user_token}`);
+    if (client.meta_token_type) lines.push(`- Token Type: ${client.meta_token_type}`);
+    if (client.meta_pixel_id) lines.push(`- Pixel ID: ${client.meta_pixel_id}`);
+    if (client.meta_capi_access_token) lines.push(`- CAPI Access Token: ${client.meta_capi_access_token}`);
+
+    if (client.hubspot_portal_id || client.hubspot_access_token) {
+      lines.push('\n### HubSpot');
+      if (client.hubspot_portal_id) lines.push(`- Portal ID: ${client.hubspot_portal_id}`);
+      if (client.hubspot_access_token) lines.push(`- Access Token: ${client.hubspot_access_token}`);
+      if (client.hubspot_sync_status) lines.push(`- Sync Status: ${client.hubspot_sync_status}`);
+      if (client.last_hubspot_sync_at) lines.push(`- Last Sync: ${client.last_hubspot_sync_at}`);
+    }
+
+    if (client.webhook_secret || client.public_token) {
+      lines.push('\n### Webhooks & Tokens');
+      if (client.public_token) lines.push(`- Public Token: ${client.public_token}`);
+      if (client.webhook_secret) lines.push(`- Webhook Secret: ${client.webhook_secret}`);
+    }
 
     if (offers.length) {
       lines.push('\n## Offers / Files');
