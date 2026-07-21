@@ -143,9 +143,18 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       rec.start(2000);
       mediaRecorderRef.current = rec;
       setIsRecording(true);
-    } catch (e) {
-      console.warn('mic denied:', e);
-      toast.error('Microphone denied — call will run without recording');
+      toast.success('Recording started');
+      return true;
+    } catch (e: any) {
+      console.error('mic denied:', e);
+      const msg = String(e?.name || e?.message || '');
+      const hint = msg.includes('NotAllowed')
+        ? 'Grant microphone permission in your browser, then click Start again.'
+        : msg.includes('NotFound')
+        ? 'No microphone found on this device.'
+        : 'Microphone unavailable — check browser mic permissions.';
+      toast.error(`Recording failed: ${hint}`, { duration: 8000 });
+      return false;
     }
   };
 
@@ -184,11 +193,19 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     if (!call) return;
     const now = new Date().toISOString();
     if (!call.started_at) {
+      // Ask for mic BEFORE marking the call started so a denial doesn't leave
+      // us with a running call and no recording.
+      const ok = await startRecording();
+      if (!ok) {
+        const proceed = window.confirm(
+          'Microphone was denied. Start the call anyway without a recording? (No transcript / summary / action items will be generated.)'
+        );
+        if (!proceed) return;
+      }
       await updateCall({
         started_at: now, status: 'in_progress',
         ...(call.facilitator_id ? {} : { facilitator_id: currentMember?.id ?? null }),
       } as any);
-      startRecording();
     }
     await updateTimer({
       running: true,
