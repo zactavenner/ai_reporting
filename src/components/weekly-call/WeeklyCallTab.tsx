@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CalendarClock, Star, CheckSquare, FileAudio, Loader2, ChevronDown, ChevronUp, FileText, Clock, Trash2 } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WeeklyCallRunner } from './WeeklyCallRunner';
 import { format, formatDistanceToNowStrict } from 'date-fns';
@@ -33,6 +34,7 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const load = async () => {
     const { data } = await (supabase as any)
@@ -98,6 +100,35 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
     }
   };
 
+  const retryFinalize = async (row: Row) => {
+    if (!row.recording_url) { toast.error('No recording on this call'); return; }
+    setRetryingId(row.id);
+    try {
+      await (supabase as any).from('client_weekly_calls').update({ finalize_status: 'pending' }).eq('id', row.id);
+      const { error } = await supabase.functions.invoke('weekly-call-finalize', { body: { call_id: row.id } });
+      if (error) throw error;
+      toast.success('Transcription re-queued');
+      load();
+    } catch (e: any) {
+      toast.error(e?.message || 'Retry failed');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const openRecording = async (row: Row) => {
+    if (!row.recording_url) return;
+    const marker = '/weekly-call-recordings/';
+    const idx = row.recording_url.indexOf(marker);
+    if (idx === -1) { window.open(row.recording_url, '_blank'); return; }
+    const path = row.recording_url.slice(idx + marker.length).split('?')[0];
+    const { data, error } = await supabase.storage
+      .from('weekly-call-recordings')
+      .createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) { toast.error('Could not open recording'); return; }
+    window.open(data.signedUrl, '_blank');
+  };
+
   return (
     <div className="space-y-6">
       <Card className="p-4 md:p-6">
@@ -156,9 +187,13 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
                         <span className="flex items-center gap-1"><Star className="w-3 h-3 text-primary" />{r.avg_rating.toFixed(1)}</span>
                       )}
                       {r.recording_url && (
-                        <a href={r.recording_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-foreground">
+                        <button
+                          type="button"
+                          onClick={() => openRecording(r)}
+                          className="flex items-center gap-1 hover:text-foreground underline-offset-2 hover:underline"
+                        >
                           <FileAudio className="w-3 h-3" />recording
-                        </a>
+                        </button>
                       )}
                     </div>
                   )}
@@ -172,7 +207,22 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
                         <Loader2 className="w-3 h-3 animate-spin" /> Generating summary…
                       </div>
                     ) : (
-                      <div className="text-xs italic text-muted-foreground">No summary available.</div>
+                      <div className="text-xs italic text-muted-foreground flex items-center gap-2 flex-wrap">
+                        No summary available.
+                        {r.recording_url && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[11px] px-2"
+                            onClick={() => retryFinalize(r)}
+                            disabled={retryingId === r.id}
+                          >
+                            {retryingId === r.id
+                              ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Retrying…</>
+                              : <><RefreshCw className="w-3 h-3 mr-1" />Retry transcription</>}
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
 
