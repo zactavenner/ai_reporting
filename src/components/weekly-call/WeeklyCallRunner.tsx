@@ -160,32 +160,44 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
 
   const stopAndUploadRecording = async (callId: string): Promise<string | null> => {
     const rec = mediaRecorderRef.current;
-    if (!rec || rec.state === 'inactive') return null;
+    if (!rec) return null;
     return new Promise<string | null>((resolve) => {
-      rec.onstop = async () => {
+      let settled = false;
+      const upload = async () => {
+        if (settled) return;
+        settled = true;
         try {
           streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
           const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
           chunksRef.current = [];
           setIsRecording(false);
-          if (blob.size < 5000) { resolve(null); return; }
+          if (blob.size < 1024) {
+            toast.error('Recording was empty — transcript was not generated.');
+            resolve(null);
+            return;
+          }
           const path = `${callId}-${Date.now()}.webm`;
-        setUploading(true);
+          setUploading(true);
           const { error: upErr } = await supabase.storage.from('weekly-call-recordings').upload(path, blob, {
             contentType: 'audio/webm', upsert: true,
           });
-        setUploading(false);
-        if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
+          setUploading(false);
+          if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
           const { data } = supabase.storage.from('weekly-call-recordings').getPublicUrl(path);
           resolve(data.publicUrl);
         } catch (e) {
           console.warn('stop/upload failed:', e);
-        setUploading(false);
+          setUploading(false);
           resolve(null);
         }
       };
-      rec.stop();
+      rec.onstop = upload;
+      if (rec.state === 'inactive') upload();
+      else {
+        try { rec.requestData(); } catch {}
+        rec.stop();
+      }
     });
   };
 
@@ -259,13 +271,13 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       avg_rating: avg as any,
       ...(recordingUrl ? { recording_url: recordingUrl, finalize_status: 'pending' } as any : {}),
     });
-    toast.success('Call wrapped — transcribing in the background');
+    toast.success(recordingUrl ? 'Call wrapped — transcribing in the background' : 'Call wrapped — no usable recording captured');
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2600);
     if (recordingUrl) {
       supabase.functions.invoke('weekly-call-finalize', { body: { call_id: call.id } })
         .then((res) => {
-          if (res.error) toast.error('Transcription failed');
+          if (res.error) toast.error('Transcription failed — use Retry from Past calls.');
         })
         .catch(() => {});
     }

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callOpenRouter, callOpenRouterJSON, AUDIO_MODELS } from "../_shared/openrouter.ts";
+import { callOpenRouter, callOpenRouterJSON } from "../_shared/openrouter.ts";
+import { transcribeRecording } from "../_shared/transcription.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,23 +65,11 @@ serve(async (req) => {
       if (path) {
         const { data: blob, error: dlErr } = await supabase.storage.from("weekly-call-recordings").download(path);
         if (dlErr) throw dlErr;
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        let bin = "";
-        const CHUNK = 0x8000;
-        for (let i = 0; i < bytes.length; i += CHUNK) {
-          bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)) as any);
-        }
-        const b64 = btoa(bin);
-        const dataUrl = `data:audio/webm;base64,${b64}`;
         try {
-          const trResult = await callOpenRouter([{
-            role: "user",
-            content: [
-              { type: "text", text: "Transcribe this daily agency huddle recording verbatim. Return ONLY the transcribed dialogue with speaker turns if identifiable. No preamble." },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          }], { models: AUDIO_MODELS, temperature: 0.1, max_tokens: 8000 });
-          transcript = trResult.text.trim();
+          transcript = await transcribeRecording(blob, {
+            fileName: path.split("/").pop() || "huddle-recording.webm",
+            prompt: "Daily agency huddle. Transcribe verbatim with speaker turns if identifiable.",
+          });
         } catch (e) {
           console.warn("transcription failed:", e);
         }
