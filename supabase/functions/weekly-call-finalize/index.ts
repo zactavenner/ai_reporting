@@ -1,11 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callOpenRouter, callOpenRouterJSON, AUDIO_MODELS } from "../_shared/openrouter.ts";
+import { callOpenRouter, callOpenRouterJSON } from "../_shared/openrouter.ts";
+import { transcribeRecording } from "../_shared/transcription.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const SUMMARY_MODELS = ["openrouter/owl-alpha", "openai/gpt-4o-mini", "google/gemini-2.0-flash-001"];
+
+function cleanModelText(text: string) {
+  const cleaned = String(text || "").replace(/```[\s\S]*?```/g, "").trim();
+  if (/^(the user wants|we need|maybe|i should|the instructions|given the|but the user)/i.test(cleaned)) return "";
+  return cleaned;
+}
+
+function bulletFallback(lines: string[], label: string) {
+  const items = lines.map((line) => line.replace(/^[-*•\s]+/, "").trim()).filter(Boolean).slice(0, 6);
+  return items.length ? items.map((line) => `- ${line}`).join("\n") : `- ${label} completed.`;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -13,10 +27,12 @@ serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  let callIdForError: string | null = null;
 
   try {
     const { call_id } = await req.json();
     if (!call_id) throw new Error("call_id required");
+    callIdForError = call_id;
 
     const { data: call, error: callErr } = await supabase
       .from("client_weekly_calls")
@@ -62,25 +78,11 @@ serve(async (req) => {
       if (path) {
         const { data: blob, error: dlErr } = await supabase.storage.from("weekly-call-recordings").download(path);
         if (dlErr) throw dlErr;
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        // Base64 encode in chunks (avoids stack overflow on large arrays)
-        let bin = "";
-        const CHUNK = 0x8000;
-        for (let i = 0; i < bytes.length; i += CHUNK) {
-          bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)) as any);
-        }
-        const b64 = btoa(bin);
-        const dataUrl = `data:audio/webm;base64,${b64}`;
-
         try {
-          const trResult = await callOpenRouter([{
-            role: "user",
-            content: [
-              { type: "text", text: "Transcribe this weekly client call recording verbatim. Return ONLY the transcribed dialogue with speaker turns if identifiable. No preamble." },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          }], { models: AUDIO_MODELS, temperature: 0.1, max_tokens: 8000 });
-          transcript = trResult.text.trim();
+          transcript = await transcribeRecording(blob, {
+            fileName: path.split("/").pop() || "weekly-call-recording.webm",
+            prompt: "Weekly client marketing call. Transcribe verbatim with speaker turns if identifiable.",
+          });
         } catch (e) {
           console.warn("transcription failed:", e);
           transcript = "";
@@ -102,30 +104,32 @@ serve(async (req) => {
       // Summary
       try {
         const sumRes = await callOpenRouter([
-          { role: "system", content: "You summarize weekly client marketing calls. Be terse, 4-6 bullet points, focus on decisions and outcomes. Always integrate the FACILITATOR RECAP NOTES if present — those override transcript inference. No preamble." },
+          { role: "system", content: "You summarize weekly client marketing calls. Output ONLY 4-6 terse bullet points. Focus on decisions, wins, action context, and outcomes. No reasoning, no analysis, no preamble, no mention of prompts or instructions." },
           { role: "user", content: contextBlock },
-        ], { temperature: 0.3, max_tokens: 500 });
-        summary = sumRes.text.trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 500 });
+        summary = cleanModelText(sumRes.text);
       } catch (e) {
         console.warn("summary failed:", e);
       }
+      if (!summary) summary = bulletFallback([winsText, recapNotes].join("\n").split("\n"), "Weekly call");
       // Title
       try {
         const titleRes = await callOpenRouter([
-          { role: "system", content: "You write concise 3-8 word titles for weekly client marketing calls. Capture the single most important theme or decision. Return the title only — no quotes, no preamble, no trailing punctuation." },
+          { role: "system", content: "You write concise 3-8 word titles for weekly client marketing calls. Return title only — no quotes, no reasoning, no preamble, no punctuation." },
           { role: "user", content: (summary ? `SUMMARY:\n${summary}\n\n` : "") + contextBlock.slice(0, 6000) },
-        ], { temperature: 0.4, max_tokens: 40 });
-        title = titleRes.text.replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 40 });
+        title = cleanModelText(titleRes.text).replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
       } catch (e) {
         console.warn("title failed:", e);
       }
+      if (!title) title = `Weekly Call ${String(call.week_of || "").slice(5)}`;
       // Task extraction
       try {
         const taskRes = await callOpenRouterJSON<{ tasks: Array<{ title: string; priority?: string }> }>([
           { role: "system", content: 'Extract action items from a weekly client call. Return strict JSON: {"tasks":[{"title":"...","priority":"low|medium|high"}]}. Prioritize items explicitly listed in FACILITATOR RECAP NOTES, then transcript-derived actions. Only concrete owner-actionable tasks. Max 10.' },
           { role: "user", content: contextBlock },
         ], { temperature: 0.1, max_tokens: 800 });
-        proposedTasks = Array.isArray(taskRes?.tasks) ? taskRes.tasks.slice(0, 10) : [];
+        proposedTasks = Array.isArray(taskRes.data?.tasks) ? taskRes.data.tasks.slice(0, 10) : [];
       } catch (e) {
         console.warn("task extract failed:", e);
       }
@@ -145,8 +149,7 @@ serve(async (req) => {
   } catch (err) {
     console.error("weekly-call-finalize error:", err);
     try {
-      const { call_id } = await req.clone().json().catch(() => ({}));
-      if (call_id) await supabase.from("client_weekly_calls").update({ finalize_status: "error" }).eq("id", call_id);
+      if (callIdForError) await supabase.from("client_weekly_calls").update({ finalize_status: "error" }).eq("id", callIdForError);
     } catch (_) {}
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,11 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callOpenRouter, callOpenRouterJSON, AUDIO_MODELS } from "../_shared/openrouter.ts";
+import { callOpenRouter, callOpenRouterJSON } from "../_shared/openrouter.ts";
+import { transcribeRecording } from "../_shared/transcription.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const SUMMARY_MODELS = ["openrouter/owl-alpha", "openai/gpt-4o-mini", "google/gemini-2.0-flash-001"];
+
+function cleanModelText(text: string) {
+  const cleaned = String(text || "").replace(/```[\s\S]*?```/g, "").trim();
+  if (/^(the user wants|we need|maybe|i should|the instructions|given the|but the user)/i.test(cleaned)) return "";
+  return cleaned;
+}
+
+function bulletFallback(lines: string[], label: string) {
+  const items = lines.map((line) => line.replace(/^[-*•\s]+/, "").trim()).filter(Boolean).slice(0, 6);
+  return items.length ? items.map((line) => `- ${line}`).join("\n") : `- ${label} completed.`;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -13,10 +27,12 @@ serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  let huddleIdForError: string | null = null;
 
   try {
     const { huddle_id } = await req.json();
     if (!huddle_id) throw new Error("huddle_id required");
+    huddleIdForError = huddle_id;
 
     const { data: huddle, error: hErr } = await supabase
       .from("huddles")
@@ -64,23 +80,11 @@ serve(async (req) => {
       if (path) {
         const { data: blob, error: dlErr } = await supabase.storage.from("weekly-call-recordings").download(path);
         if (dlErr) throw dlErr;
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        let bin = "";
-        const CHUNK = 0x8000;
-        for (let i = 0; i < bytes.length; i += CHUNK) {
-          bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)) as any);
-        }
-        const b64 = btoa(bin);
-        const dataUrl = `data:audio/webm;base64,${b64}`;
         try {
-          const trResult = await callOpenRouter([{
-            role: "user",
-            content: [
-              { type: "text", text: "Transcribe this daily agency huddle recording verbatim. Return ONLY the transcribed dialogue with speaker turns if identifiable. No preamble." },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          }], { models: AUDIO_MODELS, temperature: 0.1, max_tokens: 8000 });
-          transcript = trResult.text.trim();
+          transcript = await transcribeRecording(blob, {
+            fileName: path.split("/").pop() || "huddle-recording.webm",
+            prompt: "Daily agency huddle. Transcribe verbatim with speaker turns if identifiable.",
+          });
         } catch (e) {
           console.warn("transcription failed:", e);
         }
@@ -102,19 +106,21 @@ serve(async (req) => {
     if (contextBlock) {
       try {
         const sumRes = await callOpenRouter([
-          { role: "system", content: "You summarize daily agency huddles. Terse, 4-6 bullets, focus on wins, decisions, blockers, and commitments. No preamble." },
+          { role: "system", content: "You summarize daily agency huddles. Output ONLY 4-6 terse bullet points. No reasoning, no analysis, no preamble, no mention of prompts or instructions." },
           { role: "user", content: contextBlock },
-        ], { temperature: 0.3, max_tokens: 500 });
-        summary = sumRes.text.trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 500 });
+        summary = cleanModelText(sumRes.text);
       } catch (e) { console.warn("summary failed:", e); }
+      if (!summary) summary = bulletFallback([winsText, commitmentsText, reviewedText].join("\n").split("\n"), "Huddle");
 
       try {
         const titleRes = await callOpenRouter([
-          { role: "system", content: "Write a concise 3-8 word title for a daily agency huddle. Return only the title, no quotes or punctuation." },
+          { role: "system", content: "Write a concise 3-8 word title for a daily agency huddle. Return only the title, no quotes, no reasoning, no punctuation." },
           { role: "user", content: (summary ? `SUMMARY:\n${summary}\n\n` : "") + contextBlock.slice(0, 6000) },
-        ], { temperature: 0.4, max_tokens: 40 });
-        title = titleRes.text.replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 40 });
+        title = cleanModelText(titleRes.text).replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
       } catch (e) { console.warn("title failed:", e); }
+      if (!title) title = `Daily Huddle ${String(huddle.date || "").slice(5)}`;
 
       try {
         const clientList = reviewedClients.map((r: any) => `${r.client_id}: ${r?.clients?.name || ""}`).join("\n");
@@ -125,8 +131,8 @@ serve(async (req) => {
           { role: "system", content: 'Extract action items and per-client notes from a daily huddle. Return strict JSON: {"tasks":[{"title":"...","priority":"low|medium|high","client_id":"<uuid or null>"}], "per_client_notes": {"<client_id>": "1-2 sentence note"}}. Only concrete owner-actionable tasks. Max 15. Only use client_ids from the provided list.' },
           { role: "user", content: `KNOWN CLIENT IDS:\n${clientList}\n\n${contextBlock}` },
         ], { temperature: 0.1, max_tokens: 1200 });
-        proposedTasks = Array.isArray(taskRes?.tasks) ? taskRes.tasks.slice(0, 15) : [];
-        perClientNotes = (taskRes?.per_client_notes as Record<string, string>) || {};
+        proposedTasks = Array.isArray(taskRes.data?.tasks) ? taskRes.data.tasks.slice(0, 15) : [];
+        perClientNotes = (taskRes.data?.per_client_notes as Record<string, string>) || {};
       } catch (e) { console.warn("task extract failed:", e); }
     }
 
@@ -152,8 +158,7 @@ serve(async (req) => {
   } catch (err) {
     console.error("huddle-finalize error:", err);
     try {
-      const { huddle_id } = await req.clone().json().catch(() => ({}));
-      if (huddle_id) await supabase.from("huddles").update({ finalize_status: "error" }).eq("id", huddle_id);
+      if (huddleIdForError) await supabase.from("huddles").update({ finalize_status: "error" }).eq("id", huddleIdForError);
     } catch (_) {}
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

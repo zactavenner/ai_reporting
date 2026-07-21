@@ -47,6 +47,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
@@ -100,9 +101,9 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       });
       streamRef.current = stream;
       chunksRef.current = [];
-      const rec = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
-      });
+      const preferredMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const rec = preferredMime ? new MediaRecorder(stream, { mimeType: preferredMime }) : new MediaRecorder(stream);
+      recordingMimeTypeRef.current = rec.mimeType || preferredMime || 'audio/webm';
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       rec.start(2000);
       mediaRecorderRef.current = rec;
@@ -124,20 +125,29 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
 
   const stopAndUploadRecording = async (huddleId: string): Promise<string | null> => {
     const rec = mediaRecorderRef.current;
-    if (!rec || rec.state === 'inactive') return null;
+    if (!rec) return null;
     return new Promise<string | null>((resolve) => {
-      rec.onstop = async () => {
+      let settled = false;
+      const upload = async () => {
+        if (settled) return;
+        settled = true;
         try {
           streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
-          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          const contentType = recordingMimeTypeRef.current || 'audio/webm';
+          const blob = new Blob(chunksRef.current, { type: contentType });
           chunksRef.current = [];
           setIsRecording(false);
-          if (blob.size < 5000) { resolve(null); return; }
-          const path = `huddles/${huddleId}-${Date.now()}.webm`;
+          if (blob.size < 1024) {
+            toast.error('Recording was empty — transcript was not generated.');
+            resolve(null);
+            return;
+          }
+          const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('wav') ? 'wav' : 'webm';
+          const path = `huddles/${huddleId}-${Date.now()}.${ext}`;
           setUploading(true);
           const { error: upErr } = await supabase.storage.from('weekly-call-recordings').upload(path, blob, {
-            contentType: 'audio/webm', upsert: true,
+            contentType, upsert: true,
           });
           setUploading(false);
           if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
@@ -149,7 +159,12 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           resolve(null);
         }
       };
-      rec.stop();
+      rec.onstop = upload;
+      if (rec.state === 'inactive') upload();
+      else {
+        try { rec.requestData(); } catch {}
+        rec.stop();
+      }
     });
   };
 
@@ -249,17 +264,18 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       actual_duration_s: actual,
       status: 'completed',
       avg_rating: avg as any,
-      ...(recordingUrl ? { recording_url: recordingUrl, finalize_status: 'pending' } as any : {}),
-    });
-    toast.success('Huddle wrapped — transcribing in the background');
+      finalize_status: 'pending',
+      ...(recordingUrl ? { recording_url: recordingUrl } as any : {}),
+    } as any);
+    toast.success(recordingUrl ? 'Huddle wrapped — transcribing in the background' : 'Huddle wrapped — summarizing notes; no usable recording captured');
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2600);
-    if (recordingUrl) {
-      supabase.functions.invoke('huddle-finalize', { body: { huddle_id: huddle.id } }).catch((err) => {
-        console.error('Finalize trigger failed:', err);
-        toast.error('Failed to trigger background transcription. Please contact support.');
-      });
-    }
+    supabase.functions.invoke('huddle-finalize', { body: { huddle_id: huddle.id } }).then((res) => {
+      if (res.error) toast.error('Summary failed — use Retry from history.');
+    }).catch((err) => {
+      console.error('Finalize trigger failed:', err);
+      toast.error('Failed to trigger background summary. Please contact support.');
+    });
     setFinalizing(false);
     onFinish?.();
   };
