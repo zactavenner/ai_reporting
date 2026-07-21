@@ -8,6 +8,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const SUMMARY_MODELS = ["openrouter/owl-alpha", "openai/gpt-4o-mini", "google/gemini-2.0-flash-001"];
+
+function cleanModelText(text: string) {
+  const cleaned = String(text || "").replace(/```[\s\S]*?```/g, "").trim();
+  if (/^(the user wants|we need|maybe|i should|the instructions|given the|but the user)/i.test(cleaned)) return "";
+  return cleaned;
+}
+
+function bulletFallback(lines: string[], label: string) {
+  const items = lines.map((line) => line.replace(/^[-*•\s]+/, "").trim()).filter(Boolean).slice(0, 6);
+  return items.length ? items.map((line) => `- ${line}`).join("\n") : `- ${label} completed.`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -91,23 +104,25 @@ serve(async (req) => {
       // Summary
       try {
         const sumRes = await callOpenRouter([
-          { role: "system", content: "You summarize weekly client marketing calls. Be terse, 4-6 bullet points, focus on decisions and outcomes. Always integrate the FACILITATOR RECAP NOTES if present — those override transcript inference. No preamble." },
+          { role: "system", content: "You summarize weekly client marketing calls. Output ONLY 4-6 terse bullet points. Focus on decisions, wins, action context, and outcomes. No reasoning, no analysis, no preamble, no mention of prompts or instructions." },
           { role: "user", content: contextBlock },
-        ], { temperature: 0.3, max_tokens: 500 });
-        summary = sumRes.text.trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 500 });
+        summary = cleanModelText(sumRes.text);
       } catch (e) {
         console.warn("summary failed:", e);
       }
+      if (!summary) summary = bulletFallback([winsText, recapNotes].join("\n").split("\n"), "Weekly call");
       // Title
       try {
         const titleRes = await callOpenRouter([
-          { role: "system", content: "You write concise 3-8 word titles for weekly client marketing calls. Capture the single most important theme or decision. Return the title only — no quotes, no preamble, no trailing punctuation." },
+          { role: "system", content: "You write concise 3-8 word titles for weekly client marketing calls. Return title only — no quotes, no reasoning, no preamble, no punctuation." },
           { role: "user", content: (summary ? `SUMMARY:\n${summary}\n\n` : "") + contextBlock.slice(0, 6000) },
-        ], { temperature: 0.4, max_tokens: 40 });
-        title = titleRes.text.replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 40 });
+        title = cleanModelText(titleRes.text).replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
       } catch (e) {
         console.warn("title failed:", e);
       }
+      if (!title) title = `Weekly Call ${String(call.week_of || "").slice(5)}`;
       // Task extraction
       try {
         const taskRes = await callOpenRouterJSON<{ tasks: Array<{ title: string; priority?: string }> }>([

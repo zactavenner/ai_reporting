@@ -8,6 +8,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const SUMMARY_MODELS = ["openrouter/owl-alpha", "openai/gpt-4o-mini", "google/gemini-2.0-flash-001"];
+
+function cleanModelText(text: string) {
+  const cleaned = String(text || "").replace(/```[\s\S]*?```/g, "").trim();
+  if (/^(the user wants|we need|maybe|i should|the instructions|given the|but the user)/i.test(cleaned)) return "";
+  return cleaned;
+}
+
+function bulletFallback(lines: string[], label: string) {
+  const items = lines.map((line) => line.replace(/^[-*•\s]+/, "").trim()).filter(Boolean).slice(0, 6);
+  return items.length ? items.map((line) => `- ${line}`).join("\n") : `- ${label} completed.`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -93,19 +106,21 @@ serve(async (req) => {
     if (contextBlock) {
       try {
         const sumRes = await callOpenRouter([
-          { role: "system", content: "You summarize daily agency huddles. Terse, 4-6 bullets, focus on wins, decisions, blockers, and commitments. No preamble." },
+          { role: "system", content: "You summarize daily agency huddles. Output ONLY 4-6 terse bullet points. No reasoning, no analysis, no preamble, no mention of prompts or instructions." },
           { role: "user", content: contextBlock },
-        ], { temperature: 0.3, max_tokens: 500 });
-        summary = sumRes.text.trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 500 });
+        summary = cleanModelText(sumRes.text);
       } catch (e) { console.warn("summary failed:", e); }
+      if (!summary) summary = bulletFallback([winsText, commitmentsText, reviewedText].join("\n").split("\n"), "Huddle");
 
       try {
         const titleRes = await callOpenRouter([
-          { role: "system", content: "Write a concise 3-8 word title for a daily agency huddle. Return only the title, no quotes or punctuation." },
+          { role: "system", content: "Write a concise 3-8 word title for a daily agency huddle. Return only the title, no quotes, no reasoning, no punctuation." },
           { role: "user", content: (summary ? `SUMMARY:\n${summary}\n\n` : "") + contextBlock.slice(0, 6000) },
-        ], { temperature: 0.4, max_tokens: 40 });
-        title = titleRes.text.replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
+        ], { models: SUMMARY_MODELS, temperature: 0.2, max_tokens: 40 });
+        title = cleanModelText(titleRes.text).replace(/^["'\s]+|["'\s.!?]+$/g, "").split("\n")[0].slice(0, 120).trim();
       } catch (e) { console.warn("title failed:", e); }
+      if (!title) title = `Daily Huddle ${String(huddle.date || "").slice(5)}`;
 
       try {
         const clientList = reviewedClients.map((r: any) => `${r.client_id}: ${r?.clients?.name || ""}`).join("\n");
