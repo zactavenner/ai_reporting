@@ -32,6 +32,29 @@ export interface HuddleRecord {
   status: string;
 }
 
+const VALID_AGENDA_KEYS = new Set(DEFAULT_AGENDA.map((segment) => segment.key));
+
+function normalizeAgenda(input: unknown): AgendaSegment[] {
+  const source = Array.isArray(input) ? input : [];
+  const valid = source.filter((segment): segment is AgendaSegment => {
+    if (!segment || typeof segment !== 'object') return false;
+    const candidate = segment as Partial<AgendaSegment>;
+    return (
+      typeof candidate.key === 'string' &&
+      VALID_AGENDA_KEYS.has(candidate.key) &&
+      typeof candidate.name === 'string' &&
+      typeof candidate.duration_s === 'number' &&
+      candidate.duration_s > 0
+    );
+  });
+
+  const hasEveryRequiredSegment = DEFAULT_AGENDA.every((segment) =>
+    valid.some((candidate) => candidate.key === segment.key)
+  );
+
+  return valid.length === source.length && hasEveryRequiredSegment ? valid : DEFAULT_AGENDA;
+}
+
 export function useTodayHuddle() {
   const { currentMember } = useTeamMember();
   const [huddle, setHuddle] = useState<HuddleRecord | null>(null);
@@ -44,34 +67,79 @@ export function useTodayHuddle() {
     const load = async () => {
       // Load or create today's huddle
       const { data: settings } = await supabase.from('huddle_settings').select('agenda').eq('singleton', true).maybeSingle();
-      const settingsAgenda = (settings?.agenda as unknown as AgendaSegment[]) || DEFAULT_AGENDA;
+      const settingsAgenda = normalizeAgenda(settings?.agenda);
       const planned = settingsAgenda.reduce((a, s) => a + s.duration_s, 0);
 
-      const { data: existing } = await supabase
+      let { data: existing, error: fetchError } = await supabase
         .from('huddles')
         .select('*')
         .eq('date', today())
         .maybeSingle();
 
+      if (fetchError) {
+        console.error('Error fetching huddle:', fetchError);
+      }
+
       let record = existing as unknown as HuddleRecord | null;
       if (!record) {
-        const { data: created } = await supabase
-          .from('huddles')
-          .insert({
-            date: today(),
-            planned_duration_s: planned,
-            agenda: settingsAgenda as any,
-            timer_state: DEFAULT_TIMER as any,
-          })
-          .select('*')
-          .single();
-        record = created as unknown as HuddleRecord;
+        try {
+          const { data: created, error: insertError } = await supabase
+            .from('huddles')
+            .insert({
+              date: today(),
+              planned_duration_s: planned,
+              agenda: settingsAgenda as any,
+              timer_state: DEFAULT_TIMER as any,
+            })
+            .select('*')
+            .single();
+          
+          if (insertError) {
+            // Likely a race condition where another client inserted it first
+            const { data: refetched } = await supabase
+              .from('huddles')
+              .select('*')
+              .eq('date', today())
+              .single();
+            record = refetched as unknown as HuddleRecord;
+          } else {
+            record = created as unknown as HuddleRecord;
+          }
+        } catch (e) {
+          const { data: refetched } = await supabase
+            .from('huddles')
+            .select('*')
+            .eq('date', today())
+            .single();
+          record = refetched as unknown as HuddleRecord;
+        }
       }
 
       if (cancelled) return;
-      setAgenda((record?.agenda as unknown as AgendaSegment[]) || settingsAgenda);
-      setHuddle(record);
+      const recordAgenda = normalizeAgenda(record?.agenda);
+      const shouldResetRecordAgenda = JSON.stringify(record?.agenda || null) !== JSON.stringify(recordAgenda);
+      const finalAgenda = recordAgenda.length > 0 ? recordAgenda : settingsAgenda;
+      const safeTimer: TimerState = {
+        ...DEFAULT_TIMER,
+        ...(record?.timer_state || {}),
+        segment_index: Math.min(record?.timer_state?.segment_index ?? 0, finalAgenda.length - 1),
+        sub_index: record?.timer_state?.sub_index ?? 0,
+      };
+      const safeRecord = record ? { ...record, agenda: finalAgenda, timer_state: safeTimer } : record;
+      setAgenda(finalAgenda);
+      setHuddle(safeRecord);
       setLoading(false);
+
+      if (record && shouldResetRecordAgenda) {
+        await supabase
+          .from('huddles')
+          .update({
+            agenda: finalAgenda as any,
+            planned_duration_s: finalAgenda.reduce((a, s) => a + s.duration_s, 0),
+            timer_state: safeTimer as any,
+          })
+          .eq('id', record.id);
+      }
 
       // Attendance
       if (record && currentMember) {
