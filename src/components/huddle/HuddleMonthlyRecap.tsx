@@ -227,6 +227,51 @@ export function HuddleMonthlyRecap() {
         </Table>
       </Card>
 
+      <Card>
+        <div className="flex items-center gap-2 px-4 pt-4">
+          <Clock className="w-4 h-4 text-primary" />
+          <div className="text-sm font-semibold">Time per client ({state.clientTime.length}) · {fmtDuration(state.totalClientSeconds)} total</div>
+          {state.avgRating != null && (
+            <div className="ml-auto text-xs text-muted-foreground flex items-center gap-1"><Star className="w-3 h-3" /> avg rating {state.avgRating.toFixed(1)}</div>
+          )}
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Total time</TableHead>
+              <TableHead>Sessions</TableHead>
+              <TableHead>Avg / session</TableHead>
+              <TableHead>Share</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {state.clientTime.map(c => {
+              const pct = state.totalClientSeconds ? Math.round((c.total_s / state.totalClientSeconds) * 100) : 0;
+              return (
+                <TableRow key={c.client_id}>
+                  <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableCell>{fmtDuration(c.total_s)}</TableCell>
+                  <TableCell>{c.sessions}</TableCell>
+                  <TableCell>{fmtDuration(c.avg_s)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-24 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{pct}%</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {state.clientTime.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No client walkthroughs recorded.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-2">
