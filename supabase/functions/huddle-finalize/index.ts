@@ -14,10 +14,12 @@ serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  let huddleIdForError: string | null = null;
 
   try {
     const { huddle_id } = await req.json();
     if (!huddle_id) throw new Error("huddle_id required");
+    huddleIdForError = huddle_id;
 
     const { data: huddle, error: hErr } = await supabase
       .from("huddles")
@@ -114,8 +116,8 @@ serve(async (req) => {
           { role: "system", content: 'Extract action items and per-client notes from a daily huddle. Return strict JSON: {"tasks":[{"title":"...","priority":"low|medium|high","client_id":"<uuid or null>"}], "per_client_notes": {"<client_id>": "1-2 sentence note"}}. Only concrete owner-actionable tasks. Max 15. Only use client_ids from the provided list.' },
           { role: "user", content: `KNOWN CLIENT IDS:\n${clientList}\n\n${contextBlock}` },
         ], { temperature: 0.1, max_tokens: 1200 });
-        proposedTasks = Array.isArray(taskRes?.tasks) ? taskRes.tasks.slice(0, 15) : [];
-        perClientNotes = (taskRes?.per_client_notes as Record<string, string>) || {};
+        proposedTasks = Array.isArray(taskRes.data?.tasks) ? taskRes.data.tasks.slice(0, 15) : [];
+        perClientNotes = (taskRes.data?.per_client_notes as Record<string, string>) || {};
       } catch (e) { console.warn("task extract failed:", e); }
     }
 
@@ -141,8 +143,7 @@ serve(async (req) => {
   } catch (err) {
     console.error("huddle-finalize error:", err);
     try {
-      const { huddle_id } = await req.clone().json().catch(() => ({}));
-      if (huddle_id) await supabase.from("huddles").update({ finalize_status: "error" }).eq("id", huddle_id);
+      if (huddleIdForError) await supabase.from("huddles").update({ finalize_status: "error" }).eq("id", huddleIdForError);
     } catch (_) {}
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

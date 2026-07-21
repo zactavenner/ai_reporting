@@ -14,10 +14,12 @@ serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  let callIdForError: string | null = null;
 
   try {
     const { call_id } = await req.json();
     if (!call_id) throw new Error("call_id required");
+    callIdForError = call_id;
 
     const { data: call, error: callErr } = await supabase
       .from("client_weekly_calls")
@@ -112,7 +114,7 @@ serve(async (req) => {
           { role: "system", content: 'Extract action items from a weekly client call. Return strict JSON: {"tasks":[{"title":"...","priority":"low|medium|high"}]}. Prioritize items explicitly listed in FACILITATOR RECAP NOTES, then transcript-derived actions. Only concrete owner-actionable tasks. Max 10.' },
           { role: "user", content: contextBlock },
         ], { temperature: 0.1, max_tokens: 800 });
-        proposedTasks = Array.isArray(taskRes?.tasks) ? taskRes.tasks.slice(0, 10) : [];
+        proposedTasks = Array.isArray(taskRes.data?.tasks) ? taskRes.data.tasks.slice(0, 10) : [];
       } catch (e) {
         console.warn("task extract failed:", e);
       }
@@ -132,8 +134,7 @@ serve(async (req) => {
   } catch (err) {
     console.error("weekly-call-finalize error:", err);
     try {
-      const { call_id } = await req.clone().json().catch(() => ({}));
-      if (call_id) await supabase.from("client_weekly_calls").update({ finalize_status: "error" }).eq("id", call_id);
+      if (callIdForError) await supabase.from("client_weekly_calls").update({ finalize_status: "error" }).eq("id", callIdForError);
     } catch (_) {}
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
