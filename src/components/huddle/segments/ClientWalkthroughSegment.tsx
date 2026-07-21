@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, SkipForward } from 'lucide-react';
@@ -22,10 +22,12 @@ export function ClientWalkthroughSegment({ huddleId, subIndex, onSubIndexChange,
   const { clients, isLoading } = useHuddleClients();
   const safeIdx = Math.min(Math.max(0, subIndex), Math.max(0, clients.length - 1));
   const current = clients[safeIdx];
+  const startedAtRef = useRef<number>(Date.now());
 
   // Ensure a review row exists for the client we're viewing.
   useEffect(() => {
     if (!huddleId || !current) return;
+    startedAtRef.current = Date.now();
     (supabase as any)
       .from('huddle_client_reviews')
       .upsert(
@@ -37,10 +39,11 @@ export function ClientWalkthroughSegment({ huddleId, subIndex, onSubIndexChange,
 
   const markAndAdvance = async (status: 'reviewed' | 'skipped') => {
     if (current) {
+      const duration_s = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
       await (supabase as any)
         .from('huddle_client_reviews')
         .upsert(
-          { huddle_id: huddleId, client_id: current.id, position: safeIdx, status },
+          { huddle_id: huddleId, client_id: current.id, position: safeIdx, status, duration_s },
           { onConflict: 'huddle_id,client_id' },
         );
     }
