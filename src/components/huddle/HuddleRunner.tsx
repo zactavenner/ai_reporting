@@ -264,19 +264,18 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       actual_duration_s: actual,
       status: 'completed',
       avg_rating: avg as any,
-      ...(recordingUrl ? { recording_url: recordingUrl, finalize_status: 'pending' } as any : {}),
+      finalize_status: 'pending',
+      ...(recordingUrl ? { recording_url: recordingUrl } as any : {}),
     });
-    toast.success(recordingUrl ? 'Huddle wrapped — transcribing in the background' : 'Huddle wrapped — no usable recording captured');
+    toast.success(recordingUrl ? 'Huddle wrapped — transcribing in the background' : 'Huddle wrapped — summarizing notes; no usable recording captured');
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2600);
-    if (recordingUrl) {
-      supabase.functions.invoke('huddle-finalize', { body: { huddle_id: huddle.id } }).then((res) => {
-        if (res.error) toast.error('Transcription failed — use Retry from history.');
-      }).catch((err) => {
-        console.error('Finalize trigger failed:', err);
-        toast.error('Failed to trigger background transcription. Please contact support.');
-      });
-    }
+    supabase.functions.invoke('huddle-finalize', { body: { huddle_id: huddle.id } }).then((res) => {
+      if (res.error) toast.error('Summary failed — use Retry from history.');
+    }).catch((err) => {
+      console.error('Finalize trigger failed:', err);
+      toast.error('Failed to trigger background summary. Please contact support.');
+    });
     setFinalizing(false);
     onFinish?.();
   };

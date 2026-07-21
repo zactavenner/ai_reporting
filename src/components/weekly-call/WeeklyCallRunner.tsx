@@ -272,18 +272,17 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       actual_duration_s: actual,
       status: 'completed',
       avg_rating: avg as any,
-      ...(recordingUrl ? { recording_url: recordingUrl, finalize_status: 'pending' } as any : {}),
+      finalize_status: 'pending',
+      ...(recordingUrl ? { recording_url: recordingUrl } as any : {}),
     });
-    toast.success(recordingUrl ? 'Call wrapped — transcribing in the background' : 'Call wrapped — no usable recording captured');
+    toast.success(recordingUrl ? 'Call wrapped — transcribing in the background' : 'Call wrapped — summarizing notes; no usable recording captured');
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2600);
-    if (recordingUrl) {
-      supabase.functions.invoke('weekly-call-finalize', { body: { call_id: call.id } })
-        .then((res) => {
-          if (res.error) toast.error('Transcription failed — use Retry from Past calls.');
-        })
-        .catch(() => {});
-    }
+    supabase.functions.invoke('weekly-call-finalize', { body: { call_id: call.id } })
+      .then((res) => {
+        if (res.error) toast.error('Summary failed — use Retry from Past calls.');
+      })
+      .catch(() => {});
     setFinalizing(false);
     onFinish?.();
     // Reset the runner to a fresh call at segment 0 so another meeting the
