@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { FileAudio, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { PastCallPlayer } from '@/components/shared/PastCallPlayer';
 
 interface Row {
   id: string;
@@ -21,7 +22,7 @@ interface Row {
   transcript: string | null;
   recording_url: string | null;
   finalize_status: string | null;
-  proposed_tasks: Array<{ title?: string }> | null;
+  proposed_tasks: Array<{ title: string; priority?: string }> | null;
 }
 
 function fmt(s: number | null) {
@@ -32,6 +33,7 @@ function fmt(s: number | null) {
 export function HuddleHistory() {
   const [rows, setRows] = useState<Row[]>([]);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data: huddles } = await supabase.from('huddles').select('*').order('date', { ascending: false }).limit(60);
@@ -66,9 +68,7 @@ export function HuddleHistory() {
     setRows(enriched);
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const retryFinalize = async (row: Row) => {
     if (!row.recording_url) { toast.error('No recording on this huddle'); return; }
@@ -84,17 +84,6 @@ export function HuddleHistory() {
     } finally {
       setRetryingId(null);
     }
-  };
-
-  const openRecording = async (row: Row) => {
-    if (!row.recording_url) return;
-    const marker = '/weekly-call-recordings/';
-    const idx = row.recording_url.indexOf(marker);
-    if (idx === -1) { window.open(row.recording_url, '_blank'); return; }
-    const path = row.recording_url.slice(idx + marker.length).split('?')[0];
-    const { data, error } = await supabase.storage.from('weekly-call-recordings').createSignedUrl(path, 3600);
-    if (error || !data?.signedUrl) { toast.error('Could not open recording'); return; }
-    window.open(data.signedUrl, '_blank');
   };
 
   const chartData = [...rows].reverse().slice(-30).map(r => ({ date: r.date.slice(5), pct: r.followthrough_pct }));
@@ -119,59 +108,75 @@ export function HuddleHistory() {
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
-              <TableHead>Duration (actual/planned)</TableHead>
-              <TableHead>Avg rating</TableHead>
+              <TableHead>Duration</TableHead>
+              <TableHead>Rating</TableHead>
               <TableHead>Attendance</TableHead>
               <TableHead>Attendees</TableHead>
-              <TableHead>Follow-through</TableHead>
+              <TableHead>Follow-through / Recap</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map(r => (
-              <TableRow key={r.id} className="align-top">
-                <TableCell className="font-medium">{r.date}</TableCell>
-                <TableCell>{fmt(r.actual_duration_s)} / {fmt(r.planned_duration_s)}</TableCell>
-                <TableCell>{r.avg_rating ? r.avg_rating.toFixed(1) : '—'}</TableCell>
-                <TableCell>{r.attendees.length} · {r.attendance_pct}%</TableCell>
-                <TableCell className="max-w-[280px]">
-                  <div className="flex flex-wrap gap-1">
-                    {r.attendees.slice(0, 6).map((n, i) => (
-                      <span key={i} className="inline-block rounded-full bg-primary/10 text-primary text-[10px] px-2 py-0.5">{n}</span>
-                    ))}
-                    {r.attendees.length > 6 && <span className="text-[10px] text-muted-foreground">+{r.attendees.length - 6}</span>}
-                    {r.attendees.length === 0 && <span className="text-[10px] text-muted-foreground">—</span>}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="space-y-2">
-                    <div>{r.followthrough_pct}%</div>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {r.finalize_status === 'processing' && (
-                        <Badge variant="outline" className="text-[10px] gap-1"><Loader2 className="w-3 h-3 animate-spin" />transcribing</Badge>
-                      )}
-                      {r.recording_url && (
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => openRecording(r)}>
-                          <FileAudio className="w-3 h-3 mr-1" />Recording
+              <Fragment key={r.id}>
+                <TableRow className="align-top">
+                  <TableCell className="font-medium">{r.date}</TableCell>
+                  <TableCell>{fmt(r.actual_duration_s)} / {fmt(r.planned_duration_s)}</TableCell>
+                  <TableCell>{r.avg_rating ? r.avg_rating.toFixed(1) : '—'}</TableCell>
+                  <TableCell>{r.attendees.length} · {r.attendance_pct}%</TableCell>
+                  <TableCell className="max-w-[280px]">
+                    <div className="flex flex-wrap gap-1">
+                      {r.attendees.slice(0, 6).map((n, i) => (
+                        <span key={i} className="inline-block rounded-full bg-primary/10 text-primary text-[10px] px-2 py-0.5">{n}</span>
+                      ))}
+                      {r.attendees.length > 6 && <span className="text-[10px] text-muted-foreground">+{r.attendees.length - 6}</span>}
+                      {r.attendees.length === 0 && <span className="text-[10px] text-muted-foreground">—</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>{r.followthrough_pct}%</div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => setOpenId((id) => id === r.id ? null : r.id)}
+                        >
+                          {openId === r.id ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
+                          {openId === r.id ? 'Hide' : 'Recap'}
                         </Button>
-                      )}
-                      {r.recording_url && !r.summary_text && r.finalize_status !== 'processing' && (
-                        <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => retryFinalize(r)} disabled={retryingId === r.id}>
-                          {retryingId === r.id ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
-                          Retry
-                        </Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {r.finalize_status === 'processing' && (
+                          <Badge variant="outline" className="text-[10px] gap-1"><Loader2 className="w-3 h-3 animate-spin" />transcribing</Badge>
+                        )}
+                        {r.recording_url && !r.summary_text && r.finalize_status !== 'processing' && (
+                          <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => retryFinalize(r)} disabled={retryingId === r.id}>
+                            {retryingId === r.id ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                            Retry
+                          </Button>
+                        )}
+                      </div>
+                      {!openId && !!r.proposed_tasks?.length && (
+                        <div className="text-[11px] text-muted-foreground">{r.proposed_tasks.length} proposed tasks</div>
                       )}
                     </div>
-                    {r.summary_text && (
-                      <div className="max-w-[360px] whitespace-pre-wrap rounded border bg-muted/40 p-2 text-xs leading-relaxed">
-                        {r.summary_text}
-                      </div>
-                    )}
-                    {!!r.proposed_tasks?.length && (
-                      <div className="text-[11px] text-muted-foreground">{r.proposed_tasks.length} proposed tasks</div>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
+                  </TableCell>
+                </TableRow>
+                {openId === r.id && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="bg-muted/20">
+                      <PastCallPlayer
+                        recordingUrl={r.recording_url}
+                        transcript={r.transcript}
+                        summary={r.summary_text}
+                        proposedTasks={r.proposed_tasks}
+                        taskExtras={{ huddle_id: r.id }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
+              </Fragment>
             ))}
             {rows.length === 0 && (
               <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No huddles yet.</TableCell></TableRow>

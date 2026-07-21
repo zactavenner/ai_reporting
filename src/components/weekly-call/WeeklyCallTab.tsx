@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Star, CheckSquare, FileAudio, Loader2, ChevronDown, ChevronUp, FileText, Clock, Trash2 } from 'lucide-react';
+import { CalendarClock, Star, Loader2, Clock, Trash2 } from 'lucide-react';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WeeklyCallRunner } from './WeeklyCallRunner';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
-import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { PastCallsChat } from './PastCallsChat';
 import { ClientCallNotesPanel } from './ClientCallNotesPanel';
+import { PastCallPlayer } from '@/components/shared/PastCallPlayer';
 
 interface Row {
   id: string;
@@ -30,9 +30,6 @@ interface Row {
 
 export function WeeklyCallTab({ clientId }: { clientId: string }) {
   const [history, setHistory] = useState<Row[]>([]);
-  const { currentMember } = useTeamMember();
-  const [creatingFor, setCreatingFor] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
@@ -56,34 +53,6 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
     return () => { active = false; clearInterval(int); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
-
-  const approveTasks = async (row: Row) => {
-    const tasks = row.proposed_tasks || [];
-    if (!tasks.length) return;
-    setCreatingFor(row.id);
-    try {
-      for (const t of tasks) {
-        const { data: task } = await (supabase as any).from('tasks').insert({
-          client_id: clientId,
-          title: t.title,
-          status: 'todo',
-          stage: 'to-do',
-          priority: t.priority || 'medium',
-          created_by: currentMember?.id ?? null,
-        }).select('id').single();
-        if (task?.id) {
-          await (supabase as any).from('client_weekly_call_tasks').insert({ call_id: row.id, task_id: task.id, action: 'created' });
-        }
-      }
-      await (supabase as any).from('client_weekly_calls').update({ proposed_tasks: [] as any }).eq('id', row.id);
-      toast.success(`Created ${tasks.length} task${tasks.length === 1 ? '' : 's'}`);
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed');
-    } finally {
-      setCreatingFor(null);
-    }
-  };
 
   const deleteCall = async (row: Row) => {
     if (!window.confirm(`Delete "${row.title || 'this weekly call'}"? This removes the recording, transcript, action items, and it will no longer be available to the AI review chat.`)) return;
@@ -116,19 +85,6 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
     }
   };
 
-  const openRecording = async (row: Row) => {
-    if (!row.recording_url) return;
-    const marker = '/weekly-call-recordings/';
-    const idx = row.recording_url.indexOf(marker);
-    if (idx === -1) { window.open(row.recording_url, '_blank'); return; }
-    const path = row.recording_url.slice(idx + marker.length).split('?')[0];
-    const { data, error } = await supabase.storage
-      .from('weekly-call-recordings')
-      .createSignedUrl(path, 3600);
-    if (error || !data?.signedUrl) { toast.error('Could not open recording'); return; }
-    window.open(data.signedUrl, '_blank');
-  };
-
   return (
     <div className="space-y-6">
       <Card className="p-4 md:p-6">
@@ -146,7 +102,6 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {history.map((r) => {
-              const isOpen = !!expanded[r.id];
               const dateSource = r.ended_at || r.started_at || r.week_of;
               const daysAgo = dateSource ? formatDistanceToNowStrict(new Date(dateSource), { addSuffix: true }) : '';
               const mins = r.actual_duration_s != null ? Math.round(r.actual_duration_s / 60) : null;
@@ -181,92 +136,31 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
                     </div>
                   </div>
 
-                  {(r.avg_rating != null || r.recording_url) && (
+                  {r.avg_rating != null && (
                     <div className="text-xs text-muted-foreground flex gap-3 flex-wrap">
-                      {r.avg_rating != null && (
-                        <span className="flex items-center gap-1"><Star className="w-3 h-3 text-primary" />{r.avg_rating.toFixed(1)}</span>
-                      )}
-                      {r.recording_url && (
-                        <button
-                          type="button"
-                          onClick={() => openRecording(r)}
-                          className="flex items-center gap-1 hover:text-foreground underline-offset-2 hover:underline"
-                        >
-                          <FileAudio className="w-3 h-3" />recording
-                        </button>
-                      )}
+                      <span className="flex items-center gap-1"><Star className="w-3 h-3 text-primary" />{r.avg_rating.toFixed(1)}</span>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-foreground">Summary of call</div>
-                    {r.summary_text ? (
-                      <div className="text-xs whitespace-pre-wrap bg-muted/40 rounded p-2 border leading-relaxed">{r.summary_text}</div>
-                    ) : r.finalize_status === 'processing' ? (
-                      <div className="text-xs italic text-muted-foreground flex items-center gap-1">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Generating summary…
-                      </div>
-                    ) : (
-                      <div className="text-xs italic text-muted-foreground flex items-center gap-2 flex-wrap">
-                        No summary available.
-                        {r.recording_url && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 text-[11px] px-2"
-                            onClick={() => retryFinalize(r)}
-                            disabled={retryingId === r.id}
-                          >
-                            {retryingId === r.id
-                              ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Retrying…</>
-                              : <><RefreshCw className="w-3 h-3 mr-1" />Retry transcription</>}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 border-t pt-2">
-                    <div className="text-xs font-semibold flex items-center justify-between">
-                      <span>Action items ({r.proposed_tasks?.length || 0})</span>
-                      {r.proposed_tasks && r.proposed_tasks.length > 0 && (
-                        <Button size="sm" onClick={() => approveTasks(r)} disabled={creatingFor === r.id}>
-                          <CheckSquare className="w-3.5 h-3.5 mr-1" />
-                          {creatingFor === r.id ? 'Creating…' : 'Approve all'}
-                        </Button>
-                      )}
-                    </div>
-                    {r.proposed_tasks && r.proposed_tasks.length > 0 ? (
-                      <ul className="space-y-1">
-                        {r.proposed_tasks.map((t, i) => (
-                          <li key={i} className="text-xs flex items-start gap-2">
-                            <span className="mt-0.5">•</span>
-                            <span className="flex-1">{t.title}</span>
-                            {t.priority && <Badge variant="outline" className="text-[9px]">{t.priority}</Badge>}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="text-xs italic text-muted-foreground">No action items proposed.</div>
-                    )}
-                  </div>
-
-                  {r.transcript && (
-                    <div className="border-t pt-2">
-                      <button
-                        onClick={() => setExpanded((e) => ({ ...e, [r.id]: !isOpen }))}
-                        className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                      >
-                        <FileText className="w-3 h-3" />
-                        {isOpen ? 'Hide full transcript' : 'Click to expand full transcript'}
-                        {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      </button>
-                      {isOpen && (
-                        <div className="mt-2 text-[11px] whitespace-pre-wrap bg-muted/30 rounded p-2 border max-h-96 overflow-y-auto leading-relaxed">
-                          {r.transcript}
-                        </div>
-                      )}
-                    </div>
+                  <PastCallPlayer
+                    recordingUrl={r.recording_url}
+                    transcript={r.transcript}
+                    summary={r.summary_text}
+                    proposedTasks={r.proposed_tasks}
+                    clientId={clientId}
+                  />
+                  {!r.summary_text && r.finalize_status !== 'processing' && r.recording_url && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[11px] px-2"
+                      onClick={() => retryFinalize(r)}
+                      disabled={retryingId === r.id}
+                    >
+                      {retryingId === r.id
+                        ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Retrying…</>
+                        : <><RefreshCw className="w-3 h-3 mr-1" />Retry transcription</>}
+                    </Button>
                   )}
                 </Card>
               );
