@@ -8,7 +8,6 @@ import { HuddleAgendaRail } from './HuddleAgendaRail';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
 import { WinsSegment } from './segments/WinsSegment';
-import { NumbersSegment } from './segments/NumbersSegment';
 import { ClientWalkthroughSegment } from './segments/ClientWalkthroughSegment';
 import { CommitmentsSegment } from './segments/CommitmentsSegment';
 import { CloseSegment } from './segments/CloseSegment';
@@ -308,7 +307,6 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     if (!seg) return null;
     switch (seg.key) {
       case 'wins': return <WinsSegment huddleId={huddle.id} />;
-      case 'numbers': return <NumbersSegment huddleId={huddle.id} />;
       case 'clients':
         return (
           <ClientWalkthroughSegment
