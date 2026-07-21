@@ -72,6 +72,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -136,9 +137,9 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       });
       streamRef.current = stream;
       chunksRef.current = [];
-      const rec = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
-      });
+      const preferredMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const rec = preferredMime ? new MediaRecorder(stream, { mimeType: preferredMime }) : new MediaRecorder(stream);
+      recordingMimeTypeRef.current = rec.mimeType || preferredMime || 'audio/webm';
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       rec.start(2000);
       mediaRecorderRef.current = rec;
@@ -169,7 +170,8 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         try {
           streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
-          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          const contentType = recordingMimeTypeRef.current || 'audio/webm';
+          const blob = new Blob(chunksRef.current, { type: contentType });
           chunksRef.current = [];
           setIsRecording(false);
           if (blob.size < 1024) {
@@ -177,10 +179,11 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
             resolve(null);
             return;
           }
-          const path = `${callId}-${Date.now()}.webm`;
+          const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('wav') ? 'wav' : 'webm';
+          const path = `${callId}-${Date.now()}.${ext}`;
           setUploading(true);
           const { error: upErr } = await supabase.storage.from('weekly-call-recordings').upload(path, blob, {
-            contentType: 'audio/webm', upsert: true,
+            contentType, upsert: true,
           });
           setUploading(false);
           if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
