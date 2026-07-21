@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, Flag, PartyPopper } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, Upload, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { useTodayHuddle, useSegmentTiming } from '@/hooks/useHuddle';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
 import { WinsSegment } from './segments/WinsSegment';
 import { NumbersSegment } from './segments/NumbersSegment';
-import { ClientHealthSegment } from './segments/ClientHealthSegment';
-import { AccountabilitySegment } from './segments/AccountabilitySegment';
-import { BlockersSegment } from './segments/BlockersSegment';
+import { ClientWalkthroughSegment } from './segments/ClientWalkthroughSegment';
+import { CommitmentsSegment } from './segments/CommitmentsSegment';
 import { CloseSegment } from './segments/CloseSegment';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -42,6 +41,14 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const { huddle, agenda, loading, updateTimer, updateHuddle, updateAgenda } = useTodayHuddle();
   const { currentMember } = useTeamMember();
   const chimed = useRef<number>(-1);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
+  const autoFinishedRef = useRef(false);
 
   const timer = huddle?.timer_state;
   const timing = useSegmentTiming(agenda, timer || { segment_index: 0, segment_started_at: null, paused_at: null, paused_elapsed_s: 0, auto_advance: false, running: false, finished: false, extra_s: 0 });
@@ -71,6 +78,69 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     }
   }, [timing.remaining, timer?.running, isFacilitator]);
 
+  // Hard cap: 60 minutes then auto-finish
+  const HARD_CAP_S = 3600;
+  useEffect(() => {
+    if (!huddle?.started_at || timer?.finished || autoFinishedRef.current) return;
+    if (meetingElapsed >= HARD_CAP_S) {
+      autoFinishedRef.current = true;
+      toast.message('60-minute cap reached — wrapping huddle');
+      finish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingElapsed, timer?.finished, huddle?.started_at]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const rec = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
+      });
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.start(2000);
+      mediaRecorderRef.current = rec;
+      setIsRecording(true);
+    } catch (e) {
+      console.warn('mic denied:', e);
+      toast.error('Microphone denied — huddle will run without recording');
+    }
+  };
+
+  const stopAndUploadRecording = async (huddleId: string): Promise<string | null> => {
+    const rec = mediaRecorderRef.current;
+    if (!rec || rec.state === 'inactive') return null;
+    return new Promise<string | null>((resolve) => {
+      rec.onstop = async () => {
+        try {
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          chunksRef.current = [];
+          setIsRecording(false);
+          if (blob.size < 5000) { resolve(null); return; }
+          const path = `huddles/${huddleId}-${Date.now()}.webm`;
+          setUploading(true);
+          const { error: upErr } = await supabase.storage.from('weekly-call-recordings').upload(path, blob, {
+            contentType: 'audio/webm', upsert: true,
+          });
+          setUploading(false);
+          if (upErr) { console.warn('upload failed:', upErr); resolve(null); return; }
+          const { data } = supabase.storage.from('weekly-call-recordings').getPublicUrl(path);
+          resolve(data.publicUrl);
+        } catch (e) {
+          console.warn('stop/upload failed:', e);
+          setUploading(false);
+          resolve(null);
+        }
+      };
+      rec.stop();
+    });
+  };
+
   const start = async () => {
     if (!huddle) return;
     const now = new Date().toISOString();
@@ -81,6 +151,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         // First presser becomes the facilitator (writer of auto-advance)
         ...(huddle.facilitator_id ? {} : { facilitator_id: currentMember?.id ?? null }),
       } as any);
+      startRecording();
     }
     await updateTimer({
       running: true,
@@ -124,6 +195,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       paused_elapsed_s: 0,
       extra_s: 0,
       running: true,
+      sub_index: 0,
     });
   };
 
@@ -139,18 +211,50 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       paused_elapsed_s: 0,
       extra_s: 0,
       running: true,
+      sub_index: 0,
     });
   };
 
   const finish = async () => {
-    if (!huddle) return;
+    if (!huddle || finalizing) return;
+    setFinalizing(true);
+    try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+    await new Promise((r) => setTimeout(r, 250));
     const now = new Date().toISOString();
     const actual = huddle.started_at ? Math.floor((Date.now() - new Date(huddle.started_at).getTime()) / 1000) : 0;
     const { data: ratings } = await supabase.from('huddle_ratings').select('rating').eq('huddle_id', huddle.id);
     const avg = (ratings && ratings.length) ? (ratings.reduce((a, r: any) => a + r.rating, 0) / ratings.length) : null;
     await updateTimer({ finished: true, running: false });
-    await updateHuddle({ ended_at: now, actual_duration_s: actual, status: 'completed', avg_rating: avg as any });
-    toast.success('Huddle wrapped');
+    const recordingUrl = await stopAndUploadRecording(huddle.id);
+    await updateHuddle({
+      ended_at: now,
+      actual_duration_s: actual,
+      status: 'completed',
+      avg_rating: avg as any,
+      ...(recordingUrl ? { recording_url: recordingUrl, finalize_status: 'pending' } as any : {}),
+    });
+    toast.success('Huddle wrapped — transcribing in the background');
+    setCelebrate(true);
+    setTimeout(() => setCelebrate(false), 2600);
+    if (recordingUrl) {
+      supabase.functions.invoke('huddle-finalize', { body: { huddle_id: huddle.id } }).catch(() => {});
+    }
+    setFinalizing(false);
+    onFinish?.();
+  };
+
+  const cancel = async () => {
+    if (!huddle) return;
+    if (!window.confirm('Cancel this huddle? Recording will be discarded.')) return;
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch {} }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    chunksRef.current = [];
+    setIsRecording(false);
+    await updateTimer({ finished: true, running: false });
+    await updateHuddle({ ended_at: new Date().toISOString(), status: 'cancelled', finalize_status: 'cancelled' } as any);
+    toast.success('Huddle cancelled');
     onFinish?.();
   };
 
@@ -162,14 +266,22 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const timerColor = timing.remaining < 0 ? 'text-destructive' : pct <= 0.2 ? 'text-amber-500' : 'text-foreground';
 
   const seg = timing.seg;
+  const finalizeStatus = (huddle as any)?.finalize_status ?? null;
   const body = (() => {
     if (!seg) return null;
     switch (seg.key) {
       case 'wins': return <WinsSegment huddleId={huddle.id} />;
       case 'numbers': return <NumbersSegment huddleId={huddle.id} />;
-      case 'health': return <ClientHealthSegment huddleId={huddle.id} />;
-      case 'accountability': return <AccountabilitySegment huddleId={huddle.id} />;
-      case 'blockers': return <BlockersSegment huddleId={huddle.id} />;
+      case 'clients':
+        return (
+          <ClientWalkthroughSegment
+            huddleId={huddle.id}
+            subIndex={timer.sub_index ?? 0}
+            onSubIndexChange={(idx) => updateTimer({ sub_index: idx })}
+            onAdvanceSegment={next}
+          />
+        );
+      case 'commitments': return <CommitmentsSegment huddleId={huddle.id} />;
       case 'close': return <CloseSegment huddle={huddle} agenda={agenda} />;
       default: return null;
     }
@@ -177,10 +289,47 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      {celebrate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm pointer-events-none animate-fade-in">
+          <div className="animate-scale-in text-center space-y-3">
+            <PartyPopper className="w-24 h-24 mx-auto text-primary animate-bounce" />
+            <div className="text-3xl font-bold">Huddle complete!</div>
+            <div className="text-sm text-muted-foreground">Transcribing & summarizing…</div>
+          </div>
+        </div>
+      )}
       <header className="border-b px-4 md:px-8 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <div className="text-xs md:text-sm text-muted-foreground">Segment</div>
           <div className="text-lg md:text-xl font-semibold truncate">{seg?.name}</div>
+          {(isRecording || uploading || finalizeStatus) && (
+            <div className="flex items-center gap-2 ml-2">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'}`}
+                title={isRecording ? 'Recording' : 'Recording inactive'}
+              />
+              {uploading && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-amber-500">
+                  <Upload className="w-3 h-3" /> Uploading
+                </span>
+              )}
+              {(finalizeStatus === 'pending' || finalizeStatus === 'processing') && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-blue-500">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Transcribing
+                </span>
+              )}
+              {finalizeStatus === 'done' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-emerald-500">
+                  <CheckCircle2 className="w-3 h-3" /> Summary ready
+                </span>
+              )}
+              {finalizeStatus === 'error' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-destructive">
+                  <AlertCircle className="w-3 h-3" /> Transcript failed
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {agenda.map((_, i) => (
@@ -228,10 +377,16 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
           <span className="text-sm text-muted-foreground">Auto-advance</span>
         </div>
-        {timing.idx >= agenda.length - 1 && (
-          <Button size="lg" variant="default" onClick={finish} className="h-12 px-6 text-base ml-2">
-            <PartyPopper className="w-5 h-5 mr-2" />Finish
-          </Button>
+        {huddle.started_at && !timer.finished && (
+          <>
+            <Button size="lg" variant="ghost" onClick={cancel} className="h-12 px-4 text-base text-destructive hover:text-destructive" disabled={finalizing}>
+              <X className="w-5 h-5 mr-2" />Cancel
+            </Button>
+            <Button size="lg" variant="default" onClick={finish} className="h-12 px-6 text-base ml-2" disabled={finalizing}>
+              {finalizing ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <PartyPopper className="w-5 h-5 mr-2" />}
+              Finish
+            </Button>
+          </>
         )}
       </footer>
     </div>

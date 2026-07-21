@@ -13,15 +13,19 @@ export interface TimerState {
   running: boolean;
   finished: boolean;
   extra_s: number;                    // +30s bumps applied to current segment
+  /**
+   * Sub-position within the current segment (used by the client walkthrough
+   * to step client-by-client without advancing the segment).
+   */
+  sub_index?: number;
 }
 
 export const DEFAULT_AGENDA: AgendaSegment[] = [
-  { key: 'wins', name: 'Wins', duration_s: 120 },
-  { key: 'numbers', name: "Yesterday's Numbers", duration_s: 180 },
-  { key: 'health', name: 'Client Health', duration_s: 180 },
-  { key: 'accountability', name: 'Accountability', duration_s: 240 },
-  { key: 'blockers', name: 'Blockers', duration_s: 120 },
-  { key: 'close', name: 'Close & Cascade', duration_s: 60 },
+  { key: 'wins',         name: 'Wins & Attendance',    duration_s: 120 },
+  { key: 'numbers',      name: "Yesterday's Numbers",  duration_s: 180 },
+  { key: 'clients',      name: 'Client Walkthrough',   duration_s: 720 },
+  { key: 'commitments',  name: 'Commitments',          duration_s: 180 },
+  { key: 'close',        name: 'Recap & Close',        duration_s: 60 },
 ];
 
 export const DEFAULT_TIMER: TimerState = {
@@ -29,8 +33,9 @@ export const DEFAULT_TIMER: TimerState = {
   segment_started_at: null,
   paused_at: null,
   paused_elapsed_s: 0,
-  auto_advance: false,
+  auto_advance: true,
   running: false,
   finished: false,
   extra_s: 0,
+  sub_index: 0,
 };
