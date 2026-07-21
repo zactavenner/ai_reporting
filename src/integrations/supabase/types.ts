@@ -10200,6 +10200,148 @@ export type Database = {
           },
         ]
       }
+      huddle_client_reviews: {
+        Row: {
+          ai_action_items: Json
+          ai_summary: string | null
+          client_id: string
+          created_at: string
+          duration_s: number | null
+          huddle_id: string
+          id: string
+          notes: string | null
+          position: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ai_action_items?: Json
+          ai_summary?: string | null
+          client_id: string
+          created_at?: string
+          duration_s?: number | null
+          huddle_id: string
+          id?: string
+          notes?: string | null
+          position?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ai_action_items?: Json
+          ai_summary?: string | null
+          client_id?: string
+          created_at?: string
+          duration_s?: number | null
+          huddle_id?: string
+          id?: string
+          notes?: string | null
+          position?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddle_client_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "huddle_client_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_client_reviews_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "huddle_client_reviews_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      huddle_commitments: {
+        Row: {
+          client_id: string | null
+          commitment: string
+          created_at: string
+          for_date: string
+          huddle_id: string
+          id: string
+          member_id: string | null
+          member_name: string
+          notes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          commitment: string
+          created_at?: string
+          for_date: string
+          huddle_id: string
+          id?: string
+          member_id?: string | null
+          member_name: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          commitment?: string
+          created_at?: string
+          for_date?: string
+          huddle_id?: string
+          id?: string
+          member_id?: string | null
+          member_name?: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "huddle_commitments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "huddle_commitments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "huddle_commitments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "huddle_commitments_huddle_id_fkey"
+            columns: ["huddle_id"]
+            isOneToOne: false
+            referencedRelation: "huddles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       huddle_flags: {
         Row: {
           client_id: string | null
@@ -10373,12 +10515,17 @@ export type Database = {
           date: string
           ended_at: string | null
           facilitator_id: string | null
+          finalize_status: string | null
           id: string
           planned_duration_s: number
+          proposed_tasks: Json
+          recording_url: string | null
           started_at: string | null
           status: string
           summary_text: string | null
           timer_state: Json
+          title: string | null
+          transcript: string | null
           updated_at: string
         }
         Insert: {
@@ -10389,12 +10536,17 @@ export type Database = {
           date: string
           ended_at?: string | null
           facilitator_id?: string | null
+          finalize_status?: string | null
           id?: string
           planned_duration_s?: number
+          proposed_tasks?: Json
+          recording_url?: string | null
           started_at?: string | null
           status?: string
           summary_text?: string | null
           timer_state?: Json
+          title?: string | null
+          transcript?: string | null
           updated_at?: string
         }
         Update: {
@@ -10405,12 +10557,17 @@ export type Database = {
           date?: string
           ended_at?: string | null
           facilitator_id?: string | null
+          finalize_status?: string | null
           id?: string
           planned_duration_s?: number
+          proposed_tasks?: Json
+          recording_url?: string | null
           started_at?: string | null
           status?: string
           summary_text?: string | null
           timer_state?: Json
+          title?: string | null
+          transcript?: string | null
           updated_at?: string
         }
         Relationships: [
