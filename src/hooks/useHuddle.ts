@@ -47,29 +47,54 @@ export function useTodayHuddle() {
       const settingsAgenda = (settings?.agenda as unknown as AgendaSegment[]) || DEFAULT_AGENDA;
       const planned = settingsAgenda.reduce((a, s) => a + s.duration_s, 0);
 
-      const { data: existing } = await supabase
+      let { data: existing, error: fetchError } = await supabase
         .from('huddles')
         .select('*')
         .eq('date', today())
         .maybeSingle();
 
+      if (fetchError) {
+        console.error('Error fetching huddle:', fetchError);
+      }
+
       let record = existing as unknown as HuddleRecord | null;
       if (!record) {
-        const { data: created } = await supabase
-          .from('huddles')
-          .insert({
-            date: today(),
-            planned_duration_s: planned,
-            agenda: settingsAgenda as any,
-            timer_state: DEFAULT_TIMER as any,
-          })
-          .select('*')
-          .single();
-        record = created as unknown as HuddleRecord;
+        try {
+          const { data: created, error: insertError } = await supabase
+            .from('huddles')
+            .insert({
+              date: today(),
+              planned_duration_s: planned,
+              agenda: settingsAgenda as any,
+              timer_state: DEFAULT_TIMER as any,
+            })
+            .select('*')
+            .single();
+          
+          if (insertError) {
+            // Likely a race condition where another client inserted it first
+            const { data: refetched } = await supabase
+              .from('huddles')
+              .select('*')
+              .eq('date', today())
+              .single();
+            record = refetched as unknown as HuddleRecord;
+          } else {
+            record = created as unknown as HuddleRecord;
+          }
+        } catch (e) {
+          const { data: refetched } = await supabase
+            .from('huddles')
+            .select('*')
+            .eq('date', today())
+            .single();
+          record = refetched as unknown as HuddleRecord;
+        }
       }
 
       if (cancelled) return;
-      setAgenda((record?.agenda as unknown as AgendaSegment[]) || settingsAgenda);
+      const finalAgenda = (record?.agenda as unknown as AgendaSegment[]) || settingsAgenda;
+      setAgenda(finalAgenda.length > 0 ? finalAgenda : DEFAULT_AGENDA);
       setHuddle(record);
       setLoading(false);
 

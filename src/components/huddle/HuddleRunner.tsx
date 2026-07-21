@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, Upload, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { useTodayHuddle, useSegmentTiming } from '@/hooks/useHuddle';
+import { useHuddleClients } from '@/hooks/useHuddleClients';
+import { HuddleAgendaRail } from './HuddleAgendaRail';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
 import { WinsSegment } from './segments/WinsSegment';
@@ -39,6 +41,7 @@ function playChime() {
 
 export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const { huddle, agenda, loading, updateTimer, updateHuddle, updateAgenda } = useTodayHuddle();
+  const { clients } = useHuddleClients();
   const { currentMember } = useTeamMember();
   const chimed = useRef<number>(-1);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -252,7 +255,10 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2600);
     if (recordingUrl) {
-      supabase.functions.invoke('huddle-finalize', { body: { huddle_id: huddle.id } }).catch(() => {});
+      supabase.functions.invoke('huddle-finalize', { body: { huddle_id: huddle.id } }).catch((err) => {
+        console.error('Finalize trigger failed:', err);
+        toast.error('Failed to trigger background transcription. Please contact support.');
+      });
     }
     setFinalizing(false);
     onFinish?.();
@@ -298,7 +304,14 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         );
       case 'commitments': return <CommitmentsSegment huddleId={huddle.id} />;
       case 'close': return <CloseSegment huddle={huddle} agenda={agenda} />;
-      default: return null;
+      default:
+        return (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground border rounded-lg border-dashed">
+            <AlertCircle className="w-10 h-10 mb-2 opacity-20" />
+            <p>Segment "{seg.key}" has no runner implementation.</p>
+            <Button variant="link" onClick={next}>Skip to next</Button>
+          </div>
+        );
     }
   })();
 
@@ -368,9 +381,19 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         {timing.remaining < 0 && <div className="text-destructive text-sm uppercase tracking-widest">Overtime</div>}
       </div>
 
-      <main className="flex-1 px-4 md:px-8 pb-32">
-        {body}
-      </main>
+      <div className="flex-1 flex min-h-0">
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 pb-32">
+          {body}
+        </main>
+        <aside className="hidden xl:block w-80 border-l bg-muted/5 p-6 overflow-y-auto">
+          <HuddleAgendaRail 
+            agenda={agenda} 
+            currentSegmentIdx={timing.idx} 
+            clients={clients}
+            currentClientIdx={timer.sub_index}
+          />
+        </aside>
+      </div>
 
       <footer className="fixed bottom-0 inset-x-0 z-40 border-t px-4 md:px-8 py-5 flex items-center gap-3 flex-wrap justify-center bg-card/95 backdrop-blur shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.15)]">
         {!timer.running && !huddle.started_at && (
