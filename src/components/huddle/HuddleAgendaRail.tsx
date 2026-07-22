@@ -1,17 +1,60 @@
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Circle, Clock3, Users } from 'lucide-react';
 import type { AgendaSegment } from '@/lib/huddle/types';
 import type { Client } from '@/hooks/useClients';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   agenda: AgendaSegment[];
   currentSegmentIdx: number;
   clients?: Client[];
   currentClientIdx?: number;
+  huddleId?: string;
 }
 
-export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentClientIdx }: Props) {
+function fmtDur(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = Math.max(0, s % 60);
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentClientIdx, huddleId }: Props) {
   const clientIndex = currentClientIdx ?? 0;
+  const clientsSeg = agenda.find((s) => s.key === 'clients');
+  const targetPerClient = clientsSeg && clients && clients.length > 0
+    ? Math.max(30, Math.round(clientsSeg.duration_s / clients.length))
+    : 0;
+
+  // Saved durations for reviewed/skipped clients
+  const [durations, setDurations] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!huddleId) return;
+    let cancelled = false;
+    const load = async () => {
+      const { data } = await (supabase as any)
+        .from('huddle_client_reviews')
+        .select('client_id, duration_s')
+        .eq('huddle_id', huddleId);
+      if (cancelled || !data) return;
+      const map: Record<string, number> = {};
+      for (const r of data) if (r?.client_id && r.duration_s) map[r.client_id] = r.duration_s;
+      setDurations(map);
+    };
+    load();
+    const id = window.setInterval(load, 5000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [huddleId]);
+
+  // Live tick for current client
+  const [liveStart, setLiveStart] = useState<number>(() => Date.now());
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => { setLiveStart(Date.now()); }, [clientIndex, huddleId]);
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, []);
+  const liveElapsed = Math.max(0, Math.floor((now - liveStart) / 1000));
 
   return (
     <div className="flex flex-col h-full">
@@ -59,10 +102,15 @@ export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentCl
                           {clients.map((c, ci) => {
                             const cCompleted = i < currentSegmentIdx || (isCurrent && ci < clientIndex);
                             const cCurrent = isCurrent && ci === clientIndex;
+                            const saved = durations[c.id];
+                            const elapsed = cCurrent ? liveElapsed : saved ?? 0;
+                            const showTimer = cCurrent || (saved && saved > 0);
+                            const over = targetPerClient > 0 && elapsed > targetPerClient;
+                            const timerColor = over ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400';
                             return (
                               <div
                                 key={c.id}
-                                className={`text-xs transition-colors ${
+                                className={`text-xs transition-colors flex items-center justify-between gap-2 ${
                                   cCurrent 
                                     ? 'text-primary font-medium' 
                                     : cCompleted 
@@ -70,7 +118,12 @@ export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentCl
                                       : 'text-muted-foreground'
                                 }`}
                               >
-                                {ci + 1}. {c.name}
+                                <span className="truncate">{ci + 1}. {c.name}</span>
+                                {showTimer && (
+                                  <span className={`font-mono tabular-nums text-[10px] ${timerColor}`}>
+                                    {fmtDur(elapsed)}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}
