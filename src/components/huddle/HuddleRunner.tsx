@@ -413,6 +413,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
             currentSegmentIdx={timing.idx} 
             clients={clients}
             currentClientIdx={timer.sub_index}
+            huddleId={huddle.id}
           />
         </aside>
       </div>
