@@ -458,8 +458,14 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={back} disabled={timing.idx === 0}>
           <ChevronLeft className="w-5 h-5 mr-2" />Back
         </Button>
-        <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={next}><SkipForward className="w-5 h-5 mr-2" />Skip</Button>
-        <Button size="lg" className="h-12 px-6 text-base" onClick={next}>Next <ChevronRight className="w-5 h-5 ml-2" /></Button>
+        <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={() => walkthroughAdvance('skipped')}>
+          <SkipForward className="w-5 h-5 mr-2" />
+          {seg?.key === 'clients' && (timer.sub_index ?? 0) + 1 < clients.length ? 'Skip client' : 'Skip'}
+        </Button>
+        <Button size="lg" className="h-12 px-6 text-base" onClick={() => walkthroughAdvance('reviewed')}>
+          {seg?.key === 'clients' && (timer.sub_index ?? 0) + 1 < clients.length ? 'Next client' : 'Next'}
+          <ChevronRight className="w-5 h-5 ml-2" />
+        </Button>
         <div className="flex items-center gap-2 ml-2">
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
           <span className="text-sm text-muted-foreground">Auto-advance</span>
