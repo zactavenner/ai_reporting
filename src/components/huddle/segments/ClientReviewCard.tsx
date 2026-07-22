@@ -69,7 +69,7 @@ export function ClientReviewCard({ client }: { client: Client }) {
         </div>
       </div>
 
-      {/* Scorecard iframe */}
+      {/* Scorecard iframe — zoomed out so more of the sheet is visible at once */}
       <Card className="p-0 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
           <div className="text-sm font-medium">Scorecard</div>
@@ -79,13 +79,15 @@ export function ClientReviewCard({ client }: { client: Client }) {
         </div>
         {showSheet && (
           sheetUrl ? (
-            <iframe
-              src={embedSheetUrl(sheetUrl)}
-              title={`${client.name} scorecard`}
-              className="w-full"
-              style={{ height: 520, border: 0 }}
-              loading="lazy"
-            />
+            <div className="w-full overflow-hidden" style={{ height: 420 }}>
+              <iframe
+                src={embedSheetUrl(sheetUrl)}
+                title={`${client.name} scorecard`}
+                className="w-full"
+                style={{ height: 560, border: 0, transform: 'scale(0.75)', transformOrigin: 'top left', width: '133.33%' }}
+                loading="lazy"
+              />
+            </div>
           ) : (
             <div className="p-6 text-sm text-muted-foreground">
               No scorecard sheet configured for this client. Add one in Client Settings.
