@@ -24,15 +24,29 @@ function bucketize(tasks: any[]): Record<Bucket, any[]> {
   const in3 = new Date(today); in3.setDate(today.getDate() + 3);
   const out: Record<Bucket, any[]> = { overdue: [], today: [], upcoming: [] };
   for (const t of tasks) {
-    // Triage shows only active work — completed tasks still flow into stats below.
-    if (t.status === 'completed' || t.stage === 'done') continue;
-    if (!t.due_date) { out.upcoming.push(t); continue; }
+    const isDone = t.status === 'completed' || t.stage === 'done';
+    // Today bucket: include due-today tasks even when completed so we can
+    // show a checked line-through and roll their status into the snapshot.
+    if (!t.due_date) {
+      if (!isDone) out.upcoming.push(t);
+      continue;
+    }
     const d = new Date(t.due_date); d.setHours(0,0,0,0);
-    if (d < today) out.overdue.push(t);
-    else if (d.getTime() === today.getTime()) out.today.push(t);
-    else if (d <= in3) out.upcoming.push(t);
-    else out.upcoming.push(t);
+    if (d.getTime() === today.getTime()) {
+      out.today.push({ ...t, __done: isDone });
+    } else if (isDone) {
+      // Older/newer completed tasks stay out of triage.
+      continue;
+    } else if (d < today) {
+      out.overdue.push(t);
+    } else if (d <= in3) {
+      out.upcoming.push(t);
+    } else {
+      out.upcoming.push(t);
+    }
   }
+  // Today: incomplete first, completed at the bottom, so operators see work-left first.
+  out.today.sort((a, b) => Number(!!a.__done) - Number(!!b.__done));
   return out;
 }
 
@@ -282,8 +296,22 @@ export function EODView({ memberId }: { memberId: string }) {
 
   const handleSubmit = async () => {
     const tasksSnapshot = [
-      ...buckets.overdue.map((t) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: 'in_progress' as const })),
-      ...buckets.today.map((t) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: t.status === 'blocked' ? 'blocked' as const : 'in_progress' as const })),
+      ...buckets.overdue.map((t) => ({
+        task_id: t.id, title: t.title, client_id: t.client_id,
+        bucket: 'overdue' as const,
+        status: t.status === 'blocked' ? 'blocked' as const : 'in_progress' as const,
+        assigned_to: t.assigned_to ?? null,
+        due_date: t.due_date ?? null,
+      })),
+      ...buckets.today.map((t) => ({
+        task_id: t.id, title: t.title, client_id: t.client_id,
+        bucket: 'today' as const,
+        status: (t.__done || t.status === 'completed' || t.stage === 'done')
+          ? 'completed' as const
+          : t.status === 'blocked' ? 'blocked' as const : 'in_progress' as const,
+        assigned_to: t.assigned_to ?? null,
+        due_date: t.due_date ?? null,
+      })),
     ];
     const clientTouchpoints = amClients.map((c: any) => {
       const t = touchpointsByClient[c.id] || { message: false, meeting: false, loom: false };
@@ -481,6 +509,9 @@ export function EODView({ memberId }: { memberId: string }) {
         </CardContent>
       </Card>
 
+      {/* Due Today — moved to top so operators triage what matters before stats/touchpoints. */}
+      <Section title="Due Today" icon={Clock} items={buckets.today} tone="today" empty="Nothing due today." />
+
       {/* Period stats */}
       <Card>
         <CardHeader className="pb-2">
@@ -587,7 +618,6 @@ export function EODView({ memberId }: { memberId: string }) {
 
       {/* Task triage */}
       <Section title="Overdue" icon={AlertOctagon} items={buckets.overdue} tone="overdue" empty="Nothing overdue. 🎉" />
-      <Section title="Due Today" icon={Clock} items={buckets.today} tone="today" empty="Nothing due today." />
       <Section title="Upcoming (next 3 days)" icon={CalendarDays} items={buckets.upcoming.slice(0, 8)} tone="upcoming" empty="Nothing on deck." />
 
       {/* The 4 questions */}
