@@ -73,6 +73,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const captureStopRef = useRef<(() => void) | null>(null);
   const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
@@ -133,19 +134,23 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      streamRef.current = stream;
+      const capture = await captureMicPlusSystemAudio({ requestSystem: true });
+      streamRef.current = capture.stream;
+      captureStopRef.current = capture.stop;
       chunksRef.current = [];
       const preferredMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
-      const rec = preferredMime ? new MediaRecorder(stream, { mimeType: preferredMime }) : new MediaRecorder(stream);
+      const rec = preferredMime ? new MediaRecorder(capture.stream, { mimeType: preferredMime }) : new MediaRecorder(capture.stream);
       recordingMimeTypeRef.current = rec.mimeType || preferredMime || 'audio/webm';
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       rec.start(2000);
       mediaRecorderRef.current = rec;
       setIsRecording(true);
-      toast.success('Recording started');
+      toast.success(
+        capture.includesSystemAudio
+          ? 'Recording started — mic + system audio (Zoom/Meet participants)'
+          : 'Recording started — mic only. Share a tab/screen with "Share audio" to capture other participants.',
+        { duration: 6000 },
+      );
       return true;
     } catch (e: any) {
       console.error('mic denied:', e);
@@ -169,6 +174,8 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         if (settled) return;
         settled = true;
         try {
+          try { captureStopRef.current?.(); } catch {}
+          captureStopRef.current = null;
           streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
           const contentType = recordingMimeTypeRef.current || 'audio/webm';
