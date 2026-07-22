@@ -105,8 +105,16 @@ export function ClientReviewCard({ client }: { client: Client }) {
           </Button>
         </div>
         {showTasks && (
-          <div className="p-3">
-            <TaskBoardView clientId={client.id} />
+          <div className="p-3 overflow-hidden">
+            <div
+              style={{
+                transform: 'scale(0.75)',
+                transformOrigin: 'top left',
+                width: '133.33%',
+              }}
+            >
+              <TaskBoardView clientId={client.id} />
+            </div>
           </div>
         )}
       </Card>
