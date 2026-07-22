@@ -379,7 +379,7 @@ export function EODView({ memberId }: { memberId: string }) {
 
   if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>;
 
-  const TaskRow = ({ t }: { t: any; tone: Bucket }) => {
+  const TaskRow = ({ t, tone }: { t: any; tone: Bucket }) => {
     const subs = subtasksByParent[t.id] || [];
     const assignees = assigneesByTask[t.id] || [];
     const clientName = t.client_id ? clientNameById[t.client_id] : null;
