@@ -96,7 +96,10 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
 
   const startRecording = async () => {
     try {
-      const capture = await captureMicPlusSystemAudio({ requestSystem: true });
+      // Default to mic-only for reliability. Some browsers/OS combos hang on
+      // getDisplayMedia and silently drop the whole recording — start fast with
+      // the mic and offer "Add system audio" from the header controls.
+      const capture = await captureMicPlusSystemAudio({ requestSystem: false });
       streamRef.current = capture.stream;
       captureStopRef.current = capture.stop;
       chunksRef.current = [];
@@ -104,15 +107,11 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       const rec = preferredMime ? new MediaRecorder(capture.stream, { mimeType: preferredMime }) : new MediaRecorder(capture.stream);
       recordingMimeTypeRef.current = rec.mimeType || preferredMime || 'audio/webm';
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      rec.start(2000);
+      rec.onerror = (e) => console.error('MediaRecorder error', e);
+      rec.start(1000); // flush every 1s so late-cancel doesn't lose the tail
       mediaRecorderRef.current = rec;
       setIsRecording(true);
-      toast.success(
-        capture.includesSystemAudio
-          ? 'Recording started — mic + system audio (Zoom/Meet participants)'
-          : 'Recording started — mic only. Share a tab/screen with "Share audio" to capture other participants.',
-        { duration: 6000 },
-      );
+      toast.success('Recording started (mic). Use "Add system audio" to include call participants.', { duration: 6000 });
       return true;
     } catch (e: any) {
       console.error('mic denied:', e);
@@ -124,6 +123,53 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         : 'Microphone unavailable — check browser mic permissions.';
       toast.error(`Recording failed: ${hint}`, { duration: 8000 });
       return false;
+    }
+  };
+
+  // Opt-in: mix in system/tab audio (Zoom/Meet participants) after recording
+  // has already started with a reliable mic-only stream.
+  const addSystemAudio = async () => {
+    const rec = mediaRecorderRef.current;
+    if (!rec || rec.state === 'inactive') { toast.error('Start recording first'); return; }
+    try {
+      const display = await (navigator.mediaDevices as any).getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      display.getVideoTracks().forEach((t: MediaStreamTrack) => t.stop());
+      if (!display.getAudioTracks().length) {
+        display.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+        toast.error('No audio track — re-share and tick "Share tab audio"');
+        return;
+      }
+      // Mix into a new destination and swap the MediaRecorder source.
+      const AudioCtx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const dest = ctx.createMediaStreamDestination();
+      if (streamRef.current) ctx.createMediaStreamSource(streamRef.current).connect(dest);
+      ctx.createMediaStreamSource(display).connect(dest);
+      // We can't swap tracks on an active MediaRecorder — restart with the
+      // combined stream, preserving accumulated chunks.
+      const preservedChunks = chunksRef.current.slice();
+      try { rec.requestData(); rec.stop(); } catch {}
+      await new Promise((r) => setTimeout(r, 250));
+      chunksRef.current = preservedChunks;
+      const preferredMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const next = preferredMime ? new MediaRecorder(dest.stream, { mimeType: preferredMime }) : new MediaRecorder(dest.stream);
+      next.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      next.start(1000);
+      mediaRecorderRef.current = next;
+      const prevStop = captureStopRef.current;
+      captureStopRef.current = () => {
+        try { prevStop?.(); } catch {}
+        try { display.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
+        try { ctx.close(); } catch {}
+      };
+      streamRef.current = dest.stream;
+      toast.success('System audio added to recording');
+    } catch (e) {
+      console.warn('addSystemAudio failed', e);
+      toast.error('Could not add system audio (share cancelled or unsupported)');
     }
   };
 
