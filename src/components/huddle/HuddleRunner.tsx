@@ -9,7 +9,6 @@ import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
 import { WinsSegment } from './segments/WinsSegment';
 import { ClientWalkthroughSegment } from './segments/ClientWalkthroughSegment';
-import { CommitmentsSegment } from './segments/CommitmentsSegment';
 import { CloseSegment } from './segments/CloseSegment';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -324,7 +323,6 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
             onAdvanceSegment={next}
           />
         );
-      case 'commitments': return <CommitmentsSegment huddleId={huddle.id} />;
       case 'close': return <CloseSegment huddle={huddle} agenda={agenda} />;
       default:
         return (
