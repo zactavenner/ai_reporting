@@ -254,6 +254,34 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     });
   };
 
+  // When the operator is inside Client Walkthrough, the footer Next/Skip
+  // buttons step client-by-client instead of jumping to the next segment.
+  // Falls through to segment `next()` on the last client (or when we're not
+  // in the clients segment).
+  const walkthroughAdvance = async (status: 'reviewed' | 'skipped') => {
+    if (seg?.key === 'clients') {
+      const idx = timer?.sub_index ?? 0;
+      const current = clients[idx];
+      if (current && huddle) {
+        try {
+          await (supabase as any)
+            .from('huddle_client_reviews')
+            .upsert(
+              { huddle_id: huddle.id, client_id: current.id, position: idx, status },
+              { onConflict: 'huddle_id,client_id' },
+            );
+        } catch (e) {
+          console.warn('walkthrough upsert failed', e);
+        }
+      }
+      if (idx + 1 < clients.length) {
+        await updateTimer({ sub_index: idx + 1 });
+        return;
+      }
+    }
+    await next();
+  };
+
   const finish = async () => {
     if (!huddle || finalizing) return;
     setFinalizing(true);
