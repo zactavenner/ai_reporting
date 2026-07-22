@@ -9,6 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CheckCircle2, AlertOctagon, Clock, CalendarDays, Sparkles, Send, Loader2, ChevronDown, ChevronRight, MessageSquare, Video, Film, Users, UserCheck } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useMemberTasks, useTodayReport, useSubmitDailyReport } from '@/hooks/useDailyReports';
 import { useUpdateTask, useAgencyMembers } from '@/hooks/useTasks';
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
@@ -24,15 +25,29 @@ function bucketize(tasks: any[]): Record<Bucket, any[]> {
   const in3 = new Date(today); in3.setDate(today.getDate() + 3);
   const out: Record<Bucket, any[]> = { overdue: [], today: [], upcoming: [] };
   for (const t of tasks) {
-    // Triage shows only active work — completed tasks still flow into stats below.
-    if (t.status === 'completed' || t.stage === 'done') continue;
-    if (!t.due_date) { out.upcoming.push(t); continue; }
+    const isDone = t.status === 'completed' || t.stage === 'done';
+    // Today bucket: include due-today tasks even when completed so we can
+    // show a checked line-through and roll their status into the snapshot.
+    if (!t.due_date) {
+      if (!isDone) out.upcoming.push(t);
+      continue;
+    }
     const d = new Date(t.due_date); d.setHours(0,0,0,0);
-    if (d < today) out.overdue.push(t);
-    else if (d.getTime() === today.getTime()) out.today.push(t);
-    else if (d <= in3) out.upcoming.push(t);
-    else out.upcoming.push(t);
+    if (d.getTime() === today.getTime()) {
+      out.today.push({ ...t, __done: isDone });
+    } else if (isDone) {
+      // Older/newer completed tasks stay out of triage.
+      continue;
+    } else if (d < today) {
+      out.overdue.push(t);
+    } else if (d <= in3) {
+      out.upcoming.push(t);
+    } else {
+      out.upcoming.push(t);
+    }
   }
+  // Today: incomplete first, completed at the bottom, so operators see work-left first.
+  out.today.sort((a, b) => Number(!!a.__done) - Number(!!b.__done));
   return out;
 }
 
@@ -282,8 +297,22 @@ export function EODView({ memberId }: { memberId: string }) {
 
   const handleSubmit = async () => {
     const tasksSnapshot = [
-      ...buckets.overdue.map((t) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: 'in_progress' as const })),
-      ...buckets.today.map((t) => ({ task_id: t.id, title: t.title, client_id: t.client_id, status: t.status === 'blocked' ? 'blocked' as const : 'in_progress' as const })),
+      ...buckets.overdue.map((t) => ({
+        task_id: t.id, title: t.title, client_id: t.client_id,
+        bucket: 'overdue' as const,
+        status: t.status === 'blocked' ? 'blocked' as const : 'in_progress' as const,
+        assigned_to: t.assigned_to ?? null,
+        due_date: t.due_date ?? null,
+      })),
+      ...buckets.today.map((t) => ({
+        task_id: t.id, title: t.title, client_id: t.client_id,
+        bucket: 'today' as const,
+        status: (t.__done || t.status === 'completed' || t.stage === 'done')
+          ? 'completed' as const
+          : t.status === 'blocked' ? 'blocked' as const : 'in_progress' as const,
+        assigned_to: t.assigned_to ?? null,
+        due_date: t.due_date ?? null,
+      })),
     ];
     const clientTouchpoints = amClients.map((c: any) => {
       const t = touchpointsByClient[c.id] || { message: false, meeting: false, loom: false };
@@ -350,7 +379,7 @@ export function EODView({ memberId }: { memberId: string }) {
 
   if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>;
 
-  const TaskRow = ({ t }: { t: any; tone: Bucket }) => {
+  const TaskRow = ({ t, tone }: { t: any; tone: Bucket }) => {
     const subs = subtasksByParent[t.id] || [];
     const assignees = assigneesByTask[t.id] || [];
     const clientName = t.client_id ? clientNameById[t.client_id] : null;
@@ -382,13 +411,28 @@ export function EODView({ memberId }: { memberId: string }) {
       actionHandler = (e) => { e.stopPropagation(); handleSendForReview(t); };
     }
     const ActionIcon = actionIcon;
+    const isDone = t.__done || t.status === 'completed' || t.stage === 'done';
     return (
       <div
         onClick={() => setOpenTask(t)}
-        className="py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded transition-colors"
+        className={cn(
+          "py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded transition-colors",
+          isDone && "opacity-60"
+        )}
       >
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 flex items-start gap-2">
+            {tone === 'today' && (
+              <Checkbox
+                checked={isDone}
+                onClick={(e) => e.stopPropagation()}
+                onCheckedChange={(v) => {
+                  if (v) handleMarkDone(t);
+                }}
+                className="mt-0.5"
+              />
+            )}
+            <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               {clientName && (
                 <Badge variant="outline" className="h-5 px-1.5 text-[11px] font-bold text-foreground border-foreground/30 bg-foreground/5">
@@ -406,7 +450,7 @@ export function EODView({ memberId }: { memberId: string }) {
                   Client Review
                 </Badge>
               )}
-              <span className="text-sm font-medium truncate">{t.title}</span>
+              <span className={cn("text-sm font-medium truncate", isDone && "line-through text-muted-foreground")}>{t.title}</span>
             </div>
             {t.description && (
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
@@ -423,11 +467,14 @@ export function EODView({ memberId }: { memberId: string }) {
                 </button>
               )}
             </div>
+            </div>
           </div>
           <div className="flex gap-1 shrink-0">
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={actionHandler}>
-              <ActionIcon className="h-3.5 w-3.5 mr-1" /> {actionLabel}
-            </Button>
+            {!isDone && (
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={actionHandler}>
+                <ActionIcon className="h-3.5 w-3.5 mr-1" /> {actionLabel}
+              </Button>
+            )}
             {t.status !== 'blocked' && (
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={(e) => { e.stopPropagation(); setBlockerOpen({ taskId: t.id, title: t.title }); }}>
                 <AlertOctagon className="h-3.5 w-3.5 mr-1" /> Stuck
@@ -480,6 +527,9 @@ export function EODView({ memberId }: { memberId: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Due Today — moved to top so operators triage what matters before stats/touchpoints. */}
+      <Section title="Due Today" icon={Clock} items={buckets.today} tone="today" empty="Nothing due today." />
 
       {/* Period stats */}
       <Card>
@@ -587,7 +637,6 @@ export function EODView({ memberId }: { memberId: string }) {
 
       {/* Task triage */}
       <Section title="Overdue" icon={AlertOctagon} items={buckets.overdue} tone="overdue" empty="Nothing overdue. 🎉" />
-      <Section title="Due Today" icon={Clock} items={buckets.today} tone="today" empty="Nothing due today." />
       <Section title="Upcoming (next 3 days)" icon={CalendarDays} items={buckets.upcoming.slice(0, 8)} tone="upcoming" empty="Nothing on deck." />
 
       {/* The 4 questions */}
