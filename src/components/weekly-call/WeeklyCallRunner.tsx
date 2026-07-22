@@ -11,6 +11,7 @@ import {
   WinsSegment, ScorecardSegment, CreativeReviewSegment, TasksSegment, RecapSegment,
 } from './WeeklyCallSegments';
 import { WeeklyCallSettingsDrawer } from './WeeklyCallSettingsDrawer';
+import { captureMicPlusSystemAudio } from '@/lib/huddle/captureAudio';
 
 function fmt(s: number) {
   const neg = s < 0;
