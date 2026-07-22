@@ -430,6 +430,11 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
                 className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'}`}
                 title={isRecording ? 'Recording' : 'Recording inactive'}
               />
+              {isRecording && (
+                <Button size="sm" variant="outline" className="h-6 text-[11px] px-2" onClick={addSystemAudio}>
+                  + System audio
+                </Button>
+              )}
               {uploading && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-amber-500">
                   <Upload className="w-3 h-3" /> Uploading
