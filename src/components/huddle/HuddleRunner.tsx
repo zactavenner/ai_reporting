@@ -9,7 +9,6 @@ import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
 import { WinsSegment } from './segments/WinsSegment';
 import { ClientWalkthroughSegment } from './segments/ClientWalkthroughSegment';
-import { CommitmentsSegment } from './segments/CommitmentsSegment';
 import { CloseSegment } from './segments/CloseSegment';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -97,7 +96,10 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
 
   const startRecording = async () => {
     try {
-      const capture = await captureMicPlusSystemAudio({ requestSystem: true });
+      // Default to mic-only for reliability. Some browsers/OS combos hang on
+      // getDisplayMedia and silently drop the whole recording — start fast with
+      // the mic and offer "Add system audio" from the header controls.
+      const capture = await captureMicPlusSystemAudio({ requestSystem: false });
       streamRef.current = capture.stream;
       captureStopRef.current = capture.stop;
       chunksRef.current = [];
@@ -105,15 +107,11 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       const rec = preferredMime ? new MediaRecorder(capture.stream, { mimeType: preferredMime }) : new MediaRecorder(capture.stream);
       recordingMimeTypeRef.current = rec.mimeType || preferredMime || 'audio/webm';
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      rec.start(2000);
+      rec.onerror = (e) => console.error('MediaRecorder error', e);
+      rec.start(1000); // flush every 1s so late-cancel doesn't lose the tail
       mediaRecorderRef.current = rec;
       setIsRecording(true);
-      toast.success(
-        capture.includesSystemAudio
-          ? 'Recording started — mic + system audio (Zoom/Meet participants)'
-          : 'Recording started — mic only. Share a tab/screen with "Share audio" to capture other participants.',
-        { duration: 6000 },
-      );
+      toast.success('Recording started (mic). Use "Add system audio" to include call participants.', { duration: 6000 });
       return true;
     } catch (e: any) {
       console.error('mic denied:', e);
@@ -125,6 +123,53 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         : 'Microphone unavailable — check browser mic permissions.';
       toast.error(`Recording failed: ${hint}`, { duration: 8000 });
       return false;
+    }
+  };
+
+  // Opt-in: mix in system/tab audio (Zoom/Meet participants) after recording
+  // has already started with a reliable mic-only stream.
+  const addSystemAudio = async () => {
+    const rec = mediaRecorderRef.current;
+    if (!rec || rec.state === 'inactive') { toast.error('Start recording first'); return; }
+    try {
+      const display = await (navigator.mediaDevices as any).getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      display.getVideoTracks().forEach((t: MediaStreamTrack) => t.stop());
+      if (!display.getAudioTracks().length) {
+        display.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+        toast.error('No audio track — re-share and tick "Share tab audio"');
+        return;
+      }
+      // Mix into a new destination and swap the MediaRecorder source.
+      const AudioCtx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const dest = ctx.createMediaStreamDestination();
+      if (streamRef.current) ctx.createMediaStreamSource(streamRef.current).connect(dest);
+      ctx.createMediaStreamSource(display).connect(dest);
+      // We can't swap tracks on an active MediaRecorder — restart with the
+      // combined stream, preserving accumulated chunks.
+      const preservedChunks = chunksRef.current.slice();
+      try { rec.requestData(); rec.stop(); } catch {}
+      await new Promise((r) => setTimeout(r, 250));
+      chunksRef.current = preservedChunks;
+      const preferredMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const next = preferredMime ? new MediaRecorder(dest.stream, { mimeType: preferredMime }) : new MediaRecorder(dest.stream);
+      next.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      next.start(1000);
+      mediaRecorderRef.current = next;
+      const prevStop = captureStopRef.current;
+      captureStopRef.current = () => {
+        try { prevStop?.(); } catch {}
+        try { display.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
+        try { ctx.close(); } catch {}
+      };
+      streamRef.current = dest.stream;
+      toast.success('System audio added to recording');
+    } catch (e) {
+      console.warn('addSystemAudio failed', e);
+      toast.error('Could not add system audio (share cancelled or unsupported)');
     }
   };
 
@@ -255,6 +300,34 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     });
   };
 
+  // When the operator is inside Client Walkthrough, the footer Next/Skip
+  // buttons step client-by-client instead of jumping to the next segment.
+  // Falls through to segment `next()` on the last client (or when we're not
+  // in the clients segment).
+  const walkthroughAdvance = async (status: 'reviewed' | 'skipped') => {
+    if (seg?.key === 'clients') {
+      const idx = timer?.sub_index ?? 0;
+      const current = clients[idx];
+      if (current && huddle) {
+        try {
+          await (supabase as any)
+            .from('huddle_client_reviews')
+            .upsert(
+              { huddle_id: huddle.id, client_id: current.id, position: idx, status },
+              { onConflict: 'huddle_id,client_id' },
+            );
+        } catch (e) {
+          console.warn('walkthrough upsert failed', e);
+        }
+      }
+      if (idx + 1 < clients.length) {
+        await updateTimer({ sub_index: idx + 1 });
+        return;
+      }
+    }
+    await next();
+  };
+
   const finish = async () => {
     if (!huddle || finalizing) return;
     setFinalizing(true);
@@ -324,7 +397,6 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
             onAdvanceSegment={next}
           />
         );
-      case 'commitments': return <CommitmentsSegment huddleId={huddle.id} />;
       case 'close': return <CloseSegment huddle={huddle} agenda={agenda} />;
       default:
         return (
@@ -358,6 +430,11 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
                 className={`h-2.5 w-2.5 rounded-full ${isRecording ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'}`}
                 title={isRecording ? 'Recording' : 'Recording inactive'}
               />
+              {isRecording && (
+                <Button size="sm" variant="outline" className="h-6 text-[11px] px-2" onClick={addSystemAudio}>
+                  + System audio
+                </Button>
+              )}
               {uploading && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-amber-500">
                   <Upload className="w-3 h-3" /> Uploading
@@ -432,8 +509,14 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={back} disabled={timing.idx === 0}>
           <ChevronLeft className="w-5 h-5 mr-2" />Back
         </Button>
-        <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={next}><SkipForward className="w-5 h-5 mr-2" />Skip</Button>
-        <Button size="lg" className="h-12 px-6 text-base" onClick={next}>Next <ChevronRight className="w-5 h-5 ml-2" /></Button>
+        <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={() => walkthroughAdvance('skipped')}>
+          <SkipForward className="w-5 h-5 mr-2" />
+          {seg?.key === 'clients' && (timer.sub_index ?? 0) + 1 < clients.length ? 'Skip client' : 'Skip'}
+        </Button>
+        <Button size="lg" className="h-12 px-6 text-base" onClick={() => walkthroughAdvance('reviewed')}>
+          {seg?.key === 'clients' && (timer.sub_index ?? 0) + 1 < clients.length ? 'Next client' : 'Next'}
+          <ChevronRight className="w-5 h-5 ml-2" />
+        </Button>
         <div className="flex items-center gap-2 ml-2">
           <Switch checked={timer.auto_advance} onCheckedChange={(v) => updateTimer({ auto_advance: v })} />
           <span className="text-sm text-muted-foreground">Auto-advance</span>

@@ -134,7 +134,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
 
   const startRecording = async () => {
     try {
-      const capture = await captureMicPlusSystemAudio({ requestSystem: true });
+      const capture = await captureMicPlusSystemAudio({ requestSystem: false });
       streamRef.current = capture.stream;
       captureStopRef.current = capture.stop;
       chunksRef.current = [];
@@ -142,15 +142,11 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       const rec = preferredMime ? new MediaRecorder(capture.stream, { mimeType: preferredMime }) : new MediaRecorder(capture.stream);
       recordingMimeTypeRef.current = rec.mimeType || preferredMime || 'audio/webm';
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      rec.start(2000);
+      rec.onerror = (e) => console.error('MediaRecorder error', e);
+      rec.start(1000);
       mediaRecorderRef.current = rec;
       setIsRecording(true);
-      toast.success(
-        capture.includesSystemAudio
-          ? 'Recording started — mic + system audio (Zoom/Meet participants)'
-          : 'Recording started — mic only. Share a tab/screen with "Share audio" to capture other participants.',
-        { duration: 6000 },
-      );
+      toast.success('Recording started (mic).', { duration: 5000 });
       return true;
     } catch (e: any) {
       console.error('mic denied:', e);

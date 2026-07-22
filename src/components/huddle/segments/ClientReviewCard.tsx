@@ -18,6 +18,25 @@ const OnboardingIntake = lazy(() =>
   import('@/components/onboarding/OnboardingIntake').then((m) => ({ default: m.OnboardingIntake })),
 );
 
+// Session-scoped map that remembers which collapsible sections are open per
+// client, so navigating back to a client during the same huddle keeps the
+// operator's chosen layout instead of resetting to the defaults.
+type SectionState = {
+  sheet: boolean;
+  tasks: boolean;
+  creatives: boolean;
+  funnel: boolean;
+  onboarding: boolean;
+};
+const DEFAULT_SECTIONS: SectionState = {
+  sheet: true,
+  tasks: true,
+  creatives: false,
+  funnel: false,
+  onboarding: false,
+};
+const sectionStateByClient = new Map<string, SectionState>();
+
 interface PastCall {
   id: string;
   title: string | null;
@@ -30,11 +49,20 @@ export function ClientReviewCard({ client }: { client: Client }) {
   const [sheetUrl, setSheetUrl] = useState<string>('');
   const [pastCalls, setPastCalls] = useState<PastCall[]>([]);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
-  const [showSheet, setShowSheet] = useState(true);
-  const [showTasks, setShowTasks] = useState(true);
-  const [showCreatives, setShowCreatives] = useState(false);
-  const [showFunnel, setShowFunnel] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [sections, setSections] = useState<SectionState>(
+    () => sectionStateByClient.get(client.id) ?? { ...DEFAULT_SECTIONS },
+  );
+  useEffect(() => {
+    setSections(sectionStateByClient.get(client.id) ?? { ...DEFAULT_SECTIONS });
+  }, [client.id]);
+  const toggle = (key: keyof SectionState) => {
+    setSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      sectionStateByClient.set(client.id, next);
+      return next;
+    });
+  };
+  const { sheet: showSheet, tasks: showTasks, creatives: showCreatives, funnel: showFunnel, onboarding: showOnboarding } = sections;
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +114,7 @@ export function ClientReviewCard({ client }: { client: Client }) {
       <Card className="p-0 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
           <div className="text-sm font-medium">Scorecard</div>
-          <Button size="sm" variant="ghost" onClick={() => setShowSheet((s) => !s)}>
+          <Button size="sm" variant="ghost" onClick={() => toggle('sheet')}>
             {showSheet ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
         </div>
@@ -113,7 +141,7 @@ export function ClientReviewCard({ client }: { client: Client }) {
       <Card className="p-0 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
           <div className="text-sm font-medium">Tasks</div>
-          <Button size="sm" variant="ghost" onClick={() => setShowTasks((s) => !s)}>
+          <Button size="sm" variant="ghost" onClick={() => toggle('tasks')}>
             {showTasks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
         </div>
@@ -177,7 +205,7 @@ export function ClientReviewCard({ client }: { client: Client }) {
           <div className="text-sm font-medium flex items-center gap-2">
             <ImageIcon className="w-4 h-4 text-muted-foreground" /> Creatives
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setShowCreatives((s) => !s)}>
+          <Button size="sm" variant="ghost" onClick={() => toggle('creatives')}>
             {showCreatives ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
         </div>
@@ -198,7 +226,7 @@ export function ClientReviewCard({ client }: { client: Client }) {
           <div className="text-sm font-medium flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-muted-foreground" /> Funnel
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setShowFunnel((s) => !s)}>
+          <Button size="sm" variant="ghost" onClick={() => toggle('funnel')}>
             {showFunnel ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
         </div>
@@ -219,7 +247,7 @@ export function ClientReviewCard({ client }: { client: Client }) {
           <div className="text-sm font-medium flex items-center gap-2">
             <ClipboardList className="w-4 h-4 text-muted-foreground" /> Offer / Onboarding Form
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setShowOnboarding((s) => !s)}>
+          <Button size="sm" variant="ghost" onClick={() => toggle('onboarding')}>
             {showOnboarding ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
         </div>
