@@ -104,18 +104,23 @@ export function CloseSegment({ huddle, agenda }: Props) {
       const today = todayISO();
       const { data: dueToday } = await (supabase as any)
         .from('tasks')
-        .select('id,title,due_date,assigned_to,client_id,agency_members!tasks_assigned_to_fkey(name),clients(name)')
+        .select('id,title,due_date,assigned_to,client_id,status,clients(name)')
         .eq('due_date', today)
-        .neq('status', 'completed')
-        .neq('status', 'done')
+        .not('status', 'in', '("completed","done")')
         .order('created_at', { ascending: true })
-        .limit(50);
+        .limit(100);
+      const memberIds = Array.from(new Set(((dueToday as any[]) || []).map((t) => t.assigned_to).filter(Boolean)));
+      let memberNameMap: Record<string, string> = {};
+      if (memberIds.length) {
+        const { data: mems } = await supabase.from('agency_members').select('id,name').in('id', memberIds as string[]);
+        memberNameMap = Object.fromEntries((mems || []).map((m: any) => [m.id, m.name]));
+      }
       if (!cancelled) {
         setTasksDueToday(
           ((dueToday as any[]) || []).map((t) => ({
             id: t.id,
             title: t.title,
-            assignee: t?.agency_members?.name || null,
+            assignee: t.assigned_to ? memberNameMap[t.assigned_to] || null : null,
             due_date: t.due_date,
             client_name: t?.clients?.name || null,
           })),
