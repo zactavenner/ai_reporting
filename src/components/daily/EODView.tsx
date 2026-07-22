@@ -9,6 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CheckCircle2, AlertOctagon, Clock, CalendarDays, Sparkles, Send, Loader2, ChevronDown, ChevronRight, MessageSquare, Video, Film, Users, UserCheck } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useMemberTasks, useTodayReport, useSubmitDailyReport } from '@/hooks/useDailyReports';
 import { useUpdateTask, useAgencyMembers } from '@/hooks/useTasks';
 import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
@@ -410,13 +411,28 @@ export function EODView({ memberId }: { memberId: string }) {
       actionHandler = (e) => { e.stopPropagation(); handleSendForReview(t); };
     }
     const ActionIcon = actionIcon;
+    const isDone = t.__done || t.status === 'completed' || t.stage === 'done';
     return (
       <div
         onClick={() => setOpenTask(t)}
-        className="py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded transition-colors"
+        className={cn(
+          "py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded transition-colors",
+          isDone && "opacity-60"
+        )}
       >
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 flex items-start gap-2">
+            {tone === 'today' && (
+              <Checkbox
+                checked={isDone}
+                onClick={(e) => e.stopPropagation()}
+                onCheckedChange={(v) => {
+                  if (v) handleMarkDone(t);
+                }}
+                className="mt-0.5"
+              />
+            )}
+            <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               {clientName && (
                 <Badge variant="outline" className="h-5 px-1.5 text-[11px] font-bold text-foreground border-foreground/30 bg-foreground/5">
@@ -434,7 +450,7 @@ export function EODView({ memberId }: { memberId: string }) {
                   Client Review
                 </Badge>
               )}
-              <span className="text-sm font-medium truncate">{t.title}</span>
+              <span className={cn("text-sm font-medium truncate", isDone && "line-through text-muted-foreground")}>{t.title}</span>
             </div>
             {t.description && (
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
@@ -451,11 +467,14 @@ export function EODView({ memberId }: { memberId: string }) {
                 </button>
               )}
             </div>
+            </div>
           </div>
           <div className="flex gap-1 shrink-0">
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={actionHandler}>
-              <ActionIcon className="h-3.5 w-3.5 mr-1" /> {actionLabel}
-            </Button>
+            {!isDone && (
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={actionHandler}>
+                <ActionIcon className="h-3.5 w-3.5 mr-1" /> {actionLabel}
+              </Button>
+            )}
             {t.status !== 'blocked' && (
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={(e) => { e.stopPropagation(); setBlockerOpen({ taskId: t.id, title: t.title }); }}>
                 <AlertOctagon className="h-3.5 w-3.5 mr-1" /> Stuck
