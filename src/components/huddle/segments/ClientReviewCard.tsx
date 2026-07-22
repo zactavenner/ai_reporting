@@ -1,12 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense, lazy } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { ExternalLink, ChevronDown, ChevronUp, FileText, Image as ImageIcon, GitBranch, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { embedSheetUrl } from '@/lib/huddle/sheet';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
 import type { Client } from '@/hooks/useClients';
+
+const CreativesSection = lazy(() =>
+  import('@/components/creative/CreativesSection').then((m) => ({ default: m.CreativesSection })),
+);
+const FunnelPreviewTab = lazy(() =>
+  import('@/components/funnel/FunnelPreviewTab').then((m) => ({ default: m.FunnelPreviewTab })),
+);
+const OnboardingIntake = lazy(() =>
+  import('@/components/onboarding/OnboardingIntake').then((m) => ({ default: m.OnboardingIntake })),
+);
 
 interface PastCall {
   id: string;
@@ -22,6 +32,9 @@ export function ClientReviewCard({ client }: { client: Client }) {
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(true);
   const [showTasks, setShowTasks] = useState(true);
+  const [showCreatives, setShowCreatives] = useState(false);
+  const [showFunnel, setShowFunnel] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +168,69 @@ export function ClientReviewCard({ client }: { client: Client }) {
               );
             })}
           </ul>
+        )}
+      </Card>
+
+      {/* Creatives board */}
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+          <div className="text-sm font-medium flex items-center gap-2">
+            <ImageIcon className="w-4 h-4 text-muted-foreground" /> Creatives
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setShowCreatives((s) => !s)}>
+            {showCreatives ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+        {showCreatives && (
+          <div className="p-3 overflow-hidden">
+            <div style={{ transform: 'scale(0.8)', transformOrigin: 'top left', width: '125%' }}>
+              <Suspense fallback={<div className="text-sm text-muted-foreground p-3">Loading creatives…</div>}>
+                <CreativesSection clientId={client.id} clientName={client.name} isPublicView={false} />
+              </Suspense>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Funnel */}
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+          <div className="text-sm font-medium flex items-center gap-2">
+            <GitBranch className="w-4 h-4 text-muted-foreground" /> Funnel
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setShowFunnel((s) => !s)}>
+            {showFunnel ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+        {showFunnel && (
+          <div className="p-3 overflow-hidden">
+            <div style={{ transform: 'scale(0.8)', transformOrigin: 'top left', width: '125%' }}>
+              <Suspense fallback={<div className="text-sm text-muted-foreground p-3">Loading funnel…</div>}>
+                <FunnelPreviewTab clientId={client.id} isPublicView={false} />
+              </Suspense>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Offer / onboarding intake */}
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+          <div className="text-sm font-medium flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-muted-foreground" /> Offer / Onboarding Form
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setShowOnboarding((s) => !s)}>
+            {showOnboarding ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+        {showOnboarding && (
+          <div className="p-3 overflow-hidden">
+            <div style={{ transform: 'scale(0.85)', transformOrigin: 'top left', width: '117.65%' }}>
+              <Suspense fallback={<div className="text-sm text-muted-foreground p-3">Loading onboarding…</div>}>
+                <OnboardingIntake clientId={client.id} isPublicView={false} />
+              </Suspense>
+            </div>
+          </div>
         )}
       </Card>
     </div>
