@@ -204,6 +204,27 @@ export function ClientReviewCard({ client }: { client: Client }) {
         )}
       </Card>
 
+      {/* Ads Manager — live campaigns, ad sets, ads, top performers scoped to this client */}
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+          <div className="text-sm font-medium flex items-center gap-2">
+            <Megaphone className="w-4 h-4 text-muted-foreground" /> Ads Manager
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => toggle('ads')}>
+            {showAds ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+        {showAds && (
+          <div className="p-3 overflow-hidden">
+            <div style={{ transform: 'scale(0.8)', transformOrigin: 'top left', width: '125%' }}>
+              <Suspense fallback={<div className="text-sm text-muted-foreground p-3">Loading ads manager…</div>}>
+                <AdsManagerTab clientId={client.id} clientName={client.name} />
+              </Suspense>
+            </div>
+          </div>
+        )}
+      </Card>
+
       {/* Creatives board */}
       <Card className="p-0 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
