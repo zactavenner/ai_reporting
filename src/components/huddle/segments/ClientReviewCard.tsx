@@ -2,7 +2,7 @@ import { useEffect, useState, Suspense, lazy } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, ChevronDown, ChevronUp, FileText, Image as ImageIcon, GitBranch, ClipboardList, Megaphone } from 'lucide-react';
+import { ExternalLink, ChevronDown, ChevronUp, FileText, Image as ImageIcon, GitBranch, ClipboardList, Megaphone, Facebook, Globe, Users, Briefcase, Link2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { embedSheetUrl } from '@/lib/huddle/sheet';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
@@ -69,6 +69,39 @@ export function ClientReviewCard({ client }: { client: Client }) {
   };
   const { sheet: showSheet, tasks: showTasks, ads: showAds, creatives: showCreatives, funnel: showFunnel, onboarding: showOnboarding } = sections;
 
+  // Quick links derived from client integration ids — only render buttons for
+  // fields that are actually configured, so operators aren't clicking dead links.
+  const quickLinks: { label: string; href: string; icon: React.ComponentType<{ className?: string }> }[] = [];
+  const c: any = client;
+  if (c.meta_ad_account_id) {
+    const acct = String(c.meta_ad_account_id).replace(/^act_/, '');
+    quickLinks.push({
+      label: 'Meta Ads',
+      href: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${acct}`,
+      icon: Facebook,
+    });
+  }
+  if (c.ghl_location_id) {
+    quickLinks.push({
+      label: 'GHL',
+      href: `https://app.gohighlevel.com/v2/location/${c.ghl_location_id}/dashboard`,
+      icon: Users,
+    });
+  }
+  if (c.hubspot_portal_id) {
+    quickLinks.push({
+      label: 'HubSpot',
+      href: `https://app.hubspot.com/contacts/${c.hubspot_portal_id}`,
+      icon: Briefcase,
+    });
+  }
+  if (c.website_url) {
+    quickLinks.push({ label: 'Website', href: c.website_url, icon: Globe });
+  }
+  if (c.slack_channel_url) {
+    quickLinks.push({ label: 'Slack', href: c.slack_channel_url, icon: Link2 });
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -114,6 +147,24 @@ export function ClientReviewCard({ client }: { client: Client }) {
           )}
         </div>
       </div>
+
+      {/* Quick links — one-click hops to the external tools we reference during huddle */}
+      {quickLinks.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground mr-1">Quick links:</span>
+          {quickLinks.map((q) => {
+            const Icon = q.icon;
+            return (
+              <Button key={q.label} size="sm" variant="secondary" asChild>
+                <a href={q.href} target="_blank" rel="noreferrer">
+                  <Icon className="w-3.5 h-3.5 mr-1" /> {q.label}
+                  <ExternalLink className="w-3 h-3 ml-1 opacity-60" />
+                </a>
+              </Button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Scorecard iframe — zoomed out so more of the sheet is visible at once */}
       <Card className="p-0 overflow-hidden">
