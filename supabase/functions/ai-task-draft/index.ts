@@ -84,22 +84,49 @@ Deno.serve(async (req) => {
   if (task.client_id) {
     const { data: client } = await supa
       .from("clients")
-      .select("id, name, industry, website")
+      .select("id, name, industry, website_url, description, offer_description, media_buyer, account_manager, product_url, intake_company_name")
       .eq("id", task.client_id).maybeSingle();
     clientName = client?.name || "";
+    // Offers use `status` (active/pending_fulfillment), not `is_active`.
+    // Column list mirrors the actual public.client_offers schema.
     const { data: offers } = await supa
       .from("client_offers")
-      .select("name, headline, sub_headline, target_audience, pain_points, transformation, offer_summary, targeted_returns, asset_class")
+      .select(
+        "title, description, fund_name, fund_type, target_investor, targeted_returns, hold_period, min_investment, distribution_schedule, industry_focus, tax_advantages, credibility, fund_history, additional_notes, brand_notes, status",
+      )
       .eq("client_id", task.client_id)
-      .eq("is_active", true)
-      .limit(2);
-    const offerLines = (offers || []).map((o: any) =>
-      `- ${o.name || "Offer"}: ${[o.headline, o.target_audience, o.asset_class, o.targeted_returns].filter(Boolean).join(" · ")}`
-    ).join("\n");
+      .in("status", ["active", "pending_fulfillment"])
+      .order("updated_at", { ascending: false })
+      .limit(3);
+    const offerBlocks = (offers || []).map((o: any, i: number) => {
+      const lines = [
+        `### Offer ${i + 1}: ${o.title || o.fund_name || "Untitled"}`,
+        o.fund_type && `Type: ${o.fund_type}`,
+        o.industry_focus && `Industry: ${o.industry_focus}`,
+        o.target_investor && `Target investor: ${o.target_investor}`,
+        o.targeted_returns && `Targeted returns: ${o.targeted_returns}`,
+        o.min_investment && `Min investment: ${o.min_investment}`,
+        o.hold_period && `Hold period: ${o.hold_period}`,
+        o.distribution_schedule && `Distributions: ${o.distribution_schedule}`,
+        o.tax_advantages && `Tax advantages: ${o.tax_advantages}`,
+        o.credibility && `Credibility: ${o.credibility}`,
+        o.fund_history && `Track record: ${o.fund_history}`,
+        o.description && `Description: ${String(o.description).slice(0, 600)}`,
+        o.brand_notes && `Brand notes: ${String(o.brand_notes).slice(0, 300)}`,
+        o.additional_notes && `Notes: ${String(o.additional_notes).slice(0, 400)}`,
+      ].filter(Boolean);
+      return lines.join("\n");
+    }).join("\n\n");
     clientCtx = [
+      client?.intake_company_name && client.intake_company_name !== client?.name && `Legal name: ${client.intake_company_name}`,
       client?.industry && `Industry: ${client.industry}`,
-      client?.website && `Website: ${client.website}`,
-      offerLines && `Active offers:\n${offerLines}`,
+      client?.website_url && `Website: ${client.website_url}`,
+      client?.product_url && `Product page: ${client.product_url}`,
+      client?.media_buyer && `Media buyer: ${client.media_buyer}`,
+      client?.account_manager && `Account manager: ${client.account_manager}`,
+      client?.description && `About: ${String(client.description).slice(0, 600)}`,
+      client?.offer_description && `Offer summary: ${String(client.offer_description).slice(0, 800)}`,
+      offerBlocks && `## Active offers\n${offerBlocks}`,
     ].filter(Boolean).join("\n");
   }
 
@@ -118,30 +145,32 @@ Deno.serve(async (req) => {
   const system = [
     "You are AI Studio — the agency's senior creative strategist and copywriter.",
     "You produce ROUGH DRAFTS for internal tasks so the assignee starts at the 80% line.",
+    "ALWAYS read the client + offer context FIRST. Every draft must reference the client's specific offer(s), targeted returns, target investor, and industry — never generic templates. If client context is provided, you MUST use it; do not ask questions that the context already answers.",
     "Draft in the exact format the task requests. Be concrete, specific, and ready to ship after light editing.",
     "Direct-response principles (Dan Kennedy): one big idea, specific promise, pattern interrupt, proof, single CTA.",
     "COMPLIANCE (investment marketing): NEVER say 'guaranteed'. Use 'targeted returns'. Add a short risk disclaimer when copy references returns or performance.",
     "Output: clean Markdown. Use numbered lists for variations. Use H3 for sections. Keep it tight — no preamble, no 'as an AI'.",
-    "If the task is ambiguous or requires human judgment (e.g. approvals, scheduling, calls), produce a short checklist of what's needed instead of guessing.",
+    "Only fall back to a 'questions to unblock' checklist when the task is genuinely ambiguous AND the client context does not provide enough to draft. If any client/offer context is present, PRODUCE THE DRAFT — do not ask questions.",
   ].join("\n");
 
   const user = [
+    clientName ? `# Client\n${clientName}` : "",
+    clientCtx,
+    "",
+    commentCtx ? `# Recent discussion\n${commentCtx}` : "",
+    "",
     `# Task`,
     `Title: ${task.title}`,
     task.description ? `Description:\n${task.description}` : "",
     task.category ? `Category: ${task.category}` : "",
     task.due_date ? `Due: ${task.due_date}` : "",
     "",
-    clientName ? `# Client\n${clientName}` : "",
-    clientCtx,
-    "",
-    commentCtx ? `# Recent discussion\n${commentCtx}` : "",
-    "",
     `# Draft`,
+    `First, silently review the Client and Active offers sections above. Ground every specific in that context (fund name, targeted returns, target investor, industry, hold period). Do not invent numbers not present in the context.`,
     `Produce the deliverable now. If the title asks for "3 angles", give exactly 3 numbered angles with: angle name, 1-line hook, 2-line body, CTA.`,
     `If it asks for scripts/copy/hooks/headlines, deliver that format directly.`,
     `If it asks for a summary, provide bullets + TL;DR.`,
-    `If unclear, list the 3-5 questions you'd ask the team to unblock.`,
+    `Only if the task is ambiguous AND no useful client/offer context exists above, list the 3-5 questions you'd ask the team to unblock.`,
   ].filter(Boolean).join("\n");
 
   let draft = "";
