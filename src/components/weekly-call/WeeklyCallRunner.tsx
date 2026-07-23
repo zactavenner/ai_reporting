@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, X, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, X, Upload, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';
@@ -119,14 +119,14 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timing.remaining, timer?.segment_index, timer?.finished, call?.started_at, agenda.length]);
 
-  // Hard cap: nothing runs forever. After 60 minutes from start, auto-finish
+  // Hard cap: nothing runs forever. After 2 hours from start, auto-finish
   // (uploads recording + kicks off transcription/task extraction).
-  const HARD_CAP_S = 3600;
+  const HARD_CAP_S = 7200;
   useEffect(() => {
     if (!call?.started_at || timer?.finished || autoFinishedRef.current) return;
     if (meetingElapsed >= HARD_CAP_S) {
       autoFinishedRef.current = true;
-      toast.message('60-minute cap reached — wrapping call automatically');
+      toast.message('2-hour cap reached — wrapping call automatically');
       finish();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -319,6 +319,41 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
     }
   };
 
+  // Full restart: hard-delete this call and all its child rows so a fresh
+  // meeting can start from segment 0. Guarantees no zombie transcript,
+  // attendance, or task snapshot stays behind.
+  const restart = async () => {
+    if (!call || cancelling) return;
+    if (!window.confirm('Restart this call? Recording, transcript, attendance, ratings, and any drafted tasks for this call will be permanently deleted.')) return;
+    setCancelling(true);
+    try {
+      const rec = mediaRecorderRef.current;
+      if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch {} }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      chunksRef.current = [];
+      setIsRecording(false);
+      autoFinishedRef.current = false;
+      const id = call.id;
+      const childTables = [
+        'client_weekly_call_attendance', 'client_weekly_call_ratings',
+        'client_weekly_call_items', 'client_weekly_call_tasks',
+      ];
+      await Promise.allSettled(
+        childTables.map((t) => (supabase as any).from(t).delete().eq('call_id', id))
+      );
+      await (supabase as any).from('client_weekly_calls').delete().eq('id', id);
+      toast.success('Call restarted');
+      await resetForNewCall();
+      onFinish?.();
+    } catch (e: any) {
+      console.error('restart failed', e);
+      toast.error(e?.message || 'Restart failed');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (loading || !call || !timer) {
     return <div className="min-h-[40vh] flex items-center justify-center text-muted-foreground">Loading weekly call…</div>;
   }
@@ -423,6 +458,9 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
             </Button>
           </>
         )}
+        <Button variant="ghost" onClick={restart} className="text-muted-foreground hover:text-foreground" disabled={finalizing || cancelling} title="Delete this call and start over">
+          <RotateCcw className="w-4 h-4 mr-2" />Restart
+        </Button>
       </footer>
     </div>
   );

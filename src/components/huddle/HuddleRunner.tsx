@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, Upload, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, Upload, CheckCircle2, AlertCircle, X, RotateCcw } from 'lucide-react';
 import { useTodayHuddle, useSegmentTiming } from '@/hooks/useHuddle';
 import { useHuddleClients } from '@/hooks/useHuddleClients';
 import { HuddleAgendaRail } from './HuddleAgendaRail';
@@ -82,13 +82,13 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     }
   }, [timing.remaining, timer?.running, isFacilitator]);
 
-  // Hard cap: 60 minutes then auto-finish
-  const HARD_CAP_S = 3600;
+  // Hard cap: 2 hours then auto-finish (nothing runs forever)
+  const HARD_CAP_S = 7200;
   useEffect(() => {
     if (!huddle?.started_at || timer?.finished || autoFinishedRef.current) return;
     if (meetingElapsed >= HARD_CAP_S) {
       autoFinishedRef.current = true;
-      toast.message('60-minute cap reached — wrapping huddle');
+      toast.message('2-hour cap reached — wrapping huddle');
       finish();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -375,6 +375,37 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     onFinish?.();
   };
 
+  // Full restart: hard-delete this huddle and all its history so it can be
+  // re-run from scratch. Guarantees no zombie runs and no stale transcript
+  // or attendance data linger.
+  const restart = async () => {
+    if (!huddle) return;
+    if (!window.confirm('Restart this huddle? All attendance, ratings, commitments, wins, client reviews, recording and transcript for today will be permanently deleted.')) return;
+    try {
+      const rec = mediaRecorderRef.current;
+      if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch {} }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      chunksRef.current = [];
+      setIsRecording(false);
+      const id = huddle.id;
+      // Best-effort cleanup of child rows in case FK cascade isn't configured.
+      const childTables = [
+        'huddle_attendance', 'huddle_ratings', 'huddle_wins',
+        'huddle_commitments', 'huddle_client_reviews', 'huddle_blockers', 'huddle_flags',
+      ];
+      await Promise.allSettled(
+        childTables.map((t) => (supabase as any).from(t).delete().eq('huddle_id', id))
+      );
+      await (supabase as any).from('huddles').delete().eq('id', id);
+      toast.success('Huddle restarted');
+      window.location.reload();
+    } catch (e: any) {
+      console.error('restart failed', e);
+      toast.error(e?.message || 'Restart failed');
+    }
+  };
+
   if (loading || !huddle || !timer) {
     return <div className="min-h-[60vh] flex items-center justify-center text-muted-foreground">Loading huddle…</div>;
   }
@@ -532,6 +563,9 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
             </Button>
           </>
         )}
+        <Button size="lg" variant="ghost" onClick={restart} className="h-12 px-4 text-base text-muted-foreground hover:text-foreground" disabled={finalizing} title="Delete this huddle and start over">
+          <RotateCcw className="w-5 h-5 mr-2" />Restart
+        </Button>
       </footer>
     </div>
   );
