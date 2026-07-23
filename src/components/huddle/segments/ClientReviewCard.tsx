@@ -2,7 +2,7 @@ import { useEffect, useState, Suspense, lazy } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, ChevronDown, ChevronUp, FileText, Image as ImageIcon, GitBranch, ClipboardList } from 'lucide-react';
+import { ExternalLink, ChevronDown, ChevronUp, FileText, Image as ImageIcon, GitBranch, ClipboardList, Megaphone } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { embedSheetUrl } from '@/lib/huddle/sheet';
 import { TaskBoardView } from '@/components/tasks/TaskBoardView';
@@ -17,6 +17,9 @@ const FunnelPreviewTab = lazy(() =>
 const OnboardingIntake = lazy(() =>
   import('@/components/onboarding/OnboardingIntake').then((m) => ({ default: m.OnboardingIntake })),
 );
+const AdsManagerTab = lazy(() =>
+  import('@/components/ads-manager/AdsManagerTab').then((m) => ({ default: m.AdsManagerTab })),
+);
 
 // Session-scoped map that remembers which collapsible sections are open per
 // client, so navigating back to a client during the same huddle keeps the
@@ -24,6 +27,7 @@ const OnboardingIntake = lazy(() =>
 type SectionState = {
   sheet: boolean;
   tasks: boolean;
+  ads: boolean;
   creatives: boolean;
   funnel: boolean;
   onboarding: boolean;
@@ -31,6 +35,7 @@ type SectionState = {
 const DEFAULT_SECTIONS: SectionState = {
   sheet: true,
   tasks: true,
+  ads: false,
   creatives: false,
   funnel: false,
   onboarding: false,
@@ -62,7 +67,7 @@ export function ClientReviewCard({ client }: { client: Client }) {
       return next;
     });
   };
-  const { sheet: showSheet, tasks: showTasks, creatives: showCreatives, funnel: showFunnel, onboarding: showOnboarding } = sections;
+  const { sheet: showSheet, tasks: showTasks, ads: showAds, creatives: showCreatives, funnel: showFunnel, onboarding: showOnboarding } = sections;
 
   useEffect(() => {
     let cancelled = false;
@@ -196,6 +201,27 @@ export function ClientReviewCard({ client }: { client: Client }) {
               );
             })}
           </ul>
+        )}
+      </Card>
+
+      {/* Ads Manager — live campaigns, ad sets, ads, top performers scoped to this client */}
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+          <div className="text-sm font-medium flex items-center gap-2">
+            <Megaphone className="w-4 h-4 text-muted-foreground" /> Ads Manager
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => toggle('ads')}>
+            {showAds ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+        {showAds && (
+          <div className="p-3 overflow-hidden">
+            <div style={{ transform: 'scale(0.8)', transformOrigin: 'top left', width: '125%' }}>
+              <Suspense fallback={<div className="text-sm text-muted-foreground p-3">Loading ads manager…</div>}>
+                <AdsManagerTab clientId={client.id} clientName={client.name} />
+              </Suspense>
+            </div>
+          </div>
         )}
       </Card>
 
