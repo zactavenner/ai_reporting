@@ -181,7 +181,15 @@ Deno.serve(async (req) => {
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-      { temperature: 0.7, max_tokens: 1800 },
+      {
+        temperature: 0.7,
+        max_tokens: 1800,
+        models: [
+          "google/gemini-2.0-flash-001",
+          "openai/gpt-4o-mini",
+          "nvidia/nemotron-3-ultra-550b-a55b:free",
+        ],
+      },
     );
     draft = (res.text || "").trim();
     modelUsed = res.model;
