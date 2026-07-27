@@ -837,6 +837,28 @@ const getHistoryIcon = (action: string) => {
                 {clientName && (
                   <p className="text-sm text-muted-foreground mt-1">Client: {clientName}</p>
                 )}
+                {task.client_id && taskOffers.length > 0 && !isPublicView && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-muted-foreground">Offer:</span>
+                    <Select
+                      value={(task as any).offer_id || 'none'}
+                      onValueChange={(v) => updateTask.mutate({ id: task.id, offer_id: v === 'none' ? null : v } as any)}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-[220px]">
+                        <SelectValue placeholder="Link an offer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No offer</SelectItem>
+                        {taskOffers.map((o: any) => (
+                          <SelectItem key={o.id} value={o.id}>{o.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {linkedOffer && (
+                      <Badge variant="secondary" className="text-[10px]">{linkedOffer.title}</Badge>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap text-xs text-muted-foreground mt-1">
                   {task.created_at && (
                     <span>
