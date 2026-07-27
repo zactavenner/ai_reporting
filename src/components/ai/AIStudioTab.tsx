@@ -2587,7 +2587,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   })}
                 </div>
                 )}
-                {videoModels.length > 0 && (() => {
+                {selectedAgentMode === "video" && videoModels.length > 0 && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
                   const supportedSet = new Set<VideoRes>();
                   for (const id of videoModels) {
