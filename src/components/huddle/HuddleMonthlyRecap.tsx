@@ -433,11 +433,12 @@ export function HuddleMonthlyRecap() {
   );
 }
 
-function Kpi({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function Kpi({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">{icon}<span>{label}</span></div>
       <div className="text-2xl font-semibold mt-1">{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>}
     </Card>
   );
 }
