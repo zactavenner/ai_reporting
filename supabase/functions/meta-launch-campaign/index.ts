@@ -73,6 +73,14 @@ Deno.serve(async (req) => {
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   let campaignId: string | null = null;
   let accessToken = "";
+  let launchRowId: string | null = null;
+
+  const logEvent = async (event: string, detail: Record<string, unknown> = {}) => {
+    if (!launchRowId) return;
+    try {
+      await supabase.from("campaign_launch_events").insert({ launch_id: launchRowId, event, detail });
+    } catch { /* best-effort */ }
+  };
 
   try {
     const body = await req.json();
@@ -91,6 +99,9 @@ Deno.serve(async (req) => {
       targeting = { geo_locations: { countries: ["US"] } },
       creatives = [] as Creative[],
       specialAdCategories = [] as string[],
+      idempotencyKey,
+      offeringExemption,
+      complianceApprovalId,
     } = body;
 
     if (!clientId) throw new Error("clientId required");
@@ -99,9 +110,53 @@ Deno.serve(async (req) => {
     if (!pageId) throw new Error("pageId required");
     if (!dailyBudgetDollars || Number(dailyBudgetDollars) < 1) throw new Error("dailyBudgetDollars must be ≥ 1");
     if (!creatives.length) throw new Error("At least one creative required");
+    if (!idempotencyKey) throw new Error("idempotencyKey required");
 
     const map = OBJECTIVE_MAP[objective];
     if (!map) throw new Error(`Unsupported objective: ${objective}`);
+
+    // 0. Idempotency — reuse existing launch row if the key was seen before.
+    const { data: existing } = await supabase
+      .from("campaign_launches")
+      .select("id,status,meta_campaign_id,meta_adset_ids,meta_ad_ids,meta_lead_form_id")
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existing) {
+      // If we already produced Meta objects, return them and skip re-creation.
+      if (existing.status === "created_paused" || existing.status === "active") {
+        return new Response(JSON.stringify({
+          success: true,
+          launchId: existing.id,
+          campaignId: existing.meta_campaign_id,
+          adSetId: (existing.meta_adset_ids || [])[0],
+          leadFormId: existing.meta_lead_form_id,
+          ads: (existing.meta_ad_ids || []).map((id: string) => ({ adId: id, creativeId: null })),
+          reused: true,
+          message: "Idempotent replay — returning existing launch",
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      launchRowId = existing.id;
+      await supabase.from("campaign_launches").update({
+        status: "in_progress", current_step: "restart", error_message: null,
+      }).eq("id", launchRowId);
+    } else {
+      const { data: fresh, error: freshErr } = await supabase
+        .from("campaign_launches")
+        .insert({
+          client_id: clientId,
+          idempotency_key: idempotencyKey,
+          status: "in_progress",
+          current_step: "start",
+          payload: body,
+          offering_exemption: offeringExemption ?? null,
+          compliance_approval_id: complianceApprovalId ?? null,
+        })
+        .select("id")
+        .single();
+      if (freshErr) throw new Error(`Failed to record launch: ${freshErr.message}`);
+      launchRowId = fresh.id;
+    }
+    await logEvent("started", { objective, dailyBudgetDollars });
 
     const { data: client } = await supabase
       .from("clients")
@@ -115,6 +170,7 @@ Deno.serve(async (req) => {
     // 1. Optionally create lead form on the page
     let resolvedLeadFormId: string | undefined = leadFormId;
     if (objective === "leads" && !resolvedLeadFormId && newLeadForm) {
+      await supabase.from("campaign_launches").update({ current_step: "lead_form" }).eq("id", launchRowId);
       const lfPayload: Record<string, string> = {
         name: newLeadForm.name || campaignName,
         access_token: accessToken,
@@ -128,9 +184,14 @@ Deno.serve(async (req) => {
       if (newLeadForm.intro) lfPayload.question_page_custom_headline = newLeadForm.intro;
       const lf = await post(`${G}/${pageId}/leadgen_forms`, lfPayload);
       resolvedLeadFormId = lf.id;
+      await supabase.from("campaign_launch_objects").insert({
+        launch_id: launchRowId, kind: "leadform", meta_id: lf.id, status: "created",
+      });
+      await logEvent("lead_form_created", { leadFormId: lf.id });
     }
 
     // 2. Campaign
+    await supabase.from("campaign_launches").update({ current_step: "campaign" }).eq("id", launchRowId);
     const camp = await post(`${G}/${actId}/campaigns`, {
       name: campaignName,
       objective: map.obj,
@@ -140,8 +201,13 @@ Deno.serve(async (req) => {
       access_token: accessToken,
     });
     campaignId = camp.id;
+    await supabase.from("campaign_launch_objects").insert({
+      launch_id: launchRowId, kind: "campaign", meta_id: campaignId, status: "created",
+    });
+    await logEvent("campaign_created", { campaignId });
 
     // 3. Ad Set
+    await supabase.from("campaign_launches").update({ current_step: "ad_set" }).eq("id", launchRowId);
     const promoted: Record<string, any> = {};
     if (objective === "leads" && pageId) promoted.page_id = pageId;
     if (objective === "conversions") {
@@ -165,9 +231,16 @@ Deno.serve(async (req) => {
     if (Object.keys(promoted).length) adSetParams.promoted_object = JSON.stringify(promoted);
     const adset = await post(`${G}/${actId}/adsets`, adSetParams);
     const adSetId = adset.id;
+    await supabase.from("campaign_launch_objects").insert({
+      launch_id: launchRowId, kind: "adset", meta_id: adSetId, status: "created",
+    });
+    await logEvent("adset_created", { adSetId });
 
     // 4. Upload creatives + create ads
+    await supabase.from("campaign_launches").update({ current_step: "ads" }).eq("id", launchRowId);
     const createdAds: any[] = [];
+    const creativeIds: string[] = [];
+    const adIds: string[] = [];
     for (let i = 0; i < creatives.length; i++) {
       const c = creatives[i];
       const up = await uploadCreative(actId, accessToken, c);
@@ -208,6 +281,10 @@ Deno.serve(async (req) => {
         object_story_spec: JSON.stringify(objectStorySpec),
         access_token: accessToken,
       });
+      creativeIds.push(creative.id);
+      await supabase.from("campaign_launch_objects").insert({
+        launch_id: launchRowId, kind: "creative", ordinal: i, meta_id: creative.id, status: "created",
+      });
 
       const ad = await post(`${G}/${actId}/ads`, {
         name: c.name || `${campaignName} - ad ${i + 1}`,
@@ -216,8 +293,13 @@ Deno.serve(async (req) => {
         status: "PAUSED",
         access_token: accessToken,
       });
+      adIds.push(ad.id);
+      await supabase.from("campaign_launch_objects").insert({
+        launch_id: launchRowId, kind: "ad", ordinal: i, meta_id: ad.id, status: "created",
+      });
       createdAds.push({ adId: ad.id, creativeId: creative.id, ...up });
     }
+    await logEvent("ads_created", { count: createdAds.length });
 
     // 5. Cache locally so the ads table shows them immediately
     await supabase.from("meta_campaigns").upsert({
@@ -249,8 +331,20 @@ Deno.serve(async (req) => {
       synced_at: new Date().toISOString(),
     }, { onConflict: "client_id,meta_adset_id" });
 
+    await supabase.from("campaign_launches").update({
+      status: "created_paused",
+      current_step: "done",
+      meta_campaign_id: campaignId,
+      meta_adset_ids: [adSetId],
+      meta_ad_ids: adIds,
+      meta_creative_ids: creativeIds,
+      meta_lead_form_id: resolvedLeadFormId ?? null,
+    }).eq("id", launchRowId);
+    await logEvent("completed", { campaignId, adSetId, adCount: adIds.length });
+
     return new Response(JSON.stringify({
       success: true,
+      launchId: launchRowId,
       campaignId,
       adSetId,
       leadFormId: resolvedLeadFormId,
@@ -259,11 +353,21 @@ Deno.serve(async (req) => {
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("meta-launch-campaign error:", e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    if (launchRowId) {
+      const partial = campaignId != null;
+      await supabase.from("campaign_launches").update({
+        status: partial ? "partial" : "failed",
+        error_message: errMsg,
+        meta_campaign_id: campaignId,
+      }).eq("id", launchRowId);
+      await logEvent("failed", { error: errMsg, partial });
+    }
     // Rollback: delete campaign if it was created
     if (campaignId && accessToken) {
       try { await fetch(`${G}/${campaignId}?access_token=${accessToken}`, { method: "DELETE" }); } catch {}
     }
-    return new Response(JSON.stringify({ success: false, error: e instanceof Error ? e.message : String(e) }), {
+    return new Response(JSON.stringify({ success: false, launchId: launchRowId, error: errMsg }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

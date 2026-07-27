@@ -12,6 +12,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
 import { LeadFormEditor, DEFAULT_LEAD_FORM_QUESTIONS, LeadFormQuestion } from '@/components/funnel/LeadFormEditor';
+import {
+  ACCREDITED_PREFIX,
+  DEFAULT_DISCLOSURE,
+  scanBodyCopy,
+  ensureAccreditedPrefix,
+  checkExemptionForPublicAds,
+  hasBlocking,
+  withDisclosure,
+  makeIdempotencyKey,
+  type Exemption,
+  type ComplianceIssue,
+} from '@/lib/adCompliance';
+import { AlertTriangle, ShieldCheck } from 'lucide-react';
 
 interface NewCampaignWizardProps {
   open: boolean;
@@ -57,6 +70,13 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
   const [linkUrl, setLinkUrl] = useState('');
   const [primaryText, setPrimaryText] = useState('');
   const [headline, setHeadline] = useState('');
+  // Compliance
+  const [exemption, setExemption] = useState<Exemption>('506c');
+  const [complianceOverride, setComplianceOverride] = useState<{ id: string; approver: string } | null>(null);
+  const [overrideApprover, setOverrideApprover] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
+  const [appendDisclosure, setAppendDisclosure] = useState(true);
+  const [savingOverride, setSavingOverride] = useState(false);
   // Targeting
   const [ageMin, setAgeMin] = useState('30');
   const [ageMax, setAgeMax] = useState('65');
@@ -85,6 +105,8 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
     setInterests(''); setBehaviors(''); setCustomAudiences(''); setPlacements('automatic');
     setLeadFormName(''); setLeadFormIntro(''); setPrivacyUrl(''); setThankYouUrl('');
     setQuestions(DEFAULT_LEAD_FORM_QUESTIONS); setSmsVerify(false);
+    setExemption('506c'); setComplianceOverride(null);
+    setOverrideApprover(''); setOverrideReason(''); setAppendDisclosure(true);
   };
   const close = () => { reset(); onClose(); };
 
@@ -167,11 +189,22 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
     if (files.length === 0) { toast.error('Add at least one creative'); return; }
     if (objective === 'conversions' && !pixelId) { toast.error('Pick a Pixel for conversions'); return; }
 
+    // Compliance preflight (blocking)
+    const issues = [
+      ...checkExemptionForPublicAds(exemption, complianceOverride?.id ?? null),
+      ...scanBodyCopy(primaryText),
+    ];
+    if (hasBlocking(issues)) {
+      toast.error(`Compliance blocked: ${issues.find(i => i.severity === 'blocking')?.message}`);
+      return;
+    }
+
     setLaunching(true);
     try {
       toast.info('Uploading creatives…');
       const uploaded = await uploadFilesToStorage();
       toast.info('Creating campaign on Meta…');
+      const finalBody = appendDisclosure ? withDisclosure(primaryText, DEFAULT_DISCLOSURE) : primaryText;
       const payload: any = {
         clientId,
         campaignName: name,
@@ -183,12 +216,16 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
         pixelId: objective === 'conversions' ? pixelId : undefined,
         customEventType: objective === 'conversions' ? customEventType : undefined,
         targeting: buildTargeting(),
+        idempotencyKey: makeIdempotencyKey(`c_${clientId.slice(0, 8)}`),
+        offeringExemption: exemption,
+        complianceApprovalId: complianceOverride?.id ?? undefined,
+        specialAdCategories: ['FINANCIAL_PRODUCTS_SERVICES'],
         creatives: uploaded.map((u, i) => ({
           fileUrl: u.url,
           fileType: u.type,
           fileName: u.name,
           name: `${name} — ${i + 1}`,
-          message: primaryText || undefined,
+          message: finalBody || undefined,
           headline: headline || undefined,
           linkUrl: linkUrl || thankYouUrl || undefined,
           callToActionType: ctaType,
@@ -311,6 +348,35 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
     }
   };
 
+  const saveComplianceOverride = async () => {
+    if (!overrideApprover.trim() || !overrideReason.trim()) {
+      toast.error('Approver name and reason required');
+      return;
+    }
+    setSavingOverride(true);
+    try {
+      const { data, error } = await supabase.from('compliance_approvals').insert({
+        client_id: clientId,
+        exemption,
+        approver_name: overrideApprover,
+        reason: overrideReason,
+        attested: true,
+      }).select('id').single();
+      if (error) throw error;
+      setComplianceOverride({ id: data.id, approver: overrideApprover });
+      toast.success('Compliance override recorded');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to record override');
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
+  const complianceIssues: ComplianceIssue[] = [
+    ...checkExemptionForPublicAds(exemption, complianceOverride?.id ?? null),
+    ...(primaryText ? scanBodyCopy(primaryText) : []),
+  ];
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -346,6 +412,38 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                 <Label className="text-xs">Daily budget ($)</Label>
                 <Input type="number" value={budget} onChange={e => setBudget(e.target.value)} />
               </div>
+            </div>
+            <div className="rounded-md border p-3 space-y-2 bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/40">
+              <div className="text-[11px] font-medium flex items-center gap-2">
+                <ShieldCheck className="h-3.5 w-3.5 text-amber-600" /> Compliance — offering exemption
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(['506c', '506b', 'other'] as Exemption[]).map((e) => (
+                  <Button key={e} size="sm" variant={exemption === e ? 'default' : 'outline'}
+                    className="h-8 text-[11px]" onClick={() => { setExemption(e); setComplianceOverride(null); }}>
+                    {e === '506c' ? 'Rule 506(c)' : e === '506b' ? 'Rule 506(b)' : 'Other / review'}
+                  </Button>
+                ))}
+              </div>
+              {exemption === '506b' && !complianceOverride && (
+                <div className="rounded border border-red-300 bg-red-50 dark:bg-red-950/20 p-2 space-y-1.5">
+                  <div className="text-[11px] text-red-800 dark:text-red-300 flex items-start gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>Rule 506(b) prohibits general solicitation. Public Meta ads are blocked without a documented compliance override.</span>
+                  </div>
+                  <Input placeholder="Compliance approver name" value={overrideApprover} onChange={(e) => setOverrideApprover(e.target.value)} className="h-7 text-[11px]" />
+                  <Textarea placeholder="Reason / documented approval reference" rows={2} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} className="text-[11px]" />
+                  <Button size="sm" className="h-7 text-[11px] w-full" onClick={saveComplianceOverride} disabled={savingOverride}>
+                    {savingOverride ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                    Record compliance override
+                  </Button>
+                </div>
+              )}
+              {complianceOverride && (
+                <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  Override recorded by {complianceOverride.approver}. Preflight will pass — compliance approval still required.
+                </div>
+              )}
             </div>
             <div className="rounded-md border p-3 space-y-2 bg-muted/20">
               <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-2">
@@ -578,7 +676,27 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
               <div>
                 <Label className="text-xs">Primary text (ad copy)</Label>
                 <Textarea value={primaryText} onChange={(e) => setPrimaryText(e.target.value)} rows={3}
-                  placeholder="Written for the feed. Hook, promise, CTA." />
+                  placeholder={`${ACCREDITED_PREFIX} Written for the feed. Hook, promise, CTA.`} />
+                <div className="flex items-center gap-2 mt-1">
+                  <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                    onClick={() => setPrimaryText((t) => ensureAccreditedPrefix(t))}>
+                    Prepend "{ACCREDITED_PREFIX}"
+                  </Button>
+                  <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <Switch checked={appendDisclosure} onCheckedChange={setAppendDisclosure} />
+                    Auto-append risk disclosure
+                  </label>
+                </div>
+                {primaryText && complianceIssues.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {complianceIssues.map((iss, i) => (
+                      <div key={i} className={`flex items-start gap-1.5 text-[10px] px-2 py-1 rounded ${iss.severity === 'blocking' ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/20 dark:text-amber-300'}`}>
+                        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                        <span>{iss.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <Label className="text-xs">Headline</Label>

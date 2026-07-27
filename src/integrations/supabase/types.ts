@@ -2603,6 +2603,73 @@ export type Database = {
           },
         ]
       }
+      approved_claims: {
+        Row: {
+          approval_status: string
+          approved_at: string
+          approver: string | null
+          claim: string
+          client_id: string
+          created_at: string
+          expires_at: string | null
+          gross_or_net: string | null
+          id: string
+          required_disclosure: string | null
+          supporting_source: string | null
+          time_period: string | null
+        }
+        Insert: {
+          approval_status?: string
+          approved_at?: string
+          approver?: string | null
+          claim: string
+          client_id: string
+          created_at?: string
+          expires_at?: string | null
+          gross_or_net?: string | null
+          id?: string
+          required_disclosure?: string | null
+          supporting_source?: string | null
+          time_period?: string | null
+        }
+        Update: {
+          approval_status?: string
+          approved_at?: string
+          approver?: string | null
+          claim?: string
+          client_id?: string
+          created_at?: string
+          expires_at?: string | null
+          gross_or_net?: string | null
+          id?: string
+          required_disclosure?: string | null
+          supporting_source?: string | null
+          time_period?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approved_claims_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "approved_claims_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approved_claims_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       assets: {
         Row: {
           client_id: string | null
@@ -3832,6 +3899,209 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      campaign_launch_events: {
+        Row: {
+          created_at: string
+          detail: Json
+          event: string
+          id: string
+          launch_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json
+          event: string
+          id?: string
+          launch_id: string
+        }
+        Update: {
+          created_at?: string
+          detail?: Json
+          event?: string
+          id?: string
+          launch_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_launch_events_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_launch_objects: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          launch_id: string
+          meta_id: string | null
+          ordinal: number
+          payload: Json
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          launch_id: string
+          meta_id?: string | null
+          ordinal?: number
+          payload?: Json
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          launch_id?: string
+          meta_id?: string | null
+          ordinal?: number
+          payload?: Json
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_launch_objects_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_launches: {
+        Row: {
+          activated_at: string | null
+          client_id: string
+          compliance_approval_id: string | null
+          created_at: string
+          created_by: string | null
+          current_step: string | null
+          error_code: string | null
+          error_message: string | null
+          id: string
+          idempotency_key: string
+          meta_ad_ids: string[] | null
+          meta_adset_ids: string[] | null
+          meta_campaign_id: string | null
+          meta_creative_ids: string[] | null
+          meta_lead_form_id: string | null
+          offering_exemption: string | null
+          payload: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string | null
+          client_id: string
+          compliance_approval_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_step?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key: string
+          meta_ad_ids?: string[] | null
+          meta_adset_ids?: string[] | null
+          meta_campaign_id?: string | null
+          meta_creative_ids?: string[] | null
+          meta_lead_form_id?: string | null
+          offering_exemption?: string | null
+          payload?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string | null
+          client_id?: string
+          compliance_approval_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_step?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key?: string
+          meta_ad_ids?: string[] | null
+          meta_adset_ids?: string[] | null
+          meta_campaign_id?: string | null
+          meta_creative_ids?: string[] | null
+          meta_lead_form_id?: string | null
+          offering_exemption?: string | null
+          payload?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      campaign_templates: {
+        Row: {
+          archived: boolean
+          category: string | null
+          config: Json
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_starter: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          archived?: boolean
+          category?: string | null
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_starter?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          archived?: boolean
+          category?: string | null
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_starter?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       capi_events_sent: {
         Row: {
@@ -6774,6 +7044,74 @@ export type Database = {
           whatsapp_notify_numbers?: string[]
         }
         Relationships: []
+      }
+      compliance_approvals: {
+        Row: {
+          approver_email: string | null
+          approver_name: string
+          attested: boolean
+          client_id: string
+          created_at: string
+          created_by: string | null
+          exemption: string
+          id: string
+          launch_id: string | null
+          reason: string
+        }
+        Insert: {
+          approver_email?: string | null
+          approver_name: string
+          attested?: boolean
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          exemption: string
+          id?: string
+          launch_id?: string | null
+          reason: string
+        }
+        Update: {
+          approver_email?: string | null
+          approver_name?: string
+          attested?: boolean
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          exemption?: string
+          id?: string
+          launch_id?: string | null
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compliance_approvals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "compliance_approvals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compliance_approvals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "compliance_approvals_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_launches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contact_timeline_events: {
         Row: {
