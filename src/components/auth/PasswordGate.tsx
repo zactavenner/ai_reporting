@@ -15,7 +15,7 @@ interface PasswordGateProps {
 
 function PasswordGateContent({ children }: PasswordGateProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('hpa1234');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -127,6 +127,11 @@ function PasswordGateContent({ children }: PasswordGateProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={error && !password ? 'border-destructive' : ''}
+                autoComplete="new-password"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                name="dashboard-access-code"
                 autoFocus
               />
             </div>
@@ -137,6 +142,11 @@ function PasswordGateContent({ children }: PasswordGateProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value.toLowerCase())}
                 className={error && !name ? 'border-destructive' : ''}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                name="dashboard-member-name"
               />
             </div>
             {error && (
