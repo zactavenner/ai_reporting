@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { AgentFilesUploader } from "./AgentFilesUploader";
 import { CronSchedulePicker } from "./CronSchedulePicker";
+import { AgentTestChat } from "./AgentTestChat";
 import { CONNECTOR_REGISTRY, MODEL_REGISTRY, getModelInfo } from "@/lib/modelRegistry";
 import { toast } from "sonner";
 
@@ -448,6 +449,14 @@ export function AgentProfilePanel({
             scopeLabel={isClientView ? `${clientName || "Client"} addendum + Master` : "Master · trickles to every client"}
           />
         </Card>
+
+        {/* Test chat — validate this agent respects memory/instructions/files */}
+        <AgentTestChat
+          agentId={agent.id}
+          agentName={agent.name}
+          clientId={isClientView ? clientId : null}
+          clientName={clientName}
+        />
 
         {/* Schedule (master only) */}
         {mode === "master" && (
