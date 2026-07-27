@@ -15926,6 +15926,7 @@ export type Database = {
           huddle_id: string | null
           id: string
           meeting_id: string | null
+          offer_id: string | null
           parent_task_id: string | null
           priority: string
           project_id: string | null
@@ -15955,6 +15956,7 @@ export type Database = {
           huddle_id?: string | null
           id?: string
           meeting_id?: string | null
+          offer_id?: string | null
           parent_task_id?: string | null
           priority?: string
           project_id?: string | null
@@ -15984,6 +15986,7 @@ export type Database = {
           huddle_id?: string | null
           id?: string
           meeting_id?: string | null
+          offer_id?: string | null
           parent_task_id?: string | null
           priority?: string
           project_id?: string | null
@@ -16041,6 +16044,13 @@ export type Database = {
             columns: ["meeting_id"]
             isOneToOne: false
             referencedRelation: "agency_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "client_offers"
             referencedColumns: ["id"]
           },
           {

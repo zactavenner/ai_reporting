@@ -1,0 +1,1 @@
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS offer_id uuid REFERENCES public.client_offers(id) ON DELETE SET NULL; CREATE INDEX IF NOT EXISTS idx_tasks_offer_id ON public.tasks(offer_id);
