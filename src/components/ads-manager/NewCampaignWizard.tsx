@@ -413,6 +413,38 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                 <Input type="number" value={budget} onChange={e => setBudget(e.target.value)} />
               </div>
             </div>
+            <div className="rounded-md border p-3 space-y-2 bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/40">
+              <div className="text-[11px] font-medium flex items-center gap-2">
+                <ShieldCheck className="h-3.5 w-3.5 text-amber-600" /> Compliance — offering exemption
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(['506c', '506b', 'other'] as Exemption[]).map((e) => (
+                  <Button key={e} size="sm" variant={exemption === e ? 'default' : 'outline'}
+                    className="h-8 text-[11px]" onClick={() => { setExemption(e); setComplianceOverride(null); }}>
+                    {e === '506c' ? 'Rule 506(c)' : e === '506b' ? 'Rule 506(b)' : 'Other / review'}
+                  </Button>
+                ))}
+              </div>
+              {exemption === '506b' && !complianceOverride && (
+                <div className="rounded border border-red-300 bg-red-50 dark:bg-red-950/20 p-2 space-y-1.5">
+                  <div className="text-[11px] text-red-800 dark:text-red-300 flex items-start gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>Rule 506(b) prohibits general solicitation. Public Meta ads are blocked without a documented compliance override.</span>
+                  </div>
+                  <Input placeholder="Compliance approver name" value={overrideApprover} onChange={(e) => setOverrideApprover(e.target.value)} className="h-7 text-[11px]" />
+                  <Textarea placeholder="Reason / documented approval reference" rows={2} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} className="text-[11px]" />
+                  <Button size="sm" className="h-7 text-[11px] w-full" onClick={saveComplianceOverride} disabled={savingOverride}>
+                    {savingOverride ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                    Record compliance override
+                  </Button>
+                </div>
+              )}
+              {complianceOverride && (
+                <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  Override recorded by {complianceOverride.approver}. Preflight will pass — compliance approval still required.
+                </div>
+              )}
+            </div>
             <div className="rounded-md border p-3 space-y-2 bg-muted/20">
               <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-2">
                 Meta assets {assetsLoading && <Loader2 className="h-3 w-3 animate-spin" />}
