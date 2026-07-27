@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AgentFilesUploader } from "./AgentFilesUploader";
 import { CronSchedulePicker } from "./CronSchedulePicker";
 import { AgentTestChat } from "./AgentTestChat";
+import { AgentJournalPanel } from "./AgentJournalPanel";
 import { CONNECTOR_REGISTRY, MODEL_REGISTRY, getModelInfo } from "@/lib/modelRegistry";
 import { toast } from "sonner";
 
@@ -457,6 +458,16 @@ export function AgentProfilePanel({
           clientId={isClientView ? clientId : null}
           clientName={clientName}
         />
+
+        {/* Journal & self-improvement — client view only */}
+        {isClientView && clientId && (
+          <AgentJournalPanel
+            clientId={clientId}
+            agentId={agent.id}
+            agentName={agent.name}
+            clientName={clientName}
+          />
+        )}
 
         {/* Schedule (master only) */}
         {mode === "master" && (
