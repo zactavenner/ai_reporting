@@ -8,6 +8,7 @@ export interface Task {
   client_id: string | null;
   title: string;
   description: string | null;
+  offer_id: string | null;
   status: string;
   priority: string;
   stage: string;
