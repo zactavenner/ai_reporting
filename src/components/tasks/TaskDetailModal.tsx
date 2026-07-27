@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import ReactMarkdown from 'react-markdown';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -564,17 +565,19 @@ export function TaskDetailModal({ task, open, onOpenChange, clientName, clientId
                       }
                     }}
                     rows={3}
-                    placeholder="Add a description..."
+                    placeholder="Add a description… (Markdown supported: **bold**, *italic*, - lists, [links](url))"
                     className="mt-1"
                     autoFocus
                   />
                 ) : (
-                  <p 
+                  <div
                     onClick={() => setIsEditingDescription(true)}
-                    className="text-sm mt-1 cursor-pointer hover:bg-muted/50 rounded p-2 -mx-2 transition-colors min-h-[40px]"
+                    className="text-sm mt-1 cursor-pointer hover:bg-muted/50 rounded p-2 -mx-2 transition-colors min-h-[40px] prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_a]:text-primary break-words"
                   >
-                    {task.description || <span className="text-muted-foreground italic">Click to add description...</span>}
-                  </p>
+                    {task.description
+                      ? <ReactMarkdown>{task.description}</ReactMarkdown>
+                      : <span className="text-muted-foreground italic">Click to add description...</span>}
+                  </div>
                 )}
               </div>
               
