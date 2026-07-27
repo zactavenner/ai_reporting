@@ -485,63 +485,9 @@ const Index = () => {
                   </section>
                 </SectionErrorBoundary>
 
-                <SectionErrorBoundary sectionName="KPI Grid">
-                  <section>
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <h2 className="text-lg font-bold">Key Performance Indicators</h2>
-                        <p className="text-sm text-muted-foreground">Agency-wide performance metrics with trend comparison</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => setMetricsCustomizeOpen(true)}>
-                        <Sliders className="h-4 w-4 mr-2" />
-                        Customize
-                      </Button>
-                    </div>
-                    {dashboardMetricsLoading ? (
-                      <div className="text-center py-8 text-muted-foreground">Loading metrics...</div>
-                    ) : (
-                      <KPIGrid
-                        metrics={aggregatedMetrics}
-                        showFundedMetrics
-                        onMetricClick={(metric) => setDrillDownModal(metric)}
-                        dailySnapshots={dailyMetrics.slice(-7)}
-                      />
-                    )}
-                  </section>
+                <SectionErrorBoundary sectionName="AI Studio">
+                  <AgencyAIStudioTab />
                 </SectionErrorBoundary>
-
-                <SectionErrorBoundary sectionName="Best Performing">
-                  <BestPerformingPanel clientIds={clients?.map((c: any) => c.id)} />
-                </SectionErrorBoundary>
-
-                <SectionErrorBoundary sectionName="AI Insights">
-                  <AIInsightsCard />
-                </SectionErrorBoundary>
-
-                <SectionErrorBoundary sectionName="Integration Health">
-                  <section>
-                    <h2 className="text-lg font-bold mb-2">Integration Health</h2>
-                    <IntegrationStatusCards onNavigateToSettings={() => {}} />
-                  </section>
-                </SectionErrorBoundary>
-
-                <SectionErrorBoundary sectionName="Sync Status">
-                  <AgencySyncStatusPanel
-                    clients={clients}
-                    clientFullSettings={clientFullSettings}
-                    clientMetrics={clientMetrics}
-                  />
-                </SectionErrorBoundary>
-
-                <SectionErrorBoundary sectionName="Data Health">
-                  <DataHealthCard />
-                </SectionErrorBoundary>
-
-                {currentMember?.role === 'admin' && (
-                  <SectionErrorBoundary sectionName="Master Meta Token">
-                    <MasterMetaTokenCard />
-                  </SectionErrorBoundary>
-                )}
               </>
             )}
 
