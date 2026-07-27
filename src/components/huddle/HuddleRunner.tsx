@@ -71,6 +71,17 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     return Math.max(0, Math.floor((Date.now() - started) / 1000));
   }, [huddle?.started_at, timing.elapsed]);
 
+  // Per-client count-up: resets when sub_index changes inside the clients
+  // segment. Ticks locally every 500ms so operators see live seconds.
+  const [clientStart, setClientStart] = useState<number>(() => Date.now());
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+  useEffect(() => { setClientStart(Date.now()); }, [timer?.sub_index, timer?.segment_index, huddle?.id]);
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, []);
+  const clientElapsed = Math.max(0, Math.floor((nowTick - clientStart) / 1000));
+
   // Chime + auto-advance on segment end. Only the facilitator auto-advances so
   // multiple viewers don't race to write the next segment.
   useEffect(() => {
@@ -414,6 +425,9 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const timerColor = timing.remaining < 0 ? 'text-destructive' : pct <= 0.2 ? 'text-amber-500' : 'text-foreground';
 
   const seg = timing.seg;
+  const inClients = seg?.key === 'clients';
+  const bigDisplay = inClients ? clientElapsed : Math.max(0, timing.remaining);
+  const bigColor = inClients ? 'text-foreground' : timerColor;
   const finalizeStatus = (huddle as any)?.finalize_status ?? null;
   const body = (() => {
     if (!seg) return null;
@@ -505,10 +519,12 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       </header>
 
       <div className="flex flex-col items-center justify-center py-6 gap-2">
-        <div className={`font-mono tabular-nums text-7xl md:text-8xl lg:text-9xl font-bold ${timerColor}`}>
-          {fmt(timing.remaining)}
+        <div className={`font-mono tabular-nums text-7xl md:text-8xl lg:text-9xl font-bold ${bigColor}`}>
+          {fmt(bigDisplay)}
         </div>
-        {timing.remaining < 0 && <div className="text-destructive text-sm uppercase tracking-widest">Overtime</div>}
+        <div className="text-xs font-mono tabular-nums text-muted-foreground">
+          Total {fmt(meetingElapsed)}{!inClients && timing.remaining < 0 ? ' · Overtime' : ''}
+        </div>
       </div>
 
       <div className="flex-1 flex min-h-0">

@@ -4,9 +4,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Copy, Check, Trophy, Users, Star, ListChecks, TrendingUp, Clock } from 'lucide-react';
+import { Copy, Check, Trophy, Users, Star, ListChecks, TrendingUp, Clock, Timer, AlertCircle, Mic, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend } from 'recharts';
 
 function monthBounds(ym: string): [string, string] {
   const [y, m] = ym.split('-').map(Number);
@@ -49,7 +49,18 @@ export function HuddleMonthlyRecap() {
     improvements: { text: string; date: string }[];
     clientTime: ClientTimeStat[];
     totalClientSeconds: number;
-  }>({ loading: true, huddles: [], totalMembers: 0, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: [], topWins: [], improvements: [], clientTime: [], totalClientSeconds: 0 });
+    totalDurationS: number;
+    avgDurationS: number;
+    onTimePct: number;
+    tasksTotal: number;
+    tasksDone: number;
+    absentees: { name: string; missed: number }[];
+    perHuddle: { date: string; duration_min: number; attendance_pct: number; rating: number | null; wins: number; blockers: number }[];
+    ratingDist: { rating: string; count: number }[];
+    transcribedCount: number;
+    clientsReviewedTotal: number;
+    clientsSkippedTotal: number;
+  }>({ loading: true, huddles: [], totalMembers: 0, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: [], topWins: [], improvements: [], clientTime: [], totalClientSeconds: 0, totalDurationS: 0, avgDurationS: 0, onTimePct: 0, tasksTotal: 0, tasksDone: 0, absentees: [], perHuddle: [], ratingDist: [], transcribedCount: 0, clientsReviewedTotal: 0, clientsSkippedTotal: 0 });
 
   useEffect(() => {
     const load = async () => {
@@ -66,7 +77,7 @@ export function HuddleMonthlyRecap() {
       const totalMembers = (members || []).length || 1;
 
       if (ids.length === 0) {
-        setState({ loading: false, huddles: [], totalMembers, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: (members || []).map((m: any) => ({ name: m.name, attended: 0, wins: 0 })), topWins: [], improvements: [], clientTime: [], totalClientSeconds: 0 });
+        setState({ loading: false, huddles: [], totalMembers, attendancePct: 0, avgRating: null, followThroughPct: 0, memberStats: (members || []).map((m: any) => ({ name: m.name, attended: 0, wins: 0 })), topWins: [], improvements: [], clientTime: [], totalClientSeconds: 0, totalDurationS: 0, avgDurationS: 0, onTimePct: 0, tasksTotal: 0, tasksDone: 0, absentees: [], perHuddle: [], ratingDist: [], transcribedCount: 0, clientsReviewedTotal: 0, clientsSkippedTotal: 0 });
         return;
       }
 
@@ -105,13 +116,27 @@ export function HuddleMonthlyRecap() {
       const followThroughPct = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
       const huddleDateMap = Object.fromEntries((huddles || []).map((h: any) => [h.id, h.date]));
+      const winsByHuddle = new Map<string, number>();
+      (wins || []).forEach((w: any) => winsByHuddle.set(w.huddle_id, (winsByHuddle.get(w.huddle_id) || 0) + 1));
+      const blockersByHuddle = new Map<string, number>();
+      (blockers || []).forEach((b: any) => blockersByHuddle.set(b.huddle_id, (blockersByHuddle.get(b.huddle_id) || 0) + 1));
+      const attByHuddle = new Map<string, Set<string>>();
+      (att || []).forEach((a: any) => {
+        const set = attByHuddle.get(a.huddle_id) || new Set<string>();
+        set.add(a.member_id || a.member_name);
+        attByHuddle.set(a.huddle_id, set);
+      });
       const topWins = (wins || []).map((w: any) => ({ name: w.member_name || 'Team', text: w.text, date: huddleDateMap[w.huddle_id] })).slice(0, 25);
       const improvements = (blockers || []).map((b: any) => ({ text: b.description, date: huddleDateMap[b.huddle_id] })).slice(0, 25);
 
       // Per-client time roll-up
       const timeMap = new Map<string, ClientTimeStat>();
+      let clientsReviewedTotal = 0;
+      let clientsSkippedTotal = 0;
       (reviews || []).forEach((r: any) => {
         const d = Number(r.duration_s) || 0;
+        if (r.status === 'reviewed') clientsReviewedTotal += 1;
+        else if (r.status === 'skipped') clientsSkippedTotal += 1;
         if (!r.client_id) return;
         const cur = timeMap.get(r.client_id) || { client_id: r.client_id, name: r?.clients?.name || 'Unknown', total_s: 0, sessions: 0, avg_s: 0 };
         cur.total_s += d;
@@ -123,12 +148,40 @@ export function HuddleMonthlyRecap() {
         .sort((a, b) => b.total_s - a.total_s);
       const totalClientSeconds = clientTime.reduce((sum, c) => sum + c.total_s, 0);
 
-      setState({ loading: false, huddles: huddles || [], totalMembers, attendancePct, avgRating, followThroughPct, memberStats, topWins, improvements, clientTime, totalClientSeconds });
+      // Executive metrics
+      const totalDurationS = (huddles || []).reduce((s: number, h: any) => s + (h.actual_duration_s || 0), 0);
+      const avgDurationS = ids.length ? Math.round(totalDurationS / ids.length) : 0;
+      const onTime = (huddles || []).filter((h: any) => h.actual_duration_s != null && h.planned_duration_s && h.actual_duration_s <= h.planned_duration_s).length;
+      const onTimePct = ids.length ? Math.round((onTime / ids.length) * 100) : 0;
+      const transcribedCount = (huddles || []).filter((h: any) => !!h.summary_text).length;
+      const absentees = (members || []).map((m: any) => ({ name: m.name, missed: ids.length - (attByMember.get(m.id) || 0) }))
+        .filter((m: any) => m.missed > 0)
+        .sort((a: any, b: any) => b.missed - a.missed);
+      const perHuddle = (huddles || []).map((h: any) => ({
+        date: h.date.slice(5),
+        duration_min: Math.round((h.actual_duration_s || 0) / 60),
+        attendance_pct: Math.round(((attByHuddle.get(h.id)?.size || 0) / totalMembers) * 100),
+        rating: h.avg_rating ?? null,
+        wins: winsByHuddle.get(h.id) || 0,
+        blockers: blockersByHuddle.get(h.id) || 0,
+      }));
+      const ratingBuckets: Record<string, number> = { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 };
+      (huddles || []).forEach((h: any) => {
+        if (h.avg_rating == null) return;
+        const b = String(Math.round(h.avg_rating));
+        if (ratingBuckets[b] != null) ratingBuckets[b] += 1;
+      });
+      const ratingDist = ['5', '4', '3', '2', '1'].map(r => ({ rating: `${r}★`, count: ratingBuckets[r] }));
+
+      setState({ loading: false, huddles: huddles || [], totalMembers, attendancePct, avgRating, followThroughPct, memberStats, topWins, improvements, clientTime, totalClientSeconds, totalDurationS, avgDurationS, onTimePct, tasksTotal: totalTasks, tasksDone: doneTasks, absentees, perHuddle, ratingDist, transcribedCount, clientsReviewedTotal, clientsSkippedTotal });
     };
     load();
   }, [ym]);
 
   const chartData = useMemo(() => state.memberStats.slice(0, 15).map(m => ({ name: m.name.split(' ')[0], attended: m.attended })), [state.memberStats]);
+
+  const longestClient = state.clientTime[0];
+  const shortestClient = state.clientTime.filter(c => c.total_s > 0).slice(-1)[0];
 
   const summary = useMemo(() => {
     const [startISO, endISO] = monthBounds(ym);
@@ -179,12 +232,42 @@ export function HuddleMonthlyRecap() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi icon={<Users className="w-4 h-4" />} label="Attendance" value={`${state.attendancePct}%`} />
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
         <Kpi icon={<ListChecks className="w-4 h-4" />} label="Huddles" value={state.huddles.length.toString()} />
-        <Kpi icon={<Clock className="w-4 h-4" />} label="Time on clients" value={fmtDuration(state.totalClientSeconds)} />
+        <Kpi icon={<Clock className="w-4 h-4" />} label="Total time" value={fmtDuration(state.totalDurationS)} />
+        <Kpi icon={<Timer className="w-4 h-4" />} label="Avg length" value={fmtDuration(state.avgDurationS)} />
+        <Kpi icon={<CheckCircle2 className="w-4 h-4" />} label="On-time" value={`${state.onTimePct}%`} />
+        <Kpi icon={<Users className="w-4 h-4" />} label="Attendance" value={`${state.attendancePct}%`} />
+        <Kpi icon={<Star className="w-4 h-4" />} label="Avg rating" value={state.avgRating ? state.avgRating.toFixed(1) : '—'} />
         <Kpi icon={<TrendingUp className="w-4 h-4" />} label="Follow-through" value={`${state.followThroughPct}%`} />
+        <Kpi icon={<Mic className="w-4 h-4" />} label="Transcribed" value={`${state.transcribedCount}/${state.huddles.length}`} />
       </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi icon={<Clock className="w-4 h-4" />} label="Time on clients" value={fmtDuration(state.totalClientSeconds)} sub={`${state.clientsReviewedTotal} reviewed · ${state.clientsSkippedTotal} skipped`} />
+        <Kpi icon={<ListChecks className="w-4 h-4" />} label="Tasks generated" value={`${state.tasksDone}/${state.tasksTotal}`} sub="completed / total" />
+        <Kpi icon={<Trophy className="w-4 h-4" />} label="Wins logged" value={state.topWins.length.toString()} />
+        <Kpi icon={<AlertCircle className="w-4 h-4" />} label="Blockers surfaced" value={state.improvements.length.toString()} />
+      </div>
+
+      <Card className="p-4">
+        <div className="text-sm font-semibold mb-2">Daily trend — duration, attendance & wins</div>
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={state.perHuddle}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="date" fontSize={11} />
+              <YAxis yAxisId="min" fontSize={11} unit="m" />
+              <YAxis yAxisId="pct" orientation="right" fontSize={11} unit="%" domain={[0, 100]} />
+              <Tooltip />
+              <Legend />
+              <Line yAxisId="min" type="monotone" dataKey="duration_min" name="Duration (min)" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              <Line yAxisId="pct" type="monotone" dataKey="attendance_pct" name="Attendance %" stroke="hsl(var(--muted-foreground))" strokeWidth={2} dot={false} />
+              <Line yAxisId="min" type="monotone" dataKey="wins" name="Wins" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
 
       <Card className="p-4">
         <div className="text-sm font-semibold mb-2">Attendance by team member</div>
@@ -201,6 +284,44 @@ export function HuddleMonthlyRecap() {
         </div>
       </Card>
 
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="p-4">
+          <div className="text-sm font-semibold mb-2">Rating distribution</div>
+          <div className="h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={state.ratingDist} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis type="number" fontSize={11} allowDecimals={false} />
+                <YAxis type="category" dataKey="rating" fontSize={11} width={40} />
+                <Tooltip />
+                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm font-semibold mb-2">Client time extremes</div>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between border-b pb-2">
+              <div className="text-xs text-muted-foreground">Longest total</div>
+              <div className="font-medium">{longestClient?.name || '—'}</div>
+              <div className="font-mono tabular-nums text-emerald-600">{longestClient ? fmtDuration(longestClient.total_s) : '—'}</div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">Shortest total (&gt;0)</div>
+              <div className="font-medium">{shortestClient?.name || '—'}</div>
+              <div className="font-mono tabular-nums text-amber-600">{shortestClient ? fmtDuration(shortestClient.total_s) : '—'}</div>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t">
+              <div className="text-xs text-muted-foreground">Avg time / client / huddle</div>
+              <div className="font-mono tabular-nums">
+                {state.clientTime.length && state.huddles.length ? fmtDuration(Math.round(state.totalClientSeconds / (state.clientTime.length * state.huddles.length))) : '—'}
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       <Card>
         <Table>
           <TableHeader>
@@ -209,19 +330,23 @@ export function HuddleMonthlyRecap() {
               <TableHead>Attended</TableHead>
               <TableHead>Attendance %</TableHead>
               <TableHead>Wins shared</TableHead>
+              <TableHead>Missed</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {state.memberStats.map(m => (
+            {state.memberStats.map(m => {
+              const missed = state.huddles.length - m.attended;
+              return (
               <TableRow key={m.name}>
                 <TableCell className="font-medium">{m.name}</TableCell>
                 <TableCell>{m.attended} / {state.huddles.length}</TableCell>
                 <TableCell>{state.huddles.length ? Math.round(m.attended / state.huddles.length * 100) : 0}%</TableCell>
                 <TableCell>{m.wins}</TableCell>
+                <TableCell className={missed > 0 ? 'text-amber-600' : 'text-muted-foreground'}>{missed}</TableCell>
               </TableRow>
-            ))}
+            );})}
             {state.memberStats.length === 0 && (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No data.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No data.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -308,11 +433,12 @@ export function HuddleMonthlyRecap() {
   );
 }
 
-function Kpi({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function Kpi({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">{icon}<span>{label}</span></div>
       <div className="text-2xl font-semibold mt-1">{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>}
     </Card>
   );
 }
