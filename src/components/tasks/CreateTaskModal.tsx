@@ -35,6 +35,7 @@ import { Client } from '@/hooks/useClients';
 import { Badge } from '@/components/ui/badge';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { toast } from 'sonner';
+import { useClientOffers } from '@/hooks/useClientOffers';
 
 interface CreateTaskModalProps {
   open: boolean;
@@ -65,6 +66,7 @@ export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [clientId, setClientId] = useState(defaultClientId || '');
+  const [offerId, setOfferId] = useState<string>('');
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState<Date | undefined>(defaultDueDate);
   const [dueDateManuallySet, setDueDateManuallySet] = useState(false);
@@ -83,6 +85,10 @@ export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, 
       setClientId(defaultClientId);
     }
   }, [defaultClientId]);
+
+  // Reset offer whenever client changes
+  useEffect(() => { setOfferId(''); }, [clientId]);
+  const { data: clientOffers = [] } = useClientOffers(clientId || undefined);
   
   // Reset due date when modal opens
   useEffect(() => {
@@ -131,6 +137,7 @@ export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, 
       title: title.trim(),
       description: description.trim() || null,
       client_id: clientId || null,
+      offer_id: offerId || null,
       priority,
       due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
       status: 'todo',
