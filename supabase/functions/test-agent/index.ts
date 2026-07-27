@@ -104,6 +104,23 @@ Deno.serve(async (req) => {
     const data = JSON.parse(text);
     const reply = data.choices?.[0]?.message?.content || "(no reply)";
 
+    // Auto-journal: when this test is scoped to a client, log the turn so the
+    // agent builds a durable per-client history it can reflect on later.
+    if (client_id) {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+      const promptLine = lastUser.split("\n")[0].slice(0, 80) || "chat";
+      const body_md = `**User:**\n\n${lastUser}\n\n**${agent.name}:**\n\n${reply}`;
+      supa.from("client_agent_journal").insert({
+        client_id, agent_id,
+        entry_type: "run",
+        scope: "adhoc",
+        title: `Chat · ${promptLine}`,
+        body_md,
+        metadata: { model: cleanModel, turns: messages.length },
+        tokens_used: (data.usage?.total_tokens as number) || 0,
+      }).then(() => {}, () => {});
+    }
+
     return json({
       reply,
       model_used: cleanModel,
