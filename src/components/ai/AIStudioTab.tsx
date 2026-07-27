@@ -2717,18 +2717,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     ))}
                   </div>
                 )}
-                {(videoModels.length > 0 || imageModels.length > 0) && (
+                {(selectedAgentMode === "static" || selectedAgentMode === "video") && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
-                    <Select value={videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
-                      if (videoModels.length > 0 && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
+                    <Select value={selectedAgentMode === "video" && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
+                      if (selectedAgentMode === "video" && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
                       else setAdFormat(v);
                     }}>
                       <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {(videoModels.length > 0 ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
+                        {(selectedAgentMode === "video" ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
                           <SelectItem key={f.value} value={f.value} className="text-xs">
                             {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
                           </SelectItem>
