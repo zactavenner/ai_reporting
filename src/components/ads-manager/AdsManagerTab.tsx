@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
 import { AgentMcpPanel } from './shared/AgentMcpPanel';
 import { NewCampaignWizard } from './NewCampaignWizard';
+import { LaunchesTab } from './LaunchesTab';
 import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 import { useQuery } from '@tanstack/react-query';
@@ -511,6 +512,7 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
           <TabsTrigger value="adsets">Ad Sets {filterCampaignName ? `(${adSets.length})` : ''}</TabsTrigger>
           <TabsTrigger value="ads">Ads {filterAdSetName ? `(${ads.length})` : ''}</TabsTrigger>
+          <TabsTrigger value="launches">Launches</TabsTrigger>
         </TabsList>
 
         <div className="mt-3 space-y-3">
@@ -554,6 +556,9 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           ) : (
             <AdsTable data={ads} isLoading={adLoading} clientId={clientId} />
           )}
+        </TabsContent>
+        <TabsContent value="launches">
+          <LaunchesTab clientId={clientId} />
         </TabsContent>
       </Tabs>
 
