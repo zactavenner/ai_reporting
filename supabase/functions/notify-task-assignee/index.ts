@@ -14,6 +14,10 @@ interface Body {
   member_id: string;
   kind: 'assigned' | 'due_today';
   triggered_by?: string;
+  /** When present, retry a specific delivery row and increment retry_count. */
+  retry_delivery_id?: string;
+  /** When set, only attempt this channel (useful for retry). */
+  only_channel?: 'sms' | 'email';
 }
 
 function normalizePhone(p: string): string {
@@ -102,7 +106,8 @@ async function ghlSend(
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    const { task_id, member_id, kind, triggered_by } = (await req.json()) as Body;
+    const { task_id, member_id, kind, triggered_by, retry_delivery_id, only_channel } =
+      (await req.json()) as Body;
     if (!task_id || !member_id || !kind) {
       return new Response(JSON.stringify({ error: 'task_id, member_id, kind required' }), {
         status: 400,
@@ -212,6 +217,64 @@ Deno.serve(async (req) => {
     const email = member.email || null;
 
     const results: Record<string, unknown> = {};
+
+    // Helper: record a delivery attempt (sent/failed/skipped) and return its row.
+    const logDelivery = async (
+      channel: 'sms' | 'email',
+      recipient: string | null,
+      status: 'sent' | 'failed' | 'skipped',
+      error: string | null,
+      subject: string | null,
+      body: string | null,
+    ) => {
+      // If retrying, update the existing row and bump retry_count.
+      if (retry_delivery_id) {
+        const { data: existing } = await supabase
+          .from('task_notification_deliveries')
+          .select('id, retry_count')
+          .eq('id', retry_delivery_id)
+          .eq('channel', channel)
+          .maybeSingle();
+        if (existing) {
+          await supabase
+            .from('task_notification_deliveries')
+            .update({
+              status,
+              error,
+              recipient,
+              subject,
+              message: body,
+              retry_count: (existing.retry_count ?? 0) + 1,
+              last_attempt_at: new Date().toISOString(),
+              sent_at: status === 'sent' ? new Date().toISOString() : null,
+              triggered_by: triggered_by || null,
+              kind,
+              provider: 'ghl',
+            })
+            .eq('id', existing.id);
+          return;
+        }
+      }
+      await supabase.from('task_notification_deliveries').insert({
+        task_id: task.id,
+        member_id: member.id,
+        channel,
+        status,
+        provider: 'ghl',
+        recipient,
+        subject,
+        message: body,
+        error,
+        retry_count: 0,
+        sent_at: status === 'sent' ? new Date().toISOString() : null,
+        kind,
+        triggered_by: triggered_by || null,
+      });
+    };
+
+    const wantSms = !only_channel || only_channel === 'sms';
+    const wantEmail = !only_channel || only_channel === 'email';
+
     if (canSendGhl) {
       const contactId = await findOrCreateContact(
         client!.ghl_api_key!,
@@ -221,22 +284,46 @@ Deno.serve(async (req) => {
         member.name,
       );
       if (contactId) {
-        results.sms = phone
-          ? await ghlSend(client!.ghl_api_key!, contactId, 'SMS', { message: smsBody })
-          : { ok: false, error: 'no phone' };
-        results.email = email
-          ? await ghlSend(client!.ghl_api_key!, contactId, 'Email', {
-              subject: emailSubject,
-              html: emailHtml,
-            })
-          : { ok: false, error: 'no email' };
+        if (wantSms) {
+          const smsRes = phone
+            ? await ghlSend(client!.ghl_api_key!, contactId, 'SMS', { message: smsBody })
+            : { ok: false, error: 'no phone' };
+          results.sms = smsRes;
+          await logDelivery(
+            'sms',
+            phone,
+            smsRes.ok ? 'sent' : (phone ? 'failed' : 'skipped'),
+            smsRes.ok ? null : (smsRes as any).error ?? 'unknown',
+            null,
+            smsBody,
+          );
+        }
+        if (wantEmail) {
+          const emailRes = email
+            ? await ghlSend(client!.ghl_api_key!, contactId, 'Email', {
+                subject: emailSubject,
+                html: emailHtml,
+              })
+            : { ok: false, error: 'no email' };
+          results.email = emailRes;
+          await logDelivery(
+            'email',
+            email,
+            emailRes.ok ? 'sent' : (email ? 'failed' : 'skipped'),
+            emailRes.ok ? null : (emailRes as any).error ?? 'unknown',
+            emailSubject,
+            smsBody,
+          );
+        }
       } else {
-        results.sms = { ok: false, error: 'contact create failed' };
-        results.email = { ok: false, error: 'contact create failed' };
+        const err = 'contact create failed';
+        if (wantSms) { results.sms = { ok: false, error: err }; await logDelivery('sms', phone, 'failed', err, null, smsBody); }
+        if (wantEmail) { results.email = { ok: false, error: err }; await logDelivery('email', email, 'failed', err, emailSubject, smsBody); }
       }
     } else {
-      results.sms = { ok: false, error: 'ghl not configured' };
-      results.email = { ok: false, error: 'ghl not configured' };
+      const err = 'ghl not configured';
+      if (wantSms) { results.sms = { ok: false, error: err }; await logDelivery('sms', phone, 'failed', err, null, smsBody); }
+      if (wantEmail) { results.email = { ok: false, error: err }; await logDelivery('email', email, 'failed', err, emailSubject, smsBody); }
     }
 
     // In-app notification record
