@@ -2553,6 +2553,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   )}
                 </div>
                 )}
+                {selectedAgentMode === "video" && (
                 <div className="flex flex-wrap items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
                   {VIDEO_MODELS.map((m) => {
@@ -2585,6 +2586,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     );
                   })}
                 </div>
+                )}
                 {videoModels.length > 0 && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
                   const supportedSet = new Set<VideoRes>();
