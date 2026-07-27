@@ -174,12 +174,39 @@ serve(async (req) => {
           changed_by: 'system',
         });
 
+      await supabase.from('task_notification_deliveries').insert({
+        task_id: taskId,
+        member_id: task.assigned_to ?? null,
+        channel: 'email',
+        status: 'sent',
+        provider: 'ghl',
+        recipient: emailTo,
+        subject: emailContent.subject,
+        message: emailContent.body,
+        sent_at: new Date().toISOString(),
+        kind: action,
+        triggered_by: 'system',
+      });
+
       return new Response(
         JSON.stringify({ success: true, emailSent: true, recipient: emailTo }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     } else {
       console.error('GHL email failed:', ghlEmailResult.error);
+      await supabase.from('task_notification_deliveries').insert({
+        task_id: taskId,
+        member_id: task.assigned_to ?? null,
+        channel: 'email',
+        status: 'failed',
+        provider: 'ghl',
+        recipient: emailTo,
+        subject: emailContent.subject,
+        message: emailContent.body,
+        error: ghlEmailResult.error ?? 'unknown',
+        kind: action,
+        triggered_by: 'system',
+      });
       return new Response(
         JSON.stringify({ success: false, error: ghlEmailResult.error }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
