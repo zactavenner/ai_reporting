@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2 } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -126,6 +126,20 @@ function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): s
   const total = m.maxSeconds * m.pricePerSecond;
   const fmt = total >= 1 ? total.toFixed(2) : total.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
   return `Max ${m.maxSeconds}s · ~$${fmt} / ${m.maxSeconds}s clip`;
+}
+
+// Classify a client agent by the content it produces. Used to show the right
+// media options (image vs video) in the composer only when that kind of agent
+// is selected, keeping the UI clean for chat/copy agents.
+function inferAgentMode(agent: any): "static" | "video" | "chat" {
+  if (!agent) return "chat";
+  const text = `${agent.name || ""} ${agent.handle || ""} ${agent.system_prompt || ""} ${agent.agent_type || ""}`.toLowerCase();
+  const isVideo = /\b(video|reel|cutter|film|motion|clip|seedance|happyhorse|grok|footage|render|vsl)\b/.test(text);
+  const isStatic = /\b(static|image|canvas|photo|picture|graphic|display)\b/.test(text);
+  if (isVideo && isStatic) return isVideo ? "video" : "static";
+  if (isVideo) return "video";
+  if (isStatic) return "static";
+  return "chat";
 }
 
 // Conversion-focused ad format presets. Each preset is injected into the
@@ -1167,6 +1181,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const pickedAgencyAgent = selectedAgentId.startsWith("slug:")
     ? agencyRoster.find((a) => `slug:${a.slug}` === selectedAgentId)
     : null;
+  const selectedClientAgent =
+    selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")
+      ? (clientAgents as any[]).find((a) => a.id === selectedAgentId && a.enabled)
+      : null;
+  const selectedAgentMode = selectedClientAgent
+    ? inferAgentMode(selectedClientAgent)
+    : pickedAgencyAgent
+      ? inferAgentMode(pickedAgencyAgent)
+      : null;
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
     if (selectedAgentId.startsWith("slug:")) {
@@ -2390,86 +2413,48 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      title="Pick an agent — Master delegates to the best specialist, or pick one directly"
-                      className={`h-7 px-2 rounded-lg text-[10px] border transition inline-flex items-center gap-1 ${selectedAgentId !== "off" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
-                    >
-                      <Bot className="h-3 w-3" />
-                      {(() => {
-                        if (selectedAgentId === "off") return "Agent";
-                        if (selectedAgentId === "master") return "Jarvis";
-                        if (selectedAgentId.startsWith("slug:")) {
-                          const a = agencyRoster.find(x => `slug:${x.slug}` === selectedAgentId);
-                          return a ? a.name : "Agent";
-                        }
-                        const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
-                        return a ? a.name : "Agent";
-                      })()}
-                      <ChevronDown className="h-3 w-3 opacity-60" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-72 p-2">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Agent</div>
-                    <div className="space-y-0.5">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgentId("off")}
+                    title="Plain chat — no agent"
+                    className={`h-7 px-2 rounded-full text-[10px] border transition inline-flex items-center gap-1 ${selectedAgentId === "off" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                  >
+                    <MessageSquare className="h-3 w-3" />
+                    Chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgentId("master")}
+                    title="Jarvis — auto-delegates to the best specialist"
+                    className={`h-7 px-2 rounded-full text-[10px] border transition inline-flex items-center gap-1 ${selectedAgentId === "master" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                  >
+                    <Bot className="h-3 w-3" />
+                    Jarvis
+                  </button>
+                  {(clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
+                    <span className="text-[10px] text-muted-foreground px-1">No agents yet — create one in the Agents tab.</span>
+                  )}
+                  {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => {
+                    const mode = inferAgentMode(a);
+                    const active = selectedAgentId === a.id;
+                    return (
                       <button
+                        key={a.id}
                         type="button"
-                        onClick={() => setSelectedAgentId("off")}
-                        className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === "off" ? "bg-primary/10 font-medium" : ""}`}
+                        onClick={() => setSelectedAgentId(a.id)}
+                        title={`${a.name}${a.handle ? ` @${a.handle}` : ""} · ${mode === "static" ? "Image / static" : mode === "video" ? "Video" : "Chat"}`}
+                        className={`h-7 px-2 rounded-full text-[10px] border transition inline-flex items-center gap-1 ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                       >
-                        {selectedAgentId === "off" ? "● " : "○ "}No agent — plain chat
+                        {mode === "static" ? <ImageIcon className="h-3 w-3" /> : mode === "video" ? <Film className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                        <span className="truncate max-w-[120px]">{a.name}</span>
+                        {a.model && !active && (
+                          <span className="text-[9px] opacity-70">{a.model.split("/").pop()}</span>
+                        )}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedAgentId("master")}
-                        className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === "master" ? "bg-primary/10 font-medium" : ""}`}
-                      >
-                        {selectedAgentId === "master" ? "● " : "○ "}Jarvis (Account Manager) <span className="text-muted-foreground">— auto-delegates</span>
-                      </button>
-                    </div>
-                    {(clientAgents as any[]).filter((a: any) => a.enabled).length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-border/60">
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Client agents</div>
-                        <div className="space-y-0.5 max-h-72 overflow-y-auto">
-                          {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => {
-                            const label = `${a.handle || ""} ${a.name || ""} ${a.role || ""}`.toLowerCase();
-                            const isCopy = /copyw|copy writ/.test(label);
-                            const modelLabel = a.model
-                              ? a.model.split("/").pop()
-                              : (isCopy ? "deepseek-v4-flash" : null);
-                            return (
-                              <button
-                                key={a.id}
-                                type="button"
-                                onClick={() => setSelectedAgentId(a.id)}
-                                className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === a.id ? "bg-primary/10 font-medium" : ""}`}
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate">
-                                      {selectedAgentId === a.id ? "● " : "○ "}{a.name}
-                                    </span>
-                                    {a.handle && (
-                                      <span className="block text-[10px] text-muted-foreground truncate pl-3">@{a.handle}</span>
-                                    )}
-                                  </span>
-                                  {modelLabel && <span className="text-[9px] text-muted-foreground shrink-0">{modelLabel}</span>}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {(clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
-                      <div className="mt-2 pt-2 border-t border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
-                        No specialists yet — create one in the Agents tab.
-                      </div>
-                    )}
-                  </PopoverContent>
-                </Popover>
+                    );
+                  })}
+                </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -2538,6 +2523,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   </PopoverContent>
                 </Popover>
+                {selectedAgentMode === "static" && (
                 <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image:</span>
                   {IMAGE_MODELS.map(m => {
@@ -2566,6 +2552,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Badge variant="secondary" className="text-[9px] h-5">compare ×{imageModels.length}</Badge>
                   )}
                 </div>
+                )}
+                {selectedAgentMode === "video" && (
                 <div className="flex flex-wrap items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
                   {VIDEO_MODELS.map((m) => {
@@ -2598,7 +2586,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     );
                   })}
                 </div>
-                {videoModels.length > 0 && (() => {
+                )}
+                {selectedAgentMode === "video" && videoModels.length > 0 && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
                   const supportedSet = new Set<VideoRes>();
                   for (const id of videoModels) {
@@ -2631,7 +2620,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   );
                 })()}
-                {videoModels.length > 0 && (
+                {selectedAgentMode === "video" && videoModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
                     {([15, 30] as const).map((d) => {
@@ -2650,7 +2639,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     })}
                   </div>
                 )}
-                {imageModels.length > 0 && (
+                {selectedAgentMode === "static" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Image Style:</span>
                     <ImageStylesPopover
@@ -2661,7 +2650,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     />
                   </div>
                 )}
-                {videoModels.length > 0 && (
+                {selectedAgentMode === "video" && videoModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video Style:</span>
                     <VideoStylesPopover
@@ -2672,7 +2661,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     />
                   </div>
                 )}
-                {videoModels.length > 0 && (
+                {selectedAgentMode === "video" && videoModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Frames:</span>
                     <input
@@ -2728,18 +2717,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     ))}
                   </div>
                 )}
-                {(videoModels.length > 0 || imageModels.length > 0) && (
+                {(selectedAgentMode === "static" || selectedAgentMode === "video") && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Format:</span>
-                    <Select value={videoModels.length > 0 && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
-                      if (videoModels.length > 0 && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
+                    <Select value={selectedAgentMode === "video" && aspectForAdFormat(adFormat) === "1:1" ? "reel_9x16" : adFormat} onValueChange={(v) => {
+                      if (selectedAgentMode === "video" && aspectForAdFormat(v) === "1:1") setAdFormat("reel_9x16");
                       else setAdFormat(v);
                     }}>
                       <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {(videoModels.length > 0 ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
+                        {(selectedAgentMode === "video" ? AD_FORMATS.filter(f => f.aspect !== "1:1") : AD_FORMATS).map(f => (
                           <SelectItem key={f.value} value={f.value} className="text-xs">
                             {f.label}<span className="text-muted-foreground ml-1">— {f.hint}</span>
                           </SelectItem>
@@ -2748,7 +2737,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </Select>
                   </div>
                 )}
-                {(videoModels.length > 0 || imageModels.length > 0) && (
+                {(selectedAgentMode === "static" || selectedAgentMode === "video") && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Avatar:</span>
                     <Select value={selectedAvatarId || "none"} onValueChange={(v) => setSelectedAvatarId(v === "none" ? null : v)}>
@@ -2774,15 +2763,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     )}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setBatchScriptsOpen(true)}
-                  title="Render multiple video scripts in parallel — each auto-splits to fit the model's per-clip cap."
-                  className="h-7 px-2 rounded-lg text-[10px] inline-flex items-center gap-1 border border-border/60 bg-muted/40 hover:bg-muted hover:border-primary/40 transition text-muted-foreground hover:text-foreground"
-                >
-                  <Film className="h-3 w-3" />
-                  Batch scripts
-                </button>
+                {selectedAgentMode === "video" && (
+                  <button
+                    type="button"
+                    onClick={() => setBatchScriptsOpen(true)}
+                    title="Render multiple video scripts in parallel — each auto-splits to fit the model's per-clip cap."
+                    className="h-7 px-2 rounded-lg text-[10px] inline-flex items-center gap-1 border border-border/60 bg-muted/40 hover:bg-muted hover:border-primary/40 transition text-muted-foreground hover:text-foreground"
+                  >
+                    <Film className="h-3 w-3" />
+                    Batch scripts
+                  </button>
+                )}
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
                   {/* Send is always available so the user can queue new prompts while
