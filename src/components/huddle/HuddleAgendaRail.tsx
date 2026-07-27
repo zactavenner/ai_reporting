@@ -102,25 +102,33 @@ export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentCl
                           {clients.map((c, ci) => {
                             const cCompleted = i < currentSegmentIdx || (isCurrent && ci < clientIndex);
                             const cCurrent = isCurrent && ci === clientIndex;
-                            const saved = durations[c.id];
-                            const elapsed = cCurrent ? liveElapsed : saved ?? 0;
-                            const showTimer = cCurrent || (saved && saved > 0);
+                            const saved = durations[c.id] ?? 0;
+                            const elapsed = cCurrent ? liveElapsed : saved;
+                            // Always show timer for current + completed clients so operators
+                            // can eyeball where the huddle is spending its minutes.
+                            const showTimer = cCurrent || cCompleted;
                             const over = targetPerClient > 0 && elapsed > targetPerClient;
-                            const timerColor = over ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400';
+                            const timerColor = cCurrent
+                              ? over ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'
+                              : over ? 'text-destructive/80' : 'text-emerald-700/70 dark:text-emerald-400/70';
                             return (
                               <div
                                 key={c.id}
                                 className={`text-xs transition-colors flex items-center justify-between gap-2 ${
-                                  cCurrent 
-                                    ? 'text-primary font-medium' 
-                                    : cCompleted 
-                                      ? 'text-muted-foreground/40' 
+                                  cCurrent
+                                    ? 'text-primary font-medium'
+                                    : cCompleted
+                                      ? 'text-muted-foreground/60'
                                       : 'text-muted-foreground'
                                 }`}
                               >
                                 <span className="truncate">{ci + 1}. {c.name}</span>
                                 {showTimer && (
-                                  <span className={`font-mono tabular-nums text-[10px] ${timerColor}`}>
+                                  <span
+                                    className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded ${timerColor} ${
+                                      cCompleted && !cCurrent ? 'bg-muted/50' : ''
+                                    }`}
+                                  >
                                     {fmtDur(elapsed)}
                                   </span>
                                 )}
