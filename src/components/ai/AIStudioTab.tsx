@@ -2650,7 +2650,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     />
                   </div>
                 )}
-                {videoModels.length > 0 && (
+                {selectedAgentMode === "video" && videoModels.length > 0 && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video Style:</span>
                     <VideoStylesPopover
