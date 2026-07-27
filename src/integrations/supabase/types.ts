@@ -365,12 +365,18 @@ export type Database = {
           clicks: number
           client_id: string | null
           client_name: string | null
+          cost_per_lead: number | null
+          cpc: number | null
+          cpm: number | null
           created_at: string
+          ctr: number | null
           currency: string
           date: string
+          frequency: number | null
           id: string
           impressions: number
           leads: number
+          reach: number | null
           spend: number
           synced_at: string
           updated_at: string
@@ -382,12 +388,18 @@ export type Database = {
           clicks?: number
           client_id?: string | null
           client_name?: string | null
+          cost_per_lead?: number | null
+          cpc?: number | null
+          cpm?: number | null
           created_at?: string
+          ctr?: number | null
           currency?: string
           date: string
+          frequency?: number | null
           id?: string
           impressions?: number
           leads?: number
+          reach?: number | null
           spend?: number
           synced_at?: string
           updated_at?: string
@@ -399,12 +411,18 @@ export type Database = {
           clicks?: number
           client_id?: string | null
           client_name?: string | null
+          cost_per_lead?: number | null
+          cpc?: number | null
+          cpm?: number | null
           created_at?: string
+          ctr?: number | null
           currency?: string
           date?: string
+          frequency?: number | null
           id?: string
           impressions?: number
           leads?: number
+          reach?: number | null
           spend?: number
           synced_at?: string
           updated_at?: string
