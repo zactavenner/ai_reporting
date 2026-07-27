@@ -1181,6 +1181,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const pickedAgencyAgent = selectedAgentId.startsWith("slug:")
     ? agencyRoster.find((a) => `slug:${a.slug}` === selectedAgentId)
     : null;
+  const selectedClientAgent =
+    selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")
+      ? (clientAgents as any[]).find((a) => a.id === selectedAgentId && a.enabled)
+      : null;
+  const selectedAgentMode = selectedClientAgent
+    ? inferAgentMode(selectedClientAgent)
+    : pickedAgencyAgent
+      ? inferAgentMode(pickedAgencyAgent)
+      : null;
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
     if (selectedAgentId.startsWith("slug:")) {
