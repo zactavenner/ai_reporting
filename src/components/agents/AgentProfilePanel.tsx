@@ -450,6 +450,14 @@ export function AgentProfilePanel({
           />
         </Card>
 
+        {/* Test chat — validate this agent respects memory/instructions/files */}
+        <AgentTestChat
+          agentId={agent.id}
+          agentName={agent.name}
+          clientId={isClientView ? clientId : null}
+          clientName={clientName}
+        />
+
         {/* Schedule (master only) */}
         {mode === "master" && (
           <Card className="p-4 space-y-3">
