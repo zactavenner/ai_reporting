@@ -676,7 +676,27 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
               <div>
                 <Label className="text-xs">Primary text (ad copy)</Label>
                 <Textarea value={primaryText} onChange={(e) => setPrimaryText(e.target.value)} rows={3}
-                  placeholder="Written for the feed. Hook, promise, CTA." />
+                  placeholder={`${ACCREDITED_PREFIX} Written for the feed. Hook, promise, CTA.`} />
+                <div className="flex items-center gap-2 mt-1">
+                  <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                    onClick={() => setPrimaryText((t) => ensureAccreditedPrefix(t))}>
+                    Prepend "{ACCREDITED_PREFIX}"
+                  </Button>
+                  <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <Switch checked={appendDisclosure} onCheckedChange={setAppendDisclosure} />
+                    Auto-append risk disclosure
+                  </label>
+                </div>
+                {primaryText && complianceIssues.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {complianceIssues.map((iss, i) => (
+                      <div key={i} className={`flex items-start gap-1.5 text-[10px] px-2 py-1 rounded ${iss.severity === 'blocking' ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/20 dark:text-amber-300'}`}>
+                        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                        <span>{iss.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <Label className="text-xs">Headline</Label>
