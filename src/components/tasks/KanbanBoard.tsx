@@ -154,10 +154,17 @@ export function KanbanBoard({ tasks, clients, clientId, isPublicView = false }: 
     if (currentMember && !isPublicView) {
       // Check session storage for preference
       const stored = sessionStorage.getItem(MY_TASKS_KEY);
+      const role = (currentMember.role || '').toLowerCase();
+      const isAccountManager = role.includes('account') || role.includes('manager') || role === 'am';
       if (stored === null) {
-        // Default to showing user's own tasks
-        setShowMyTasksOnly(true);
-        setFilterAssigneeId(currentMember.id);
+        // Account managers default to All Tasks; everyone else to My Tasks
+        if (isAccountManager) {
+          setShowMyTasksOnly(false);
+          setFilterAssigneeId(null);
+        } else {
+          setShowMyTasksOnly(true);
+          setFilterAssigneeId(currentMember.id);
+        }
       } else {
         setShowMyTasksOnly(stored === 'true');
         if (stored === 'true') {
