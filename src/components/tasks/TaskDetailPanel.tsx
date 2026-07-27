@@ -142,6 +142,19 @@ function useClientMetaAdAccounts(clientId?: string) {
  
  export function TaskDetailPanel({ task, open, onOpenChange, clientName, clientId, isPublicView = false }: TaskDetailPanelProps) {
    const updateTask = useUpdateTask();
+  const { data: taskOffers = [] } = useClientOffers(task?.client_id || undefined);
+  const linkedOffer = taskOffers.find((o: any) => o.id === (task as any)?.offer_id) || null;
+  const openInAIStudio = () => {
+    if (!task?.client_id) return;
+    try {
+      localStorage.setItem('agency-ai-studio:last-client', task.client_id);
+      localStorage.setItem(
+        `ai-studio:offer:${task.client_id}`,
+        (task as any).offer_id || 'all'
+      );
+    } catch {}
+    window.location.href = '/?tab=ai-studio';
+  };
   const [editingTitle, setEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
    const deleteTask = useDeleteTask();
