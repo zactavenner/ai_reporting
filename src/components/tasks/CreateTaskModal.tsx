@@ -305,6 +305,23 @@ export function CreateTaskModal({ open, onOpenChange, clients, defaultClientId, 
                 </SelectContent>
               </Select>
             </div>
+
+            {clientId && clientOffers.length > 0 && (
+              <div>
+                <Label>Offer <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                <Select value={offerId || 'none'} onValueChange={(v) => setOfferId(v === 'none' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="No offer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No offer</SelectItem>
+                    {clientOffers.map((o: any) => (
+                      <SelectItem key={o.id} value={o.id}>{o.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
             <div>
               <Label>Priority</Label>
