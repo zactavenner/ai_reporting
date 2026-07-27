@@ -15,6 +15,57 @@ const OPENROUTER_API_KEY = (Deno.env.get("OPENROUTER_API_KEY") || "").trim().rep
 
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
+// ---------- Utari Persona MCP client (Streamable HTTP) ----------
+async function mcpCall(url: string, method: string, params: any, id: number): Promise<any> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`MCP ${method} ${res.status}: ${text.slice(0, 300)}`);
+  // Streamable HTTP returns SSE ("event: message\ndata: {json}") or plain JSON.
+  const dataLine = text.split("\n").find((l) => l.startsWith("data: "));
+  const payload = dataLine ? dataLine.slice(6).trim() : text.trim();
+  try {
+    const parsed = JSON.parse(payload);
+    if (parsed.error) throw new Error(`MCP error: ${parsed.error.message || JSON.stringify(parsed.error)}`);
+    return parsed.result;
+  } catch (e) {
+    throw new Error(`MCP parse failed: ${payload.slice(0, 300)}`);
+  }
+}
+
+async function callUtariPersona(mcpUrl: string, message: string, conversationId?: string | null) {
+  const result = await mcpCall(
+    mcpUrl,
+    "tools/call",
+    {
+      name: "send_message",
+      arguments: {
+        message,
+        conversation_id: conversationId || "",
+        wait_for_reply: true,
+      },
+    },
+    Math.floor(Math.random() * 1_000_000),
+  );
+  const content = Array.isArray(result?.content) ? result.content : [];
+  const textNode = content.find((c: any) => c.type === "text");
+  let reply = textNode?.text || "";
+  let convId: string | null = null;
+  // The persona server returns a JSON string in the text node
+  try {
+    const j = JSON.parse(reply);
+    reply = j.reply || j.message || j.text || reply;
+    convId = j.conversation_id || null;
+  } catch { /* keep raw text */ }
+  return { reply: reply || "(no reply from persona)", conversation_id: convId };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -23,9 +74,6 @@ Deno.serve(async (req) => {
     };
     if (!agent_id || !Array.isArray(messages) || messages.length === 0) {
       return json({ error: "agent_id and messages[] required" }, 400);
-    }
-    if (!OPENROUTER_API_KEY.startsWith("sk-or-")) {
-      return json({ error: "OPENROUTER_API_KEY not configured on the server" }, 500);
     }
 
     const supa = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -42,15 +90,106 @@ Deno.serve(async (req) => {
     let override: any = null;
     let brain: any = null;
     let clientName: string | null = null;
+    let offers: any[] = [];
     if (client_id) {
-      const [ov, br, cli] = await Promise.all([
+      const [ov, br, cli, off] = await Promise.all([
         supa.from("client_agent_overrides").select("memory_md, instructions_md").eq("client_id", client_id).eq("agent_id", agent_id).maybeSingle(),
         supa.from("client_brain").select("voice, icp, brand_guidelines, do_not_say").eq("client_id", client_id).maybeSingle(),
         supa.from("clients").select("name").eq("id", client_id).maybeSingle(),
+        supa.from("client_offers").select("title, description, fund_name, fund_type, target_investor, targeted_returns, min_investment, hold_period, industry_focus, additional_notes, status").eq("client_id", client_id).order("created_at", { ascending: false }).limit(3),
       ]);
       override = ov.data;
       brain = br.data;
       clientName = (cli.data as any)?.name || null;
+      offers = off.data || [];
+    }
+
+    // === Utari Persona MCP branch (Jeremy AI) ===
+    const caps: any = agent.capabilities || {};
+    if (caps?.provider === "utari_persona" && caps?.mcp_url) {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+      const ctxLines: string[] = [];
+      if (clientName) ctxLines.push(`Client in scope: ${clientName}`);
+      if (brain?.voice) ctxLines.push(`Brand voice: ${brain.voice}`);
+      if (brain?.icp) ctxLines.push(`ICP: ${brain.icp}`);
+      if (brain?.brand_guidelines) ctxLines.push(`Brand guidelines: ${brain.brand_guidelines}`);
+      if (brain?.do_not_say) ctxLines.push(`Do NOT say: ${brain.do_not_say}`);
+      if (offers.length) {
+        ctxLines.push(`Active offer(s):`);
+        for (const o of offers) {
+          const bits = [
+            o.title && `Title: ${o.title}`,
+            o.fund_name && `Fund: ${o.fund_name}`,
+            o.fund_type && `Type: ${o.fund_type}`,
+            o.target_investor && `Target investor: ${o.target_investor}`,
+            o.targeted_returns && `Targeted returns: ${o.targeted_returns}`,
+            o.min_investment && `Min investment: ${o.min_investment}`,
+            o.hold_period && `Hold: ${o.hold_period}`,
+            o.industry_focus && `Industry: ${o.industry_focus}`,
+            o.description && `Description: ${o.description}`,
+            o.additional_notes && `Notes: ${o.additional_notes}`,
+          ].filter(Boolean).join(" | ");
+          if (bits) ctxLines.push(`- ${bits}`);
+        }
+      }
+
+      // Persistent conversation id per (agent, client) scope
+      const scopeClient = client_id ?? "00000000-0000-0000-0000-000000000000";
+      const { data: convRow } = await supa
+        .from("agent_mcp_conversations")
+        .select("conversation_id")
+        .eq("agent_id", agent_id)
+        .eq("client_id", client_id ?? null)
+        .maybeSingle();
+      const existingConv = convRow?.conversation_id || null;
+
+      const contextBlock = ctxLines.length
+        ? `[CONTEXT — use this to ground your reply]\n${ctxLines.join("\n")}\n\n[MESSAGE]\n`
+        : "";
+      // Only prepend context on the first message of a conversation; keep continuity terse afterwards.
+      const outbound = existingConv ? lastUser : `${contextBlock}${lastUser}`;
+
+      let reply = "";
+      let newConvId: string | null = null;
+      try {
+        const r = await callUtariPersona(caps.mcp_url, outbound, existingConv);
+        reply = r.reply;
+        newConvId = r.conversation_id;
+      } catch (e: any) {
+        return json({ error: `Utari persona call failed: ${e?.message || e}` }, 502);
+      }
+
+      if (newConvId && newConvId !== existingConv) {
+        await supa.from("agent_mcp_conversations").upsert({
+          agent_id, client_id: client_id ?? null, conversation_id: newConvId, updated_at: new Date().toISOString(),
+        }, { onConflict: "agent_id,client_id" }).then(() => {}, () => {});
+        // Fallback: unique index uses COALESCE(client_id, 0-uuid) — do a manual reconcile if upsert on null fails
+      }
+
+      if (client_id) {
+        supa.from("client_agent_journal").insert({
+          client_id, agent_id,
+          entry_type: "run",
+          scope: "adhoc",
+          title: `Jeremy AI · ${lastUser.split("\n")[0].slice(0, 80) || "chat"}`,
+          body_md: `**You:**\n\n${lastUser}\n\n**Jeremy AI:**\n\n${reply}`,
+          metadata: { provider: "utari_persona", conversation_id: newConvId || existingConv },
+        }).then(() => {}, () => {});
+      }
+
+      return json({
+        reply,
+        model_used: "utari/persona",
+        context_summary: {
+          has_memory: false,
+          has_instructions: !!agent.instructions_md,
+          client_override: !!(override?.memory_md || override?.instructions_md),
+          client_brain: !!brain,
+          files_count: offers.length,
+          provider: "utari_persona",
+          conversation_id: newConvId || existingConv,
+        },
+      });
     }
 
     // 3. Files list (metadata only — model sees filenames as references)
@@ -58,6 +197,11 @@ Deno.serve(async (req) => {
     const { data: files } = client_id
       ? await filesQ.or(`client_id.is.null,client_id.eq.${client_id}`)
       : await filesQ.is("client_id", null);
+
+    // Default OpenRouter path requires the API key
+    if (!OPENROUTER_API_KEY.startsWith("sk-or-")) {
+      return json({ error: "OPENROUTER_API_KEY not configured on the server" }, 500);
+    }
 
     // 4. Compose system prompt
     const sys: string[] = [];
