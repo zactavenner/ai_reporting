@@ -55,25 +55,28 @@ serve(async (req) => {
       );
     }
 
-    // Fetch the client with GHL credentials
-    const { data: client, error: clientError } = await supabase
+    // Fetch client for display name only. All task notifications must send from
+    // the agency's own GHL location (support@highperformanceads.com,
+    // +1 323-988-5958) regardless of which client the task belongs to.
+    const { data: clientRow } = await supabase
       .from('clients')
       .select('id, name, ghl_api_key, ghl_location_id')
       .eq('id', targetClientId)
       .single();
-
-    if (clientError || !client) {
-      console.error('Client not found:', clientError);
+    const agencyKey = Deno.env.get('AGENCY_GHL_API_KEY') || Deno.env.get('AGENCY_GHL_PIT_TOKEN');
+    const agencyLoc = Deno.env.get('AGENCY_GHL_LOCATION_ID');
+    const senderKey = agencyKey || clientRow?.ghl_api_key || null;
+    const senderLoc = agencyLoc || clientRow?.ghl_location_id || null;
+    const client = {
+      id: clientRow?.id ?? targetClientId,
+      name: clientRow?.name ?? 'Internal',
+      ghl_api_key: senderKey,
+      ghl_location_id: senderLoc,
+    };
+    if (!senderKey || !senderLoc) {
+      console.log('No GHL sender credentials available');
       return new Response(
-        JSON.stringify({ success: false, error: 'Client not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!client.ghl_api_key || !client.ghl_location_id) {
-      console.log('Client does not have GHL credentials configured');
-      return new Response(
-        JSON.stringify({ success: false, error: 'GHL credentials not configured for client' }),
+        JSON.stringify({ success: false, error: 'No GHL sender configured' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -284,6 +287,8 @@ Funding Sonar`
   }
 }
 
+const AGENCY_FROM_EMAIL = 'support@highperformanceads.com';
+
 async function sendGHLEmail(
   apiKey: string,
   locationId: string,
@@ -368,6 +373,7 @@ async function sendGHLEmail(
           contactId,
           subject,
           html: body.replace(/\n/g, '<br>'),
+          emailFrom: AGENCY_FROM_EMAIL,
         })
       }
     );
