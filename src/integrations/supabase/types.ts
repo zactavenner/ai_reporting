@@ -4317,6 +4317,80 @@ export type Database = {
           },
         ]
       }
+      client_agent_journal: {
+        Row: {
+          agent_id: string
+          body_md: string
+          client_id: string
+          cost_usd: number | null
+          created_at: string
+          created_by: string | null
+          entry_type: string
+          id: string
+          metadata: Json
+          scope: string
+          title: string
+          tokens_used: number | null
+        }
+        Insert: {
+          agent_id: string
+          body_md: string
+          client_id: string
+          cost_usd?: number | null
+          created_at?: string
+          created_by?: string | null
+          entry_type?: string
+          id?: string
+          metadata?: Json
+          scope?: string
+          title: string
+          tokens_used?: number | null
+        }
+        Update: {
+          agent_id?: string
+          body_md?: string
+          client_id?: string
+          cost_usd?: number | null
+          created_at?: string
+          created_by?: string | null
+          entry_type?: string
+          id?: string
+          metadata?: Json
+          scope?: string
+          title?: string
+          tokens_used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_agent_journal_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agency_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agent_journal_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_agent_journal_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_agent_journal_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_agent_overrides: {
         Row: {
           agent_id: string
