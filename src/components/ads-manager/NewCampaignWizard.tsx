@@ -232,18 +232,12 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
     if (!result?.campaignId) return;
     setActivating(true);
     try {
-      // Activate campaign + adset + all ads
-      const targets = [
-        { objectId: result.campaignId },
-        { objectId: result.adSetId },
-        ...result.ads.map((a) => ({ objectId: a.adId })),
-      ];
-      for (const t of targets) {
-        const { error } = await supabase.functions.invoke('toggle-meta-status', {
-          body: { clientId, objectId: t.objectId, status: 'ACTIVE' },
-        });
-        if (error) throw error;
-      }
+      const nodeIds = [result.campaignId, result.adSetId, ...result.ads.map((a) => a.adId)];
+      const { data, error } = await supabase.functions.invoke('meta-set-status-by-nodes', {
+        body: { clientId, nodeIds, status: 'ACTIVE' },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Activation failed');
       toast.success('Campaign is now ACTIVE 🎉');
       close();
     } catch (e: any) {
@@ -369,10 +363,10 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                 </div>
                 <div>
                   <Label className="text-[11px]">Instagram (optional)</Label>
-                  <Select value={instagramActorId} onValueChange={setInstagramActorId}>
+                  <Select value={instagramActorId || 'none'} onValueChange={(v) => setInstagramActorId(v === 'none' ? '' : v)}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" className="text-xs">None</SelectItem>
+                      <SelectItem value="none" className="text-xs">None</SelectItem>
                       {igActors.map((p) => <SelectItem key={p.id} value={p.id} className="text-xs">@{p.username || p.id}</SelectItem>)}
                     </SelectContent>
                   </Select>
