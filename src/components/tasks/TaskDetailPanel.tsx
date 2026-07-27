@@ -920,6 +920,17 @@ const getHistoryIcon = (action: string) => {
                       )}
                       Duplicate
                     </Button>
+                    {task.client_id && !isPublicView && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={openInAIStudio}
+                        title={linkedOffer ? `Open AI Studio with "${linkedOffer.title}"` : 'Open AI Studio for this client'}
+                      >
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Open in AI Studio
+                      </Button>
+                    )}
                     {metaAdAccountIds.map((adId, idx) => (
                       <Button
                         key={adId}
