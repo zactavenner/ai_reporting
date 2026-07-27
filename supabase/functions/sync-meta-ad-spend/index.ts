@@ -1,9 +1,9 @@
 // Daily Meta ad-spend sync. Writes to public.ad_spend_daily (source of truth)
-// and mirrors the same rows into a Google Sheet "Daily Spend" tab (via the
-// google_sheets connector gateway). Each client account is isolated in its
-// own try/catch with a single retry, and every attempt is logged to
-// public.ad_spend_sync_runs so the Data Health dashboard can surface stale
-// or failing accounts.
+// and mirrors the same rows into each client's own KPI Google Sheet on a
+// tab called "FB Spend" (via the google_sheets connector gateway). Each
+// client account is isolated in its own try/catch with a single retry, and
+// every attempt is logged to public.ad_spend_sync_runs so the Data Health
+// dashboard can surface stale or failing accounts.
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -11,15 +11,26 @@ type Body = {
   mode?: 'daily' | 'manual';
   client_id?: string;
   date?: string; // YYYY-MM-DD
+  days_back?: number; // backfill: syncs [today - days_back .. yesterday]
 };
 
-const SHEET_TAB = 'Daily Spend';
-const HEADER = ['Date','Client','Account ID','Campaign ID','Campaign Name','Spend','Impressions','Clicks','Leads','Synced At'];
+const SHEET_TAB = 'FB Spend';
+const HEADER = [
+  'Date','Campaign Name','Ad Spend','Impressions','Clicks','Frequency','CTR',
+  'Reach','CPM','CPC','Leads','Cost/Lead','Campaign ID','Account ID','Synced At',
+];
+const LAST_COL = 'O'; // 15 columns
 const GATEWAY = 'https://connector-gateway.lovable.dev/google_sheets/v4';
 
 const yesterdayISO = () => {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
+
+const isoNDaysAgo = (n: number) => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
 };
 
@@ -62,13 +73,14 @@ async function loadAccounts(sb: any, clientId?: string): Promise<AccountRow[]> {
 type CampaignRow = {
   campaign_id: string; campaign_name: string;
   spend: number; impressions: number; clicks: number; leads: number;
+  reach: number; frequency: number; ctr: number; cpm: number; cpc: number;
 };
 
 async function fetchMetaInsights(acct: AccountRow, date: string): Promise<CampaignRow[]> {
   const url = new URL(`https://graph.facebook.com/v21.0/${acct.ad_account_id}/insights`);
   url.searchParams.set('level', 'campaign');
   url.searchParams.set('time_range', JSON.stringify({ since: date, until: date }));
-  url.searchParams.set('fields', 'campaign_id,campaign_name,spend,impressions,clicks,actions');
+  url.searchParams.set('fields', 'campaign_id,campaign_name,spend,impressions,clicks,reach,frequency,ctr,cpm,cpc,actions');
   url.searchParams.set('limit', '500');
   url.searchParams.set('access_token', acct.token);
   const res = await fetch(url.toString());
@@ -90,6 +102,11 @@ async function fetchMetaInsights(acct: AccountRow, date: string): Promise<Campai
       impressions: Number(r.impressions ?? 0),
       clicks: Number(r.clicks ?? 0),
       leads,
+      reach: Number(r.reach ?? 0),
+      frequency: Number(r.frequency ?? 0),
+      ctr: Number(r.ctr ?? 0),
+      cpm: Number(r.cpm ?? 0),
+      cpc: Number(r.cpc ?? 0),
     });
   }
   return rows;
@@ -102,6 +119,8 @@ async function upsertDaily(sb: any, acct: AccountRow, date: string, rows: Campai
     ad_account_id: acct.ad_account_id,
     campaign_id: r.campaign_id, campaign_name: r.campaign_name,
     spend: r.spend, impressions: r.impressions, clicks: r.clicks, leads: r.leads,
+    reach: r.reach, frequency: r.frequency, ctr: r.ctr, cpm: r.cpm, cpc: r.cpc,
+    cost_per_lead: r.leads > 0 ? r.spend / r.leads : null,
     synced_at: new Date().toISOString(),
   }));
   const { error } = await sb.from('ad_spend_daily')
@@ -140,7 +159,7 @@ async function ensureTab(spreadsheetId: string) {
       method: 'POST',
       body: JSON.stringify({ requests: [{ addSheet: { properties: { title: SHEET_TAB } } }] }),
     });
-    await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:J1`, {
+    await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:${LAST_COL}1`, {
       method: 'PUT',
       qs: { valueInputOption: 'RAW' },
       body: JSON.stringify({ values: [HEADER] }),
@@ -148,10 +167,10 @@ async function ensureTab(spreadsheetId: string) {
     return;
   }
   // ensure header
-  const cur = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:J1`);
+  const cur = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:${LAST_COL}1`);
   const first = (cur.values?.[0] ?? []).join('|');
   if (first !== HEADER.join('|')) {
-    await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:J1`, {
+    await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:${LAST_COL}1`, {
       method: 'PUT',
       qs: { valueInputOption: 'RAW' },
       body: JSON.stringify({ values: [HEADER] }),
@@ -161,23 +180,29 @@ async function ensureTab(spreadsheetId: string) {
 
 async function mirrorToSheet(spreadsheetId: string, acct: AccountRow, date: string, rows: CampaignRow[]) {
   if (!rows.length) return;
-  // Read existing keys (Date col A, CampaignId col D)
-  const existing = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A2:D`);
+  // Dedupe key = Date (A) + Campaign ID (M) + Account ID (N)
+  const existing = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A2:N`);
   const rowIndexByKey = new Map<string, number>(); // 1-based row number
   for (let i = 0; i < (existing.values?.length ?? 0); i++) {
     const r = existing.values[i];
-    const key = `${r[0]}|${r[3]}`;
+    // columns: A=date(0) ... M=campaign_id(12) N=account_id(13)
+    const key = `${r[0]}|${r[12] ?? ''}|${r[13] ?? ''}`;
     rowIndexByKey.set(key, i + 2);
   }
   const now = new Date().toISOString();
   const toAppend: any[][] = [];
   const updates: { range: string; values: any[][] }[] = [];
   for (const r of rows) {
-    const row = [date, acct.client_name, acct.ad_account_id, r.campaign_id, r.campaign_name, r.spend, r.impressions, r.clicks, r.leads, now];
-    const key = `${date}|${r.campaign_id}`;
+    const costPerLead = r.leads > 0 ? +(r.spend / r.leads).toFixed(2) : '';
+    const row = [
+      date, r.campaign_name, r.spend, r.impressions, r.clicks,
+      r.frequency, r.ctr, r.reach, r.cpm, r.cpc,
+      r.leads, costPerLead, r.campaign_id, acct.ad_account_id, now,
+    ];
+    const key = `${date}|${r.campaign_id}|${acct.ad_account_id}`;
     const existingRow = rowIndexByKey.get(key);
     if (existingRow) {
-      updates.push({ range: `${SHEET_TAB}!A${existingRow}:J${existingRow}`, values: [row] });
+      updates.push({ range: `${SHEET_TAB}!A${existingRow}:${LAST_COL}${existingRow}`, values: [row] });
     } else {
       toAppend.push(row);
     }
@@ -189,7 +214,7 @@ async function mirrorToSheet(spreadsheetId: string, acct: AccountRow, date: stri
     });
   }
   if (toAppend.length) {
-    await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A:J:append`, {
+    await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A:${LAST_COL}:append`, {
       method: 'POST',
       qs: { valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS' },
       body: JSON.stringify({ values: toAppend }),
@@ -204,77 +229,100 @@ Deno.serve(async (req) => {
   try {
     const body: Body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
     const mode = body.mode ?? 'manual';
-    const date = body.date ?? yesterdayISO();
+    const daysBack = Math.max(0, Math.min(30, Number(body.days_back ?? 0)));
+    const dates: string[] = body.date
+      ? [body.date]
+      : daysBack > 0
+        ? Array.from({ length: daysBack }, (_, i) => isoNDaysAgo(i + 1)) // yesterday backwards
+        : [yesterdayISO()];
 
     const sb = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    const { data: settings } = await sb.from('agency_settings').select('meta_spend_sheet_url').limit(1).maybeSingle();
-    const spreadsheetId = extractSpreadsheetId(settings?.meta_spend_sheet_url);
-    let sheetReady = false;
-    if (spreadsheetId) {
-      try { await ensureTab(spreadsheetId); sheetReady = true; }
-      catch (e) { console.error('ensureTab failed', e); }
+    // Per-client KPI sheet map (kpi_google_sheet_url → spreadsheetId)
+    const { data: cs } = await sb
+      .from('client_settings')
+      .select('client_id, kpi_google_sheet_url');
+    const sheetIdByClient = new Map<string, string>();
+    for (const row of cs ?? []) {
+      const id = extractSpreadsheetId((row as any).kpi_google_sheet_url);
+      if (id) sheetIdByClient.set((row as any).client_id, id);
     }
+    const readySheets = new Set<string>();
 
     const accounts = await loadAccounts(sb, body.client_id);
-    const summary = { total_accounts: accounts.length, ok: 0, failed: 0, total_rows: 0, sheet_ok: 0, sheet_failed: 0 };
+    const summary = {
+      total_accounts: accounts.length, dates: dates.length,
+      ok: 0, failed: 0, total_rows: 0, sheet_ok: 0, sheet_failed: 0, sheet_skipped: 0,
+    };
 
-    for (const acct of accounts) {
-      const { data: runIns } = await sb.from('ad_spend_sync_runs').insert({
-        client_id: acct.client_id, client_name: acct.client_name,
-        ad_account_id: acct.ad_account_id, sync_date: date,
-        status: 'running', triggered_by: mode,
-      }).select('id').single();
-      const runId = runIns?.id;
+    for (const date of dates) {
+      for (const acct of accounts) {
+        const { data: runIns } = await sb.from('ad_spend_sync_runs').insert({
+          client_id: acct.client_id, client_name: acct.client_name,
+          ad_account_id: acct.ad_account_id, sync_date: date,
+          status: 'running', triggered_by: mode,
+        }).select('id').single();
+        const runId = runIns?.id;
 
-      let rows: CampaignRow[] = [];
-      let lastErr: string | null = null;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try { rows = await fetchMetaInsights(acct, date); lastErr = null; break; }
-        catch (e) { lastErr = (e as Error).message; if (attempt === 1) await sleep(2000); }
-      }
-      if (lastErr) {
-        summary.failed++;
+        let rows: CampaignRow[] = [];
+        let lastErr: string | null = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try { rows = await fetchMetaInsights(acct, date); lastErr = null; break; }
+          catch (e) { lastErr = (e as Error).message; if (attempt === 1) await sleep(2000); }
+        }
+        if (lastErr) {
+          summary.failed++;
+          await sb.from('ad_spend_sync_runs').update({
+            status: 'error', error_message: lastErr, finished_at: new Date().toISOString(),
+          }).eq('id', runId);
+          continue;
+        }
+
+        let written = 0;
+        try { written = await upsertDaily(sb, acct, date, rows); }
+        catch (e) {
+          summary.failed++;
+          await sb.from('ad_spend_sync_runs').update({
+            status: 'error', error_message: `db upsert: ${(e as Error).message}`,
+            finished_at: new Date().toISOString(),
+          }).eq('id', runId);
+          continue;
+        }
+
+        // Per-client sheet mirror
+        const clientSheetId = sheetIdByClient.get(acct.client_id);
+        let sheetStatus: 'ok' | 'error' | 'skipped' = clientSheetId ? 'ok' : 'skipped';
+        let sheetErr: string | null = null;
+        if (clientSheetId) {
+          if (!readySheets.has(clientSheetId)) {
+            try { await ensureTab(clientSheetId); readySheets.add(clientSheetId); }
+            catch (e) { sheetStatus = 'error'; sheetErr = `ensureTab: ${(e as Error).message}`; }
+          }
+          if (sheetStatus === 'ok') {
+            try { await mirrorToSheet(clientSheetId, acct, date, rows); summary.sheet_ok++; }
+            catch (e) { sheetStatus = 'error'; sheetErr = (e as Error).message; summary.sheet_failed++; }
+          } else {
+            summary.sheet_failed++;
+          }
+        } else {
+          summary.sheet_skipped++;
+        }
+
+        const overall = sheetStatus === 'error' ? 'partial' : 'success';
+        summary.ok++;
+        summary.total_rows += written;
         await sb.from('ad_spend_sync_runs').update({
-          status: 'error', error_message: lastErr, finished_at: new Date().toISOString(),
-        }).eq('id', runId);
-        continue;
-      }
-
-      let written = 0;
-      try { written = await upsertDaily(sb, acct, date, rows); }
-      catch (e) {
-        summary.failed++;
-        await sb.from('ad_spend_sync_runs').update({
-          status: 'error', error_message: `db upsert: ${(e as Error).message}`,
+          status: overall, rows_written: written,
+          sheet_status: sheetStatus, sheet_error: sheetErr,
           finished_at: new Date().toISOString(),
         }).eq('id', runId);
-        continue;
       }
-
-      let sheetStatus: 'ok' | 'error' | 'skipped' = spreadsheetId ? 'ok' : 'skipped';
-      let sheetErr: string | null = null;
-      if (spreadsheetId && sheetReady) {
-        try { await mirrorToSheet(spreadsheetId, acct, date, rows); summary.sheet_ok++; }
-        catch (e) { sheetStatus = 'error'; sheetErr = (e as Error).message; summary.sheet_failed++; }
-      } else if (spreadsheetId && !sheetReady) {
-        sheetStatus = 'error'; sheetErr = 'sheet tab could not be prepared'; summary.sheet_failed++;
-      }
-
-      const overall = sheetStatus === 'error' ? 'partial' : 'success';
-      summary.ok++;
-      summary.total_rows += written;
-      await sb.from('ad_spend_sync_runs').update({
-        status: overall, rows_written: written,
-        sheet_status: sheetStatus, sheet_error: sheetErr,
-        finished_at: new Date().toISOString(),
-      }).eq('id', runId);
     }
 
-    return new Response(JSON.stringify({ ok: true, date, mode, summary }), {
+    return new Response(JSON.stringify({ ok: true, dates, mode, summary }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
