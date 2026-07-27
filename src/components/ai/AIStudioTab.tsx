@@ -1577,6 +1577,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           if (selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")) {
             const a = (clientAgents as any[]).find(a => a.id === selectedAgentId && a.enabled);
             if (a?.model) return a.model;
+            // Copywriting agent defaults to DeepSeek V4 Flash when no explicit model is set.
+            const label = `${a?.handle || ""} ${a?.name || ""} ${a?.role || ""}`.toLowerCase();
+            if (a && /copyw|copy writ/.test(label)) return "openrouter/deepseek/deepseek-v4-flash";
           }
           return chatModel;
         })(),
