@@ -4,8 +4,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, Users, Clock, Star, ListChecks, TrendingUp, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 import { PastCallPlayer } from '@/components/shared/PastCallPlayer';
 
@@ -23,6 +23,14 @@ interface Row {
   recording_url: string | null;
   finalize_status: string | null;
   proposed_tasks: Array<{ title: string; priority?: string }> | null;
+  clients_reviewed: number;
+  clients_skipped: number;
+  client_time_s: number;
+  tasks_total: number;
+  tasks_done: number;
+  wins_count: number;
+  blockers_count: number;
+  client_breakdown: { name: string; duration_s: number; status: string }[];
 }
 
 function fmt(s: number | null) {
@@ -42,13 +50,23 @@ export function HuddleHistory() {
 
     const enriched: Row[] = [];
     for (const h of (huddles as any[] || [])) {
-      const [{ data: attRows }, { data: tasks }] = await Promise.all([
+      const [{ data: attRows }, { data: tasks }, { data: reviews }, { data: wins }, { data: blockers }] = await Promise.all([
         supabase.from('huddle_attendance').select('member_name').eq('huddle_id', h.id),
         supabase.from('tasks').select('id,status').eq('huddle_id', h.id),
+        (supabase as any).from('huddle_client_reviews').select('client_id,duration_s,status,clients(name)').eq('huddle_id', h.id),
+        supabase.from('huddle_wins').select('id').eq('huddle_id', h.id),
+        supabase.from('huddle_blockers').select('id').eq('huddle_id', h.id),
       ]);
       const attendees = ((attRows as any[]) || []).map(a => a.member_name).filter(Boolean);
       const total = (tasks || []).length;
       const done = (tasks || []).filter((t: any) => t.status === 'completed' || t.status === 'done').length;
+      const revs = (reviews as any[]) || [];
+      const clients_reviewed = revs.filter(r => r.status === 'reviewed').length;
+      const clients_skipped = revs.filter(r => r.status === 'skipped').length;
+      const client_time_s = revs.reduce((s, r) => s + (Number(r.duration_s) || 0), 0);
+      const client_breakdown = revs
+        .map(r => ({ name: r?.clients?.name || 'Unknown', duration_s: Number(r.duration_s) || 0, status: r.status || 'reviewed' }))
+        .sort((a, b) => b.duration_s - a.duration_s);
       enriched.push({
         id: h.id,
         date: h.date,
@@ -63,6 +81,14 @@ export function HuddleHistory() {
         recording_url: h.recording_url ?? null,
         finalize_status: h.finalize_status ?? null,
         proposed_tasks: Array.isArray(h.proposed_tasks) ? h.proposed_tasks : null,
+        clients_reviewed,
+        clients_skipped,
+        client_time_s,
+        tasks_total: total,
+        tasks_done: done,
+        wins_count: (wins || []).length,
+        blockers_count: (blockers || []).length,
+        client_breakdown,
       });
     }
     setRows(enriched);
@@ -86,19 +112,55 @@ export function HuddleHistory() {
     }
   };
 
-  const chartData = [...rows].reverse().slice(-30).map(r => ({ date: r.date.slice(5), pct: r.followthrough_pct }));
+  const chartData = [...rows].reverse().slice(-30).map(r => ({
+    date: r.date.slice(5),
+    followThrough: r.followthrough_pct,
+    attendance: r.attendance_pct,
+    duration: Math.round((r.actual_duration_s || 0) / 60),
+  }));
+
+  // Executive KPI roll-up across all loaded huddles
+  const kpi = (() => {
+    const n = rows.length || 1;
+    const totalMin = Math.round(rows.reduce((s, r) => s + (r.actual_duration_s || 0), 0) / 60);
+    const avgMin = Math.round(totalMin / n);
+    const ratings = rows.filter(r => r.avg_rating != null);
+    const avgRating = ratings.length ? (ratings.reduce((s, r) => s + (r.avg_rating || 0), 0) / ratings.length) : null;
+    const attPct = Math.round(rows.reduce((s, r) => s + r.attendance_pct, 0) / n);
+    const ftPct = Math.round(rows.reduce((s, r) => s + r.followthrough_pct, 0) / n);
+    const transcribed = rows.filter(r => !!r.summary_text).length;
+    const clientTimeMin = Math.round(rows.reduce((s, r) => s + r.client_time_s, 0) / 60);
+    const totalClientsReviewed = rows.reduce((s, r) => s + r.clients_reviewed, 0);
+    return { n: rows.length, totalMin, avgMin, avgRating, attPct, ftPct, transcribed, clientTimeMin, totalClientsReviewed };
+  })();
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+        <MiniKpi icon={<ListChecks className="w-4 h-4" />} label="Huddles" value={kpi.n.toString()} />
+        <MiniKpi icon={<Clock className="w-4 h-4" />} label="Total time" value={`${kpi.totalMin}m`} sub={`avg ${kpi.avgMin}m`} />
+        <MiniKpi icon={<Users className="w-4 h-4" />} label="Attendance" value={`${kpi.attPct}%`} />
+        <MiniKpi icon={<Star className="w-4 h-4" />} label="Avg rating" value={kpi.avgRating ? kpi.avgRating.toFixed(1) : '—'} />
+        <MiniKpi icon={<TrendingUp className="w-4 h-4" />} label="Follow-through" value={`${kpi.ftPct}%`} />
+        <MiniKpi icon={<Mic className="w-4 h-4" />} label="Transcribed" value={`${kpi.transcribed}/${kpi.n}`} />
+        <MiniKpi icon={<Clock className="w-4 h-4" />} label="Client time" value={`${kpi.clientTimeMin}m`} />
+        <MiniKpi icon={<Users className="w-4 h-4" />} label="Clients reviewed" value={kpi.totalClientsReviewed.toString()} />
+      </div>
+
       <Card className="p-4">
-        <div className="text-sm font-semibold mb-2">30-day follow-through</div>
-        <div className="h-40">
+        <div className="text-sm font-semibold mb-2">30-day trend</div>
+        <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="date" fontSize={11} />
-              <YAxis domain={[0, 100]} fontSize={11} unit="%" />
+              <YAxis yAxisId="pct" domain={[0, 100]} fontSize={11} unit="%" />
+              <YAxis yAxisId="min" orientation="right" fontSize={11} unit="m" />
               <Tooltip />
-              <Line type="monotone" dataKey="pct" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              <Legend />
+              <Line yAxisId="pct" type="monotone" dataKey="followThrough" name="Follow-through %" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              <Line yAxisId="pct" type="monotone" dataKey="attendance" name="Attendance %" stroke="hsl(var(--muted-foreground))" strokeWidth={2} dot={false} />
+              <Line yAxisId="min" type="monotone" dataKey="duration" name="Duration (min)" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -111,7 +173,9 @@ export function HuddleHistory() {
               <TableHead>Duration</TableHead>
               <TableHead>Rating</TableHead>
               <TableHead>Attendance</TableHead>
-              <TableHead>Attendees</TableHead>
+              <TableHead>Clients (rev/skip)</TableHead>
+              <TableHead>Wins / Blockers</TableHead>
+              <TableHead>Tasks</TableHead>
               <TableHead>Follow-through / Recap</TableHead>
             </TableRow>
           </TableHeader>
@@ -123,14 +187,16 @@ export function HuddleHistory() {
                   <TableCell>{fmt(r.actual_duration_s)} / {fmt(r.planned_duration_s)}</TableCell>
                   <TableCell>{r.avg_rating ? r.avg_rating.toFixed(1) : '—'}</TableCell>
                   <TableCell>{r.attendees.length} · {r.attendance_pct}%</TableCell>
-                  <TableCell className="max-w-[280px]">
-                    <div className="flex flex-wrap gap-1">
-                      {r.attendees.slice(0, 6).map((n, i) => (
-                        <span key={i} className="inline-block rounded-full bg-primary/10 text-primary text-[10px] px-2 py-0.5">{n}</span>
-                      ))}
-                      {r.attendees.length > 6 && <span className="text-[10px] text-muted-foreground">+{r.attendees.length - 6}</span>}
-                      {r.attendees.length === 0 && <span className="text-[10px] text-muted-foreground">—</span>}
-                    </div>
+                  <TableCell className="text-xs">
+                    <div><span className="text-emerald-600 font-medium">{r.clients_reviewed}</span> / <span className="text-muted-foreground">{r.clients_skipped}</span></div>
+                    <div className="text-[10px] text-muted-foreground">{fmt(r.client_time_s)} on clients</div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <div><span className="text-primary font-medium">{r.wins_count}</span> wins</div>
+                    <div className="text-[10px] text-amber-600">{r.blockers_count} blockers</div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {r.tasks_done}/{r.tasks_total}
                   </TableCell>
                   <TableCell>
                     <div className="space-y-2">
@@ -165,25 +231,62 @@ export function HuddleHistory() {
                 </TableRow>
                 {openId === r.id && (
                   <TableRow>
-                    <TableCell colSpan={6} className="bg-muted/20">
-                      <PastCallPlayer
-                        recordingUrl={r.recording_url}
-                        transcript={r.transcript}
-                        summary={r.summary_text}
-                        proposedTasks={r.proposed_tasks}
-                        taskExtras={{ huddle_id: r.id }}
-                      />
+                    <TableCell colSpan={8} className="bg-muted/20">
+                      <div className="space-y-4">
+                        {r.attendees.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold uppercase text-muted-foreground mb-1">Attendees ({r.attendees.length})</div>
+                            <div className="flex flex-wrap gap-1">
+                              {r.attendees.map((n, i) => (
+                                <span key={i} className="inline-block rounded-full bg-primary/10 text-primary text-[10px] px-2 py-0.5">{n}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {r.client_breakdown.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold uppercase text-muted-foreground mb-1">Time per client ({r.client_breakdown.length})</div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+                              {r.client_breakdown.map((c, i) => (
+                                <div key={i} className="flex items-center justify-between border rounded-md px-2 py-1">
+                                  <span className="truncate">{c.name}</span>
+                                  <span className={`font-mono tabular-nums ${c.status === 'skipped' ? 'text-muted-foreground' : 'text-emerald-600'}`}>
+                                    {fmt(c.duration_s)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <PastCallPlayer
+                          recordingUrl={r.recording_url}
+                          transcript={r.transcript}
+                          summary={r.summary_text}
+                          proposedTasks={r.proposed_tasks}
+                          taskExtras={{ huddle_id: r.id }}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}
               </Fragment>
             ))}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No huddles yet.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No huddles yet.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
       </Card>
     </div>
+  );
+}
+
+function MiniKpi({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
+  return (
+    <Card className="p-3">
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">{icon}<span>{label}</span></div>
+      <div className="text-xl font-semibold mt-1 tabular-nums">{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground">{sub}</div>}
+    </Card>
   );
 }
