@@ -12,6 +12,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCreateTask } from '@/hooks/useTasks';
 import { toast } from 'sonner';
 import { LeadFormEditor, DEFAULT_LEAD_FORM_QUESTIONS, LeadFormQuestion } from '@/components/funnel/LeadFormEditor';
+import {
+  ACCREDITED_PREFIX,
+  DEFAULT_DISCLOSURE,
+  scanBodyCopy,
+  ensureAccreditedPrefix,
+  checkExemptionForPublicAds,
+  hasBlocking,
+  withDisclosure,
+  makeIdempotencyKey,
+  type Exemption,
+  type ComplianceIssue,
+} from '@/lib/adCompliance';
+import { AlertTriangle, ShieldCheck } from 'lucide-react';
 
 interface NewCampaignWizardProps {
   open: boolean;
@@ -57,6 +70,13 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
   const [linkUrl, setLinkUrl] = useState('');
   const [primaryText, setPrimaryText] = useState('');
   const [headline, setHeadline] = useState('');
+  // Compliance
+  const [exemption, setExemption] = useState<Exemption>('506c');
+  const [complianceOverride, setComplianceOverride] = useState<{ id: string; approver: string } | null>(null);
+  const [overrideApprover, setOverrideApprover] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
+  const [appendDisclosure, setAppendDisclosure] = useState(true);
+  const [savingOverride, setSavingOverride] = useState(false);
   // Targeting
   const [ageMin, setAgeMin] = useState('30');
   const [ageMax, setAgeMax] = useState('65');
@@ -85,6 +105,8 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
     setInterests(''); setBehaviors(''); setCustomAudiences(''); setPlacements('automatic');
     setLeadFormName(''); setLeadFormIntro(''); setPrivacyUrl(''); setThankYouUrl('');
     setQuestions(DEFAULT_LEAD_FORM_QUESTIONS); setSmsVerify(false);
+    setExemption('506c'); setComplianceOverride(null);
+    setOverrideApprover(''); setOverrideReason(''); setAppendDisclosure(true);
   };
   const close = () => { reset(); onClose(); };
 
@@ -167,11 +189,22 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
     if (files.length === 0) { toast.error('Add at least one creative'); return; }
     if (objective === 'conversions' && !pixelId) { toast.error('Pick a Pixel for conversions'); return; }
 
+    // Compliance preflight (blocking)
+    const issues = [
+      ...checkExemptionForPublicAds(exemption, complianceOverride?.id ?? null),
+      ...scanBodyCopy(primaryText),
+    ];
+    if (hasBlocking(issues)) {
+      toast.error(`Compliance blocked: ${issues.find(i => i.severity === 'blocking')?.message}`);
+      return;
+    }
+
     setLaunching(true);
     try {
       toast.info('Uploading creatives…');
       const uploaded = await uploadFilesToStorage();
       toast.info('Creating campaign on Meta…');
+      const finalBody = appendDisclosure ? withDisclosure(primaryText, DEFAULT_DISCLOSURE) : primaryText;
       const payload: any = {
         clientId,
         campaignName: name,
@@ -183,12 +216,16 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
         pixelId: objective === 'conversions' ? pixelId : undefined,
         customEventType: objective === 'conversions' ? customEventType : undefined,
         targeting: buildTargeting(),
+        idempotencyKey: makeIdempotencyKey(`c_${clientId.slice(0, 8)}`),
+        offeringExemption: exemption,
+        complianceApprovalId: complianceOverride?.id ?? undefined,
+        specialAdCategories: ['FINANCIAL_PRODUCTS_SERVICES'],
         creatives: uploaded.map((u, i) => ({
           fileUrl: u.url,
           fileType: u.type,
           fileName: u.name,
           name: `${name} — ${i + 1}`,
-          message: primaryText || undefined,
+          message: finalBody || undefined,
           headline: headline || undefined,
           linkUrl: linkUrl || thankYouUrl || undefined,
           callToActionType: ctaType,
@@ -310,6 +347,35 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
       setUploading(false);
     }
   };
+
+  const saveComplianceOverride = async () => {
+    if (!overrideApprover.trim() || !overrideReason.trim()) {
+      toast.error('Approver name and reason required');
+      return;
+    }
+    setSavingOverride(true);
+    try {
+      const { data, error } = await supabase.from('compliance_approvals').insert({
+        client_id: clientId,
+        exemption,
+        approver_name: overrideApprover,
+        reason: overrideReason,
+        attested: true,
+      }).select('id').single();
+      if (error) throw error;
+      setComplianceOverride({ id: data.id, approver: overrideApprover });
+      toast.success('Compliance override recorded');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to record override');
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
+  const complianceIssues: ComplianceIssue[] = [
+    ...checkExemptionForPublicAds(exemption, complianceOverride?.id ?? null),
+    ...(primaryText ? scanBodyCopy(primaryText) : []),
+  ];
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
