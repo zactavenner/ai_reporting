@@ -77,6 +77,8 @@ import { useDeleteTaskComment } from '@/hooks/useTasks';
 import { useMeetings } from '@/hooks/useMeetings';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useTaskFileReview } from '@/hooks/useTaskFileReview';
+import { useClientOffers } from '@/hooks/useClientOffers';
+import { Wand2 } from 'lucide-react';
 import { TaskDiscussionVoiceNote, VoiceNotePlayer } from './TaskDiscussionVoiceNote';
 import { FilePreviewLightbox, MiniThumbnail } from './FilePreviewLightbox';
 import { InlineFilePreview } from './InlineFilePreview';
@@ -140,6 +142,19 @@ function useClientMetaAdAccounts(clientId?: string) {
  
  export function TaskDetailPanel({ task, open, onOpenChange, clientName, clientId, isPublicView = false }: TaskDetailPanelProps) {
    const updateTask = useUpdateTask();
+  const { data: taskOffers = [] } = useClientOffers(task?.client_id || undefined);
+  const linkedOffer = taskOffers.find((o: any) => o.id === (task as any)?.offer_id) || null;
+  const openInAIStudio = () => {
+    if (!task?.client_id) return;
+    try {
+      localStorage.setItem('agency-ai-studio:last-client', task.client_id);
+      localStorage.setItem(
+        `ai-studio:offer:${task.client_id}`,
+        (task as any).offer_id || 'all'
+      );
+    } catch {}
+    window.location.href = '/?tab=ai-studio';
+  };
   const [editingTitle, setEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
    const deleteTask = useDeleteTask();
@@ -822,6 +837,28 @@ const getHistoryIcon = (action: string) => {
                 {clientName && (
                   <p className="text-sm text-muted-foreground mt-1">Client: {clientName}</p>
                 )}
+                {task.client_id && taskOffers.length > 0 && !isPublicView && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-muted-foreground">Offer:</span>
+                    <Select
+                      value={(task as any).offer_id || 'none'}
+                      onValueChange={(v) => updateTask.mutate({ id: task.id, offer_id: v === 'none' ? null : v } as any)}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-[220px]">
+                        <SelectValue placeholder="Link an offer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No offer</SelectItem>
+                        {taskOffers.map((o: any) => (
+                          <SelectItem key={o.id} value={o.id}>{o.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {linkedOffer && (
+                      <Badge variant="secondary" className="text-[10px]">{linkedOffer.title}</Badge>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap text-xs text-muted-foreground mt-1">
                   {task.created_at && (
                     <span>
@@ -883,6 +920,17 @@ const getHistoryIcon = (action: string) => {
                       )}
                       Duplicate
                     </Button>
+                    {task.client_id && !isPublicView && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={openInAIStudio}
+                        title={linkedOffer ? `Open AI Studio with "${linkedOffer.title}"` : 'Open AI Studio for this client'}
+                      >
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Open in AI Studio
+                      </Button>
+                    )}
                     {metaAdAccountIds.map((adId, idx) => (
                       <Button
                         key={adId}
