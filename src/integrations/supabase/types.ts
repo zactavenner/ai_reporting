@@ -15779,6 +15779,94 @@ export type Database = {
           },
         ]
       }
+      task_notification_deliveries: {
+        Row: {
+          channel: string
+          created_at: string
+          error: string | null
+          id: string
+          kind: string | null
+          last_attempt_at: string
+          member_id: string | null
+          message: string | null
+          notification_id: string | null
+          provider: string | null
+          provider_response: Json | null
+          recipient: string | null
+          retry_count: number
+          sent_at: string | null
+          status: string
+          subject: string | null
+          task_id: string | null
+          triggered_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string | null
+          last_attempt_at?: string
+          member_id?: string | null
+          message?: string | null
+          notification_id?: string | null
+          provider?: string | null
+          provider_response?: Json | null
+          recipient?: string | null
+          retry_count?: number
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          task_id?: string | null
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string | null
+          last_attempt_at?: string
+          member_id?: string | null
+          message?: string | null
+          notification_id?: string | null
+          provider?: string | null
+          provider_response?: Json | null
+          recipient?: string | null
+          retry_count?: number
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          task_id?: string | null
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_notification_deliveries_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "agency_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_notification_deliveries_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "task_notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_notification_deliveries_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_notifications: {
         Row: {
           created_at: string

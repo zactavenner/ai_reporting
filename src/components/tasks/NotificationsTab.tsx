@@ -8,6 +8,8 @@ import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { TaskDeliveriesPanel } from './TaskDeliveriesPanel';
 
 interface Notification {
   id: string;
@@ -128,7 +130,13 @@ export function NotificationsTab({ onTaskClick }: { onTaskClick?: (taskId: strin
   }
 
   return (
-    <div className="space-y-4">
+    <Tabs defaultValue="inbox" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="inbox">Inbox</TabsTrigger>
+        <TabsTrigger value="deliveries">Delivery Log</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="inbox" className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button
@@ -218,6 +226,11 @@ export function NotificationsTab({ onTaskClick }: { onTaskClick?: (taskId: strin
           </div>
         </ScrollArea>
       )}
-    </div>
+      </TabsContent>
+
+      <TabsContent value="deliveries">
+        <TaskDeliveriesPanel memberId={currentMember.id} />
+      </TabsContent>
+    </Tabs>
   );
 }
