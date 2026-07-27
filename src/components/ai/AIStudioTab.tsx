@@ -128,6 +128,20 @@ function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): s
   return `Max ${m.maxSeconds}s · ~$${fmt} / ${m.maxSeconds}s clip`;
 }
 
+// Classify a client agent by the content it produces. Used to show the right
+// media options (image vs video) in the composer only when that kind of agent
+// is selected, keeping the UI clean for chat/copy agents.
+function inferAgentMode(agent: any): "static" | "video" | "chat" {
+  if (!agent) return "chat";
+  const text = `${agent.name || ""} ${agent.handle || ""} ${agent.system_prompt || ""} ${agent.agent_type || ""}`.toLowerCase();
+  const isVideo = /\b(video|reel|cutter|film|motion|clip|seedance|happyhorse|grok|footage|render|vsl)\b/.test(text);
+  const isStatic = /\b(static|image|canvas|photo|picture|graphic|display)\b/.test(text);
+  if (isVideo && isStatic) return isVideo ? "video" : "static";
+  if (isVideo) return "video";
+  if (isStatic) return "static";
+  return "chat";
+}
+
 // Conversion-focused ad format presets. Each preset is injected into the
 // AI Studio system prompt so the model picks the right dims, safe zones,
 // text-overlay placement, and platform-native look automatically.
