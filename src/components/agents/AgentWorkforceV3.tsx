@@ -3,7 +3,6 @@ import { Bot, Crown, ChevronRight, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAgencyAgents, useCreateCustomAgent, AGENCY_AGENT_MODELS } from "@/hooks/useAgencyAgents";
 import { AgentProfilePanel } from "./AgentProfilePanel";
 import { useAgencyAgentFiles, totalTokensForFiles } from "@/hooks/useAgencyAgentFiles";
@@ -97,38 +96,21 @@ export function AgentWorkforceV3() {
       ) : coreAgents.length === 0 ? (
         <p className="text-sm text-muted-foreground">No agency agents seeded yet.</p>
       ) : (
-        <Tabs value={selected?.id || ""} onValueChange={setSelectedId}>
-          <TabsList className="flex flex-wrap gap-1 h-auto bg-transparent p-0">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-2">
+          <div className="md:col-span-1 space-y-2">
             {coreAgents.map((a) => (
-              <TabsTrigger key={a.id} value={a.id} className="text-xs data-[state=active]:bg-primary/10">
-                <span className="mr-1">{a.icon || "🤖"}</span>{a.name}
-              </TabsTrigger>
+              <AgentCard
+                key={a.id}
+                agent={a}
+                selected={selected?.id === a.id}
+                onClick={() => setSelectedId(a.id)}
+              />
             ))}
-          </TabsList>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
-            <div className="md:col-span-1 space-y-2">
-              {coreAgents.map((a) => (
-                <AgentCard
-                  key={a.id}
-                  agent={a}
-                  selected={selected?.id === a.id}
-                  onClick={() => setSelectedId(a.id)}
-                />
-              ))}
-            </div>
-            <div className="md:col-span-3">
-              {coreAgents.map((a) => (
-                <TabsContent key={a.id} value={a.id} className="m-0">
-                  <AgentProfilePanel agent={a} mode="master" />
-                </TabsContent>
-              ))}
-              {!coreAgents.some((a) => a.id === selected?.id) && selected && (
-                <AgentProfilePanel agent={selected} mode="master" />
-              )}
-            </div>
           </div>
-        </Tabs>
+          <div className="md:col-span-3">
+            {selected && <AgentProfilePanel key={selected.id} agent={selected} mode="master" />}
+          </div>
+        </div>
       )}
 
       <Dialog open={showNew} onOpenChange={setShowNew}>
