@@ -3,6 +3,11 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
 const APP_URL = 'https://aireporting.lovable.app';
+// Agency-owned sender identity for all task notifications. Task alerts should
+// always come from HPA's support inbox and dedicated number, never from the
+// individual client's GHL location.
+const AGENCY_FROM_EMAIL = 'support@highperformanceads.com';
+const AGENCY_FROM_NUMBER = '+13239885958';
 
 interface Body {
   task_id: string;
@@ -68,10 +73,14 @@ async function ghlSend(
   payload: { message?: string; subject?: string; html?: string },
 ) {
   const body: Record<string, unknown> = { type, contactId };
-  if (type === 'SMS') body.message = payload.message;
+  if (type === 'SMS') {
+    body.message = payload.message;
+    body.fromNumber = AGENCY_FROM_NUMBER;
+  }
   if (type === 'Email') {
     body.subject = payload.subject;
     body.html = payload.html;
+    body.emailFrom = AGENCY_FROM_EMAIL;
   }
   const res = await fetch(`${GHL_BASE_URL}/conversations/messages`, {
     method: 'POST',
@@ -126,9 +135,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Look up GHL credentials from the task's own client_id (may be null for internal tasks)
+    // Always send from the agency's own GHL location so notifications come from
+    // support@highperformanceads.com and +1 323-988-5958 — never from the
+    // client's brand. Fall back to the client's GHL only if agency creds are
+    // missing (should not happen in production).
+    const agencyKey = Deno.env.get('AGENCY_GHL_API_KEY') || Deno.env.get('AGENCY_GHL_PIT_TOKEN');
+    const agencyLoc = Deno.env.get('AGENCY_GHL_LOCATION_ID');
     let client: { ghl_api_key: string | null; ghl_location_id: string | null } | null = null;
-    if (task.client_id) {
+    if (agencyKey && agencyLoc) {
+      client = { ghl_api_key: agencyKey, ghl_location_id: agencyLoc };
+    } else if (task.client_id) {
       const { data } = await supabase
         .from('clients')
         .select('ghl_api_key, ghl_location_id')
