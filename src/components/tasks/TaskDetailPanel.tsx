@@ -77,6 +77,8 @@ import { useDeleteTaskComment } from '@/hooks/useTasks';
 import { useMeetings } from '@/hooks/useMeetings';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useTaskFileReview } from '@/hooks/useTaskFileReview';
+import { useClientOffers } from '@/hooks/useClientOffers';
+import { Wand2 } from 'lucide-react';
 import { TaskDiscussionVoiceNote, VoiceNotePlayer } from './TaskDiscussionVoiceNote';
 import { FilePreviewLightbox, MiniThumbnail } from './FilePreviewLightbox';
 import { InlineFilePreview } from './InlineFilePreview';
