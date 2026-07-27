@@ -119,7 +119,7 @@ function PasswordGateContent({ children }: PasswordGateProps) {
           <CardDescription>Enter password and your name to access</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div>
               <Input
                 type="password"
