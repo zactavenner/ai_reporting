@@ -2403,15 +2403,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         if (selectedAgentId === "master") return "Jarvis";
                         if (selectedAgentId.startsWith("slug:")) {
                           const a = agencyRoster.find(x => `slug:${x.slug}` === selectedAgentId);
-                          return a ? `@${a.slug}` : "Agent";
+                          return a ? a.name : "Agent";
                         }
                         const a = (clientAgents as any[]).find(a => a.id === selectedAgentId);
-                        return a ? `@${a.handle}` : "Agent";
+                        return a ? a.name : "Agent";
                       })()}
                       <ChevronDown className="h-3 w-3 opacity-60" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-64 p-2">
+                  <PopoverContent align="start" className="w-72 p-2">
                     <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Agent</div>
                     <div className="space-y-0.5">
                       <button
@@ -2429,25 +2429,33 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         {selectedAgentId === "master" ? "● " : "○ "}Jarvis (Account Manager) <span className="text-muted-foreground">— auto-delegates</span>
                       </button>
                     </div>
-                    {agencyRoster.length > 0 && (
+                    {(clientAgents as any[]).filter((a: any) => a.enabled).length > 0 && (
                       <div className="mt-2 pt-2 border-t border-border/60">
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Team specialists</div>
-                        <div className="space-y-0.5 max-h-56 overflow-y-auto">
-                          {agencyRoster.map((a: any) => {
-                            const value = `slug:${a.slug}`;
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Client agents</div>
+                        <div className="space-y-0.5 max-h-72 overflow-y-auto">
+                          {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => {
+                            const label = `${a.handle || ""} ${a.name || ""} ${a.role || ""}`.toLowerCase();
+                            const isCopy = /copyw|copy writ/.test(label);
+                            const modelLabel = a.model
+                              ? a.model.split("/").pop()
+                              : (isCopy ? "deepseek-v4-flash" : null);
                             return (
                               <button
                                 key={a.id}
                                 type="button"
-                                onClick={() => setSelectedAgentId(value)}
-                                className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === value ? "bg-primary/10 font-medium" : ""}`}
+                                onClick={() => setSelectedAgentId(a.id)}
+                                className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === a.id ? "bg-primary/10 font-medium" : ""}`}
                               >
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="truncate">
-                                    {selectedAgentId === value ? "● " : "○ "}@{a.slug}
-                                    <span className="text-muted-foreground"> · {a.name}</span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate">
+                                      {selectedAgentId === a.id ? "● " : "○ "}{a.name}
+                                    </span>
+                                    {a.handle && (
+                                      <span className="block text-[10px] text-muted-foreground truncate pl-3">@{a.handle}</span>
+                                    )}
                                   </span>
-                                  {a.default_model && <span className="text-[9px] text-muted-foreground shrink-0">{a.default_model.split("/").pop()}</span>}
+                                  {modelLabel && <span className="text-[9px] text-muted-foreground shrink-0">{modelLabel}</span>}
                                 </div>
                               </button>
                             );
@@ -2455,30 +2463,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         </div>
                       </div>
                     )}
-                    {(clientAgents as any[]).filter((a: any) => a.enabled).length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-border/60">
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-1 pb-1">Client-only agents</div>
-                        <div className="space-y-0.5 max-h-56 overflow-y-auto">
-                          {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => (
-                            <button
-                              key={a.id}
-                              type="button"
-                              onClick={() => setSelectedAgentId(a.id)}
-                              className={`w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted ${selectedAgentId === a.id ? "bg-primary/10 font-medium" : ""}`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="truncate">
-                                  {selectedAgentId === a.id ? "● " : "○ "}@{a.handle}
-                                  <span className="text-muted-foreground"> · {a.name}</span>
-                                </span>
-                                {a.model && <span className="text-[9px] text-muted-foreground shrink-0">{a.model.split("/").pop()}</span>}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {agencyRoster.length === 0 && (clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
+                    {(clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
                       <div className="mt-2 pt-2 border-t border-border/60 px-2 py-1.5 text-[10px] text-muted-foreground">
                         No specialists yet — create one in the Agents tab.
                       </div>
