@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { whatsappDashboard } from '@/lib/whatsappDashboard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,8 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Trash2, Plus, Send, Loader2, BellRing } from 'lucide-react';
 import { toast } from 'sonner';
-
-const sb = supabase as any;
 
 interface Recipient {
   id: string;
@@ -32,8 +31,10 @@ export function JarvisAlertsPanel() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await sb.from('jarvis_alert_recipients').select('*').order('created_at', { ascending: true });
-    setRows(data || []);
+    try {
+      const r = await whatsappDashboard<{ recipients: Recipient[] }>('recipients_list');
+      setRows(r.recipients || []);
+    } catch (e: any) { toast.error('Load failed: ' + e.message); }
     setLoading(false);
   };
 
@@ -44,32 +45,33 @@ export function JarvisAlertsPanel() {
     if (!newName.trim() || !phone) { toast.error('Name and phone required'); return; }
     const e164 = phone.startsWith('+') ? phone : '+' + phone.replace(/\D/g, '');
     setSaving(true);
-    const { error } = await sb.from('jarvis_alert_recipients').insert({
-      name: newName.trim(), phone_e164: e164, active: true, alert_types: ['all'],
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    setNewName(''); setNewPhone('');
-    load();
+    try {
+      await whatsappDashboard('recipient_upsert', {
+        row: { name: newName.trim(), phone_e164: e164, active: true, alert_types: ['all'] },
+      });
+      setNewName(''); setNewPhone('');
+      load();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
   };
 
   const toggle = async (r: Recipient, active: boolean) => {
-    await sb.from('jarvis_alert_recipients').update({ active }).eq('id', r.id);
-    load();
+    try { await whatsappDashboard('recipient_upsert', { row: { ...r, active } }); load(); }
+    catch (e: any) { toast.error(e.message); }
   };
 
   const remove = async (r: Recipient) => {
     if (!confirm(`Remove ${r.name}?`)) return;
-    await sb.from('jarvis_alert_recipients').delete().eq('id', r.id);
-    load();
+    try { await whatsappDashboard('recipient_delete', { id: r.id }); load(); }
+    catch (e: any) { toast.error(e.message); }
   };
 
   const toggleType = async (r: Recipient, t: string) => {
     let next = new Set(r.alert_types || []);
     if (next.has(t)) next.delete(t); else next.add(t);
     if (next.size === 0) next = new Set(['all']);
-    await sb.from('jarvis_alert_recipients').update({ alert_types: Array.from(next) }).eq('id', r.id);
-    load();
+    try { await whatsappDashboard('recipient_upsert', { row: { ...r, alert_types: Array.from(next) } }); load(); }
+    catch (e: any) { toast.error(e.message); }
   };
 
   const sendTest = async (r: Recipient) => {
