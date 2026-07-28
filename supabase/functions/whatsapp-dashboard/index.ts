@@ -27,22 +27,61 @@ async function getOrCreateSession(admin: ReturnType<typeof createClient>, label 
   return created;
 }
 
-async function callBridge(path: string, method: 'GET' | 'POST', body?: unknown) {
+// Timeout-safe bridge fetch. Any transport failure (DNS, TLS, timeout, TCP
+// reset) is captured as { configured: true, ok: false, status: 0, error }
+// so the caller can surface a real diagnostic to the UI instead of hanging
+// or throwing.
+async function callBridge(
+  path: string,
+  method: 'GET' | 'POST',
+  body?: unknown,
+  timeoutMs = 10_000,
+) {
   const url = Deno.env.get('WHATSAPP_BRIDGE_URL');
   const token = Deno.env.get('WHATSAPP_BRIDGE_TOKEN');
-  if (!url || !token) return { configured: false, ok: false, status: 0, body: null as any };
-  const res = await fetch(`${url.replace(/\/$/, '')}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let parsed: any = null;
-  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
-  return { configured: true, ok: res.ok, status: res.status, body: parsed };
+  if (!url) return { configured: false, ok: false, status: 0, body: null as any, error: 'WHATSAPP_BRIDGE_URL not set' };
+  if (!token) return { configured: false, ok: false, status: 0, body: null as any, error: 'WHATSAPP_BRIDGE_TOKEN not set' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const target = `${url.replace(/\/$/, '')}${path}`;
+  try {
+    const res = await fetch(target, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let parsed: any = null;
+    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+    return { configured: true, ok: res.ok, status: res.status, body: parsed, error: res.ok ? null : `bridge ${res.status}` };
+  } catch (e) {
+    const msg = (e as Error)?.name === 'AbortError'
+      ? `bridge timeout after ${timeoutMs}ms (${target})`
+      : `bridge fetch failed: ${(e as Error).message} (${target})`;
+    console.error('[callBridge]', msg);
+    return { configured: true, ok: false, status: 0, body: null as any, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Actively probe /health so the UI can distinguish "URL configured" from
+// "bridge answering right now". Short timeout — this is called on every load.
+async function probeBridge(timeoutMs = 4_000) {
+  const url = Deno.env.get('WHATSAPP_BRIDGE_URL');
+  if (!url) return { configured: false, reachable: false, error: 'WHATSAPP_BRIDGE_URL not set', body: null as any };
+  const r = await callBridge('/health', 'GET', undefined, timeoutMs);
+  return {
+    configured: true,
+    reachable: r.ok,
+    status: r.status,
+    error: r.ok ? null : r.error,
+    body: r.body,
+  };
 }
 
 Deno.serve(async (req) => {
