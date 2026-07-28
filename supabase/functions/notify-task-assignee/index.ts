@@ -148,16 +148,7 @@ Deno.serve(async (req) => {
     // AGENCY_GHL_API_KEY returns "Invalid JWT" against services.leadconnectorhq.com
     // (a v2 endpoint), which caused every task notification to fail with
     // "contact create failed". Fall back to the v1 key only if no PIT is set.
-    const pit = Deno.env.get('AGENCY_GHL_PIT_TOKEN');
-    const legacy = Deno.env.get('AGENCY_GHL_API_KEY');
-    const agencyKey = pit || legacy;
-    console.log('[ghl-key-diag]', {
-      using: pit ? 'PIT' : (legacy ? 'legacy' : 'none'),
-      prefix: agencyKey ? agencyKey.slice(0, 6) : null,
-      len: agencyKey ? agencyKey.length : 0,
-      pit_present: !!pit,
-      legacy_present: !!legacy,
-    });
+    const agencyKey = Deno.env.get('AGENCY_GHL_PIT_TOKEN') || Deno.env.get('AGENCY_GHL_API_KEY');
     const agencyLoc = Deno.env.get('AGENCY_GHL_LOCATION_ID');
     let client: { ghl_api_key: string | null; ghl_location_id: string | null } | null = null;
     if (agencyKey && agencyLoc) {
