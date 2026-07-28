@@ -134,12 +134,30 @@ function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): s
 function inferAgentMode(agent: any): "static" | "video" | "chat" {
   if (!agent) return "chat";
   const text = `${agent.name || ""} ${agent.handle || ""} ${agent.system_prompt || ""} ${agent.agent_type || ""}`.toLowerCase();
+  // Copy-focused agents are strictly chat/text — never allow them to trigger
+  // image or video generation tools, even if their prompt mentions "video".
+  if (/\bcopy\s*writer|\bcopyw|\bcopy_writer|\bcopywriting|\bscript\s*writer\b/.test(text)) return "chat";
   const isVideo = /\b(video|reel|cutter|film|motion|clip|seedance|happyhorse|grok|footage|render|vsl)\b/.test(text);
   const isStatic = /\b(static|image|canvas|photo|picture|graphic|display)\b/.test(text);
   if (isVideo && isStatic) return isVideo ? "video" : "static";
   if (isVideo) return "video";
   if (isStatic) return "static";
   return "chat";
+}
+
+// Pick a server-side tool policy from the selected agent. Copy/chat agents
+// are text-only; static / video specialists are locked to their modality;
+// Jarvis (Account Manager) can call every tool so it can orchestrate a full
+// end-to-end deliverable across copywriter + static + video without asking
+// the user to change bubbles mid-turn.
+function agentToolPolicyFor(agent: any, isMaster: boolean): "text_only" | "static_only" | "video_only" | "all" {
+  if (isMaster) return "all";
+  if (!agent) return "all";
+  const mode = inferAgentMode(agent);
+  if (mode === "chat") return "text_only";
+  if (mode === "static") return "static_only";
+  if (mode === "video") return "video_only";
+  return "all";
 }
 
 // Conversion-focused ad format presets. Each preset is injected into the
@@ -1558,8 +1576,24 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const agentBlock = pickedAgent
             ? buildAgentContextBlock([pickedAgent])
             : (mentioned.length && !pickedAgencyForTurn ? buildAgentContextBlock(mentioned) : "");
-          const masterAgentBlock = selectedAgentId === "master" && agentEnabledForTurn && agencyRoster.length > 0
-            ? `You are Jarvis, the Account Manager. Inspect the user's request and silently delegate to the most appropriate specialist from the roster below. Adopt that specialist's role, knowledge and tone for this turn. Available specialists:\n${agencyRoster.map(a => `- @${a.slug} (${a.role}) — ${a.name}`).join("\n")}\n\n---\n`
+          const masterAgentBlock = selectedAgentId === "master" && agentEnabledForTurn
+            ? [
+                "You are Jarvis, the Account Manager. You do NOT hand the user back to a specialist — you deliver the finished work yourself by orchestrating them end-to-end in this SAME turn.",
+                "",
+                "Delegation contract (silent — never tell the user to switch bubbles):",
+                "1. Restate the goal in one line.",
+                "2. If copy / hooks / captions / scripts are needed → adopt the Copywriter voice first and produce the copy in-chat before any visual tool call.",
+                "3. If a static ad / image is needed → call the image tools (generate_static_ad / edit_static_ad / compare_image_models / generate_ad_variations) with the composer's locked model + aspect ratio.",
+                "4. If a video / reel / VSL is needed → call generate_seedance_video with the composer's locked video model, resolution and duration.",
+                "5. When BOTH copy and a creative are requested, do copy → static → video in one turn (parallel tool calls where possible). Never stop after the copy step and ask the user to run the visuals separately.",
+                "6. After every tool run, briefly review the output in the copywriter/creative-director voice (what works, one crisp iteration if the output is weak) and finish with a Done summary listing every deliverable.",
+                "",
+                agencyRoster.length > 0
+                  ? `Roster you can channel (adopt their voice/knowledge — do NOT @-mention them to the user):\n${agencyRoster.map(a => `- @${a.slug} (${a.role}) — ${a.name}`).join("\n")}`
+                  : "",
+                "---",
+                "",
+              ].filter(Boolean).join("\n")
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
@@ -1637,6 +1671,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         activeReferenceIds,
         activeVideoReferenceIds,
         agentMode: selectedAgentId !== "off",
+        agentToolPolicy: agentToolPolicyFor(
+          (clientAgents as any[]).find(a => a.id === selectedAgentId) || null,
+          selectedAgentId === "master",
+        ),
         // Phase 5 wiring: pass offer scope so the edge function can load
         // 3-layer context (agency agent + client brain + offer training).
         offerIds: selectedOfferId && selectedOfferId !== "all" ? [selectedOfferId] : (clientOffers || []).map((o: any) => o.id),
@@ -2386,7 +2424,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               />
               </div>
               <div className="flex flex-col md:flex-row md:items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
-                <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible -mx-1 px-1 pb-1 md:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0 [&>button]:shrink-0">
+                <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-wrap -mx-1 px-1 pb-1 md:pb-0">
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Offer:</span>
                   <Select value={selectedOfferId} onValueChange={setSelectedOfferId}>

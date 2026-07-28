@@ -3094,7 +3094,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds, forceToolName } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, agentToolPolicy, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds, forceToolName } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -3115,6 +3115,7 @@ Deno.serve(async (req) => {
     threadTitle?: string | null;
     threadUpdate?: { title?: string | null; pinned?: boolean; archived?: boolean } | null;
     agentMode?: boolean;
+    agentToolPolicy?: "text_only" | "static_only" | "video_only" | "all";
     attachments?: Array<{ url: string; name?: string; mime?: string; text?: string }> | null;
     canvasItemKind?: string;
     canvasItemPayload?: any;
@@ -4112,6 +4113,16 @@ Deno.serve(async (req) => {
             const n = t?.function?.name || t?.name;
             if (!n) return true;
             if (STORYBOARD_TOOL_NAMES.has(n)) return false;
+            // Per-agent policy: hard-block modalities the selected specialist
+            // is not authorized for. Copywriter (text_only) never touches
+            // image/video tools; static/video specialists stay in their lane.
+            if (agentToolPolicy === "text_only") {
+              if (IMAGE_TOOL_NAMES.has(n) || VIDEO_TOOL_NAMES.has(n) || n === "image_to_reel") return false;
+            } else if (agentToolPolicy === "static_only") {
+              if (VIDEO_TOOL_NAMES.has(n) || n === "image_to_reel") return false;
+            } else if (agentToolPolicy === "video_only") {
+              if (IMAGE_TOOL_NAMES.has(n)) return false;
+            }
             if (n === "image_to_reel") return hasImage && hasVideo;
             if (IMAGE_TOOL_NAMES.has(n)) return hasImage;
             if (VIDEO_TOOL_NAMES.has(n)) return hasVideo;
