@@ -144,7 +144,11 @@ Deno.serve(async (req) => {
     // support@highperformanceads.com and +1 323-988-5958 — never from the
     // client's brand. Fall back to the client's GHL only if agency creds are
     // missing (should not happen in production).
-    const agencyKey = Deno.env.get('AGENCY_GHL_API_KEY') || Deno.env.get('AGENCY_GHL_PIT_TOKEN');
+    // Prefer the v2 Private Integration Token (PIT). The legacy v1
+    // AGENCY_GHL_API_KEY returns "Invalid JWT" against services.leadconnectorhq.com
+    // (a v2 endpoint), which caused every task notification to fail with
+    // "contact create failed". Fall back to the v1 key only if no PIT is set.
+    const agencyKey = Deno.env.get('AGENCY_GHL_PIT_TOKEN') || Deno.env.get('AGENCY_GHL_API_KEY');
     const agencyLoc = Deno.env.get('AGENCY_GHL_LOCATION_ID');
     let client: { ghl_api_key: string | null; ghl_location_id: string | null } | null = null;
     if (agencyKey && agencyLoc) {
