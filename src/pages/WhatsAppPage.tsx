@@ -269,7 +269,17 @@ export default function WhatsAppPage() {
         <div className="text-sm space-y-2">
           <p className="font-medium">Status: {session?.status || 'unknown'}</p>
           {session?.phone_number && <p className="text-muted-foreground">Number: +{session.phone_number}</p>}
-          {session?.last_error && <p className="text-red-600">Last error: {session.last_error}</p>}
+          {(session?.last_error || bridgeError) && (
+            <div className="rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 p-3 text-red-700 dark:text-red-300">
+              <p className="font-medium">Bridge error</p>
+              <p className="text-xs whitespace-pre-wrap break-all">{session?.last_error || bridgeError}</p>
+            </div>
+          )}
+          {bridgeConfigured && bridgeReachable === false && (
+            <p className="text-amber-600">
+              Bridge URL is set but not responding to /health. Verify the deploy is running and BRIDGE_TOKEN matches.
+            </p>
+          )}
           <p className="text-muted-foreground">
             Click <strong>Refresh</strong> above to fetch the latest QR / connection state from the bridge.
           </p>
