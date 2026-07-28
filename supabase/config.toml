@@ -78,6 +78,18 @@ verify_jwt = false
 [functions.verify-pixels]
 verify_jwt = false
 
+[functions.whatsapp-inbound]
+verify_jwt = false
+
+[functions.whatsapp-status]
+verify_jwt = false
+
+[functions.whatsapp-dashboard]
+verify_jwt = false
+
+[functions.whatsapp-queue-drain]
+verify_jwt = false
+
 [functions.scrape-fb-ads]
 verify_jwt = false
 

@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { whatsappDashboard } from '@/lib/whatsappDashboard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +13,6 @@ import { JarvisAlertsPanel } from '@/components/whatsapp/JarvisAlertsPanel';
 import { WhatsAppHealthTab } from '@/components/whatsapp/WhatsAppHealthTab';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link2 } from 'lucide-react';
-
-const sb = supabase as any;
 
 interface Session {
   id: string;
@@ -64,132 +62,101 @@ export default function WhatsAppPage() {
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Load client roster once for the link-to-client selector
+  // ---- Client roster ------------------------------------------------------
   useEffect(() => {
-    (async () => {
-      const { data } = await sb.from('clients').select('id, name').order('name');
-      setClients((data as any[]) || []);
-    })();
+    whatsappDashboard<{ clients: { id: string; name: string }[] }>('clients_list')
+      .then(r => setClients(r.clients || []))
+      .catch(() => {/* non-fatal */});
   }, []);
 
   const linkContactToClient = async (contactId: string, clientId: string | null) => {
-    const { error } = await sb.from('whatsapp_contacts').update({ linked_client_id: clientId }).eq('id', contactId);
-    if (error) { toast.error('Link failed: ' + error.message); return; }
-    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, linked_client_id: clientId } : c));
-    toast.success(clientId ? 'Linked to client' : 'Unlinked');
+    try {
+      const r = await whatsappDashboard<{ contact: Contact }>('contact_link_client', {
+        contact_id: contactId, linked_client_id: clientId,
+      });
+      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, linked_client_id: r.contact?.linked_client_id ?? null } : c));
+      toast.success(clientId ? 'Linked to client' : 'Unlinked');
+    } catch (e: any) { toast.error('Link failed: ' + e.message); }
   };
 
-  // Load session row + subscribe
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const { data } = await sb.from('whatsapp_sessions').select('*').eq('label', 'default').maybeSingle();
-      if (mounted) setSession(data);
-    })();
-    const ch = sb.channel('wa-session')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_sessions' },
-        (p: any) => setSession(p.new))
-      .subscribe();
-    return () => { mounted = false; sb.removeChannel(ch); };
+  // ---- Session polling (every 4s) ----------------------------------------
+  const loadSession = useCallback(async () => {
+    try {
+      const r = await whatsappDashboard<{ session: Session; bridgeConfigured: boolean }>('session_get');
+      setSession(r.session);
+      setBridgeConfigured(r.bridgeConfigured);
+    } catch (e: any) {
+      console.warn('session_get failed', e?.message);
+    }
   }, []);
+  useEffect(() => {
+    loadSession();
+    const id = window.setInterval(loadSession, 4000);
+    return () => window.clearInterval(id);
+  }, [loadSession]);
 
-  // Contacts + realtime
+  // ---- Contact list polling ----------------------------------------------
   useEffect(() => {
     if (!session?.id) return;
     let mounted = true;
-    const load = async () => {
-      const { data } = await sb.from('whatsapp_contacts')
-        .select('*').eq('session_id', session.id)
-        .order('last_message_at', { ascending: false, nullsFirst: false }).limit(200);
-      if (mounted) setContacts(data || []);
-    };
+    const load = () => whatsappDashboard<{ contacts: Contact[] }>('contacts_list')
+      .then(r => { if (mounted) setContacts(r.contacts || []); })
+      .catch(() => {/* ignore transient */});
     load();
-    const ch = sb.channel('wa-contacts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_contacts' }, load)
-      .subscribe();
-    return () => { mounted = false; sb.removeChannel(ch); };
+    const id = window.setInterval(load, 5000);
+    return () => { mounted = false; window.clearInterval(id); };
   }, [session?.id]);
 
-  // Messages for active thread
+  // ---- Active thread polling ---------------------------------------------
   useEffect(() => {
     if (!session?.id || !activeJid) { setMessages([]); return; }
     let mounted = true;
-    const load = async () => {
-      const { data } = await sb.from('whatsapp_messages')
-        .select('*').eq('session_id', session.id).eq('jid', activeJid)
-        .order('wa_timestamp', { ascending: true }).limit(500);
-      if (mounted) {
-        setMessages(data || []);
+    const load = () => whatsappDashboard<{ messages: Msg[] }>('messages_list', { jid: activeJid })
+      .then(r => {
+        if (!mounted) return;
+        setMessages(r.messages || []);
         setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 50);
-      }
-    };
+      })
+      .catch(() => {/* ignore */});
     load();
-    const ch = sb.channel(`wa-msgs-${activeJid}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'whatsapp_messages', filter: `jid=eq.${activeJid}` },
-        load)
-      .subscribe();
-    // mark read
-    sb.from('whatsapp_contacts').update({ unread_count: 0 }).eq('session_id', session.id).eq('jid', activeJid).then(() => {});
-    return () => { mounted = false; sb.removeChannel(ch); };
+    whatsappDashboard('contact_mark_read', { jid: activeJid }).catch(() => {});
+    const id = window.setInterval(load, 3500);
+    return () => { mounted = false; window.clearInterval(id); };
   }, [session?.id, activeJid]);
 
   const refreshStatus = async () => {
     setStatusLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-status', {
-        body: { action: 'status' },
-      });
-      if (error) throw error;
-      if (data?.configured === false) {
-        setBridgeConfigured(false);
-        toast.error(data.message || 'Bridge not configured');
-        return;
-      }
-      setBridgeConfigured(true);
-      if (session) {
-        await sb.from('whatsapp_sessions').update({
-          status: data?.status || 'disconnected',
-          phone_number: data?.phone_number || null,
-          last_qr: data?.qr || null,
-          last_qr_at: data?.qr_at || (data?.qr ? new Date().toISOString() : session.last_qr_at),
-          last_connected_at: data?.status === 'connected' ? new Date().toISOString() : session.last_connected_at,
-          last_error: data?.error || null,
-        }).eq('id', session.id);
-      }
-      toast.success('Status refreshed');
-    } catch (e: any) {
-      toast.error('Status failed: ' + (e?.message || 'unknown'));
-    } finally { setStatusLoading(false); }
+      const r = await whatsappDashboard<{ session: Session; bridgeConfigured: boolean; message?: string }>('status_refresh');
+      setSession(r.session);
+      setBridgeConfigured(r.bridgeConfigured);
+      if (r.bridgeConfigured === false) toast.error(r.message || 'Bridge not configured');
+      else toast.success('Status refreshed');
+    } catch (e: any) { toast.error('Status failed: ' + e.message); }
+    finally { setStatusLoading(false); }
   };
 
   const resetPairing = async () => {
     setStatusLoading(true);
     try {
-      const { error } = await supabase.functions.invoke('whatsapp-status', { body: { action: 'reset' } });
-      if (error) throw error;
-      if (session) {
-        await sb.from('whatsapp_sessions').update({
-          status: 'connecting',
-          phone_number: null,
-          last_qr: null,
-          last_qr_at: null,
-          last_error: null,
-        }).eq('id', session.id);
+      await whatsappDashboard('status_reset');
+      toast.success('Pairing reset — fetching a fresh QR…');
+      // Poll a few times for the fresh QR to arrive from the bridge.
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 1500));
+        const r = await whatsappDashboard<{ session: Session }>('status_refresh').catch(() => null);
+        if (r?.session) { setSession(r.session); if (r.session.last_qr) break; }
       }
-      toast.success('Pairing reset — fetching a fresh QR');
-      window.setTimeout(() => { refreshStatus(); }, 2500);
-    } catch (e: any) {
-      toast.error('Reset failed: ' + (e?.message || 'unknown'));
-    } finally { setStatusLoading(false); }
+    } catch (e: any) { toast.error('Reset failed: ' + e.message); }
+    finally { setStatusLoading(false); }
   };
 
   const logout = async () => {
     if (!confirm('Disconnect and force re-pairing?')) return;
     try {
-      const { error } = await supabase.functions.invoke('whatsapp-status', { body: { action: 'logout' } });
-      if (error) throw error;
-      toast.success('Logged out — refresh status to get a new QR');
+      await whatsappDashboard('status_logout');
+      toast.success('Logged out — click Refresh for a new QR');
+      loadSession();
     } catch (e: any) { toast.error('Logout failed: ' + e.message); }
   };
 
@@ -198,14 +165,13 @@ export default function WhatsAppPage() {
     if (!jid || !draft.trim()) return;
     setSending(true);
     try {
-      const { error } = await supabase.functions.invoke('whatsapp-send', {
-        body: { jid, message: draft.trim() },
+      const r = await whatsappDashboard<{ ok: boolean; queued?: boolean; error?: string }>('send_message', {
+        jid, message: draft.trim(),
       });
-      if (error) throw error;
+      if (r.queued) toast.warning('Not connected — queued for retry');
       setDraft('');
-    } catch (e: any) {
-      toast.error('Send failed: ' + (e?.message || 'unknown'));
-    } finally { setSending(false); }
+    } catch (e: any) { toast.error('Send failed: ' + e.message); }
+    finally { setSending(false); }
   };
 
   const startNewThread = () => {

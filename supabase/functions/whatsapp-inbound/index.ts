@@ -14,7 +14,8 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   const secret = req.headers.get('x-bridge-secret');
-  if (!secret || secret !== Deno.env.get('WHATSAPP_WEBHOOK_SECRET')) {
+  const expected = Deno.env.get('WHATSAPP_WEBHOOK_SECRET');
+  if (!expected || !secret || secret !== expected) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -64,7 +65,7 @@ Deno.serve(async (req) => {
         if (payload.phone_number) patch.phone_number = payload.phone_number;
       }
       await sb.from('whatsapp_sessions').update(patch).eq('id', sessionId);
-    } else if (event === 'message') {
+    } else if (event === 'message' || event === 'history_message') {
       const {
         jid, wa_message_id, direction = 'inbound', body: text, media_url,
         media_mime, message_type = 'text', sender_jid, sender_name,
@@ -98,8 +99,8 @@ Deno.serve(async (req) => {
         .select('id, unread_count')
         .single();
 
-      // Increment unread for inbound
-      if (contact && direction === 'inbound') {
+      // Increment unread for live inbound only (skip historical backfill)
+      if (contact && direction === 'inbound' && event === 'message') {
         await sb.from('whatsapp_contacts')
           .update({ unread_count: (contact.unread_count ?? 0) + 1 })
           .eq('id', contact.id);
@@ -128,6 +129,17 @@ Deno.serve(async (req) => {
         });
       } else {
         await sb.from('whatsapp_messages').insert(messageRecord);
+      }
+    } else if (event === 'receipt') {
+      // Delivery/read receipts. Best-effort update of the outbound row.
+      const { wa_message_id, jid, status } = payload;
+      if (wa_message_id && sessionId) {
+        await sb.from('whatsapp_messages').update({ status: status ?? 'delivered' })
+          .eq('session_id', sessionId).eq('wa_message_id', wa_message_id);
+      } else if (jid && sessionId) {
+        await sb.from('whatsapp_messages').update({ status: status ?? 'delivered' })
+          .eq('session_id', sessionId).eq('jid', jid).eq('direction', 'outbound')
+          .order('wa_timestamp', { ascending: false }).limit(1);
       }
     } else {
       return new Response(JSON.stringify({ error: `unknown event: ${event}` }), {

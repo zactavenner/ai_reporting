@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState, useCallback } from 'react';
+import { whatsappDashboard } from '@/lib/whatsappDashboard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,8 +7,6 @@ import { Activity, CheckCircle2, XCircle, Clock, RefreshCw, Loader2, Trash2 } fr
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { WhatsAppOnboardingWizard } from './WhatsAppOnboardingWizard';
-
-const sb = supabase as any;
 
 interface Session {
   id: string; label: string; status: string;
@@ -36,62 +34,51 @@ interface Props {
 
 export function WhatsAppHealthTab({ session, bridgeConfigured, onRefresh, onLogout, onReset, refreshing }: Props) {
   const [queue, setQueue] = useState<QueueRow[]>([]);
-  const [stats, setStats] = useState({ pending: 0, failed: 0, sent: 0, dead: 0 });
+  const [stats, setStats] = useState({ pending: 0, failed: 0, sending: 0, sent: 0, dead: 0 });
   const [draining, setDraining] = useState(false);
 
-  const loadQueue = async () => {
-    const { data } = await sb.from('whatsapp_send_queue')
-      .select('*').order('created_at', { ascending: false }).limit(50);
-    setQueue(data || []);
-    const { data: counts } = await sb.from('whatsapp_send_queue').select('status');
-    if (counts) {
+  const loadQueue = useCallback(async () => {
+    try {
+      const r = await whatsappDashboard<{ queue: QueueRow[]; stats: any }>('queue_list');
+      setQueue(r.queue || []);
       setStats({
-        pending: counts.filter((r: any) => r.status === 'pending').length,
-        failed: counts.filter((r: any) => r.status === 'failed').length,
-        sent: counts.filter((r: any) => r.status === 'sent').length,
-        dead: counts.filter((r: any) => r.status === 'dead').length,
+        pending: r.stats?.pending ?? 0,
+        failed: r.stats?.failed ?? 0,
+        sending: r.stats?.sending ?? 0,
+        sent: r.stats?.sent ?? 0,
+        dead: r.stats?.dead ?? 0,
       });
-    }
-  };
+    } catch (e: any) { /* transient */ }
+  }, []);
 
   useEffect(() => {
     loadQueue();
-    const ch = sb.channel('wa-queue')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_send_queue' }, loadQueue)
-      .subscribe();
-    return () => { sb.removeChannel(ch); };
-  }, []);
+    const id = window.setInterval(loadQueue, 5000);
+    return () => window.clearInterval(id);
+  }, [loadQueue]);
 
   const drainNow = async () => {
     setDraining(true);
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-queue-drain', { body: {} });
-      if (error) throw error;
+      const data = await whatsappDashboard<any>('queue_drain_now');
       if (data?.skipped) toast.warning(`Skipped: ${data.skipped}`);
-      else toast.success(`Drained ${data?.drained ?? 0} (${data?.succeeded ?? 0} sent)`);
+      else toast.success(`Drained ${data?.drained ?? data?.results?.length ?? 0} (${data?.succeeded ?? 0} sent)`);
       loadQueue();
-    } catch (e: any) {
-      toast.error('Drain failed: ' + (e?.message || 'unknown'));
-    } finally { setDraining(false); }
+    } catch (e: any) { toast.error('Drain failed: ' + e.message); }
+    finally { setDraining(false); }
   };
-
   const retryRow = async (id: string) => {
-    await sb.from('whatsapp_send_queue').update({
-      status: 'pending', next_attempt_at: new Date().toISOString(), last_error: null,
-    }).eq('id', id);
-    toast.success('Requeued — will send on next drain');
-    loadQueue();
+    try { await whatsappDashboard('queue_retry', { id }); toast.success('Requeued'); loadQueue(); }
+    catch (e: any) { toast.error(e.message); }
   };
-
   const cancelRow = async (id: string) => {
-    await sb.from('whatsapp_send_queue').update({ status: 'dead' }).eq('id', id);
-    loadQueue();
+    try { await whatsappDashboard('queue_cancel', { id }); loadQueue(); }
+    catch (e: any) { toast.error(e.message); }
   };
-
   const purgeSent = async () => {
     if (!confirm('Delete all sent + dead queue rows?')) return;
-    await sb.from('whatsapp_send_queue').delete().in('status', ['sent', 'dead']);
-    loadQueue();
+    try { await whatsappDashboard('queue_purge'); loadQueue(); }
+    catch (e: any) { toast.error(e.message); }
   };
 
   const statusPill = (s: string) => {
