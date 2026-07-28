@@ -173,6 +173,22 @@ const aspectForAdFormat = (format: string): "9:16" | "16:9" | "1:1" =>
 const videoAspectForAdFormat = (format: string): "9:16" | "16:9" =>
   aspectForAdFormat(format) === "16:9" ? "16:9" : "9:16";
 
+// Auto-detect the user's intended video aspect from free-form prompt text so
+// they don't have to click the Format select. Only returns a value when the
+// intent is unambiguous — otherwise callers keep the currently selected format.
+const detectAdFormatFromPrompt = (text: string): "reel_9x16" | "video_16x9" | "static_1x1" | null => {
+  const t = (text || "").toLowerCase();
+  // Explicit ratios win.
+  if (/\b16\s*[:x/]\s*9\b/.test(t)) return "video_16x9";
+  if (/\b9\s*[:x/]\s*16\b/.test(t)) return "reel_9x16";
+  if (/\b1\s*[:x/]\s*1\b/.test(t)) return "static_1x1";
+  // Landscape / horizontal cues
+  if (/\b(landscape|horizontal|widescreen|youtube(?!\s*shorts?)|yt(?!\s*shorts?)|desktop|web\s*ad)\b/.test(t)) return "video_16x9";
+  // Vertical / short-form cues
+  if (/\b(vertical|reel|reels|tiktok|shorts?|story|stories|ig\s*story|instagram\s*story)\b/.test(t)) return "reel_9x16";
+  return null;
+};
+
 // Proven direct-response copy frameworks. The picker tells the AI which
 // structure to use for both on-image text and any scripts it writes.
 const HOOK_FRAMEWORKS: { value: string; label: string; desc: string }[] = [
@@ -1533,6 +1549,23 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     if (!text.trim()) return;
     if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
+    // Auto-detect intended aspect from the prompt so the user doesn't need to
+    // click the Format select. Video mode is locked to 9:16 / 16:9; static mode
+    // may additionally resolve to 1:1. Only override when the prompt is
+    // unambiguous — otherwise keep the currently selected adFormat.
+    let effectiveAdFormat = adFormat;
+    {
+      const detected = detectAdFormatFromPrompt(text);
+      if (detected) {
+        if (selectedAgentMode === "video") {
+          const forced = detected === "static_1x1" ? "reel_9x16" : detected;
+          if (forced !== adFormat) { effectiveAdFormat = forced; setAdFormat(forced); }
+        } else if (detected !== adFormat) {
+          effectiveAdFormat = detected;
+          setAdFormat(detected);
+        }
+      }
+    }
     const attSnapshot = pendingAttachments.slice();
     const userContent = attSnapshot.length
       ? text + "\n\n" + attSnapshot.map(a => `📎 ${a.name}`).join("\n")
@@ -1602,7 +1635,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           // model / resolution / frames the user pre-selected in the composer.
           const lockLines: string[] = [];
           if (videoModel) {
-            const lockedAspect = videoAspectForAdFormat(adFormat);
+            const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             lockLines.push(
               `🔒 VIDEO HARD-LOCK: model="${videoModel}", resolution="${videoResolution}", duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
@@ -1644,7 +1677,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         imageModels,
         ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution } : {}),
         avatarId: selectedAvatarId,
-        adFormat: adFormat || undefined,
+        adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
           ? selectedAgentId.slice("slug:".length)
           : (selectedAgentId === "master" ? "account_manager" : undefined),

@@ -2805,6 +2805,20 @@ function videoAspectFromAdFormat(format: unknown): "9:16" | "16:9" {
   return "9:16";
 }
 
+// Resolve the effective video aspect ratio: the user's free-form prompt wins
+// when it names an unambiguous ratio (16:9 / 9:16 / landscape / vertical /
+// reel / youtube), otherwise fall back to the composer's adFormat selection.
+// This keeps 16:9 requests honored even if the UI Format select still shows
+// Reel 9:16 from a previous session.
+function resolveVideoAspect(userText: unknown, adFormat: unknown): "9:16" | "16:9" {
+  const t = (typeof userText === "string" ? userText : "").toLowerCase();
+  if (/\b16\s*[:x/]\s*9\b/.test(t)) return "16:9";
+  if (/\b9\s*[:x/]\s*16\b/.test(t)) return "9:16";
+  if (/\b(landscape|horizontal|widescreen|youtube(?!\s*shorts?)|yt(?!\s*shorts?))\b/.test(t)) return "16:9";
+  if (/\b(vertical|reels?|tiktok|shorts?|stor(?:y|ies))\b/.test(t)) return "9:16";
+  return videoAspectFromAdFormat(adFormat);
+}
+
 function shouldDirectGenerateVideoPrompt(text: string, hasSelectedVideoModel = false): boolean {
   const t = (text || "").trim();
   const lower = t.toLowerCase();
@@ -3906,7 +3920,7 @@ Deno.serve(async (req) => {
         if (hasSelectedVideoModel && shouldDirectGenerateVideoPrompt(userText || "", hasSelectedVideoModel)) {
           const totalDuration = 15;
           // UI Format dropdown is authoritative for video: only Reel 9:16 or Video 16:9.
-          const aspect = videoAspectFromAdFormat(adFormat);
+          const aspect = resolveVideoAspect(userText, adFormat);
           const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
@@ -4774,7 +4788,17 @@ Deno.serve(async (req) => {
                 const baseDuration = 15;
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
                 const argRes = (args.resolution === "720p" || args.resolution === "1080p" || args.resolution === "4k") ? args.resolution : null;
-                const baseAspect = videoAspectFromAdFormat(adFormat);
+                 // Aspect priority: the LLM's explicit args.aspect_ratio wins
+                 // when it is a valid video aspect (9:16 or 16:9). Otherwise
+                 // fall back to prompt inference (userText + args.prompt), then
+                 // to the composer's adFormat selection.
+                 const argAspect = (args.aspect_ratio === "9:16" || args.aspect_ratio === "16:9")
+                   ? args.aspect_ratio as "9:16" | "16:9"
+                   : null;
+                 const baseAspect = argAspect || resolveVideoAspect(
+                   (args && (args.prompt || args.brief)) || userText,
+                   adFormat,
+                 );
                 const baseImageUrl = args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null);
                 const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
@@ -5008,7 +5032,10 @@ Deno.serve(async (req) => {
                   result = { ok: true, generated: variants.length, failed: errors.length, errors: errors.slice(0, 5), aspect_ratio: aspect };
                 }
               } else if (name === "image_to_reel") {
-                const aspect = videoAspectFromAdFormat(adFormat);
+                const aspect = resolveVideoAspect(
+                  (args && (args.brief || args.motion_prompt || args.prompt)) || userText,
+                  adFormat,
+                );
                 const duration = 15;
                 // UI resolution wins over any LLM-suggested arg. Clamp to the
                 // selected (or to-be-selected) reel model's cap so Seedance Pro
@@ -5113,7 +5140,10 @@ Deno.serve(async (req) => {
                 if (!rawScripts.length) {
                   result = { error: "generate_script_batch requires scripts[] with at least one script." };
                 } else {
-                  const aspect = videoAspectFromAdFormat(adFormat);
+                  const aspect = resolveVideoAspect(
+                    (args && (args.brief || args.master_prompt || args.style || args.notes)) || userText,
+                    adFormat,
+                  );
                   // UI selection wins over the LLM's args.model — the tool name biases the LLM toward Seedance.
                   const requestedModel = selectedVideoModel || normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : null);
                   // UI resolution wins over the LLM's args.resolution. Shadow
