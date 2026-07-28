@@ -56,6 +56,9 @@ export default function WhatsAppPage() {
   const [sending, setSending] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(null);
+  const [bridgeReachable, setBridgeReachable] = useState<boolean | null>(null);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [bridgeProbeBody, setBridgeProbeBody] = useState<unknown>(null);
   const [tab, setTab] = useState<'chats' | 'groups' | 'alerts' | 'health' | 'settings'>('chats');
   const [chatFilter, setChatFilter] = useState<'all' | 'direct' | 'groups' | 'unread'>('all');
   const [chatSearch, setChatSearch] = useState('');
@@ -82,10 +85,20 @@ export default function WhatsAppPage() {
   // ---- Session polling (every 4s) ----------------------------------------
   const loadSession = useCallback(async () => {
     try {
-      const r = await whatsappDashboard<{ session: Session; bridgeConfigured: boolean }>('session_get');
+      const r = await whatsappDashboard<{
+        session: Session;
+        bridgeConfigured: boolean;
+        bridgeReachable?: boolean;
+        bridgeError?: string | null;
+        bridgeProbe?: unknown;
+      }>('session_get');
       setSession(r.session);
       setBridgeConfigured(r.bridgeConfigured);
+      setBridgeReachable(r.bridgeReachable ?? null);
+      setBridgeError(r.bridgeError ?? null);
+      setBridgeProbeBody(r.bridgeProbe ?? null);
     } catch (e: any) {
+      setBridgeError(e?.message || 'dashboard proxy failed');
       console.warn('session_get failed', e?.message);
     }
   }, []);
@@ -127,12 +140,21 @@ export default function WhatsAppPage() {
   const refreshStatus = async () => {
     setStatusLoading(true);
     try {
-      const r = await whatsappDashboard<{ session: Session; bridgeConfigured: boolean; message?: string }>('status_refresh');
+      const r = await whatsappDashboard<{
+        session: Session; bridgeConfigured: boolean; bridgeReachable?: boolean;
+        error?: string; message?: string;
+      }>('status_refresh');
       setSession(r.session);
       setBridgeConfigured(r.bridgeConfigured);
-      if (r.bridgeConfigured === false) toast.error(r.message || 'Bridge not configured');
+      setBridgeReachable(r.bridgeReachable ?? null);
+      setBridgeError(r.error ?? null);
+      if (r.error) toast.error(r.error);
+      else if (r.bridgeConfigured === false) toast.error(r.message || 'Bridge not configured');
       else toast.success('Status refreshed');
-    } catch (e: any) { toast.error('Status failed: ' + e.message); }
+    } catch (e: any) {
+      setBridgeError(e?.message || 'dashboard proxy failed');
+      toast.error('Status failed: ' + e.message);
+    }
     finally { setStatusLoading(false); }
   };
 
@@ -247,7 +269,17 @@ export default function WhatsAppPage() {
         <div className="text-sm space-y-2">
           <p className="font-medium">Status: {session?.status || 'unknown'}</p>
           {session?.phone_number && <p className="text-muted-foreground">Number: +{session.phone_number}</p>}
-          {session?.last_error && <p className="text-red-600">Last error: {session.last_error}</p>}
+          {(session?.last_error || bridgeError) && (
+            <div className="rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 p-3 text-red-700 dark:text-red-300">
+              <p className="font-medium">Bridge error</p>
+              <p className="text-xs whitespace-pre-wrap break-all">{session?.last_error || bridgeError}</p>
+            </div>
+          )}
+          {bridgeConfigured && bridgeReachable === false && (
+            <p className="text-amber-600">
+              Bridge URL is set but not responding to /health. Verify the deploy is running and BRIDGE_TOKEN matches.
+            </p>
+          )}
           <p className="text-muted-foreground">
             Click <strong>Refresh</strong> above to fetch the latest QR / connection state from the bridge.
           </p>
@@ -532,6 +564,8 @@ export default function WhatsAppPage() {
             <WhatsAppHealthTab
               session={session as any}
               bridgeConfigured={bridgeConfigured}
+              bridgeReachable={bridgeReachable}
+              bridgeError={bridgeError}
               onRefresh={refreshStatus}
               onLogout={logout}
               onReset={resetPairing}

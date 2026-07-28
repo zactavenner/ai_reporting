@@ -26,16 +26,31 @@ interface QueueRow {
 interface Props {
   session: Session | null;
   bridgeConfigured: boolean | null;
+  bridgeReachable?: boolean | null;
+  bridgeError?: string | null;
   onRefresh: () => void;
   onLogout: () => void;
   onReset: () => void;
   refreshing: boolean;
 }
 
-export function WhatsAppHealthTab({ session, bridgeConfigured, onRefresh, onLogout, onReset, refreshing }: Props) {
+export function WhatsAppHealthTab({ session, bridgeConfigured, bridgeReachable, bridgeError, onRefresh, onLogout, onReset, refreshing }: Props) {
   const [queue, setQueue] = useState<QueueRow[]>([]);
   const [stats, setStats] = useState({ pending: 0, failed: 0, sending: 0, sent: 0, dead: 0 });
   const [draining, setDraining] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probe, setProbe] = useState<any>(null);
+
+  const diagnoseBridge = async () => {
+    setProbing(true);
+    try {
+      const r = await whatsappDashboard<any>('bridge_probe');
+      setProbe(r);
+      if (r?.bridgeReachable) toast.success(`Bridge OK (HTTP ${r.bridgeStatus})`);
+      else toast.error(r?.bridgeError || 'Bridge unreachable');
+    } catch (e: any) { toast.error('Probe failed: ' + e.message); }
+    finally { setProbing(false); }
+  };
 
   const loadQueue = useCallback(async () => {
     try {
@@ -112,8 +127,10 @@ export function WhatsAppHealthTab({ session, bridgeConfigured, onRefresh, onLogo
                 <div className="mt-1">
                   {bridgeConfigured === false ? (
                     <Badge variant="outline" className="bg-red-500/15 text-red-700 dark:text-red-400">not configured</Badge>
-                  ) : bridgeConfigured ? (
+                  ) : bridgeReachable === true ? (
                     <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">reachable</Badge>
+                  ) : bridgeReachable === false ? (
+                    <Badge variant="outline" className="bg-red-500/15 text-red-700 dark:text-red-400">unreachable</Badge>
                   ) : <Badge variant="outline">unknown</Badge>}
                 </div>
               </div>
@@ -144,16 +161,27 @@ export function WhatsAppHealthTab({ session, bridgeConfigured, onRefresh, onLogo
               <div className="col-span-2">
                 <div className="text-xs text-muted-foreground">Last error</div>
                 <div className="text-xs mt-1 font-mono break-all text-red-600 dark:text-red-400">
-                  {session?.last_error || '—'}
+                  {session?.last_error || bridgeError || '—'}
                 </div>
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Refresh
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+              {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={diagnoseBridge} disabled={probing}>
+              {probing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+              Diagnose bridge
+            </Button>
+          </div>
         </div>
+        {probe && (
+          <pre className="mt-4 text-[10px] bg-muted/40 rounded p-2 overflow-auto max-h-48">
+{JSON.stringify(probe, null, 2)}
+          </pre>
+        )}
       </Card>
 
       {/* Onboarding wizard — shown until connected */}
