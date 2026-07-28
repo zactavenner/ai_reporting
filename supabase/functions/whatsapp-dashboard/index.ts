@@ -5,9 +5,17 @@
 // This function is deliberately configured with `verify_jwt = false` because
 // the app uses a custom HMAC token (not a Supabase Auth JWT). We do our own
 // server-side token check via verifyDashboardToken.
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { corsHeaders as baseCorsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyDashboardToken, readDashboardToken } from '../_shared/dashboardToken.ts';
+
+// Extend the shared CORS headers so browser preflight allows the custom
+// x-dashboard-token header used to authenticate dashboard requests.
+const corsHeaders = {
+  ...baseCorsHeaders,
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-retry-count, x-dashboard-token',
+};
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
   status,
