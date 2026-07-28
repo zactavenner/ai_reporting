@@ -182,15 +182,24 @@ Deno.serve(async (req) => {
         const session = await getOrCreateSession(admin, sessionLabel);
         const path = action === 'status_reset' ? '/reset' : '/logout';
         const r = await callBridge(`${path}?session_label=${encodeURIComponent(sessionLabel)}`, 'POST');
-        if (!r.configured) return json(200, { ok: false, bridgeConfigured: false });
+        if (!r.configured) {
+          const patch = { status: 'error', last_error: r.error ?? 'Bridge not configured' };
+          await admin.from('whatsapp_sessions').update(patch).eq('id', session.id);
+          return json(200, { ok: false, bridgeConfigured: false, error: patch.last_error });
+        }
+        const detail = r.body != null
+          ? (typeof r.body === 'string' ? r.body : JSON.stringify(r.body)).slice(0, 400)
+          : null;
+        const errorText = r.ok ? null : `${r.error ?? 'bridge error'}${detail ? ` — ${detail}` : ''}`;
         await admin.from('whatsapp_sessions').update({
-          status: 'connecting',
+          status: r.ok ? 'connecting' : 'error',
           phone_number: action === 'status_reset' ? null : session.phone_number,
           last_qr: null,
           last_qr_at: null,
-          last_error: r.ok ? null : `bridge ${r.status}: ${JSON.stringify(r.body).slice(0, 400)}`,
+          last_error: errorText,
         }).eq('id', session.id);
-        return json(200, { ok: r.ok, bridgeConfigured: true, bridge: r.body });
+        if (!r.ok) console.error(`[${action}] bridge`, { status: r.status, error: r.error, body: r.body });
+        return json(200, { ok: r.ok, bridgeConfigured: true, bridgeReachable: r.ok, bridge: r.body, error: errorText });
       }
 
       case 'contacts_list': {
