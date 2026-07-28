@@ -63,7 +63,8 @@ serve(async (req) => {
       .select('id, name, ghl_api_key, ghl_location_id')
       .eq('id', targetClientId)
       .single();
-    const agencyKey = Deno.env.get('AGENCY_GHL_API_KEY') || Deno.env.get('AGENCY_GHL_PIT_TOKEN');
+    // Prefer v2 PIT token; v1 key returns Invalid JWT against v2 endpoints.
+    const agencyKey = Deno.env.get('AGENCY_GHL_PIT_TOKEN') || Deno.env.get('AGENCY_GHL_API_KEY');
     const agencyLoc = Deno.env.get('AGENCY_GHL_LOCATION_ID');
     const senderKey = agencyKey || clientRow?.ghl_api_key || null;
     const senderLoc = agencyLoc || clientRow?.ghl_location_id || null;
