@@ -564,6 +564,8 @@ export default function WhatsAppPage() {
             <WhatsAppHealthTab
               session={session as any}
               bridgeConfigured={bridgeConfigured}
+              bridgeReachable={bridgeReachable}
+              bridgeError={bridgeError}
               onRefresh={refreshStatus}
               onLogout={logout}
               onReset={resetPairing}
