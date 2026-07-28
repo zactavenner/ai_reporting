@@ -173,6 +173,22 @@ const aspectForAdFormat = (format: string): "9:16" | "16:9" | "1:1" =>
 const videoAspectForAdFormat = (format: string): "9:16" | "16:9" =>
   aspectForAdFormat(format) === "16:9" ? "16:9" : "9:16";
 
+// Auto-detect the user's intended video aspect from free-form prompt text so
+// they don't have to click the Format select. Only returns a value when the
+// intent is unambiguous — otherwise callers keep the currently selected format.
+const detectAdFormatFromPrompt = (text: string): "reel_9x16" | "video_16x9" | "static_1x1" | null => {
+  const t = (text || "").toLowerCase();
+  // Explicit ratios win.
+  if (/\b16\s*[:x/]\s*9\b/.test(t)) return "video_16x9";
+  if (/\b9\s*[:x/]\s*16\b/.test(t)) return "reel_9x16";
+  if (/\b1\s*[:x/]\s*1\b/.test(t)) return "static_1x1";
+  // Landscape / horizontal cues
+  if (/\b(landscape|horizontal|widescreen|youtube(?!\s*shorts?)|yt(?!\s*shorts?)|desktop|web\s*ad)\b/.test(t)) return "video_16x9";
+  // Vertical / short-form cues
+  if (/\b(vertical|reel|reels|tiktok|shorts?|story|stories|ig\s*story|instagram\s*story)\b/.test(t)) return "reel_9x16";
+  return null;
+};
+
 // Proven direct-response copy frameworks. The picker tells the AI which
 // structure to use for both on-image text and any scripts it writes.
 const HOOK_FRAMEWORKS: { value: string; label: string; desc: string }[] = [
