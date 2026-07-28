@@ -11,6 +11,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { JarvisAlertsPanel } from '@/components/whatsapp/JarvisAlertsPanel';
 import { WhatsAppHealthTab } from '@/components/whatsapp/WhatsAppHealthTab';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Link2 } from 'lucide-react';
 
 const sb = supabase as any;
 
@@ -33,6 +35,7 @@ interface Contact {
   last_message_at: string | null;
   last_message_preview: string | null;
   unread_count: number;
+  linked_client_id?: string | null;
 }
 interface Msg {
   id: string;
@@ -57,7 +60,24 @@ export default function WhatsAppPage() {
   const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(null);
   const [tab, setTab] = useState<'chats' | 'groups' | 'alerts' | 'health' | 'settings'>('chats');
   const [chatFilter, setChatFilter] = useState<'all' | 'direct' | 'groups' | 'unread'>('all');
+  const [chatSearch, setChatSearch] = useState('');
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load client roster once for the link-to-client selector
+  useEffect(() => {
+    (async () => {
+      const { data } = await sb.from('clients').select('id, name').order('name');
+      setClients((data as any[]) || []);
+    })();
+  }, []);
+
+  const linkContactToClient = async (contactId: string, clientId: string | null) => {
+    const { error } = await sb.from('whatsapp_contacts').update({ linked_client_id: clientId }).eq('id', contactId);
+    if (error) { toast.error('Link failed: ' + error.message); return; }
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, linked_client_id: clientId } : c));
+    toast.success(clientId ? 'Linked to client' : 'Unlinked');
+  };
 
   // Load session row + subscribe
   useEffect(() => {
@@ -190,13 +210,20 @@ export default function WhatsAppPage() {
   const groupContacts = contacts.filter(c => c.is_group);
 
   const visibleContacts = (() => {
-    switch (chatFilter) {
-      case 'direct': return directContacts;
-      case 'groups': return groupContacts;
-      case 'unread': return contacts.filter(c => c.unread_count > 0);
-      default: return contacts;
-    }
+    const base = chatFilter === 'direct' ? directContacts
+      : chatFilter === 'groups' ? groupContacts
+      : chatFilter === 'unread' ? contacts.filter(c => c.unread_count > 0)
+      : contacts;
+    const q = chatSearch.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(c =>
+      (c.display_name || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q) ||
+      (c.jid || '').toLowerCase().includes(q),
+    );
   })();
+
+  const clientNameFor = (id?: string | null) => id ? (clients.find(c => c.id === id)?.name || '—') : null;
 
   const ConnectionCard = (
     <Card className="p-6">
