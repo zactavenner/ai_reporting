@@ -1549,6 +1549,23 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     if (!text.trim()) return;
     if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
+    // Auto-detect intended aspect from the prompt so the user doesn't need to
+    // click the Format select. Video mode is locked to 9:16 / 16:9; static mode
+    // may additionally resolve to 1:1. Only override when the prompt is
+    // unambiguous — otherwise keep the currently selected adFormat.
+    let effectiveAdFormat = adFormat;
+    {
+      const detected = detectAdFormatFromPrompt(text);
+      if (detected) {
+        if (selectedAgentMode === "video") {
+          const forced = detected === "static_1x1" ? "reel_9x16" : detected;
+          if (forced !== adFormat) { effectiveAdFormat = forced; setAdFormat(forced); }
+        } else if (detected !== adFormat) {
+          effectiveAdFormat = detected;
+          setAdFormat(detected);
+        }
+      }
+    }
     const attSnapshot = pendingAttachments.slice();
     const userContent = attSnapshot.length
       ? text + "\n\n" + attSnapshot.map(a => `📎 ${a.name}`).join("\n")
