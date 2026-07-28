@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useClientOffers } from '@/hooks/useClientOffers';
 import { useFunnelCampaigns } from '@/hooks/useFunnelCampaigns';
 import { useFunnelSteps } from '@/hooks/useFunnelSteps';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ClientQuickLinksBarProps {
   client: any;
@@ -80,6 +81,23 @@ export function ClientQuickLinksBar({ client }: ClientQuickLinksBarProps) {
       lines.push('\n### Webhooks & Tokens');
       if (client.public_token) lines.push(`- Public Token: ${client.public_token}`);
       if (client.webhook_secret) lines.push(`- Webhook Secret: ${client.webhook_secret}`);
+    }
+
+    // Agency-level API keys (OpenRouter, Gemini, Meta, GHL PIT, etc.)
+    try {
+      const { data: keyRes } = await supabase.functions.invoke('get-agency-api-keys', {
+        body: { password: 'HPA1234$' },
+      });
+      const keys = (keyRes as any)?.keys as Record<string, string | null> | undefined;
+      if (keys) {
+        const present = Object.entries(keys).filter(([, v]) => v);
+        if (present.length) {
+          lines.push('\n## Agency API Keys');
+          for (const [name, val] of present) lines.push(`- ${name}: ${val}`);
+        }
+      }
+    } catch (e) {
+      console.warn('agency api keys fetch failed', e);
     }
 
     if (offers.length) {
