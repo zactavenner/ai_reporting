@@ -17041,6 +17041,8 @@ export type Database = {
           jid: string
           last_message_at: string | null
           last_message_preview: string | null
+          linked_client_id: string | null
+          notes: string | null
           phone: string | null
           push_name: string | null
           session_id: string
@@ -17056,6 +17058,8 @@ export type Database = {
           jid: string
           last_message_at?: string | null
           last_message_preview?: string | null
+          linked_client_id?: string | null
+          notes?: string | null
           phone?: string | null
           push_name?: string | null
           session_id: string
@@ -17071,6 +17075,8 @@ export type Database = {
           jid?: string
           last_message_at?: string | null
           last_message_preview?: string | null
+          linked_client_id?: string | null
+          notes?: string | null
           phone?: string | null
           push_name?: string | null
           session_id?: string
@@ -17078,6 +17084,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_contacts_linked_client_id_fkey"
+            columns: ["linked_client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contacts_linked_client_id_fkey"
+            columns: ["linked_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contacts_linked_client_id_fkey"
+            columns: ["linked_client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
           {
             foreignKeyName: "whatsapp_contacts_session_id_fkey"
             columns: ["session_id"]

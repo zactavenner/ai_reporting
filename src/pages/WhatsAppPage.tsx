@@ -11,6 +11,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { JarvisAlertsPanel } from '@/components/whatsapp/JarvisAlertsPanel';
 import { WhatsAppHealthTab } from '@/components/whatsapp/WhatsAppHealthTab';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Link2 } from 'lucide-react';
 
 const sb = supabase as any;
 
@@ -33,6 +35,7 @@ interface Contact {
   last_message_at: string | null;
   last_message_preview: string | null;
   unread_count: number;
+  linked_client_id?: string | null;
 }
 interface Msg {
   id: string;
@@ -57,7 +60,24 @@ export default function WhatsAppPage() {
   const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(null);
   const [tab, setTab] = useState<'chats' | 'groups' | 'alerts' | 'health' | 'settings'>('chats');
   const [chatFilter, setChatFilter] = useState<'all' | 'direct' | 'groups' | 'unread'>('all');
+  const [chatSearch, setChatSearch] = useState('');
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load client roster once for the link-to-client selector
+  useEffect(() => {
+    (async () => {
+      const { data } = await sb.from('clients').select('id, name').order('name');
+      setClients((data as any[]) || []);
+    })();
+  }, []);
+
+  const linkContactToClient = async (contactId: string, clientId: string | null) => {
+    const { error } = await sb.from('whatsapp_contacts').update({ linked_client_id: clientId }).eq('id', contactId);
+    if (error) { toast.error('Link failed: ' + error.message); return; }
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, linked_client_id: clientId } : c));
+    toast.success(clientId ? 'Linked to client' : 'Unlinked');
+  };
 
   // Load session row + subscribe
   useEffect(() => {
@@ -190,13 +210,20 @@ export default function WhatsAppPage() {
   const groupContacts = contacts.filter(c => c.is_group);
 
   const visibleContacts = (() => {
-    switch (chatFilter) {
-      case 'direct': return directContacts;
-      case 'groups': return groupContacts;
-      case 'unread': return contacts.filter(c => c.unread_count > 0);
-      default: return contacts;
-    }
+    const base = chatFilter === 'direct' ? directContacts
+      : chatFilter === 'groups' ? groupContacts
+      : chatFilter === 'unread' ? contacts.filter(c => c.unread_count > 0)
+      : contacts;
+    const q = chatSearch.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(c =>
+      (c.display_name || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q) ||
+      (c.jid || '').toLowerCase().includes(q),
+    );
   })();
+
+  const clientNameFor = (id?: string | null) => id ? (clients.find(c => c.id === id)?.name || '—') : null;
 
   const ConnectionCard = (
     <Card className="p-6">
@@ -239,9 +266,15 @@ export default function WhatsAppPage() {
   );
 
   const InboxGrid = (
-    <div className="grid grid-cols-12 gap-4 h-[70vh]">
+    <div className="grid grid-cols-12 gap-4 h-[75vh]">
       <Card className="col-span-4 p-0 flex flex-col overflow-hidden">
         <div className="p-3 border-b space-y-2">
+          <Input
+            placeholder="Search chats, groups, phone…"
+            value={chatSearch}
+            onChange={(e) => setChatSearch(e.target.value)}
+            className="h-8 text-sm"
+          />
           <div className="flex gap-2">
             <Input
               placeholder="New chat: 14155551234"
@@ -265,7 +298,11 @@ export default function WhatsAppPage() {
         </div>
         <ScrollArea className="flex-1">
           {visibleContacts.length === 0 && (
-            <div className="p-4 text-sm text-muted-foreground">No conversations.</div>
+            <div className="p-4 text-sm text-muted-foreground">
+              {session?.status === 'connected'
+                ? 'No conversations yet. Send or receive a message to start one.'
+                : 'Not paired yet — connect your phone in the Settings tab. Past history will appear here once paired.'}
+            </div>
           )}
           {visibleContacts.map(c => (
             <button
@@ -282,9 +319,21 @@ export default function WhatsAppPage() {
                   <Badge className="ml-2 bg-emerald-500 text-white">{c.unread_count}</Badge>
                 )}
               </div>
+              <div className="flex items-center justify-between gap-2 mt-0.5">
               {c.last_message_preview && (
-                <p className="text-xs text-muted-foreground truncate mt-0.5">{c.last_message_preview}</p>
+                  <p className="text-xs text-muted-foreground truncate flex-1">{c.last_message_preview}</p>
               )}
+                {c.linked_client_id && (
+                  <Badge variant="outline" className="text-[10px] shrink-0 border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                    <Link2 className="h-2.5 w-2.5 mr-0.5" />{clientNameFor(c.linked_client_id)}
+                  </Badge>
+                )}
+                {c.last_message_at && !c.linked_client_id && (
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {formatDistanceToNow(new Date(c.last_message_at), { addSuffix: false })}
+                  </span>
+                )}
+              </div>
             </button>
           ))}
         </ScrollArea>
@@ -292,20 +341,49 @@ export default function WhatsAppPage() {
 
       <Card className="col-span-8 p-0 flex flex-col overflow-hidden">
         {!activeJid ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Pick a conversation
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-sm gap-2 p-6 text-center">
+            <MessageCircle className="h-10 w-10 opacity-30" />
+            <p className="font-medium text-foreground">Select a conversation</p>
+            <p className="max-w-xs">
+              Direct chats and groups sync in real time from the paired WhatsApp number. Full message history is persisted per thread.
+            </p>
           </div>
         ) : (
           <>
-            <div className="p-3 border-b">
-              <p className="font-medium flex items-center gap-2">
-                {activeContact?.is_group && <Users className="h-4 w-4 text-muted-foreground" />}
-                {activeContact?.display_name || activeJid}
-              </p>
-              <p className="text-xs text-muted-foreground">{activeContact?.phone || activeJid}</p>
+            <div className="p-3 border-b flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium flex items-center gap-2 truncate">
+                  {activeContact?.is_group && <Users className="h-4 w-4 text-muted-foreground" />}
+                  {activeContact?.display_name || activeJid}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">{activeContact?.phone || activeJid}</p>
+              </div>
+              {activeContact && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Select
+                    value={activeContact.linked_client_id || 'none'}
+                    onValueChange={(v) => linkContactToClient(activeContact.id, v === 'none' ? null : v)}
+                  >
+                    <SelectTrigger className="h-8 w-[200px] text-xs">
+                      <SelectValue placeholder="Link to client…" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="none">— Unlinked —</SelectItem>
+                      {clients.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
-              {messages.map(m => (
+              {messages.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                  No messages in this thread yet.
+                </div>
+              ) : messages.map(m => (
                 <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
                     m.direction === 'outbound'
@@ -328,7 +406,7 @@ export default function WhatsAppPage() {
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-                placeholder="Type a message…"
+                placeholder={session?.status === 'connected' ? 'Type a message…' : 'Not paired — messages will queue and send after connect'}
                 disabled={sending}
               />
               <Button onClick={() => send()} disabled={sending || !draft.trim()}>
@@ -378,11 +456,24 @@ export default function WhatsAppPage() {
           </TabsList>
 
           <TabsContent value="chats" className="mt-4 space-y-4">
-            {session?.status !== 'connected' ? ConnectionCard : InboxGrid}
+            {session?.status !== 'connected' && (
+              <Card className="p-3 text-xs flex items-center justify-between gap-3 border-amber-500/40 bg-amber-500/5">
+                <span>
+                  <strong>Not paired.</strong> Message history stays visible below. Open the <em>Settings</em> tab and scan the QR to start syncing new messages.
+                </span>
+                <Button size="sm" variant="outline" onClick={() => setTab('settings')}>Open pairing</Button>
+              </Card>
+            )}
+            {InboxGrid}
           </TabsContent>
 
           <TabsContent value="groups" className="mt-4 space-y-4">
-            {session?.status !== 'connected' ? ConnectionCard : (
+            {session?.status !== 'connected' && (
+              <Card className="p-3 text-xs border-amber-500/40 bg-amber-500/5">
+                <strong>Not paired.</strong> Existing group threads still appear below. Pair a device to receive new messages.
+              </Card>
+            )}
+            {(
               <Card className="p-0">
                 <div className="p-3 border-b flex items-center justify-between">
                   <p className="font-medium flex items-center gap-2"><Users className="h-4 w-4" /> Monitored Groups</p>
@@ -395,18 +486,32 @@ export default function WhatsAppPage() {
                 ) : (
                   <div className="divide-y">
                     {groupContacts.map(g => (
-                      <button
-                        key={g.id}
-                        onClick={() => { setActiveJid(g.jid); setTab('chats'); setChatFilter('groups'); }}
-                        className="w-full text-left px-4 py-3 hover:bg-muted/50 flex items-center justify-between"
-                      >
-                        <div>
-                          <div className="font-medium">{g.display_name || g.jid}</div>
+                      <div key={g.id} className="px-4 py-3 hover:bg-muted/50 flex items-center justify-between gap-3">
+                        <button
+                          onClick={() => { setActiveJid(g.jid); setTab('chats'); setChatFilter('groups'); }}
+                          className="text-left flex-1 min-w-0"
+                        >
+                          <div className="font-medium truncate">{g.display_name || g.jid}</div>
                           {g.last_message_preview && (
                             <div className="text-xs text-muted-foreground truncate max-w-md">{g.last_message_preview}</div>
                           )}
-                        </div>
-                        <div className="text-right">
+                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Select
+                            value={g.linked_client_id || 'none'}
+                            onValueChange={(v) => linkContactToClient(g.id, v === 'none' ? null : v)}
+                          >
+                            <SelectTrigger className="h-8 w-[180px] text-xs">
+                              <SelectValue placeholder="Link to client…" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72">
+                              <SelectItem value="none">— Unlinked —</SelectItem>
+                              {clients.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <div className="text-right">
                           {g.last_message_at && (
                             <div className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(g.last_message_at), { addSuffix: true })}
@@ -415,8 +520,9 @@ export default function WhatsAppPage() {
                           {g.unread_count > 0 && (
                             <Badge className="mt-1 bg-emerald-500 text-white">{g.unread_count} unread</Badge>
                           )}
+                          </div>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
