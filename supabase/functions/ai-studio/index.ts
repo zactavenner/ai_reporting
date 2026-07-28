@@ -2805,6 +2805,20 @@ function videoAspectFromAdFormat(format: unknown): "9:16" | "16:9" {
   return "9:16";
 }
 
+// Resolve the effective video aspect ratio: the user's free-form prompt wins
+// when it names an unambiguous ratio (16:9 / 9:16 / landscape / vertical /
+// reel / youtube), otherwise fall back to the composer's adFormat selection.
+// This keeps 16:9 requests honored even if the UI Format select still shows
+// Reel 9:16 from a previous session.
+function resolveVideoAspect(userText: unknown, adFormat: unknown): "9:16" | "16:9" {
+  const t = (typeof userText === "string" ? userText : "").toLowerCase();
+  if (/\b16\s*[:x/]\s*9\b/.test(t)) return "16:9";
+  if (/\b9\s*[:x/]\s*16\b/.test(t)) return "9:16";
+  if (/\b(landscape|horizontal|widescreen|youtube(?!\s*shorts?)|yt(?!\s*shorts?))\b/.test(t)) return "16:9";
+  if (/\b(vertical|reels?|tiktok|shorts?|stor(?:y|ies))\b/.test(t)) return "9:16";
+  return videoAspectFromAdFormat(adFormat);
+}
+
 function shouldDirectGenerateVideoPrompt(text: string, hasSelectedVideoModel = false): boolean {
   const t = (text || "").trim();
   const lower = t.toLowerCase();
