@@ -107,23 +107,56 @@ Deno.serve(async (req) => {
     switch (action) {
       case 'session_get': {
         const session = await getOrCreateSession(admin, sessionLabel);
-        return json(200, { session, bridgeConfigured: !!Deno.env.get('WHATSAPP_BRIDGE_URL') });
+        const probe = await probeBridge();
+        return json(200, {
+          session,
+          bridgeConfigured: probe.configured,
+          bridgeReachable: probe.reachable,
+          bridgeError: probe.error,
+          bridgeProbe: probe.body,
+        });
+      }
+
+      case 'bridge_probe': {
+        const probe = await probeBridge(6_000);
+        return json(200, {
+          bridgeConfigured: probe.configured,
+          bridgeReachable: probe.reachable,
+          bridgeError: probe.error,
+          bridgeStatus: probe.status,
+          bridgeBody: probe.body,
+          bridgeUrlPresent: !!Deno.env.get('WHATSAPP_BRIDGE_URL'),
+          bridgeTokenPresent: !!Deno.env.get('WHATSAPP_BRIDGE_TOKEN'),
+        });
       }
 
       case 'status_refresh': {
         const session = await getOrCreateSession(admin, sessionLabel);
         const r = await callBridge(`/status?session_label=${encodeURIComponent(sessionLabel)}`, 'GET');
         if (!r.configured) {
-          return json(200, { session, bridgeConfigured: false, message: 'Bridge not configured' });
-        }
-        if (!r.ok) {
-          const patch = {
-            status: 'error',
-            last_error: `bridge ${r.status}: ${JSON.stringify(r.body).slice(0, 500)}`,
-          };
+          const patch = { status: 'error', last_error: r.error ?? 'Bridge not configured' };
           const { data: updated } = await admin.from('whatsapp_sessions')
             .update(patch).eq('id', session.id).select('*').single();
-          return json(200, { session: updated ?? session, bridgeConfigured: true, error: patch.last_error });
+          return json(200, {
+            session: updated ?? { ...session, ...patch },
+            bridgeConfigured: false, bridgeReachable: false,
+            error: patch.last_error, message: patch.last_error,
+          });
+        }
+        if (!r.ok) {
+          // Transport / non-2xx — persist the actual error so the UI can show it.
+          const detail = r.body != null
+            ? (typeof r.body === 'string' ? r.body : JSON.stringify(r.body)).slice(0, 500)
+            : (r.error ?? 'unknown bridge error');
+          const patch = { status: 'error', last_error: `${r.error ?? 'bridge error'}${r.body ? ` — ${detail}` : ''}` };
+          const { data: updated } = await admin.from('whatsapp_sessions')
+            .update(patch).eq('id', session.id).select('*').single();
+          console.error('[status_refresh] bridge non-ok', { status: r.status, error: r.error, body: r.body });
+          return json(200, {
+            session: updated ?? { ...session, ...patch },
+            bridgeConfigured: true, bridgeReachable: false,
+            error: patch.last_error,
+          });
         }
         const live = r.body ?? {};
         const nowIso = new Date().toISOString();
@@ -138,7 +171,10 @@ Deno.serve(async (req) => {
         if (live.status === 'connected') patch.last_connected_at = nowIso;
         const { data: updated } = await admin.from('whatsapp_sessions')
           .update(patch).eq('id', session.id).select('*').single();
-        return json(200, { session: updated ?? { ...session, ...patch }, bridgeConfigured: true });
+        return json(200, {
+          session: updated ?? { ...session, ...patch },
+          bridgeConfigured: true, bridgeReachable: true,
+        });
       }
 
       case 'status_reset':
