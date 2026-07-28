@@ -266,9 +266,15 @@ export default function WhatsAppPage() {
   );
 
   const InboxGrid = (
-    <div className="grid grid-cols-12 gap-4 h-[70vh]">
+    <div className="grid grid-cols-12 gap-4 h-[75vh]">
       <Card className="col-span-4 p-0 flex flex-col overflow-hidden">
         <div className="p-3 border-b space-y-2">
+          <Input
+            placeholder="Search chats, groups, phone…"
+            value={chatSearch}
+            onChange={(e) => setChatSearch(e.target.value)}
+            className="h-8 text-sm"
+          />
           <div className="flex gap-2">
             <Input
               placeholder="New chat: 14155551234"
@@ -292,7 +298,11 @@ export default function WhatsAppPage() {
         </div>
         <ScrollArea className="flex-1">
           {visibleContacts.length === 0 && (
-            <div className="p-4 text-sm text-muted-foreground">No conversations.</div>
+            <div className="p-4 text-sm text-muted-foreground">
+              {session?.status === 'connected'
+                ? 'No conversations yet. Send or receive a message to start one.'
+                : 'Not paired yet — connect your phone in the Settings tab. Past history will appear here once paired.'}
+            </div>
           )}
           {visibleContacts.map(c => (
             <button
@@ -309,9 +319,21 @@ export default function WhatsAppPage() {
                   <Badge className="ml-2 bg-emerald-500 text-white">{c.unread_count}</Badge>
                 )}
               </div>
+              <div className="flex items-center justify-between gap-2 mt-0.5">
               {c.last_message_preview && (
-                <p className="text-xs text-muted-foreground truncate mt-0.5">{c.last_message_preview}</p>
+                  <p className="text-xs text-muted-foreground truncate flex-1">{c.last_message_preview}</p>
               )}
+                {c.linked_client_id && (
+                  <Badge variant="outline" className="text-[10px] shrink-0 border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                    <Link2 className="h-2.5 w-2.5 mr-0.5" />{clientNameFor(c.linked_client_id)}
+                  </Badge>
+                )}
+                {c.last_message_at && !c.linked_client_id && (
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {formatDistanceToNow(new Date(c.last_message_at), { addSuffix: false })}
+                  </span>
+                )}
+              </div>
             </button>
           ))}
         </ScrollArea>
@@ -319,20 +341,49 @@ export default function WhatsAppPage() {
 
       <Card className="col-span-8 p-0 flex flex-col overflow-hidden">
         {!activeJid ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Pick a conversation
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-sm gap-2 p-6 text-center">
+            <MessageCircle className="h-10 w-10 opacity-30" />
+            <p className="font-medium text-foreground">Select a conversation</p>
+            <p className="max-w-xs">
+              Direct chats and groups sync in real time from the paired WhatsApp number. Full message history is persisted per thread.
+            </p>
           </div>
         ) : (
           <>
-            <div className="p-3 border-b">
-              <p className="font-medium flex items-center gap-2">
-                {activeContact?.is_group && <Users className="h-4 w-4 text-muted-foreground" />}
-                {activeContact?.display_name || activeJid}
-              </p>
-              <p className="text-xs text-muted-foreground">{activeContact?.phone || activeJid}</p>
+            <div className="p-3 border-b flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium flex items-center gap-2 truncate">
+                  {activeContact?.is_group && <Users className="h-4 w-4 text-muted-foreground" />}
+                  {activeContact?.display_name || activeJid}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">{activeContact?.phone || activeJid}</p>
+              </div>
+              {activeContact && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Select
+                    value={activeContact.linked_client_id || 'none'}
+                    onValueChange={(v) => linkContactToClient(activeContact.id, v === 'none' ? null : v)}
+                  >
+                    <SelectTrigger className="h-8 w-[200px] text-xs">
+                      <SelectValue placeholder="Link to client…" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="none">— Unlinked —</SelectItem>
+                      {clients.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
-              {messages.map(m => (
+              {messages.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                  No messages in this thread yet.
+                </div>
+              ) : messages.map(m => (
                 <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
                     m.direction === 'outbound'
@@ -355,7 +406,7 @@ export default function WhatsAppPage() {
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-                placeholder="Type a message…"
+                placeholder={session?.status === 'connected' ? 'Type a message…' : 'Not paired — messages will queue and send after connect'}
                 disabled={sending}
               />
               <Button onClick={() => send()} disabled={sending || !draft.trim()}>
