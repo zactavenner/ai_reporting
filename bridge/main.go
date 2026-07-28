@@ -110,6 +110,39 @@ func extractBody(m *waProto.Message) (body, mtype, mime string) {
 	return "", "other", ""
 }
 
+// postHistoryMessage flattens a historical WebMessageInfo into the same
+// webhook payload shape the live message handler uses, so whatsapp-inbound
+// can idempotently upsert on (session_id, wa_message_id).
+func postHistoryMessage(chatJID string, wmi *waProto.WebMessageInfo) {
+	if wmi == nil || wmi.Key == nil {
+		return
+	}
+	body, mtype, mime := extractBody(wmi.GetMessage())
+	fromMe := wmi.GetKey().GetFromMe()
+	direction := "inbound"
+	if fromMe {
+		direction = "outbound"
+	}
+	ts := time.Unix(int64(wmi.GetMessageTimestamp()), 0).UTC().Format(time.RFC3339)
+	senderJID := wmi.GetParticipant()
+	if senderJID == "" {
+		senderJID = chatJID
+	}
+	isGroup := strings.HasSuffix(chatJID, "@g.us")
+	postWebhook("history_message", map[string]any{
+		"jid":           chatJID,
+		"wa_message_id": wmi.GetKey().GetId(),
+		"direction":     direction,
+		"body":          body,
+		"message_type":  mtype,
+		"media_mime":    mime,
+		"sender_jid":    senderJID,
+		"push_name":     wmi.GetPushName(),
+		"is_group":      isGroup,
+		"wa_timestamp":  ts,
+	})
+}
+
 func handleEvent(evt any) {
 	switch v := evt.(type) {
 	case *events.Connected:
@@ -155,6 +188,35 @@ func handleEvent(evt any) {
 			"wa_timestamp":  v.Info.Timestamp.UTC().Format(time.RFC3339),
 		}
 		postWebhook("message", payload)
+	case *events.Receipt:
+		// Best-effort delivery/read receipts for outbound messages
+		status := "delivered"
+		if v.Type == events.ReceiptTypeRead || v.Type == events.ReceiptTypeReadSelf {
+			status = "read"
+		}
+		for _, id := range v.MessageIDs {
+			postWebhook("receipt", map[string]any{
+				"wa_message_id": id,
+				"jid":           v.Chat.String(),
+				"status":        status,
+			})
+		}
+	case *events.HistorySync:
+		// Whatsmeow only surfaces the history WhatsApp sends at first pairing.
+		// We flatten each conversation's messages into the standard webhook
+		// so whatsapp-inbound upserts idempotently on wa_message_id.
+		if v.Data == nil {
+			return
+		}
+		count := 0
+		for _, conv := range v.Data.GetConversations() {
+			chatJID := conv.GetId()
+			for _, hm := range conv.GetMessages() {
+				postHistoryMessage(chatJID, hm.GetMessage())
+				count++
+			}
+		}
+		log.Printf("history_sync: relayed %d messages across %d conversations", count, len(v.Data.GetConversations()))
 	}
 }
 
