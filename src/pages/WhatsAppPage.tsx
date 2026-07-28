@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, RefreshCw, Send, LogOut, MessageCircle, Users, BellRing, Settings as SettingsIcon } from 'lucide-react';
+import { Loader2, RefreshCw, Send, LogOut, MessageCircle, Users, BellRing, Settings as SettingsIcon, HeartPulse } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { JarvisAlertsPanel } from '@/components/whatsapp/JarvisAlertsPanel';
+import { WhatsAppHealthTab } from '@/components/whatsapp/WhatsAppHealthTab';
 
 const sb = supabase as any;
 
@@ -54,7 +55,7 @@ export default function WhatsAppPage() {
   const [sending, setSending] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<'chats' | 'groups' | 'alerts' | 'settings'>('chats');
+  const [tab, setTab] = useState<'chats' | 'groups' | 'alerts' | 'health' | 'settings'>('chats');
   const [chatFilter, setChatFilter] = useState<'all' | 'direct' | 'groups' | 'unread'>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -372,6 +373,7 @@ export default function WhatsAppPage() {
             <TabsTrigger value="chats"><MessageCircle className="h-4 w-4 mr-1.5" />Chats</TabsTrigger>
             <TabsTrigger value="groups"><Users className="h-4 w-4 mr-1.5" />Groups ({groupContacts.length})</TabsTrigger>
             <TabsTrigger value="alerts"><BellRing className="h-4 w-4 mr-1.5" />Jarvis Alerts</TabsTrigger>
+            <TabsTrigger value="health"><HeartPulse className="h-4 w-4 mr-1.5" />Health & Queue</TabsTrigger>
             <TabsTrigger value="settings"><SettingsIcon className="h-4 w-4 mr-1.5" />Settings</TabsTrigger>
           </TabsList>
 
@@ -424,6 +426,16 @@ export default function WhatsAppPage() {
 
           <TabsContent value="alerts" className="mt-4 space-y-4">
             <JarvisAlertsPanel />
+          </TabsContent>
+
+          <TabsContent value="health" className="mt-4 space-y-4">
+            <WhatsAppHealthTab
+              session={session as any}
+              bridgeConfigured={bridgeConfigured}
+              onRefresh={refreshStatus}
+              onLogout={logout}
+              refreshing={statusLoading}
+            />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-4 space-y-4">
