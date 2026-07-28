@@ -29,7 +29,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
-    const { data: sessionRow } = await admin.from('whatsapp_sessions').select('id').eq('label', 'default').maybeSingle();
+    const sessionLabel = 'default';
+    const { data: sessionRow } = await admin.from('whatsapp_sessions').select('id, label').eq('label', sessionLabel).maybeSingle();
     const enqueue = async (phone: string, err: string) => {
       await admin.from('whatsapp_send_queue').insert({
         session_id: sessionRow?.id ?? null,
@@ -70,9 +71,16 @@ Deno.serve(async (req) => {
         const r = await fetch(`${bridgeUrl.replace(/\/$/, '')}/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bridgeToken}` },
-          body: JSON.stringify({ jid, message }),
+          body: JSON.stringify({ session_label: sessionRow?.label ?? sessionLabel, jid, message }),
         });
         const text = await r.text();
+        let waMessageId: string | null = null;
+        try {
+          const parsed = text ? JSON.parse(text) : null;
+          if (typeof parsed?.wa_message_id === 'string') waMessageId = parsed.wa_message_id;
+        } catch (_) {
+          // Bridge errors may be plain text; handled below.
+        }
         if (!r.ok) {
           await enqueue(phone, `bridge ${r.status}: ${text.slice(0, 500)}`);
           return { phone, ok: false, queued: true, status: r.status, error: text };
@@ -88,13 +96,22 @@ Deno.serve(async (req) => {
               last_message_at: new Date().toISOString(),
               last_message_preview: message.slice(0, 200),
             }, { onConflict: 'session_id,jid' }).select('id').single();
-            await admin.from('whatsapp_messages').insert({
+            const outboundMessage = {
               session_id: session.id, contact_id: contact?.id ?? null,
               jid, direction: 'outbound', body: message,
+              wa_message_id: waMessageId,
               message_type: 'text', status: 'sent',
               sender_name: `Jarvis (${alert_type})`,
               wa_timestamp: new Date().toISOString(),
-            });
+            };
+            if (waMessageId) {
+              await admin.from('whatsapp_messages').upsert(outboundMessage, {
+                onConflict: 'session_id,wa_message_id',
+                ignoreDuplicates: false,
+              });
+            } else {
+              await admin.from('whatsapp_messages').insert(outboundMessage);
+            }
           }
         } catch (_) { /* non-fatal */ }
 

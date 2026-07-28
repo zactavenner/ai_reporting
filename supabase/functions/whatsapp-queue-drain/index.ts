@@ -18,8 +18,9 @@ Deno.serve(async (req) => {
   const bridgeToken = Deno.env.get('WHATSAPP_BRIDGE_TOKEN');
 
   // Only try to drain if session appears connected — otherwise leave queued.
+  const sessionLabel = 'default';
   const { data: session } = await admin
-    .from('whatsapp_sessions').select('id, status').eq('label', 'default').maybeSingle();
+    .from('whatsapp_sessions').select('id, label, status').eq('label', sessionLabel).maybeSingle();
 
   if (!bridgeUrl || !bridgeToken) {
     return new Response(JSON.stringify({ ok: true, skipped: 'bridge not configured' }),
@@ -53,9 +54,16 @@ Deno.serve(async (req) => {
       const r = await fetch(`${bridgeUrl.replace(/\/$/, '')}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bridgeToken}` },
-        body: JSON.stringify({ jid: row.jid, message: row.message }),
+        body: JSON.stringify({ session_label: session?.label ?? sessionLabel, jid: row.jid, message: row.message }),
       });
       const text = await r.text();
+      let waMessageId: string | null = null;
+      try {
+        const parsed = text ? JSON.parse(text) : null;
+        if (typeof parsed?.wa_message_id === 'string') waMessageId = parsed.wa_message_id;
+      } catch (_) {
+        // Keep queue processing resilient to non-JSON bridge responses.
+      }
       if (r.ok) {
         await admin.from('whatsapp_send_queue').update({
           status: 'sent', sent_at: new Date().toISOString(), last_error: null,
@@ -72,13 +80,22 @@ Deno.serve(async (req) => {
             last_message_at: new Date().toISOString(),
             last_message_preview: row.message.slice(0, 200),
           }, { onConflict: 'session_id,jid' }).select('id').single();
-          await admin.from('whatsapp_messages').insert({
+          const outboundMessage = {
             session_id: session.id, contact_id: contact?.id ?? null,
             jid: row.jid, direction: 'outbound', body: row.message,
+            wa_message_id: waMessageId,
             message_type: 'text', status: 'sent',
             sender_name: row.source === 'jarvis' ? `Jarvis (${row.alert_type ?? 'all'})` : null,
             wa_timestamp: new Date().toISOString(),
-          });
+          };
+          if (waMessageId) {
+            await admin.from('whatsapp_messages').upsert(outboundMessage, {
+              onConflict: 'session_id,wa_message_id',
+              ignoreDuplicates: false,
+            });
+          } else {
+            await admin.from('whatsapp_messages').insert(outboundMessage);
+          }
         }
         results.push({ id: row.id, ok: true });
       } else {

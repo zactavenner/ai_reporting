@@ -147,15 +147,40 @@ export default function WhatsAppPage() {
         return;
       }
       setBridgeConfigured(true);
-      // The bridge response gets stored via the next webhook automatically; for QR we also update directly
-      if (data?.qr && session) {
+      if (session) {
         await sb.from('whatsapp_sessions').update({
-          status: data.status || 'qr', last_qr: data.qr, last_qr_at: new Date().toISOString(),
+          status: data?.status || 'disconnected',
+          phone_number: data?.phone_number || null,
+          last_qr: data?.qr || null,
+          last_qr_at: data?.qr_at || (data?.qr ? new Date().toISOString() : session.last_qr_at),
+          last_connected_at: data?.status === 'connected' ? new Date().toISOString() : session.last_connected_at,
+          last_error: data?.error || null,
         }).eq('id', session.id);
       }
       toast.success('Status refreshed');
     } catch (e: any) {
       toast.error('Status failed: ' + (e?.message || 'unknown'));
+    } finally { setStatusLoading(false); }
+  };
+
+  const resetPairing = async () => {
+    setStatusLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke('whatsapp-status', { body: { action: 'reset' } });
+      if (error) throw error;
+      if (session) {
+        await sb.from('whatsapp_sessions').update({
+          status: 'connecting',
+          phone_number: null,
+          last_qr: null,
+          last_qr_at: null,
+          last_error: null,
+        }).eq('id', session.id);
+      }
+      toast.success('Pairing reset — fetching a fresh QR');
+      window.setTimeout(() => { refreshStatus(); }, 2500);
+    } catch (e: any) {
+      toast.error('Reset failed: ' + (e?.message || 'unknown'));
     } finally { setStatusLoading(false); }
   };
 
@@ -438,6 +463,9 @@ export default function WhatsAppPage() {
               {statusLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Refresh
             </Button>
+            <Button variant="outline" size="sm" onClick={resetPairing} disabled={statusLoading}>
+              New QR
+            </Button>
             {session?.status === 'connected' && (
               <Button variant="outline" size="sm" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" /> Disconnect
@@ -540,6 +568,7 @@ export default function WhatsAppPage() {
               bridgeConfigured={bridgeConfigured}
               onRefresh={refreshStatus}
               onLogout={logout}
+              onReset={resetPairing}
               refreshing={statusLoading}
             />
           </TabsContent>

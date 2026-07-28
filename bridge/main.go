@@ -337,7 +337,15 @@ func resetHandler(w http.ResponseWriter, r *http.Request) {
 	if cli != nil {
 		cli.Disconnect()
 	}
-	_ = os.Remove(filepath.Join(state.authDir, "whatsmeow.db"))
+	for _, pattern := range []string{"whatsmeow.db", "whatsmeow.db-*"} {
+		matches, err := filepath.Glob(filepath.Join(state.authDir, pattern))
+		if err != nil {
+			continue
+		}
+		for _, match := range matches {
+			_ = os.Remove(match)
+		}
+	}
 	state.mu.Lock()
 	state.status = "disconnected"
 	state.lastQR = ""
