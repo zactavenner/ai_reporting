@@ -4774,7 +4774,15 @@ Deno.serve(async (req) => {
                 const baseDuration = 15;
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
                 const argRes = (args.resolution === "720p" || args.resolution === "1080p" || args.resolution === "4k") ? args.resolution : null;
-                const baseAspect = videoAspectFromAdFormat(adFormat);
+                 // Aspect priority: the LLM's explicit args.aspect_ratio wins
+                 // when it is a valid video aspect (9:16 or 16:9), so a prompt
+                 // like "landscape 16:9 reel" flips the render even if the UI
+                 // still shows the previous format. Otherwise fall back to
+                 // the composer's adFormat selection.
+                 const argAspect = (args.aspect_ratio === "9:16" || args.aspect_ratio === "16:9")
+                   ? args.aspect_ratio as "9:16" | "16:9"
+                   : null;
+                 const baseAspect = argAspect || videoAspectFromAdFormat(adFormat);
                 const baseImageUrl = args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null);
                 const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
