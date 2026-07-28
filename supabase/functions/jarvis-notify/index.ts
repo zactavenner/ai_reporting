@@ -25,16 +25,20 @@ Deno.serve(async (req) => {
 
     const bridgeUrl = Deno.env.get('WHATSAPP_BRIDGE_URL');
     const bridgeToken = Deno.env.get('WHATSAPP_BRIDGE_TOKEN');
-    if (!bridgeUrl || !bridgeToken) {
-      return new Response(JSON.stringify({ error: 'Bridge not configured' }), {
-        status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+    const { data: sessionRow } = await admin.from('whatsapp_sessions').select('id').eq('label', 'default').maybeSingle();
+    const enqueue = async (phone: string, err: string) => {
+      await admin.from('whatsapp_send_queue').insert({
+        session_id: sessionRow?.id ?? null,
+        jid: toJid(phone), phone, message,
+        source: 'jarvis', alert_type,
+        status: 'pending', last_error: err,
+        next_attempt_at: new Date(Date.now() + 60_000).toISOString(),
+      });
+    };
 
     let targets: string[] = [];
     if (Array.isArray(recipients) && recipients.length) {
@@ -58,6 +62,10 @@ Deno.serve(async (req) => {
 
     const results = await Promise.all(targets.map(async (phone) => {
       const jid = toJid(phone);
+      if (!bridgeUrl || !bridgeToken) {
+        await enqueue(phone, 'bridge not configured');
+        return { phone, ok: false, queued: true, error: 'bridge not configured' };
+      }
       try {
         const r = await fetch(`${bridgeUrl.replace(/\/$/, '')}/send`, {
           method: 'POST',
@@ -65,7 +73,10 @@ Deno.serve(async (req) => {
           body: JSON.stringify({ jid, message }),
         });
         const text = await r.text();
-        if (!r.ok) return { phone, ok: false, status: r.status, error: text };
+        if (!r.ok) {
+          await enqueue(phone, `bridge ${r.status}: ${text.slice(0, 500)}`);
+          return { phone, ok: false, queued: true, status: r.status, error: text };
+        }
 
         // Best-effort: log outbound to whatsapp_messages
         try {
@@ -89,7 +100,8 @@ Deno.serve(async (req) => {
 
         return { phone, ok: true };
       } catch (e) {
-        return { phone, ok: false, error: (e as Error).message };
+        await enqueue(phone, `bridge unreachable: ${(e as Error).message}`);
+        return { phone, ok: false, queued: true, error: (e as Error).message };
       }
     }));
 

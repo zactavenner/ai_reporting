@@ -1,8 +1,10 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-// Authenticated send-message endpoint. Forwards to the Baileys bridge.
-// Body: { jid: string, message: string, session_label?: string }
+// Authenticated send-message endpoint. Forwards to the whatsmeow bridge.
+// Body: { jid: string, message: string, session_label?: string, source?: string, alert_type?: string, client_id?: string, task_id?: string }
+// On bridge failure (unpaired, network, 5xx) the message is enqueued into
+// `whatsapp_send_queue` and will be retried by whatsapp-queue-drain.
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -30,45 +32,65 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { jid, message, session_label = 'default' } = await req.json();
+    const body = await req.json();
+    const { jid, message, session_label = 'default',
+            source = 'manual', alert_type = null, client_id = null, task_id = null } = body;
     if (!jid || !message) {
       return new Response(JSON.stringify({ error: 'jid and message required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const bridgeUrl = Deno.env.get('WHATSAPP_BRIDGE_URL');
-    const bridgeToken = Deno.env.get('WHATSAPP_BRIDGE_TOKEN');
-    if (!bridgeUrl || !bridgeToken) {
-      return new Response(JSON.stringify({ error: 'Bridge not configured. Set WHATSAPP_BRIDGE_URL and WHATSAPP_BRIDGE_TOKEN.' }), {
-        status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const res = await fetch(`${bridgeUrl.replace(/\/$/, '')}/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${bridgeToken}`,
-      },
-      body: JSON.stringify({ session_label, jid, message }),
-    });
-    const text = await res.text();
-    if (!res.ok) {
-      return new Response(JSON.stringify({ error: `bridge: ${res.status} ${text}` }), {
-        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Optimistically record outbound (bridge will also webhook it back, but UI feels snappier)
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
     const { data: session } = await admin
       .from('whatsapp_sessions').select('id').eq('label', session_label).maybeSingle();
+
+    const phone = jid.includes('@s.whatsapp.net') ? '+' + jid.split('@')[0] : null;
+    const enqueue = async (err: string) => {
+      await admin.from('whatsapp_send_queue').insert({
+        session_id: session?.id ?? null, jid, phone, message,
+        source, alert_type, client_id, task_id,
+        status: 'pending', last_error: err,
+        next_attempt_at: new Date(Date.now() + 60_000).toISOString(),
+      });
+    };
+
+    const bridgeUrl = Deno.env.get('WHATSAPP_BRIDGE_URL');
+    const bridgeToken = Deno.env.get('WHATSAPP_BRIDGE_TOKEN');
+    if (!bridgeUrl || !bridgeToken) {
+      await enqueue('bridge not configured');
+      return new Response(JSON.stringify({ ok: false, queued: true, error: 'Bridge not configured — message queued.' }), {
+        status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    let res: Response;
+    let text = '';
+    try {
+      res = await fetch(`${bridgeUrl.replace(/\/$/, '')}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bridgeToken}` },
+        body: JSON.stringify({ session_label, jid, message }),
+      });
+      text = await res.text();
+    } catch (e) {
+      await enqueue(`bridge unreachable: ${(e as Error).message}`);
+      return new Response(JSON.stringify({ ok: false, queued: true, error: 'Bridge unreachable — queued for retry.' }), {
+        status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (!res.ok) {
+      await enqueue(`bridge ${res.status}: ${text.slice(0, 500)}`);
+      return new Response(JSON.stringify({ ok: false, queued: true, error: `Bridge ${res.status} — queued for retry.` }), {
+        status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Optimistically record outbound
     if (session) {
-      const phone = jid.includes('@s.whatsapp.net') ? '+' + jid.split('@')[0] : null;
       const { data: contact } = await admin
         .from('whatsapp_contacts')
         .upsert({

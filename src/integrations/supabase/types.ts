@@ -17172,6 +17172,80 @@ export type Database = {
           },
         ]
       }
+      whatsapp_send_queue: {
+        Row: {
+          alert_type: string | null
+          attempts: number
+          client_id: string | null
+          created_at: string
+          id: string
+          jid: string
+          last_attempt_at: string | null
+          last_error: string | null
+          max_attempts: number
+          message: string
+          metadata: Json
+          next_attempt_at: string
+          phone: string | null
+          sent_at: string | null
+          session_id: string | null
+          source: string
+          status: string
+          task_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          alert_type?: string | null
+          attempts?: number
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          jid: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          max_attempts?: number
+          message: string
+          metadata?: Json
+          next_attempt_at?: string
+          phone?: string | null
+          sent_at?: string | null
+          session_id?: string | null
+          source?: string
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alert_type?: string | null
+          attempts?: number
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          jid?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          max_attempts?: number
+          message?: string
+          metadata?: Json
+          next_attempt_at?: string
+          phone?: string | null
+          sent_at?: string | null
+          session_id?: string | null
+          source?: string
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_send_queue_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_sessions: {
         Row: {
           bridge_meta: Json | null
