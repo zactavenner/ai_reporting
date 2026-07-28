@@ -1635,7 +1635,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           // model / resolution / frames the user pre-selected in the composer.
           const lockLines: string[] = [];
           if (videoModel) {
-            const lockedAspect = videoAspectForAdFormat(adFormat);
+            const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             lockLines.push(
               `🔒 VIDEO HARD-LOCK: model="${videoModel}", resolution="${videoResolution}", duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
@@ -1677,7 +1677,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         imageModels,
         ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution } : {}),
         avatarId: selectedAvatarId,
-        adFormat: adFormat || undefined,
+        adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
           ? selectedAgentId.slice("slug:".length)
           : (selectedAgentId === "master" ? "account_manager" : undefined),
