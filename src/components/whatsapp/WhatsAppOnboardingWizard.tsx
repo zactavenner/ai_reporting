@@ -16,12 +16,13 @@ interface Props {
   bridgeConfigured: boolean | null;
   onRefresh: () => void;
   onLogout: () => void;
+  onReset: () => void;
   refreshing: boolean;
 }
 
 type StepState = 'done' | 'active' | 'pending';
 
-export function WhatsAppOnboardingWizard({ session, bridgeConfigured, onRefresh, onLogout, refreshing }: Props) {
+export function WhatsAppOnboardingWizard({ session, bridgeConfigured, onRefresh, onLogout, onReset, refreshing }: Props) {
   const status = session?.status ?? 'unknown';
   const qrStale = session?.last_qr_at
     ? (Date.now() - new Date(session.last_qr_at).getTime()) > 60_000
@@ -40,7 +41,7 @@ export function WhatsAppOnboardingWizard({ session, bridgeConfigured, onRefresh,
         title: 'Generate a fresh pairing code',
         detail: session?.last_qr && !qrStale
           ? `QR ready — generated ${formatDistanceToNow(new Date(session.last_qr_at!), { addSuffix: true })}.`
-          : 'Tap Refresh to fetch a new QR from the bridge (codes expire after ~60s).',
+          : 'Tap New QR to reset the bridge session and generate a fresh pairing code.',
         state: (status === 'connected' ? 'done'
           : status === 'qr' && session?.last_qr && !qrStale ? 'done'
           : bridgeConfigured ? 'active' : 'pending') as StepState,
@@ -77,7 +78,11 @@ export function WhatsAppOnboardingWizard({ session, bridgeConfigured, onRefresh,
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={onRefresh} disabled={refreshing}>
             {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            {status === 'qr' ? 'New QR' : 'Refresh'}
+            Refresh
+          </Button>
+          <Button size="sm" onClick={onReset} disabled={refreshing}>
+            {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Smartphone className="h-4 w-4 mr-2" />}
+            New QR
           </Button>
           {status === 'connected' && (
             <Button size="sm" variant="outline" onClick={onLogout}>

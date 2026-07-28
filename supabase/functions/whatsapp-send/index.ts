@@ -22,10 +22,9 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  const { data: claimsData, error: claimsErr } = await sb.auth.getClaims(
-    authHeader.replace('Bearer ', '')
-  );
-  if (claimsErr || !claimsData?.claims) {
+  const token = authHeader.replace('Bearer ', '');
+  const { data: userData, error: userErr } = await sb.auth.getUser(token);
+  if (userErr || !userData?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -69,6 +68,7 @@ Deno.serve(async (req) => {
 
     let res: Response;
     let text = '';
+    let waMessageId: string | null = null;
     try {
       res = await fetch(`${bridgeUrl.replace(/\/$/, '')}/send`, {
         method: 'POST',
@@ -76,6 +76,12 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ session_label, jid, message }),
       });
       text = await res.text();
+      try {
+        const parsed = text ? JSON.parse(text) : null;
+        if (typeof parsed?.wa_message_id === 'string') waMessageId = parsed.wa_message_id;
+      } catch (_) {
+        // Non-JSON bridge responses are handled by status checks below.
+      }
     } catch (e) {
       await enqueue(`bridge unreachable: ${(e as Error).message}`);
       return new Response(JSON.stringify({ ok: false, queued: true, error: 'Bridge unreachable — queued for retry.' }), {
@@ -102,17 +108,26 @@ Deno.serve(async (req) => {
           last_message_preview: message.slice(0, 200),
         }, { onConflict: 'session_id,jid' })
         .select('id').single();
-      await admin.from('whatsapp_messages').insert({
+      const outboundMessage = {
         session_id: session.id,
         contact_id: contact?.id ?? null,
         jid,
+        wa_message_id: waMessageId,
         direction: 'outbound',
         body: message,
         message_type: 'text',
         team_member_id: null,
         status: 'sent',
         wa_timestamp: new Date().toISOString(),
-      });
+      };
+      if (waMessageId) {
+        await admin.from('whatsapp_messages').upsert(outboundMessage, {
+          onConflict: 'session_id,wa_message_id',
+          ignoreDuplicates: false,
+        });
+      } else {
+        await admin.from('whatsapp_messages').insert(outboundMessage);
+      }
     }
 
     return new Response(text || JSON.stringify({ ok: true }), {

@@ -30,10 +30,11 @@ interface Props {
   bridgeConfigured: boolean | null;
   onRefresh: () => void;
   onLogout: () => void;
+  onReset: () => void;
   refreshing: boolean;
 }
 
-export function WhatsAppHealthTab({ session, bridgeConfigured, onRefresh, onLogout, refreshing }: Props) {
+export function WhatsAppHealthTab({ session, bridgeConfigured, onRefresh, onLogout, onReset, refreshing }: Props) {
   const [queue, setQueue] = useState<QueueRow[]>([]);
   const [stats, setStats] = useState({ pending: 0, failed: 0, sent: 0, dead: 0 });
   const [draining, setDraining] = useState(false);
@@ -175,6 +176,7 @@ export function WhatsAppHealthTab({ session, bridgeConfigured, onRefresh, onLogo
           bridgeConfigured={bridgeConfigured}
           onRefresh={onRefresh}
           onLogout={onLogout}
+          onReset={onReset}
           refreshing={refreshing}
         />
       )}
