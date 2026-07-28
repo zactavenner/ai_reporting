@@ -191,7 +191,7 @@ func handleEvent(evt any) {
 	case *events.Receipt:
 		// Best-effort delivery/read receipts for outbound messages
 		status := "delivered"
-		if v.Type == events.ReceiptTypeRead || v.Type == events.ReceiptTypeReadSelf {
+		if v.Type == events.ReceiptTypeRead {
 			status = "read"
 		}
 		for _, id := range v.MessageIDs {
