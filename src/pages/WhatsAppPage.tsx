@@ -456,11 +456,24 @@ export default function WhatsAppPage() {
           </TabsList>
 
           <TabsContent value="chats" className="mt-4 space-y-4">
-            {session?.status !== 'connected' ? ConnectionCard : InboxGrid}
+            {session?.status !== 'connected' && (
+              <Card className="p-3 text-xs flex items-center justify-between gap-3 border-amber-500/40 bg-amber-500/5">
+                <span>
+                  <strong>Not paired.</strong> Message history stays visible below. Open the <em>Settings</em> tab and scan the QR to start syncing new messages.
+                </span>
+                <Button size="sm" variant="outline" onClick={() => setTab('settings')}>Open pairing</Button>
+              </Card>
+            )}
+            {InboxGrid}
           </TabsContent>
 
           <TabsContent value="groups" className="mt-4 space-y-4">
-            {session?.status !== 'connected' ? ConnectionCard : (
+            {session?.status !== 'connected' && (
+              <Card className="p-3 text-xs border-amber-500/40 bg-amber-500/5">
+                <strong>Not paired.</strong> Existing group threads still appear below. Pair a device to receive new messages.
+              </Card>
+            )}
+            {(
               <Card className="p-0">
                 <div className="p-3 border-b flex items-center justify-between">
                   <p className="font-medium flex items-center gap-2"><Users className="h-4 w-4" /> Monitored Groups</p>
@@ -473,18 +486,32 @@ export default function WhatsAppPage() {
                 ) : (
                   <div className="divide-y">
                     {groupContacts.map(g => (
-                      <button
-                        key={g.id}
-                        onClick={() => { setActiveJid(g.jid); setTab('chats'); setChatFilter('groups'); }}
-                        className="w-full text-left px-4 py-3 hover:bg-muted/50 flex items-center justify-between"
-                      >
-                        <div>
-                          <div className="font-medium">{g.display_name || g.jid}</div>
+                      <div key={g.id} className="px-4 py-3 hover:bg-muted/50 flex items-center justify-between gap-3">
+                        <button
+                          onClick={() => { setActiveJid(g.jid); setTab('chats'); setChatFilter('groups'); }}
+                          className="text-left flex-1 min-w-0"
+                        >
+                          <div className="font-medium truncate">{g.display_name || g.jid}</div>
                           {g.last_message_preview && (
                             <div className="text-xs text-muted-foreground truncate max-w-md">{g.last_message_preview}</div>
                           )}
-                        </div>
-                        <div className="text-right">
+                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Select
+                            value={g.linked_client_id || 'none'}
+                            onValueChange={(v) => linkContactToClient(g.id, v === 'none' ? null : v)}
+                          >
+                            <SelectTrigger className="h-8 w-[180px] text-xs">
+                              <SelectValue placeholder="Link to client…" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72">
+                              <SelectItem value="none">— Unlinked —</SelectItem>
+                              {clients.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <div className="text-right">
                           {g.last_message_at && (
                             <div className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(g.last_message_at), { addSuffix: true })}
@@ -493,8 +520,9 @@ export default function WhatsAppPage() {
                           {g.unread_count > 0 && (
                             <Badge className="mt-1 bg-emerald-500 text-white">{g.unread_count} unread</Badge>
                           )}
+                          </div>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
