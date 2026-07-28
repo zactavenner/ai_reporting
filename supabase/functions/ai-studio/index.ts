@@ -3920,7 +3920,7 @@ Deno.serve(async (req) => {
         if (hasSelectedVideoModel && shouldDirectGenerateVideoPrompt(userText || "", hasSelectedVideoModel)) {
           const totalDuration = 15;
           // UI Format dropdown is authoritative for video: only Reel 9:16 or Video 16:9.
-          const aspect = videoAspectFromAdFormat(adFormat);
+          const aspect = resolveVideoAspect(userText, adFormat);
           const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "")
             ? "alibaba/happyhorse-1.1"
             : null;
@@ -5030,7 +5030,10 @@ Deno.serve(async (req) => {
                   result = { ok: true, generated: variants.length, failed: errors.length, errors: errors.slice(0, 5), aspect_ratio: aspect };
                 }
               } else if (name === "image_to_reel") {
-                const aspect = videoAspectFromAdFormat(adFormat);
+                const aspect = resolveVideoAspect(
+                  (args && (args.brief || args.motion_prompt || args.prompt)) || userText,
+                  adFormat,
+                );
                 const duration = 15;
                 // UI resolution wins over any LLM-suggested arg. Clamp to the
                 // selected (or to-be-selected) reel model's cap so Seedance Pro
@@ -5135,7 +5138,10 @@ Deno.serve(async (req) => {
                 if (!rawScripts.length) {
                   result = { error: "generate_script_batch requires scripts[] with at least one script." };
                 } else {
-                  const aspect = videoAspectFromAdFormat(adFormat);
+                  const aspect = resolveVideoAspect(
+                    (args && (args.brief || args.master_prompt || args.style || args.notes)) || userText,
+                    adFormat,
+                  );
                   // UI selection wins over the LLM's args.model — the tool name biases the LLM toward Seedance.
                   const requestedModel = selectedVideoModel || normalizeVideoModel(args.model) || (typeof args.model === "string" && args.model ? args.model : null);
                   // UI resolution wins over the LLM's args.resolution. Shadow
