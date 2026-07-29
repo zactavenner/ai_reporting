@@ -472,8 +472,14 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
                 title={isRecording ? 'Recording' : 'Recording inactive'}
               />
               {isRecording && (
-                <Button size="sm" variant="outline" className="h-6 text-[11px] px-2" onClick={addSystemAudio}>
-                  + System audio
+                <Button
+                  size="sm"
+                  variant={systemAudioOn ? 'secondary' : 'outline'}
+                  className="h-6 text-[11px] px-2"
+                  onClick={() => setAudioGuideOpen(true)}
+                  disabled={systemAudioOn}
+                >
+                  {systemAudioOn ? 'Call audio on' : '+ Call audio'}
                 </Button>
               )}
               {uploading && (
@@ -579,6 +585,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           <RotateCcw className="w-5 h-5 mr-2" />Restart
         </Button>
       </footer>
+      <AddCallAudioDialog open={audioGuideOpen} onOpenChange={setAudioGuideOpen} onRequest={addSystemAudio} />
     </div>
   );
 }
