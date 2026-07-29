@@ -2668,7 +2668,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   })}
                 </div>
                 )}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (() => {
+                {selectedAgentMode === "video" && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
                   const supportedSet = new Set<VideoRes>();
                   for (const id of videoModels) {
@@ -2701,7 +2701,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   );
                 })()}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (
+                {selectedAgentMode === "video" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
                     {([15, 30] as const).map((d) => {
@@ -2731,7 +2731,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     />
                   </div>
                 )}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (
+                {selectedAgentMode === "video" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video Style:</span>
                     <VideoStylesPopover
@@ -2742,7 +2742,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     />
                   </div>
                 )}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (
+                {selectedAgentMode === "video" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Frames:</span>
                     <input
