@@ -125,26 +125,6 @@ export function AgencyStatsBar({
           </CardContent>
         </Card>
       ))}
-
-      {/* Cost of Capital card with sparkline — admin only */}
-      {isAdmin && (
-        <Card className="border-2">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Percent className="h-5 w-5 text-chart-2 flex-shrink-0" />
-              <p className="text-2xl font-bold tabular-nums">
-                {cocLoading ? '—' : `${costOfCapital.toFixed(2)}%`}
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground mb-1.5">Cost of Capital</p>
-            {sparkline.length >= 2 && (
-              <div className="h-6">
-                <Sparkline data={sparkline} height={24} invertTrend />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { HuddleAgendaRail } from './HuddleAgendaRail';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { HuddleSettingsDrawer } from './HuddleSettingsDrawer';
 import { WinsSegment } from './segments/WinsSegment';
+import { AccountabilitySegment } from './segments/AccountabilitySegment';
 import { ClientWalkthroughSegment } from './segments/ClientWalkthroughSegment';
 import { CloseSegment } from './segments/CloseSegment';
 import { supabase } from '@/integrations/supabase/client';
@@ -429,6 +430,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     if (!seg) return null;
     switch (seg.key) {
       case 'wins': return <WinsSegment huddleId={huddle.id} />;
+      case 'accountability': return <AccountabilitySegment huddleId={huddle.id} />;
       case 'clients':
         return (
           <ClientWalkthroughSegment
@@ -555,6 +557,17 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           <Button size="lg" variant="secondary" className="h-12 px-6 text-base" onClick={pause}><Pause className="w-5 h-5 mr-2" />Pause</Button>
         )}
         <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={bump30}><Plus className="w-5 h-5 mr-2" />30s</Button>
+        {isRecording && (
+          <Button
+            size="lg"
+            variant={systemAudioOn ? 'secondary' : 'outline'}
+            className="h-12 px-5 text-base"
+            onClick={() => setAudioGuideOpen(true)}
+            disabled={systemAudioOn}
+          >
+            <Volume2 className="w-5 h-5 mr-2" />{systemAudioOn ? 'Call audio on' : 'Add call audio'}
+          </Button>
+        )}
         <Button size="lg" variant="outline" className="h-12 px-5 text-base" onClick={back} disabled={timing.idx === 0}>
           <ChevronLeft className="w-5 h-5 mr-2" />Back
         </Button>
