@@ -405,19 +405,9 @@ const Index = () => {
             {/* Dashboard */}
             {activeTab === 'dashboard' && (
               <>
-                <DailyAISummaryCard />
-                <DateRangeFilter
-                  onExportCSV={handleExportCSV}
-                  onAddClient={() => setAddClientOpen(true)}
-                  onRefresh={handleRefresh}
-                />
-                <div className="flex justify-end -mt-2">
+                <div className="flex justify-end">
                   <AISheetSummaryButton />
                 </div>
-
-                <SectionErrorBoundary sectionName="Master Spreadsheet">
-                  <MasterSheetPanel />
-                </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="Client Summary">
                   <section>
