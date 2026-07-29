@@ -2675,6 +2675,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     for (const r of (VIDEO_MODEL_RES[id] || ["1080p"])) supportedSet.add(r);
                   }
                   const supported = (["480p", "720p", "1080p", "4k"] as const).filter(r => supportedSet.has(r));
+                  if (supported.length === 0) return null;
                   const activeRes = supported.includes(videoResolution) ? videoResolution : supported[supported.length - 1];
                   if (activeRes !== videoResolution) {
                     // auto-correct when user switches to a model that doesn't support current res
