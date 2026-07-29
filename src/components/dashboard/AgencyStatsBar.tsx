@@ -1,10 +1,8 @@
 import { Client } from '@/hooks/useClients';
 import { ClientMRRSettings, calculateClientRevenue } from '@/hooks/useClientMRR';
 import { ClientSettings, getEffectiveMonthlyTarget } from '@/hooks/useClientSettings';
-import { useAgencyCostOfCapital } from '@/hooks/useAgencyPerformance';
-import { Sparkline } from './Sparkline';
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, UserCheck, Pause, DollarSign, TrendingUp, Target, Percent } from 'lucide-react';
+import { Users, UserCheck, Pause, DollarSign, TrendingUp, Target } from 'lucide-react';
 
 interface AgencyStatsBarProps {
   clients: Client[];
@@ -24,8 +22,6 @@ export function AgencyStatsBar({
   const activeClients = clients.filter(c => c.status === 'active').length;
   const onboardingClients = clients.filter(c => c.status === 'onboarding').length;
   const pausedClients = clients.filter(c => c.status === 'paused' || c.status === 'on_hold').length;
-  
-  const { costOfCapital, sparkline, isLoading: cocLoading } = useAgencyCostOfCapital();
 
   // Calculate total MRR with actual ad spend fees (current performance)
   const activeClientsForRevenue = clients.filter(c => c.status === 'active');
