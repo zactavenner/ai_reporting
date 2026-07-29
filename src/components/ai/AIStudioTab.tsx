@@ -1235,6 +1235,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     if ((clientAgents as any[]).length > 0 && !selectedIsEnabled) setSelectedAgentId("off");
   }, [clientAgents, agencyRoster, selectedAgentId]);
 
+  // When a video specialist is selected, always keep a model locked in so the
+  // full marketing option set (resolution, length, style, frames, format,
+  // avatar) is visible and enforced instead of hidden behind a first click.
+  useEffect(() => {
+    if (selectedAgentMode === "video" && videoModels.length === 0) {
+      setVideoModels(["alibaba/happyhorse-1.1"]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAgentMode]);
+
   // --- Auto-import the selected offer's image assets as references in the composer.
   // Whenever the offer picker changes, drop any previously-imported offer images and
   // pull in the new offer's image files so the AI uses them as reference for any
@@ -1642,6 +1652,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
+            if (selectedAvatarId && selectedAvatar) {
+              lockLines.push(
+                `🔒 AVATAR LOCK: use avatar "${selectedAvatar.name}" (id="${selectedAvatarId}"${selectedAvatar.image_url ? `, image_url="${selectedAvatar.image_url}"` : ""}) as the on-camera talent for every clip. Do NOT invent a different person or swap wardrobe between clips.`,
+              );
+            }
+            if (videoStyles?.selected?.name) {
+              lockLines.push(`🔒 STYLE LOCK: render in the "${videoStyles.selected.name}" video style — do not drift to another look.`);
+            }
+            lockLines.push(
+              `🔒 These composer settings are FINAL. If the user's prompt text conflicts with them, follow the composer settings and note the override in your reply — never silently fall back to defaults.`,
+            );
             if (videoTotalDuration === 30) {
               const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
               lockLines.push(
@@ -2658,13 +2679,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   })}
                 </div>
                 )}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (() => {
+                {selectedAgentMode === "video" && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
                   const supportedSet = new Set<VideoRes>();
                   for (const id of videoModels) {
                     for (const r of (VIDEO_MODEL_RES[id] || ["1080p"])) supportedSet.add(r);
                   }
                   const supported = (["480p", "720p", "1080p", "4k"] as const).filter(r => supportedSet.has(r));
+                  if (supported.length === 0) return null;
                   const activeRes = supported.includes(videoResolution) ? videoResolution : supported[supported.length - 1];
                   if (activeRes !== videoResolution) {
                     // auto-correct when user switches to a model that doesn't support current res
@@ -2691,7 +2713,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   );
                 })()}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (
+                {selectedAgentMode === "video" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
                     {([15, 30] as const).map((d) => {
@@ -2721,7 +2743,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     />
                   </div>
                 )}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (
+                {selectedAgentMode === "video" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video Style:</span>
                     <VideoStylesPopover
@@ -2732,7 +2754,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     />
                   </div>
                 )}
-                {selectedAgentMode === "video" && videoModels.length > 0 && (
+                {selectedAgentMode === "video" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Frames:</span>
                     <input
@@ -2844,6 +2866,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <Film className="h-3 w-3" />
                     Batch scripts
                   </button>
+                )}
+                {selectedAgentMode === "video" && videoModel && (
+                  <Badge
+                    variant="secondary"
+                    className="h-7 text-[9px] gap-1 border border-primary/40 bg-primary/10 text-primary"
+                    title="These settings are passed to the renderer exactly as selected — the agent cannot substitute a different model, resolution, length, format or avatar."
+                  >
+                    🔒 Locked: {VIDEO_MODELS.find(m => m.value === videoModel)?.label || videoModel} ·{" "}
+                    {videoResolution === "4k" ? "4K" : videoResolution} · {videoTotalDuration}s ·{" "}
+                    {videoAspectForAdFormat(adFormat)}
+                    {selectedAvatar ? ` · ${selectedAvatar.name}` : ""}
+                  </Badge>
                 )}
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
