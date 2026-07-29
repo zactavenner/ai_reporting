@@ -76,6 +76,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const captureStopRef = useRef<(() => void) | null>(null);
   const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
+  const [systemAudioOn, setSystemAudioOn] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
