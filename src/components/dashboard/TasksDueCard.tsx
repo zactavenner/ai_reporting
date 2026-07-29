@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { CalendarCheck, CalendarRange } from 'lucide-react';
 import { useAllTasks, Task } from '@/hooks/useTasks';
 import { startOfWeek, endOfWeek, isWithinInterval, parseISO, isSameDay } from 'date-fns';
+import { useTeamMember } from '@/contexts/TeamMemberContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export function isTaskDone(t: Task) {
   return t.status === 'completed' || t.status === 'done' || !!t.completed_at;
@@ -18,8 +21,44 @@ function toDate(v?: string | null) {
   }
 }
 
+export function useIsAccountManager() {
+  const { currentMember } = useTeamMember();
+  const role = (currentMember?.role || '').toLowerCase();
+  return {
+    currentMember,
+    isAccountManager:
+      role.includes('account') || role.includes('manager') || role === 'am' || role === 'admin',
+  };
+}
+
+/**
+ * Tasks due today / this week.
+ * Account managers (and admins) see ALL tasks; everyone else only sees their own.
+ */
 export function useTasksDue() {
-  const { data: tasks = [] } = useAllTasks();
+  const { data: allTasks = [] } = useAllTasks();
+  const { currentMember, isAccountManager } = useIsAccountManager();
+
+  const { data: myTaskIds } = useQuery({
+    queryKey: ['my-task-assignee-ids', currentMember?.id],
+    enabled: !!currentMember?.id && !isAccountManager,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('task_assignees')
+        .select('task_id')
+        .eq('member_id', currentMember!.id);
+      if (error) throw error;
+      return new Set((data || []).map((r: any) => r.task_id as string));
+    },
+  });
+
+  const tasks = useMemo(() => {
+    if (isAccountManager || !currentMember) return allTasks;
+    return allTasks.filter(
+      (t) => t.assigned_to === currentMember.id || myTaskIds?.has(t.id),
+    );
+  }, [allTasks, isAccountManager, currentMember, myTaskIds]);
+
   return useMemo(() => {
     const now = new Date();
     const weekStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -41,8 +80,9 @@ export function useTasksDue() {
       week,
       todayDone: done(today),
       weekDone: done(week),
+      scope: (isAccountManager ? 'all' : 'mine') as 'all' | 'mine',
     };
-  }, [tasks]);
+  }, [tasks, isAccountManager]);
 }
 
 function Stat({
@@ -81,21 +121,21 @@ function Stat({
 }
 
 export function TasksDueCard({ onOpenTasks }: { onOpenTasks?: () => void }) {
-  const { today, week, todayDone, weekDone } = useTasksDue();
+  const { today, week, todayDone, weekDone, scope } = useTasksDue();
 
   return (
     <Card className="p-3 border-border/60 shadow-sm">
       <div className="flex gap-3">
         <Stat
           icon={<CalendarCheck className="h-3.5 w-3.5 text-primary" />}
-          label="Tasks due today"
+          label={scope === 'all' ? 'Tasks due today (all)' : 'My tasks due today'}
           done={todayDone}
           total={today.length}
           onClick={onOpenTasks}
         />
         <Stat
           icon={<CalendarRange className="h-3.5 w-3.5 text-primary" />}
-          label="Tasks due this week"
+          label={scope === 'all' ? 'Tasks due this week (all)' : 'My tasks due this week'}
           done={weekDone}
           total={week.length}
           onClick={onOpenTasks}
