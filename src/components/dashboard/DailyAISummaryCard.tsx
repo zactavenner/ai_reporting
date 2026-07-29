@@ -1,28 +1,44 @@
+import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Sparkles, RefreshCw, AlertTriangle, CheckCircle2, ListTodo } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useUpdateTask, Task } from '@/hooks/useTasks';
+import { useTasksDue, isTaskDone } from '@/components/dashboard/TasksDueCard';
 
-export function DailyAISummaryCard() {
+function todayKey() {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+
+interface Props {
+  onTaskClick?: (taskId: string) => void;
+}
+
+export function DailyAISummaryCard({ onTaskClick }: Props) {
   const qc = useQueryClient();
+  const autoRan = useRef(false);
+  const today = todayKey();
 
+  // Persist for the entire day: always read TODAY's brief (falls back to latest).
   const { data, isLoading } = useQuery({
-    queryKey: ['daily-ai-summary-latest'],
+    queryKey: ['daily-ai-summary', today],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('daily_ai_summaries')
         .select('*')
-        .order('summary_date', { ascending: false })
-        .limit(1)
+        .eq('summary_date', today)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
+    staleTime: 60 * 60 * 1000,
+    gcTime: 12 * 60 * 60 * 1000,
   });
 
   const regen = useMutation({
@@ -32,14 +48,36 @@ export function DailyAISummaryCard() {
     },
     onSuccess: () => {
       toast.success('Daily brief refreshed');
-      qc.invalidateQueries({ queryKey: ['daily-ai-summary-latest'] });
+      qc.invalidateQueries({ queryKey: ['daily-ai-summary', today] });
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to refresh brief'),
   });
 
-  const tasks = (data?.tasks_due_today as any[]) || [];
+  // Auto-generate once per day if today's brief is missing.
+  useEffect(() => {
+    if (isLoading || data || autoRan.current) return;
+    const flag = `daily-brief-auto-${today}`;
+    if (localStorage.getItem(flag)) return;
+    localStorage.setItem(flag, '1');
+    autoRan.current = true;
+    regen.mutate();
+  }, [isLoading, data, today]);
+
   const alerts = (data?.sheet_alerts as any[]) || [];
   const stats = (data?.client_stats as any[]) || [];
+
+  // Live tasks due today so checking off is systematic and always accurate.
+  const { today: tasksToday, todayDone } = useTasksDue();
+  const updateTask = useUpdateTask();
+
+  const toggleTask = (t: Task) => {
+    const done = isTaskDone(t);
+    updateTask.mutate({
+      id: t.id,
+      status: done ? 'todo' : 'completed',
+      completed_at: done ? null : new Date().toISOString(),
+    } as any);
+  };
 
   return (
     <Card className="p-5 border-border/60 shadow-sm bg-gradient-to-br from-primary/5 via-background to-background">
@@ -50,11 +88,9 @@ export function DailyAISummaryCard() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold leading-tight">Daily Brief</h2>
-            {data?.summary_date && (
-              <Badge variant="secondary" className="text-[10px]">
-                {format(new Date(data.summary_date + 'T00:00:00'), 'MMM d')}
-              </Badge>
-            )}
+            <Badge variant="secondary" className="text-[10px]">
+              {format(new Date(`${data?.summary_date || today}T00:00:00`), 'MMM d')}
+            </Badge>
             {data?.delivered_slack && (
               <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="h-2.5 w-2.5" /> Slack</Badge>
             )}
@@ -73,67 +109,82 @@ export function DailyAISummaryCard() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading brief…</div>
-      ) : !data ? (
-        <div className="text-sm text-muted-foreground">
-          No brief yet. Click <strong>Refresh</strong> to generate today's brief.
+      <div className="grid lg:grid-cols-[1.4fr,1fr] gap-4">
+        {/* AI Summary */}
+        <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:mt-3 prose-headings:mb-1.5 prose-h2:text-sm prose-h2:font-semibold prose-p:my-1 prose-ul:my-1.5">
+          {isLoading || regen.isPending ? (
+            <div className="text-sm text-muted-foreground">Generating today's brief…</div>
+          ) : (
+            <ReactMarkdown>{data?.ai_summary || '_No summary content yet — click Refresh._'}</ReactMarkdown>
+          )}
         </div>
-      ) : (
-        <div className="grid lg:grid-cols-[1.4fr,1fr] gap-4">
-          {/* AI Summary */}
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:mt-3 prose-headings:mb-1.5 prose-h2:text-sm prose-h2:font-semibold prose-p:my-1 prose-ul:my-1.5">
-            <ReactMarkdown>{data.ai_summary || '_No summary content_'}</ReactMarkdown>
+
+        {/* Quick stats column */}
+        <div className="space-y-3">
+          <div className="rounded-xl border border-border/60 p-3 bg-card/50">
+            <div className="flex items-center gap-1.5 text-xs font-medium mb-2">
+              <ListTodo className="h-3.5 w-3.5 text-primary" />
+              Tasks due today
+              <Badge variant="secondary" className="text-[10px] ml-auto">
+                {todayDone}/{tasksToday.length}
+              </Badge>
+            </div>
+            {tasksToday.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Clear for today.</p>
+            ) : (
+              <ul className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                {tasksToday.map((t) => {
+                  const done = isTaskDone(t);
+                  return (
+                    <li key={t.id} className="text-xs flex items-center gap-2 group">
+                      <Checkbox
+                        checked={done}
+                        onCheckedChange={() => toggleTask(t)}
+                        className="h-3.5 w-3.5 shrink-0"
+                      />
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-rose-500' : t.priority === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onTaskClick?.(t.id)}
+                        className={`truncate text-left flex-1 hover:underline ${done ? 'line-through text-muted-foreground' : ''}`}
+                        title={t.title}
+                      >
+                        {t.title}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
 
-          {/* Quick stats column */}
-          <div className="space-y-3">
-            <div className="rounded-xl border border-border/60 p-3 bg-card/50">
-              <div className="flex items-center gap-1.5 text-xs font-medium mb-2">
-                <ListTodo className="h-3.5 w-3.5 text-primary" />
-                Tasks due today
-                <Badge variant="secondary" className="text-[10px] ml-auto">{tasks.length}</Badge>
-              </div>
-              {tasks.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Clear for today.</p>
-              ) : (
-                <ul className="space-y-1 max-h-44 overflow-y-auto pr-1">
-                  {tasks.slice(0, 10).map((t: any) => (
-                    <li key={t.id} className="text-xs flex items-center gap-2">
-                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-rose-500' : t.priority === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                      <span className="truncate">{t.title}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          <div className="rounded-xl border border-border/60 p-3 bg-card/50">
+            <div className="flex items-center gap-1.5 text-xs font-medium mb-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              Alerts
+              <Badge variant="secondary" className="text-[10px] ml-auto">{alerts.length}</Badge>
             </div>
+            {alerts.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No alerts. All sheets healthy.</p>
+            ) : (
+              <ul className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                {alerts.slice(0, 8).map((a: any, i: number) => (
+                  <li key={i} className="text-xs">
+                    <span className="font-medium">{a.client_name}</span>{' '}
+                    <span className="text-muted-foreground">— {a.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-            <div className="rounded-xl border border-border/60 p-3 bg-card/50">
-              <div className="flex items-center gap-1.5 text-xs font-medium mb-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                Alerts
-                <Badge variant="secondary" className="text-[10px] ml-auto">{alerts.length}</Badge>
-              </div>
-              {alerts.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No alerts. All sheets healthy.</p>
-              ) : (
-                <ul className="space-y-1 max-h-32 overflow-y-auto pr-1">
-                  {alerts.slice(0, 8).map((a: any, i: number) => (
-                    <li key={i} className="text-xs">
-                      <span className="font-medium">{a.client_name}</span>{' '}
-                      <span className="text-muted-foreground">— {a.reason}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="text-[10px] text-muted-foreground">
-              {stats.length} client{stats.length === 1 ? '' : 's'} reported sheet stats for yesterday.
-            </div>
+          <div className="text-[10px] text-muted-foreground">
+            {stats.length} client{stats.length === 1 ? '' : 's'} reported sheet stats for yesterday.
           </div>
         </div>
-      )}
+      </div>
     </Card>
   );
 }

@@ -6,6 +6,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { AISheetSummaryButton } from '@/components/ai/AISheetSummaryButton';
 import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { DailyAISummaryCard } from '@/components/dashboard/DailyAISummaryCard';
+import { TasksDueCard } from '@/components/dashboard/TasksDueCard';
 import { DataAccuracyAuditPanel } from '@/components/dashboard/DataAccuracyAuditPanel';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { AIInsightsCard } from '@/components/dashboard/AIInsightsCard';
@@ -355,6 +356,17 @@ const Index = () => {
             onTaskClick={handleNotificationTaskClick}
           />
 
+          {activeTab === 'dashboard' && (
+            <div className="sticky top-12 z-20 border-b border-border bg-card/80 apple-blur px-6 py-2">
+              <DateRangeFilter
+                compact
+                onExportCSV={handleExportCSV}
+                onAddClient={() => setAddClientOpen(true)}
+                onRefresh={handleRefresh}
+              />
+            </div>
+          )}
+
           <main className="flex-1 p-6 space-y-6 overflow-auto">
             {/* Database utility page */}
             {activeTab === 'database' && <DatabaseView embedded />}
@@ -393,19 +405,9 @@ const Index = () => {
             {/* Dashboard */}
             {activeTab === 'dashboard' && (
               <>
-                <DailyAISummaryCard />
-                <DateRangeFilter
-                  onExportCSV={handleExportCSV}
-                  onAddClient={() => setAddClientOpen(true)}
-                  onRefresh={handleRefresh}
-                />
-                <div className="flex justify-end -mt-2">
+                <div className="flex justify-end">
                   <AISheetSummaryButton />
                 </div>
-
-                <SectionErrorBoundary sectionName="Master Spreadsheet">
-                  <MasterSheetPanel />
-                </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="Client Summary">
                   <section>
@@ -452,6 +454,9 @@ const Index = () => {
                         </Button>
                       </div>
                     </div>
+                    <div className="mb-3">
+                      <TasksDueCard onOpenTasks={() => handleTabChange('tasks')} />
+                    </div>
                     {clientsLoading ? (
                       <div className="text-center py-8 text-muted-foreground">Loading clients...</div>
                     ) : clients.length === 0 ? (
@@ -483,6 +488,14 @@ const Index = () => {
                       </>
                     )}
                   </section>
+                </SectionErrorBoundary>
+
+                <SectionErrorBoundary sectionName="Daily Brief">
+                  <DailyAISummaryCard onTaskClick={handleNotificationTaskClick} />
+                </SectionErrorBoundary>
+
+                <SectionErrorBoundary sectionName="Master Spreadsheet">
+                  <MasterSheetPanel />
                 </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="AI Studio">
