@@ -30,6 +30,7 @@ interface DateRangeFilterProps {
   onImport?: () => void;
   showAddClient?: boolean;
   showImport?: boolean;
+  compact?: boolean;
 }
 
 export function DateRangeFilter({ 
@@ -39,6 +40,7 @@ export function DateRangeFilter({
   onImport,
   showAddClient = true,
   showImport = false,
+  compact = false,
 }: DateRangeFilterProps) {
   const { dateRange, setDateRange, sourceFilter, setSourceFilter, availableSources } = useDateFilter();
   const [preset, setPreset] = useState('yesterday');
@@ -189,13 +191,17 @@ export function DateRangeFilter({
   };
 
   return (
-    <div className="border-2 border-border bg-card p-4">
-      <h2 className="font-bold text-lg mb-1">Filters & Actions</h2>
-      <p className="text-sm text-muted-foreground mb-4">Select date range, filter by source, and export data</p>
-      
-      <div className="flex flex-wrap items-center gap-3">
+    <div className={compact ? '' : 'border-2 border-border bg-card p-4'}>
+      {!compact && (
+        <>
+          <h2 className="font-bold text-lg mb-1">Filters & Actions</h2>
+          <p className="text-sm text-muted-foreground mb-4">Select date range, filter by source, and export data</p>
+        </>
+      )}
+
+      <div className={cn('flex flex-wrap items-center', compact ? 'gap-2' : 'gap-3')}>
         <Select value={currentPreset === 'custom' ? 'custom' : preset} onValueChange={handlePresetChange}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className={compact ? 'w-32 h-8 text-xs' : 'w-40'}>
             <SelectValue placeholder="Select range" />
           </SelectTrigger>
           <SelectContent>
@@ -217,12 +223,14 @@ export function DateRangeFilter({
           <PopoverTrigger asChild>
             <Button
               variant="outline"
+              size={compact ? 'sm' : 'default'}
               className={cn(
-                'w-64 justify-start text-left font-normal',
+                'justify-start text-left font-normal',
+                compact ? 'h-8 text-xs w-56' : 'w-64',
                 !dateRange && 'text-muted-foreground'
               )}
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
+              <CalendarIcon className={compact ? 'mr-2 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
               {dateRange?.from ? (
                 dateRange.to ? (
                   <>
@@ -252,8 +260,8 @@ export function DateRangeFilter({
         {/* Source Filter Dropdown */}
         <Popover open={sourceOpen} onOpenChange={setSourceOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Filter className="h-4 w-4" />
+            <Button variant="outline" size={compact ? 'sm' : 'default'} className={cn('gap-2', compact && 'h-8 text-xs')}>
+              <Filter className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
               Source
               {sourceFilter.length > 0 && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
@@ -305,29 +313,29 @@ export function DateRangeFilter({
         </Popover>
 
         {onRefresh && (
-          <Button variant="outline" onClick={onRefresh}>
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <Button variant="outline" size={compact ? 'sm' : 'default'} className={compact ? 'h-8 text-xs' : ''} onClick={onRefresh}>
+            <RefreshCw className={compact ? 'mr-1.5 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
             Refresh
           </Button>
         )}
 
         {showImport && onImport && (
-          <Button variant="outline" onClick={onImport}>
-            <Upload className="mr-2 h-4 w-4" />
+          <Button variant="outline" size={compact ? 'sm' : 'default'} className={compact ? 'h-8 text-xs' : ''} onClick={onImport}>
+            <Upload className={compact ? 'mr-1.5 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
             Import CSV
           </Button>
         )}
 
         {onExportCSV && (
-          <Button variant="outline" onClick={onExportCSV}>
-            <Download className="mr-2 h-4 w-4" />
+          <Button variant="outline" size={compact ? 'sm' : 'default'} className={compact ? 'h-8 text-xs' : ''} onClick={onExportCSV}>
+            <Download className={compact ? 'mr-1.5 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
             Export CSV
           </Button>
         )}
 
         {showAddClient && onAddClient && (
-          <Button onClick={onAddClient}>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button size={compact ? 'sm' : 'default'} className={compact ? 'h-8 text-xs' : ''} onClick={onAddClient}>
+            <Plus className={compact ? 'mr-1.5 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
             Add Client
           </Button>
         )}
@@ -335,7 +343,7 @@ export function DateRangeFilter({
 
       {/* Active Source Filter Chips */}
       {sourceFilter.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border">
+        <div className={cn('flex flex-wrap items-center gap-2', compact ? 'mt-2' : 'mt-3 pt-3 border-t border-border')}>
           <span className="text-xs text-muted-foreground">Active filters:</span>
           {sourceFilter.map(source => (
             <Badge 
