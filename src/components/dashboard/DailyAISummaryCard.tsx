@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useUpdateTask, Task } from '@/hooks/useTasks';
 import { useTasksDue, isTaskDone } from '@/components/dashboard/TasksDueCard';
+import { useClients } from '@/hooks/useClients';
 
 function todayKey() {
   return format(new Date(), 'yyyy-MM-dd');
@@ -67,8 +68,14 @@ export function DailyAISummaryCard({ onTaskClick }: Props) {
   const stats = (data?.client_stats as any[]) || [];
 
   // Live tasks due today so checking off is systematic and always accurate.
-  const { today: tasksToday, todayDone } = useTasksDue();
+  const { today: tasksToday, todayDone, scope } = useTasksDue();
   const updateTask = useUpdateTask();
+  const { data: clients = [] } = useClients();
+  const clientNameById = new Map<string, string>(
+    (clients as any[]).map((c: any) => [c.id, c.name]),
+  );
+  const clientNameFor = (t: Task) =>
+    t.assigned_client_name || (t.client_id ? clientNameById.get(t.client_id) : null) || null;
 
   const toggleTask = (t: Task) => {
     const done = isTaskDone(t);
@@ -95,7 +102,9 @@ export function DailyAISummaryCard({ onTaskClick }: Props) {
               <Badge variant="outline" className="text-[10px] gap-1"><CheckCircle2 className="h-2.5 w-2.5" /> Slack</Badge>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">Auto-generated each morning at 4 AM PST — tasks due today + yesterday's KPI snapshot per client.</p>
+          <p className="text-xs text-muted-foreground">
+            Auto-generated each morning at 4 AM PST — {scope === 'all' ? 'all team tasks' : 'your tasks'} due today + yesterday's KPI snapshot per client.
+          </p>
         </div>
         <Button
           variant="ghost"
@@ -124,7 +133,7 @@ export function DailyAISummaryCard({ onTaskClick }: Props) {
           <div className="rounded-xl border border-border/60 p-3 bg-card/50">
             <div className="flex items-center gap-1.5 text-xs font-medium mb-2">
               <ListTodo className="h-3.5 w-3.5 text-primary" />
-              Tasks due today
+              {scope === 'all' ? 'Tasks due today (all team)' : 'My tasks due today'}
               <Badge variant="secondary" className="text-[10px] ml-auto">
                 {todayDone}/{tasksToday.length}
               </Badge>
@@ -135,6 +144,7 @@ export function DailyAISummaryCard({ onTaskClick }: Props) {
               <ul className="space-y-1 max-h-56 overflow-y-auto pr-1">
                 {tasksToday.map((t) => {
                   const done = isTaskDone(t);
+                  const clientName = clientNameFor(t);
                   return (
                     <li key={t.id} className="text-xs flex items-center gap-2 group">
                       <Checkbox
@@ -149,8 +159,11 @@ export function DailyAISummaryCard({ onTaskClick }: Props) {
                         type="button"
                         onClick={() => onTaskClick?.(t.id)}
                         className={`truncate text-left flex-1 hover:underline ${done ? 'line-through text-muted-foreground' : ''}`}
-                        title={t.title}
+                        title={clientName ? `${clientName} — ${t.title}` : t.title}
                       >
+                        {clientName && (
+                          <span className="font-semibold text-foreground/90">{clientName} · </span>
+                        )}
                         {t.title}
                       </button>
                     </li>
