@@ -12,7 +12,8 @@ import { ClientWalkthroughSegment } from './segments/ClientWalkthroughSegment';
 import { CloseSegment } from './segments/CloseSegment';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { captureMicPlusSystemAudio } from '@/lib/huddle/captureAudio';
+import { captureMicPlusSystemAudio, requestTabAudioStream } from '@/lib/huddle/captureAudio';
+import { AddCallAudioDialog } from '@/components/shared/AddCallAudioDialog';
 
 function fmt(s: number) {
   const neg = s < 0;
@@ -49,6 +50,8 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const captureStopRef = useRef<(() => void) | null>(null);
   const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
+  const [systemAudioOn, setSystemAudioOn] = useState(false);
+  const [audioGuideOpen, setAudioGuideOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -141,18 +144,9 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   // has already started with a reliable mic-only stream.
   const addSystemAudio = async () => {
     const rec = mediaRecorderRef.current;
-    if (!rec || rec.state === 'inactive') { toast.error('Start recording first'); return; }
+    if (!rec || rec.state === 'inactive') { throw new Error('Start recording first'); }
+    const display = await requestTabAudioStream();
     try {
-      const display = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: true,
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      display.getVideoTracks().forEach((t: MediaStreamTrack) => t.stop());
-      if (!display.getAudioTracks().length) {
-        display.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-        toast.error('No audio track — re-share and tick "Share tab audio"');
-        return;
-      }
       // Mix into a new destination and swap the MediaRecorder source.
       const AudioCtx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
@@ -177,10 +171,12 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
         try { ctx.close(); } catch {}
       };
       streamRef.current = dest.stream;
-      toast.success('System audio added to recording');
-    } catch (e) {
+      setSystemAudioOn(true);
+      toast.success('Call audio added — mic + participants are now recorded');
+    } catch (e: any) {
+      try { display.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
       console.warn('addSystemAudio failed', e);
-      toast.error('Could not add system audio (share cancelled or unsupported)');
+      throw new Error(e?.message || 'Could not mix in the shared audio.');
     }
   };
 
@@ -476,8 +472,14 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
                 title={isRecording ? 'Recording' : 'Recording inactive'}
               />
               {isRecording && (
-                <Button size="sm" variant="outline" className="h-6 text-[11px] px-2" onClick={addSystemAudio}>
-                  + System audio
+                <Button
+                  size="sm"
+                  variant={systemAudioOn ? 'secondary' : 'outline'}
+                  className="h-6 text-[11px] px-2"
+                  onClick={() => setAudioGuideOpen(true)}
+                  disabled={systemAudioOn}
+                >
+                  {systemAudioOn ? 'Call audio on' : '+ Call audio'}
                 </Button>
               )}
               {uploading && (
@@ -583,6 +585,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           <RotateCcw className="w-5 h-5 mr-2" />Restart
         </Button>
       </footer>
+      <AddCallAudioDialog open={audioGuideOpen} onOpenChange={setAudioGuideOpen} onRequest={addSystemAudio} />
     </div>
   );
 }

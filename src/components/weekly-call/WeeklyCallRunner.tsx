@@ -11,7 +11,8 @@ import {
   WinsSegment, ScorecardSegment, CreativeReviewSegment, TasksSegment, RecapSegment,
 } from './WeeklyCallSegments';
 import { WeeklyCallSettingsDrawer } from './WeeklyCallSettingsDrawer';
-import { captureMicPlusSystemAudio } from '@/lib/huddle/captureAudio';
+import { captureMicPlusSystemAudio, requestTabAudioStream } from '@/lib/huddle/captureAudio';
+import { AddCallAudioDialog } from '@/components/shared/AddCallAudioDialog';
 
 function fmt(s: number) {
   const neg = s < 0;
@@ -77,6 +78,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
   const [systemAudioOn, setSystemAudioOn] = useState(false);
+  const [audioGuideOpen, setAudioGuideOpen] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -167,18 +169,9 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   // mic-only recorder is already running reliably.
   const addSystemAudio = async () => {
     const rec = mediaRecorderRef.current;
-    if (!rec || rec.state === 'inactive') { toast.error('Start the call recording first'); return; }
+    if (!rec || rec.state === 'inactive') { throw new Error('Start the call recording first'); }
+    const display = await requestTabAudioStream();
     try {
-      const display = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: true,
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      display.getVideoTracks().forEach((t: MediaStreamTrack) => t.stop());
-      if (!display.getAudioTracks().length) {
-        display.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-        toast.error('No audio track — re-share the Meet tab and tick "Also share tab audio"');
-        return;
-      }
       const AudioCtx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
       const dest = ctx.createMediaStreamDestination();
@@ -202,9 +195,10 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       streamRef.current = dest.stream;
       setSystemAudioOn(true);
       toast.success('Call audio added — mic + participants are now recorded');
-    } catch (e) {
+    } catch (e: any) {
+      try { display.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
       console.warn('addSystemAudio failed', e);
-      toast.error('Could not add call audio (share cancelled or unsupported)');
+      throw new Error(e?.message || 'Could not mix in the shared audio.');
     }
   };
 
@@ -478,7 +472,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           </>
         )}
         {isRecording && (
-          <Button variant={systemAudioOn ? 'secondary' : 'outline'} onClick={addSystemAudio} disabled={systemAudioOn}>
+          <Button variant={systemAudioOn ? 'secondary' : 'outline'} onClick={() => setAudioGuideOpen(true)} disabled={systemAudioOn}>
             <Volume2 className="w-4 h-4 mr-2" />{systemAudioOn ? 'Call audio on' : 'Add call audio'}
           </Button>
         )}
@@ -514,6 +508,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           <RotateCcw className="w-4 h-4 mr-2" />Restart
         </Button>
       </footer>
+      <AddCallAudioDialog open={audioGuideOpen} onOpenChange={setAudioGuideOpen} onRequest={addSystemAudio} />
     </div>
   );
 }

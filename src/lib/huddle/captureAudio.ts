@@ -12,6 +12,54 @@ export interface MixedCaptureResult {
   stop: () => void;
 }
 
+export type TabAudioErrorKind = 'cancelled' | 'no-audio' | 'unsupported';
+
+export class TabAudioError extends Error {
+  kind: TabAudioErrorKind;
+  constructor(kind: TabAudioErrorKind, message: string) {
+    super(message);
+    this.kind = kind;
+    this.name = 'TabAudioError';
+  }
+}
+
+/**
+ * Opens the Chrome share picker pre-targeted at the "Chrome Tab" pane so the
+ * "Also share tab audio" checkbox is the only thing the user has to tick.
+ * Returns a stream containing ONLY the shared audio track.
+ */
+export async function requestTabAudioStream(): Promise<MediaStream> {
+  const md: any = navigator.mediaDevices as any;
+  if (!md?.getDisplayMedia) {
+    throw new TabAudioError('unsupported', 'This browser cannot capture tab audio. Use desktop Chrome or Edge.');
+  }
+
+  let display: MediaStream;
+  try {
+    display = await md.getDisplayMedia({
+      // Chrome requires a video track even for audio-only capture.
+      video: { displaySurface: 'browser' },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      // Chrome-only hints: open on the Tab pane, allow the meeting tab to be
+      // listed, allow switching surfaces, and offer system audio on Windows.
+      preferCurrentTab: false,
+      selfBrowserSurface: 'exclude',
+      systemAudio: 'include',
+      surfaceSwitching: 'include',
+      monitorTypeSurfaces: 'include',
+    } as any);
+  } catch (e: any) {
+    throw new TabAudioError('cancelled', 'Share dialog was dismissed before a tab was picked.');
+  }
+
+  display.getVideoTracks().forEach((t) => t.stop());
+  if (!display.getAudioTracks().length) {
+    display.getTracks().forEach((t) => t.stop());
+    throw new TabAudioError('no-audio', 'That share had no audio — the "Also share tab audio" toggle was left off.');
+  }
+  return display;
+}
+
 export async function captureMicPlusSystemAudio(
   opts: { requestSystem?: boolean } = {},
 ): Promise<MixedCaptureResult> {
