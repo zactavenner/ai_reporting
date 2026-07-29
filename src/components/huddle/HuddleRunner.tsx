@@ -50,6 +50,8 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const captureStopRef = useRef<(() => void) | null>(null);
   const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
+  const [systemAudioOn, setSystemAudioOn] = useState(false);
+  const [audioGuideOpen, setAudioGuideOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
