@@ -508,6 +508,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           <RotateCcw className="w-4 h-4 mr-2" />Restart
         </Button>
       </footer>
+      <AddCallAudioDialog open={audioGuideOpen} onOpenChange={setAudioGuideOpen} onRequest={addSystemAudio} />
     </div>
   );
 }
