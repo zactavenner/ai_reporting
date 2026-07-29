@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, X, Upload, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, X, Upload, CheckCircle2, AlertCircle, RotateCcw, Volume2 } from 'lucide-react';
 import { useThisWeekCall } from '@/hooks/useThisWeekCall';
 import { useTeamMember } from '@/contexts/TeamMemberContext';
 import { useSegmentTiming } from '@/hooks/useHuddle';
@@ -146,7 +146,8 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       rec.start(1000);
       mediaRecorderRef.current = rec;
       setIsRecording(true);
-      toast.success('Recording started (mic).', { duration: 5000 });
+      setSystemAudioOn(false);
+      toast.success('Recording started (mic). Use "Add call audio" to include Meet/Zoom participants.', { duration: 6000 });
       return true;
     } catch (e: any) {
       console.error('mic denied:', e);
@@ -158,6 +159,51 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
         : 'Microphone unavailable — check browser mic permissions.';
       toast.error(`Recording failed: ${hint}`, { duration: 8000 });
       return false;
+    }
+  };
+
+  // Opt-in: mix in tab/system audio (Google Meet participants) after the
+  // mic-only recorder is already running reliably.
+  const addSystemAudio = async () => {
+    const rec = mediaRecorderRef.current;
+    if (!rec || rec.state === 'inactive') { toast.error('Start the call recording first'); return; }
+    try {
+      const display = await (navigator.mediaDevices as any).getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      display.getVideoTracks().forEach((t: MediaStreamTrack) => t.stop());
+      if (!display.getAudioTracks().length) {
+        display.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+        toast.error('No audio track — re-share the Meet tab and tick "Also share tab audio"');
+        return;
+      }
+      const AudioCtx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const dest = ctx.createMediaStreamDestination();
+      if (streamRef.current) ctx.createMediaStreamSource(streamRef.current).connect(dest);
+      ctx.createMediaStreamSource(display).connect(dest);
+      const preservedChunks = chunksRef.current.slice();
+      try { rec.requestData(); rec.stop(); } catch {}
+      await new Promise((r) => setTimeout(r, 250));
+      chunksRef.current = preservedChunks;
+      const preferredMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const next = preferredMime ? new MediaRecorder(dest.stream, { mimeType: preferredMime }) : new MediaRecorder(dest.stream);
+      next.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      next.start(1000);
+      mediaRecorderRef.current = next;
+      const prevStop = captureStopRef.current;
+      captureStopRef.current = () => {
+        try { prevStop?.(); } catch {}
+        try { display.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
+        try { ctx.close(); } catch {}
+      };
+      streamRef.current = dest.stream;
+      setSystemAudioOn(true);
+      toast.success('Call audio added — mic + participants are now recorded');
+    } catch (e) {
+      console.warn('addSystemAudio failed', e);
+      toast.error('Could not add call audio (share cancelled or unsupported)');
     }
   };
 
