@@ -78,6 +78,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   const recordingMimeTypeRef = useRef('audio/webm');
   const [isRecording, setIsRecording] = useState(false);
   const [systemAudioOn, setSystemAudioOn] = useState(false);
+  const [audioGuideOpen, setAudioGuideOpen] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -471,7 +472,7 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
           </>
         )}
         {isRecording && (
-          <Button variant={systemAudioOn ? 'secondary' : 'outline'} onClick={addSystemAudio} disabled={systemAudioOn}>
+          <Button variant={systemAudioOn ? 'secondary' : 'outline'} onClick={() => setAudioGuideOpen(true)} disabled={systemAudioOn}>
             <Volume2 className="w-4 h-4 mr-2" />{systemAudioOn ? 'Call audio on' : 'Add call audio'}
           </Button>
         )}
