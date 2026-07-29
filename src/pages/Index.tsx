@@ -405,6 +405,10 @@ const Index = () => {
             {/* Dashboard */}
             {activeTab === 'dashboard' && (
               <>
+                <SectionErrorBoundary sectionName="Daily Brief">
+                  <DailyAISummaryCard onTaskClick={handleNotificationTaskClick} />
+                </SectionErrorBoundary>
+
                 <div className="flex justify-end">
                   <AISheetSummaryButton />
                 </div>
@@ -488,10 +492,6 @@ const Index = () => {
                       </>
                     )}
                   </section>
-                </SectionErrorBoundary>
-
-                <SectionErrorBoundary sectionName="Daily Brief">
-                  <DailyAISummaryCard onTaskClick={handleNotificationTaskClick} />
                 </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="Master Spreadsheet">
