@@ -454,6 +454,9 @@ const Index = () => {
                         </Button>
                       </div>
                     </div>
+                    <div className="mb-3">
+                      <TasksDueCard onOpenTasks={() => handleTabChange('tasks')} />
+                    </div>
                     {clientsLoading ? (
                       <div className="text-center py-8 text-muted-foreground">Loading clients...</div>
                     ) : clients.length === 0 ? (
@@ -485,6 +488,14 @@ const Index = () => {
                       </>
                     )}
                   </section>
+                </SectionErrorBoundary>
+
+                <SectionErrorBoundary sectionName="Daily Brief">
+                  <DailyAISummaryCard onTaskClick={handleNotificationTaskClick} />
+                </SectionErrorBoundary>
+
+                <SectionErrorBoundary sectionName="Master Spreadsheet">
+                  <MasterSheetPanel />
                 </SectionErrorBoundary>
 
                 <SectionErrorBoundary sectionName="AI Studio">
