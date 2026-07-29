@@ -477,6 +477,11 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
             <Button variant="secondary" onClick={pause}><Pause className="w-4 h-4 mr-2" />Pause</Button>
           </>
         )}
+        {isRecording && (
+          <Button variant={systemAudioOn ? 'secondary' : 'outline'} onClick={addSystemAudio} disabled={systemAudioOn}>
+            <Volume2 className="w-4 h-4 mr-2" />{systemAudioOn ? 'Call audio on' : 'Add call audio'}
+          </Button>
+        )}
         <Button variant="outline" onClick={bump30} disabled={isLastSegment}><Plus className="w-4 h-4 mr-2" />30s</Button>
         <Button variant="outline" onClick={back} disabled={timing.idx === 0}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
         <Button variant="outline" onClick={next}><SkipForward className="w-4 h-4 mr-2" />Skip</Button>
