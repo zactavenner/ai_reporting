@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, Upload, CheckCircle2, AlertCircle, X, RotateCcw } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, ChevronRight, ChevronLeft, PartyPopper, Loader2, Upload, CheckCircle2, AlertCircle, X, RotateCcw, Volume2 } from 'lucide-react';
 import { useTodayHuddle, useSegmentTiming } from '@/hooks/useHuddle';
 import { useHuddleClients } from '@/hooks/useHuddleClients';
 import { HuddleAgendaRail } from './HuddleAgendaRail';
