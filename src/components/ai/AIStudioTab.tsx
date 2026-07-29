@@ -1235,6 +1235,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     if ((clientAgents as any[]).length > 0 && !selectedIsEnabled) setSelectedAgentId("off");
   }, [clientAgents, agencyRoster, selectedAgentId]);
 
+  // When a video specialist is selected, always keep a model locked in so the
+  // full marketing option set (resolution, length, style, frames, format,
+  // avatar) is visible and enforced instead of hidden behind a first click.
+  useEffect(() => {
+    if (selectedAgentMode === "video" && videoModels.length === 0) {
+      setVideoModels(["alibaba/happyhorse-1.1"]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAgentMode]);
+
   // --- Auto-import the selected offer's image assets as references in the composer.
   // Whenever the offer picker changes, drop any previously-imported offer images and
   // pull in the new offer's image files so the AI uses them as reference for any
