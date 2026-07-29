@@ -6,6 +6,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { AISheetSummaryButton } from '@/components/ai/AISheetSummaryButton';
 import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { DailyAISummaryCard } from '@/components/dashboard/DailyAISummaryCard';
+import { TasksDueCard } from '@/components/dashboard/TasksDueCard';
 import { DataAccuracyAuditPanel } from '@/components/dashboard/DataAccuracyAuditPanel';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { AIInsightsCard } from '@/components/dashboard/AIInsightsCard';
@@ -354,6 +355,17 @@ const Index = () => {
             onLogout={currentMember ? logout : undefined}
             onTaskClick={handleNotificationTaskClick}
           />
+
+          {activeTab === 'dashboard' && (
+            <div className="sticky top-12 z-20 border-b border-border bg-card/80 apple-blur px-6 py-2">
+              <DateRangeFilter
+                compact
+                onExportCSV={handleExportCSV}
+                onAddClient={() => setAddClientOpen(true)}
+                onRefresh={handleRefresh}
+              />
+            </div>
+          )}
 
           <main className="flex-1 p-6 space-y-6 overflow-auto">
             {/* Database utility page */}
