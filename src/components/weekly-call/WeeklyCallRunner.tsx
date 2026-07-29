@@ -11,7 +11,8 @@ import {
   WinsSegment, ScorecardSegment, CreativeReviewSegment, TasksSegment, RecapSegment,
 } from './WeeklyCallSegments';
 import { WeeklyCallSettingsDrawer } from './WeeklyCallSettingsDrawer';
-import { captureMicPlusSystemAudio } from '@/lib/huddle/captureAudio';
+import { captureMicPlusSystemAudio, requestTabAudioStream } from '@/lib/huddle/captureAudio';
+import { AddCallAudioDialog } from '@/components/shared/AddCallAudioDialog';
 
 function fmt(s: number) {
   const neg = s < 0;
@@ -167,18 +168,9 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
   // mic-only recorder is already running reliably.
   const addSystemAudio = async () => {
     const rec = mediaRecorderRef.current;
-    if (!rec || rec.state === 'inactive') { toast.error('Start the call recording first'); return; }
+    if (!rec || rec.state === 'inactive') { throw new Error('Start the call recording first'); }
+    const display = await requestTabAudioStream();
     try {
-      const display = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: true,
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      display.getVideoTracks().forEach((t: MediaStreamTrack) => t.stop());
-      if (!display.getAudioTracks().length) {
-        display.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-        toast.error('No audio track — re-share the Meet tab and tick "Also share tab audio"');
-        return;
-      }
       const AudioCtx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
       const dest = ctx.createMediaStreamDestination();
@@ -202,9 +194,10 @@ export function WeeklyCallRunner({ clientId, onFinish }: { clientId: string; onF
       streamRef.current = dest.stream;
       setSystemAudioOn(true);
       toast.success('Call audio added — mic + participants are now recorded');
-    } catch (e) {
+    } catch (e: any) {
+      try { display.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
       console.warn('addSystemAudio failed', e);
-      toast.error('Could not add call audio (share cancelled or unsupported)');
+      throw new Error(e?.message || 'Could not mix in the shared audio.');
     }
   };
 
