@@ -26,6 +26,7 @@ export function AccountabilitySegment({ huddleId }: { huddleId: string }) {
   const { currentMember } = useTeamMember();
   const [yesterdayTasks, setYesterdayTasks] = useState<TaskRow[]>([]);
   const [notDoneReason, setNotDoneReason] = useState<Record<string, string>>({});
+  const [comment, setComment] = useState<Record<string, string>>({});
   const [todayTitle, setTodayTitle] = useState('');
   const [todayTasks, setTodayTasks] = useState<TaskRow[]>([]);
   const [members, setMembers] = useState<Record<string, string>>({});
@@ -146,8 +147,29 @@ export function AccountabilitySegment({ huddleId }: { huddleId: string }) {
       // reschedule to today with a note appended
       await supabase.from('tasks').update({ due_date: today }).eq('id', t.id);
       await supabase.from('task_history').insert({ task_id: t.id, action: 'rescheduled', changes: { reason: notDoneReason[t.id], from: t.due_date, to: today } } as any);
-      toast.success('Rescheduled to today');
+      // Log the reason on the task thread so it shows in the task sidebar.
+      await supabase.from('task_comments').insert({
+        task_id: t.id,
+        author_name: currentMember?.name || 'Huddle',
+        content: `Daily huddle — not completed yesterday: ${notDoneReason[t.id]}`,
+        comment_type: 'text',
+      } as any);
+      toast.success('Rescheduled to today · reason added to task');
     }
+  };
+
+  // Free-form huddle comment posted straight onto the task thread.
+  const addComment = async (t: TaskRow, text: string) => {
+    if (!text.trim()) return;
+    const { error } = await supabase.from('task_comments').insert({
+      task_id: t.id,
+      author_name: currentMember?.name || 'Huddle',
+      content: text.trim(),
+      comment_type: 'text',
+    } as any);
+    if (error) { toast.error('Failed to add comment'); return; }
+    setComment((p) => ({ ...p, [t.id]: '' }));
+    toast.success('Comment added to task');
   };
 
   const toggleTodayDone = async (t: TaskRow, done: boolean) => {
@@ -267,6 +289,18 @@ export function AccountabilitySegment({ huddleId }: { huddleId: string }) {
                             onChange={(e) => setNotDoneReason(p => ({ ...p, [t.id]: e.target.value }))}
                           />
                         )}
+                        <div className="mt-2 flex gap-2">
+                          <Input
+                            className="h-8 text-xs"
+                            placeholder="Add comment to task…"
+                            value={comment[t.id] || ''}
+                            onChange={(e) => setComment(p => ({ ...p, [t.id]: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addComment(t, comment[t.id] || '')}
+                          />
+                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => addComment(t, comment[t.id] || '')}>
+                            Comment
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
