@@ -2867,6 +2867,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     Batch scripts
                   </button>
                 )}
+                {selectedAgentMode === "video" && videoModel && (
+                  <Badge
+                    variant="secondary"
+                    className="h-7 text-[9px] gap-1 border border-primary/40 bg-primary/10 text-primary"
+                    title="These settings are passed to the renderer exactly as selected — the agent cannot substitute a different model, resolution, length, format or avatar."
+                  >
+                    🔒 Locked: {VIDEO_MODELS.find(m => m.value === videoModel)?.label || videoModel} ·{" "}
+                    {videoResolution === "4k" ? "4K" : videoResolution} · {videoTotalDuration}s ·{" "}
+                    {videoAspectForAdFormat(adFormat)}
+                    {selectedAvatar ? ` · ${selectedAvatar.name}` : ""}
+                  </Badge>
+                )}
                 </div>
                 <div className="order-1 md:order-2 shrink-0 self-end ml-auto md:ml-0">
                   {/* Send is always available so the user can queue new prompts while
