@@ -1058,15 +1058,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       setAdFormat("reel_9x16");
     }
   }, [adFormat, videoModels.length]);
-  // When a video specialist agent is selected, always have a model locked in so
-  // the full marketing option set (resolution, length, style, frames, format,
-  // avatar) is visible and enforced instead of hidden behind a first click.
-  useEffect(() => {
-    if (selectedAgentMode === "video" && videoModels.length === 0) {
-      setVideoModels(["alibaba/happyhorse-1.1"]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAgentMode]);
   const [hookFramework, setHookFramework] = useState<string>(() => {
     try { return localStorage.getItem("ai-studio:hook-framework") || "auto"; } catch { return "auto"; }
   });
