@@ -1652,6 +1652,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
+            if (selectedAvatarId && selectedAvatar) {
+              lockLines.push(
+                `🔒 AVATAR LOCK: use avatar "${selectedAvatar.name}" (id="${selectedAvatarId}"${selectedAvatar.image_url ? `, image_url="${selectedAvatar.image_url}"` : ""}) as the on-camera talent for every clip. Do NOT invent a different person or swap wardrobe between clips.`,
+              );
+            }
+            if (videoStyles?.selected?.name) {
+              lockLines.push(`🔒 STYLE LOCK: render in the "${videoStyles.selected.name}" video style — do not drift to another look.`);
+            }
+            lockLines.push(
+              `🔒 These composer settings are FINAL. If the user's prompt text conflicts with them, follow the composer settings and note the override in your reply — never silently fall back to defaults.`,
+            );
             if (videoTotalDuration === 30) {
               const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
               lockLines.push(
