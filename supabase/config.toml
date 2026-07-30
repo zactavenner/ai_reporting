@@ -54,6 +54,9 @@ verify_jwt = false
 [functions.send-sheet-stats-email]
 verify_jwt = false
 
+[functions.ghl-conversation-webhook]
+verify_jwt = false
+
 [functions.sync-ghl-contacts]
 verify_jwt = false
 
