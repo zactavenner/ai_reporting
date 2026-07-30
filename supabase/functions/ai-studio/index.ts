@@ -1288,7 +1288,7 @@ async function generateSeedanceVideo(opts: {
   const modelLabel = isHappyHorse
     ? "HappyHorse 1.1"
     : isGrok
-      ? (model === "x-ai/grok-imagine-video" ? "Grok Imagine 1.5" : "Grok 1.5")
+      ? (model === "x-ai/grok-imagine-video-1.5" ? "Grok Imagine 1.5" : "Grok Imagine")
       : isSeedance
       ? (isSeedanceFast ? "Seedance Fast" : "Seedance Pro")
       : isKling
