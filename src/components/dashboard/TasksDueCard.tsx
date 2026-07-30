@@ -66,8 +66,11 @@ export function useTasksDue() {
 
     const today: Task[] = [];
     const week: Task[] = [];
+    const createdToday: Task[] = [];
 
     for (const t of tasks) {
+      const c = toDate(t.created_at);
+      if (c && isSameDay(c, now)) createdToday.push(t);
       const d = toDate(t.due_date);
       if (!d) continue;
       if (isSameDay(d, now)) today.push(t);
@@ -78,8 +81,10 @@ export function useTasksDue() {
     return {
       today,
       week,
+      createdToday,
       todayDone: done(today),
       weekDone: done(week),
+      createdTodayDone: done(createdToday),
       scope: (isAccountManager ? 'all' : 'mine') as 'all' | 'mine',
     };
   }, [tasks, isAccountManager]);
