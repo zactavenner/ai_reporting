@@ -1243,7 +1243,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // avatar) is visible and enforced instead of hidden behind a first click.
   useEffect(() => {
     if (selectedAgentMode === "video" && videoModels.length === 0) {
-      setVideoModels(["alibaba/happyhorse-1.1"]);
+      // Grok 1.5 is the strongest first-frame image-to-video model on OpenRouter.
+      setVideoModels(["x-ai/grok-video-1.5"]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAgentMode]);
