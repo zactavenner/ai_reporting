@@ -1,61 +1,51 @@
-# Automate daily "FB Spend" Google Sheet sync
-
 ## Goal
-Every day, automatically append yesterday's Meta ad performance (per campaign, per client) into the **FB Spend** tab of each client's KPI Google Sheet — matching the exact columns in the screenshot, plus a few useful extras.
 
-## Columns written to the "FB Spend" tab
+From the Setter panel: press **Call**, your phone rings, GHL bridges you to the lead using that client's GHL number, and the call is logged in the lead timeline. SMS and email to/from the lead appear in the same thread in near real time.
 
-| # | Column | Source |
-|---|---|---|
-| 1 | Date | insights day |
-| 2 | Campaign Name | Meta campaign name |
-| 3 | Ad Spend | insights.spend |
-| 4 | Impressions | insights.impressions |
-| 5 | Clicks | insights.clicks (link clicks) |
-| 6 | Frequency | insights.frequency |
-| 7 | CTR | insights.ctr |
-| 8 | Reach | insights.reach *(new)* |
-| 9 | CPM | insights.cpm *(new)* |
-| 10 | CPC | insights.cpc *(new)* |
-| 11 | Leads | actions → lead |
-| 12 | Cost/Lead | spend / leads *(new)* |
-| 13 | Campaign ID | for dedupe key *(hidden-friendly)* |
-| 14 | Account ID | for multi-account clients |
-| 15 | Synced At | run timestamp |
+## Current state (verified)
 
-Header row is written once on tab creation and auto-repaired if column count changes.
+- `setter-send-message` already sends SMS/email through each client's own GHL credentials (`clients.ghl_api_key` + `ghl_location_id`) and writes an outbound row into `contact_timeline_events`.
+- Inbound messages arrive only through the scheduled conversation sync (`sync-ghl-contacts`), which normalizes direction and writes to `contact_timeline_events`. There is no inbound webhook, so replies lag.
+- There is no calling path at all today — the panel only has a `mailto:` link. No Twilio/voice provider is configured.
 
-## Behavior
+Important constraint: the GHL public API cannot *dial* a call. `POST /conversations/messages/outbound` only **logs** an external call. The only API-reachable way to make GHL actually bridge a call from the client's number is to trigger a GHL **workflow** (Inbound Webhook trigger → Call action) in that sub-account. The plan uses that, with a graceful device-dial fallback.
 
-- **Per-client sheet**: writes to the URL in `client_settings.kpi_google_sheet_url` (falls back to `metrics_sheet_id`). Clients without a sheet URL are skipped and logged.
-- **Tab name**: `FB Spend` (created if missing, header written on create).
-- **Dedupe key**: `Date + Campaign ID + Account ID`. If a row for that key exists, it's updated in place; otherwise appended. No duplicate rows on re-runs or backfills.
-- **Backfill window**: default = yesterday. Function accepts `{ days_back: N }` for one-off backfills (up to 30 days).
-- **Also writes to Supabase**: continues upserting `ad_spend_daily` so Data Health + reporting stay in sync (this already works; we just extend the row with reach/frequency/ctr/cpm/cpc).
-- **Multi-account clients**: one row per campaign per account per day; account column disambiguates.
+## What gets built
 
-## Schedule
+### 1. Click-to-call (GHL bridge)
 
-- `pg_cron` job **`fb-spend-sheet-daily`** at **06:15 UTC (~11:15 PM PT)** — after Meta's day-close, before the 6 AM PT accuracy window.
-- A safety re-run at **13:30 UTC (~6:30 AM PT)** with `days_back: 3` to catch late-attributed conversions.
-- Each run logged to `ad_spend_sync_runs` with status + row counts (already exists; extend with sheet write counts).
+- New edge function `setter-place-call`:
+  - Looks up the client's GHL creds, upserts/locates the contact.
+  - Fires the client's configured **Inbound Webhook URL** with `{contact_id, phone, setter_phone, lead_id}` so the GHL workflow's Call action bridges setter → lead using the client's number.
+  - Immediately writes a `contact_timeline_events` row (`event_type: call`, `outbound`, status `dialing`) so the timeline and speed-to-lead update instantly.
+  - Also posts `POST /conversations/messages/outbound` type `Call` so the activity shows inside GHL's conversation too.
+  - If the client has no call-workflow webhook configured, returns a `fallback: "device"` response and the UI opens the system dialer (`tel:`) while still logging the attempt.
+- New per-client settings (in client settings): **Call workflow webhook URL** and default **outbound caller number**; per-user **setter callback phone** on the agency member record.
+- UI: a real **Call** button in `SetterDetailPanel` next to Mail/SMS, with dialing state, connect/no-answer/voicemail quick disposition, and duration capture written back to the timeline + `calls` table.
 
-## Files touched
+### 2. Accurate, realtime SMS/email thread
 
-- `supabase/functions/sync-meta-ad-spend/index.ts` — extend Meta fields fetched (`reach,frequency,ctr,cpm,cpc,actions`), extend sheet writer, switch to per-client `kpi_google_sheet_url`, rename tab constant to `FB Spend`, expand header, extend dedupe key to include Campaign ID + Account ID.
-- `supabase/migrations/<ts>_fb_spend_sync.sql`:
-  - Add columns to `ad_spend_daily`: `reach`, `frequency`, `ctr`, `cpm`, `cpc`, `cost_per_lead` (all `numeric`, nullable).
-  - Add pg_cron jobs `fb-spend-sheet-daily` (06:15 UTC) and `fb-spend-sheet-safety` (13:30 UTC).
-- `src/pages/DataHealthPage.tsx` — add a "FB Spend sheet" column showing last successful sheet write per client, with a manual "Run now" button that calls the edge function with `days_back: 1`.
+- New public edge function `ghl-conversation-webhook` (HMAC/shared-secret verified, `verify_jwt=false`):
+  - Accepts GHL `InboundMessage`, `OutboundMessage`, and call-status events.
+  - Resolves client by `locationId`, resolves lead by `ghl_contact_id` / phone / email, and upserts into `contact_timeline_events` keyed by GHL `messageId` so nothing double-posts against the 15-min sync.
+- Keep the existing 15-min sync as reconciliation only (idempotent upsert on message id).
+- Thread rendering: unify `SmsThread` to render SMS **and** email in one chronological thread with direction-based bubbles, channel + provider label ("via GHL" vs "sent from platform"), delivery status, and unread badge clearing on view.
+- Realtime subscription on `contact_timeline_events` for the open lead so inbound replies pop in without a refresh.
 
-## Edge cases handled
+### 3. Accuracy guardrails
 
-- Missing sheet URL → skip, log `skipped_no_sheet` in `ad_spend_sync_runs`.
-- Meta token expired → surface provider error verbatim (existing pattern).
-- Rate-limit / 429 from Sheets → exponential backoff, honor `Retry-After`.
-- Zero-spend days → still written (spend = 0) so gaps are visible in the sheet.
-- Client with 2 Meta accounts → separate rows keyed by Account ID.
+- Dedup key: `metadata.ghl_message_id` unique per client — used by webhook, sync, and outbound send.
+- Phone normalization to E.164 before match/lookup so GHL and platform rows collapse onto the same lead.
+- Small "Message health" strip in the Setter header: last webhook received, last sync, and count of unmatched inbound messages.
 
-## What the user gets
+## Setup you'll need to do once per client sub-account
 
-Open any client's KPI sheet → **FB Spend** tab is filled and refreshed every morning with Date, Campaign, Spend, Impressions, Clicks, Frequency, CTR — plus Reach, CPM, CPC, Leads, Cost/Lead. No manual work.
+1. In GHL, create a workflow: **Inbound Webhook** trigger → **Call** action (call assigned user, then contact) — paste its webhook URL into the client's settings in the app.
+2. Add the app's webhook URL to that sub-account's messaging webhook (or the marketplace app) so inbound SMS/email hits us instantly.
+
+## Technical notes
+
+- Edge functions: `setter-place-call` (new), `ghl-conversation-webhook` (new), `setter-send-message` (extended with message-id dedup).
+- DB: add `call_workflow_webhook_url` + `outbound_caller_number` to `client_settings`, `setter_phone` to `agency_members`, and a unique index on `(client_id, (metadata->>'ghl_message_id'))` for `contact_timeline_events`.
+- Frontend: `SetterDetailPanel.tsx`, `SmsThread.tsx`, `useSetterLeads.ts`, new `useLeadThread` realtime hook.
+- A shared webhook secret will be requested via the secure secret form after the webhook endpoint is deployed.
