@@ -61,6 +61,11 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [callbackAt, setCallbackAt] = useState<string>('');
   const [callbackNote, setCallbackNote] = useState('');
+  const [members2, setMembers2] = useState<{ id: string; name: string; phone: string | null }[]>([]);
+  const [calling, setCalling] = useState(false);
+  const [callMode, setCallMode] = useState<'bridge' | 'device' | null>(null);
+  const [callEventId, setCallEventId] = useState<string | null>(null);
+  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
 
   // Tick every 30s so the "last synced" label stays fresh.
   useEffect(() => {
@@ -120,7 +125,10 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
   };
 
   useEffect(() => {
-    supabase.from('agency_members').select('id, name').then(({ data }) => setMembers((data as any) || []));
+    supabase.from('agency_members').select('id, name, phone').then(({ data }) => {
+      setMembers(((data as any) || []).map((m: any) => ({ id: m.id, name: m.name })));
+      setMembers2((data as any) || []);
+    });
   }, []);
 
   useEffect(() => {
