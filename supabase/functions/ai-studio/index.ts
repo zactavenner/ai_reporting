@@ -1208,7 +1208,7 @@ async function generateSeedanceVideo(opts: {
     "kwaivgi/kling-v2.1-master",
     "google/veo-3.1-fast",
     "alibaba/happyhorse-1.1",
-    "x-ai/grok-video-1.5",
+    "x-ai/grok-imagine-video-1.5",
     "x-ai/grok-imagine-video",
   ];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
@@ -1231,12 +1231,12 @@ async function generateSeedanceVideo(opts: {
     "hourse": "alibaba/happyhorse-1.1",
     "happyhorse-1.1": "alibaba/happyhorse-1.1",
     "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
-    "grok": "x-ai/grok-video-1.5",
-    "grok-1.5": "x-ai/grok-video-1.5",
-    "grok-video": "x-ai/grok-video-1.5",
-    "grok-video-1.5": "x-ai/grok-video-1.5",
-    "x-ai/grok-1.5": "x-ai/grok-video-1.5",
-    "xai/grok-video-1.5": "x-ai/grok-video-1.5",
+    "grok": "x-ai/grok-imagine-video-1.5",
+    "grok-1.5": "x-ai/grok-imagine-video-1.5",
+    "grok-video": "x-ai/grok-imagine-video-1.5",
+    "grok-video-1.5": "x-ai/grok-imagine-video-1.5",
+    "x-ai/grok-1.5": "x-ai/grok-imagine-video-1.5",
+    "xai/grok-video-1.5": "x-ai/grok-imagine-video-1.5",
     "grok-imagine": "x-ai/grok-imagine-video",
     "grok-imagine-video": "x-ai/grok-imagine-video",
     "x-ai/grok-imagine": "x-ai/grok-imagine-video",
@@ -1307,7 +1307,7 @@ async function generateSeedanceVideo(opts: {
   }
   else if (isGrok) {
     // Grok Imagine Video supports only 480p and 720p via OpenRouter /v1/videos.
-    // Older x-ai/grok-video-1.5 caps at 720p as well.
+    // Older x-ai/grok-imagine-video-1.5 caps at 720p as well.
     effectiveResolution = effectiveResolution === "480p" ? "480p" : "720p";
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
@@ -2745,7 +2745,7 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
   "alibaba/happyhorse-1.1":      { maxDuration: 15, label: "HappyHorse 1.1 (≤15s per clip, 1080p)" },
-  "x-ai/grok-video-1.5":         { maxDuration: 15, label: "Grok 1.5 (≤15s per clip, 720p)" },
+  "x-ai/grok-imagine-video-1.5":         { maxDuration: 15, label: "Grok 1.5 (≤15s per clip, 720p)" },
   "x-ai/grok-imagine-video":     { maxDuration: 15, label: "Grok Imagine 1.5 (≤15s per clip, up to 720p)" },
 };
 
