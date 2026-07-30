@@ -103,7 +103,13 @@ serve(async (req) => {
         title: sender_name ? `Sent by ${sender_name}` : `Outbound ${channel}`,
         body: (text || subject || "").slice(0, 500),
         event_at: new Date().toISOString(),
-        metadata: { via: "setter", messageId: sendJson?.messageId || sendJson?.id || null },
+        metadata: {
+          via: "setter",
+          provider: "ghl",
+          status: "sent",
+          messageId: sendJson?.messageId || sendJson?.id || null,
+          ghl_message_id: sendJson?.messageId || sendJson?.id || null,
+        },
       });
     }
 

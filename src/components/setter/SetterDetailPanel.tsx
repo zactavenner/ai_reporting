@@ -61,6 +61,11 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [callbackAt, setCallbackAt] = useState<string>('');
   const [callbackNote, setCallbackNote] = useState('');
+  const [members2, setMembers2] = useState<{ id: string; name: string; phone: string | null }[]>([]);
+  const [calling, setCalling] = useState(false);
+  const [callMode, setCallMode] = useState<'bridge' | 'device' | null>(null);
+  const [callEventId, setCallEventId] = useState<string | null>(null);
+  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
 
   // Tick every 30s so the "last synced" label stays fresh.
   useEffect(() => {
@@ -120,7 +125,10 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
   };
 
   useEffect(() => {
-    supabase.from('agency_members').select('id, name').then(({ data }) => setMembers((data as any) || []));
+    supabase.from('agency_members').select('id, name, phone').then(({ data }) => {
+      setMembers(((data as any) || []).map((m: any) => ({ id: m.id, name: m.name })));
+      setMembers2((data as any) || []);
+    });
   }, []);
 
   useEffect(() => {
@@ -206,6 +214,102 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
   }, [lead?.id, lead?.ghl_contact_id, syncingTimeline]);
 
   const draftAI = async () => {
+    if (!lead) return;
+    setDrafting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('setter-ai-opener', {
+        body: { password: 'HPA1234$', lead_id: lead.id, channel: tab },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setText(data.text || '');
+      if (tab === 'email' && data.subject) setSubject(data.subject);
+      toast.success('Draft ready');
+    } catch (e: any) {
+      toast.error(`Draft failed: ${e?.message || e}`);
+    } finally { setDrafting(false); }
+  };
+
+  const myPhone = useMemo(() => {
+    const mine = members2.find((m) => m.id === currentMember?.id);
+    return mine?.phone || localStorage.getItem('setter_callback_phone') || '';
+  }, [members2, currentMember?.id]);
+
+  const placeCall = async () => {
+    if (!lead?.phone) { toast.error('Lead has no phone'); return; }
+    setCalling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('setter-place-call', {
+        body: {
+          password: 'HPA1234$',
+          client_id: lead.client_id,
+          lead_id: lead.id,
+          to_phone: lead.phone,
+          name: lead.name,
+          setter_name: currentMember?.name || null,
+          setter_phone: myPhone || null,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setCallEventId(data.timeline_event_id || null);
+      setCallStartedAt(Date.now());
+      setCallMode(data.mode === 'bridge' ? 'bridge' : 'device');
+      if (data.mode === 'bridge') {
+        toast.success('Bridging call — your phone will ring, then the lead');
+      } else {
+        if (data.bridge_error) toast.warning(`Bridge unavailable (${data.bridge_error}) — dialing from this device`);
+        window.location.href = `tel:${lead.phone}`;
+      }
+      markViewed(lead.id);
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(`Call failed: ${e?.message || e}`);
+    } finally { setCalling(false); }
+  };
+
+  const logCallOutcome = async (outcome: 'connected' | 'no_answer' | 'voicemail' | 'bad_number') => {
+    if (!lead) return;
+    const seconds = callStartedAt ? Math.round((Date.now() - callStartedAt) / 1000) : null;
+    const label = outcome.replace('_', ' ');
+    try {
+      if (callEventId) {
+        const { data: existing } = await supabase
+          .from('contact_timeline_events')
+          .select('metadata')
+          .eq('id', callEventId)
+          .maybeSingle();
+        await supabase
+          .from('contact_timeline_events')
+          .update({
+            title: `Call · ${label}${seconds ? ` · ${Math.max(1, Math.round(seconds / 60))}m` : ''}`,
+            metadata: { ...((existing?.metadata as any) || {}), status: outcome, duration_seconds: seconds },
+          })
+          .eq('id', callEventId);
+      } else {
+        await supabase.from('contact_timeline_events').insert({
+          client_id: lead.client_id,
+          lead_id: lead.id,
+          ghl_contact_id: lead.ghl_contact_id || null,
+          event_type: 'call',
+          event_subtype: 'outbound',
+          title: `Call · ${label}`,
+          event_at: new Date().toISOString(),
+          metadata: { via: 'setter', status: outcome, duration_seconds: seconds },
+        });
+      }
+      if (outcome === 'connected') await setDispo('contacted');
+      if (outcome === 'bad_number') await setDispo('bad_number');
+      toast.success(`Logged: ${label}`);
+    } catch (e: any) {
+      toast.error(`Log failed: ${e?.message || e}`);
+    } finally {
+      setCallMode(null); setCallEventId(null); setCallStartedAt(null);
+      onChanged?.();
+    }
+  };
+
+  const draftAILegacy = async () => {
     if (!lead) return;
     setDrafting(true);
     try {
@@ -540,9 +644,40 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       {/* Quick actions bar */}
       <div className="border-b p-3 flex items-center gap-2 flex-wrap bg-muted/20">
         {lead.phone && (
-          <Button size="sm" variant="default" asChild>
-            <a href={`tel:${lead.phone}`}><PhoneCall className="w-3.5 h-3.5 mr-1" />Call</a>
-          </Button>
+          callMode ? (
+            <div className="flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-1">
+              <span className="text-[11px] font-medium text-primary inline-flex items-center gap-1">
+                <PhoneCall className="w-3.5 h-3.5 animate-pulse" />
+                {callMode === 'bridge' ? 'Bridging…' : 'On call'}
+              </span>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={() => logCallOutcome('connected')}>Connected</Button>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={() => logCallOutcome('no_answer')}>No answer</Button>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={() => logCallOutcome('voicemail')}>Voicemail</Button>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px] text-destructive" onClick={() => logCallOutcome('bad_number')}>Bad #</Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="default" onClick={placeCall} disabled={calling}>
+              <PhoneCall className="w-3.5 h-3.5 mr-1" />{calling ? 'Dialing…' : 'Call'}
+            </Button>
+          )
+        )}
+        {lead.phone && !myPhone && (
+          <div className="flex items-center gap-1">
+            <Input
+              placeholder="Your callback #"
+              className="h-8 w-36 text-sm"
+              onKeyDown={async (ev) => {
+                if (ev.key !== 'Enter') return;
+                const val = (ev.target as HTMLInputElement).value.trim();
+                if (!val) return;
+                localStorage.setItem('setter_callback_phone', val);
+                if (currentMember?.id) await supabase.from('agency_members').update({ phone: val }).eq('id', currentMember.id);
+                setMembers2((prev) => prev.map((m) => (m.id === currentMember?.id ? { ...m, phone: val } : m)));
+                toast.success('Callback number saved');
+              }}
+              title="GHL rings this number first, then bridges you to the lead"
+            />
+          </div>
         )}
         {lead.email && (
           <Button size="sm" variant="outline" asChild>

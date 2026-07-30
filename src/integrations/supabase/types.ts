@@ -6195,6 +6195,7 @@ export type Database = {
           ad_spend_fee_threshold: number | null
           ads_library_page_id: string | null
           ads_library_url: string | null
+          call_workflow_webhook_url: string | null
           canva_url: string | null
           client_id: string
           committed_stage_ids: string[] | null
@@ -6258,6 +6259,7 @@ export type Database = {
           metrics_source_default: string | null
           monthly_ad_spend_target: number | null
           mrr: number | null
+          outbound_caller_number: string | null
           pixel_notification_email: string | null
           pixel_verification_enabled: boolean | null
           pixel_verification_frequency: string | null
@@ -6297,6 +6299,7 @@ export type Database = {
           ad_spend_fee_threshold?: number | null
           ads_library_page_id?: string | null
           ads_library_url?: string | null
+          call_workflow_webhook_url?: string | null
           canva_url?: string | null
           client_id: string
           committed_stage_ids?: string[] | null
@@ -6360,6 +6363,7 @@ export type Database = {
           metrics_source_default?: string | null
           monthly_ad_spend_target?: number | null
           mrr?: number | null
+          outbound_caller_number?: string | null
           pixel_notification_email?: string | null
           pixel_verification_enabled?: boolean | null
           pixel_verification_frequency?: string | null
@@ -6399,6 +6403,7 @@ export type Database = {
           ad_spend_fee_threshold?: number | null
           ads_library_page_id?: string | null
           ads_library_url?: string | null
+          call_workflow_webhook_url?: string | null
           canva_url?: string | null
           client_id?: string
           committed_stage_ids?: string[] | null
@@ -6462,6 +6467,7 @@ export type Database = {
           metrics_source_default?: string | null
           monthly_ad_spend_target?: number | null
           mrr?: number | null
+          outbound_caller_number?: string | null
           pixel_notification_email?: string | null
           pixel_verification_enabled?: boolean | null
           pixel_verification_frequency?: string | null

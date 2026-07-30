@@ -86,10 +86,23 @@ const PLATFORMS: PlatformDef[] = [
     fields: [
       { key: 'ghl_location_id', label: 'Location ID', placeholder: 'loc_...', source: 'client' },
       { key: 'ghl_api_key', label: 'Private Integration Key', placeholder: 'pit-...', secret: true, source: 'client' },
+      {
+        key: 'outbound_caller_number',
+        label: 'Outbound caller ID',
+        placeholder: '+13239885958',
+        source: 'client_settings',
+      },
+      {
+        key: 'call_workflow_webhook_url',
+        label: 'Call bridge webhook (GHL workflow)',
+        placeholder: 'https://services.leadconnectorhq.com/hooks/...',
+        source: 'client_settings',
+      },
     ],
     toggles: [
       { key: 'ghl_sync_contacts_enabled', label: 'Sync contacts', source: 'client_settings' },
       { key: 'ghl_sync_calls_enabled', label: 'Sync calls', source: 'client_settings' },
+      { key: 'ghl_sync_conversations_enabled', label: 'Sync conversations', source: 'client_settings' },
     ],
     isConfigured: (c) => !!c?.ghl_location_id && !!c?.ghl_api_key,
     accountLabel: (c) => c?.ghl_location_id || null,
