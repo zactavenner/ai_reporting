@@ -136,15 +136,22 @@ function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): s
 // is selected, keeping the UI clean for chat/copy agents.
 function inferAgentMode(agent: any): "static" | "video" | "chat" {
   if (!agent) return "chat";
-  const text = `${agent.name || ""} ${agent.handle || ""} ${agent.system_prompt || ""} ${agent.agent_type || ""}`.toLowerCase();
-  // Copy-focused agents are strictly chat/text — never allow them to trigger
-  // image or video generation tools, even if their prompt mentions "video".
-  if (/\bcopy\s*writer|\bcopyw|\bcopy_writer|\bcopywriting|\bscript\s*writer\b/.test(text)) return "chat";
-  const isVideo = /\b(video|reel|cutter|film|motion|clip|seedance|happyhorse|grok|footage|render|vsl)\b/.test(text);
-  const isStatic = /\b(static|image|canvas|photo|picture|graphic|display)\b/.test(text);
-  if (isVideo && isStatic) return isVideo ? "video" : "static";
-  if (isVideo) return "video";
-  if (isStatic) return "static";
+  // Identity fields decide the mode. The system prompt is only a weak fallback:
+  // a video specialist's prompt routinely mentions "script"/"copy", which used
+  // to misclassify it as chat and hide every video control in the composer.
+  const identity = `${agent.name || ""} ${agent.handle || ""} ${agent.agent_type || ""}`.toLowerCase();
+  const videoRe = /\b(video|reel|cutter|film|motion|clip|seedance|happyhorse|grok|footage|render|vsl)\b/;
+  const staticRe = /\b(static|image|canvas|photo|picture|graphic|display)\b/;
+  const copyRe = /\bcopy\s*writer|\bcopyw|\bcopy_writer|\bcopywriting|\bscript\s*writer\b/;
+
+  if (videoRe.test(identity)) return "video";
+  if (staticRe.test(identity)) return "static";
+  if (copyRe.test(identity)) return "chat";
+
+  const prompt = `${agent.system_prompt || ""}`.toLowerCase();
+  if (copyRe.test(prompt)) return "chat";
+  if (videoRe.test(prompt)) return "video";
+  if (staticRe.test(prompt)) return "static";
   return "chat";
 }
 
