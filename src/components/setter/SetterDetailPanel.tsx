@@ -644,9 +644,22 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
       {/* Quick actions bar */}
       <div className="border-b p-3 flex items-center gap-2 flex-wrap bg-muted/20">
         {lead.phone && (
-          <Button size="sm" variant="default" asChild>
-            <a href={`tel:${lead.phone}`}><PhoneCall className="w-3.5 h-3.5 mr-1" />Call</a>
-          </Button>
+          callMode ? (
+            <div className="flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-1">
+              <span className="text-[11px] font-medium text-primary inline-flex items-center gap-1">
+                <PhoneCall className="w-3.5 h-3.5 animate-pulse" />
+                {callMode === 'bridge' ? 'Bridging…' : 'On call'}
+              </span>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={() => logCallOutcome('connected')}>Connected</Button>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={() => logCallOutcome('no_answer')}>No answer</Button>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={() => logCallOutcome('voicemail')}>Voicemail</Button>
+              <Button size="sm" variant="ghost" className="h-6 text-[11px] text-destructive" onClick={() => logCallOutcome('bad_number')}>Bad #</Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="default" onClick={placeCall} disabled={calling}>
+              <PhoneCall className="w-3.5 h-3.5 mr-1" />{calling ? 'Dialing…' : 'Call'}
+            </Button>
+          )
         )}
         {lead.email && (
           <Button size="sm" variant="outline" asChild>
