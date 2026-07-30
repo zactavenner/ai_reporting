@@ -1306,9 +1306,12 @@ async function generateSeedanceVideo(opts: {
     effectiveResolution = effectiveResolution === "1080p" ? "1080p" : "720p";
   }
   else if (isGrok) {
-    // Grok Imagine Video supports only 480p and 720p via OpenRouter /v1/videos.
-    // Older x-ai/grok-imagine-video-1.5 caps at 720p as well.
-    effectiveResolution = effectiveResolution === "480p" ? "480p" : "720p";
+    // OpenRouter /v1/videos: grok-imagine-video-1.5 supports 480p/720p/1080p,
+    // the base grok-imagine-video caps at 720p.
+    const grokAllows1080 = model === "x-ai/grok-imagine-video-1.5";
+    if (effectiveResolution === "480p") effectiveResolution = "480p";
+    else if (effectiveResolution === "1080p" && grokAllows1080) effectiveResolution = "1080p";
+    else effectiveResolution = "720p";
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   // Seedance 2.0 Fast supports only 480p and 720p per spec.
@@ -2745,8 +2748,8 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
   "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
   "alibaba/happyhorse-1.1":      { maxDuration: 15, label: "HappyHorse 1.1 (≤15s per clip, 1080p)" },
-  "x-ai/grok-imagine-video-1.5":         { maxDuration: 15, label: "Grok 1.5 (≤15s per clip, 720p)" },
-  "x-ai/grok-imagine-video":     { maxDuration: 15, label: "Grok Imagine 1.5 (≤15s per clip, up to 720p)" },
+  "x-ai/grok-imagine-video-1.5": { maxDuration: 15, label: "Grok Imagine 1.5 (≤15s per clip, up to 1080p)" },
+  "x-ai/grok-imagine-video":     { maxDuration: 15, label: "Grok Imagine (≤15s per clip, up to 720p)" },
 };
 
 // Models known to RELIABLY render synthetic / AI-generated human avatars.
