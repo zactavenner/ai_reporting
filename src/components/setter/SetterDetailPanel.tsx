@@ -230,6 +230,102 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
     } finally { setDrafting(false); }
   };
 
+  const myPhone = useMemo(() => {
+    const mine = members2.find((m) => m.id === currentMember?.id);
+    return mine?.phone || localStorage.getItem('setter_callback_phone') || '';
+  }, [members2, currentMember?.id]);
+
+  const placeCall = async () => {
+    if (!lead?.phone) { toast.error('Lead has no phone'); return; }
+    setCalling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('setter-place-call', {
+        body: {
+          password: 'HPA1234$',
+          client_id: lead.client_id,
+          lead_id: lead.id,
+          to_phone: lead.phone,
+          name: lead.name,
+          setter_name: currentMember?.name || null,
+          setter_phone: myPhone || null,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setCallEventId(data.timeline_event_id || null);
+      setCallStartedAt(Date.now());
+      setCallMode(data.mode === 'bridge' ? 'bridge' : 'device');
+      if (data.mode === 'bridge') {
+        toast.success('Bridging call — your phone will ring, then the lead');
+      } else {
+        if (data.bridge_error) toast.warning(`Bridge unavailable (${data.bridge_error}) — dialing from this device`);
+        window.location.href = `tel:${lead.phone}`;
+      }
+      markViewed(lead.id);
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(`Call failed: ${e?.message || e}`);
+    } finally { setCalling(false); }
+  };
+
+  const logCallOutcome = async (outcome: 'connected' | 'no_answer' | 'voicemail' | 'bad_number') => {
+    if (!lead) return;
+    const seconds = callStartedAt ? Math.round((Date.now() - callStartedAt) / 1000) : null;
+    const label = outcome.replace('_', ' ');
+    try {
+      if (callEventId) {
+        const { data: existing } = await supabase
+          .from('contact_timeline_events')
+          .select('metadata')
+          .eq('id', callEventId)
+          .maybeSingle();
+        await supabase
+          .from('contact_timeline_events')
+          .update({
+            title: `Call · ${label}${seconds ? ` · ${Math.max(1, Math.round(seconds / 60))}m` : ''}`,
+            metadata: { ...((existing?.metadata as any) || {}), status: outcome, duration_seconds: seconds },
+          })
+          .eq('id', callEventId);
+      } else {
+        await supabase.from('contact_timeline_events').insert({
+          client_id: lead.client_id,
+          lead_id: lead.id,
+          ghl_contact_id: lead.ghl_contact_id || null,
+          event_type: 'call',
+          event_subtype: 'outbound',
+          title: `Call · ${label}`,
+          event_at: new Date().toISOString(),
+          metadata: { via: 'setter', status: outcome, duration_seconds: seconds },
+        });
+      }
+      if (outcome === 'connected') await setDispo('contacted');
+      if (outcome === 'bad_number') await setDispo('bad_number');
+      toast.success(`Logged: ${label}`);
+    } catch (e: any) {
+      toast.error(`Log failed: ${e?.message || e}`);
+    } finally {
+      setCallMode(null); setCallEventId(null); setCallStartedAt(null);
+      onChanged?.();
+    }
+  };
+
+  const draftAILegacy = async () => {
+    if (!lead) return;
+    setDrafting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('setter-ai-opener', {
+        body: { password: 'HPA1234$', lead_id: lead.id, channel: tab },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setText(data.text || '');
+      if (tab === 'email' && data.subject) setSubject(data.subject);
+      toast.success('Draft ready');
+    } catch (e: any) {
+      toast.error(`Draft failed: ${e?.message || e}`);
+    } finally { setDrafting(false); }
+  };
+
   const send = async () => {
     if (!lead) return;
     if (!text.trim()) { toast.warning('Message empty'); return; }
