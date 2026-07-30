@@ -661,6 +661,24 @@ export function SetterDetailPanel({ lead, onChanged, onAdvance }: { lead: Setter
             </Button>
           )
         )}
+        {lead.phone && !myPhone && (
+          <div className="flex items-center gap-1">
+            <Input
+              placeholder="Your callback #"
+              className="h-8 w-36 text-sm"
+              onKeyDown={async (ev) => {
+                if (ev.key !== 'Enter') return;
+                const val = (ev.target as HTMLInputElement).value.trim();
+                if (!val) return;
+                localStorage.setItem('setter_callback_phone', val);
+                if (currentMember?.id) await supabase.from('agency_members').update({ phone: val }).eq('id', currentMember.id);
+                setMembers2((prev) => prev.map((m) => (m.id === currentMember?.id ? { ...m, phone: val } : m)));
+                toast.success('Callback number saved');
+              }}
+              title="GHL rings this number first, then bridges you to the lead"
+            />
+          </div>
+        )}
         {lead.email && (
           <Button size="sm" variant="outline" asChild>
             <a href={`mailto:${lead.email}`}><Mail className="w-3.5 h-3.5 mr-1" />Mail</a>
