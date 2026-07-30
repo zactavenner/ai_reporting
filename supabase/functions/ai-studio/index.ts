@@ -1241,11 +1241,11 @@ async function generateSeedanceVideo(opts: {
     "grok-imagine-video": "x-ai/grok-imagine-video",
     "x-ai/grok-imagine": "x-ai/grok-imagine-video",
     "xai/grok-imagine-video": "x-ai/grok-imagine-video",
-    "grok-imagine-1.5": "x-ai/grok-imagine-video",
-    "grok-imagine-1-5": "x-ai/grok-imagine-video",
-    "grok-imagine 1.5": "x-ai/grok-imagine-video",
-    "x-ai/grok-imagine-1.5": "x-ai/grok-imagine-video",
-    "xai/grok-imagine-1.5": "x-ai/grok-imagine-video",
+    "grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
+    "grok-imagine-1-5": "x-ai/grok-imagine-video-1.5",
+    "grok-imagine 1.5": "x-ai/grok-imagine-video-1.5",
+    "x-ai/grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
+    "xai/grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
   // HARD RULE: when the caller explicitly passed a model id, never silently
