@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import { AnimateImageDialog } from './AnimateImageDialog';
 import { 
   FileText, 
   Sparkles, 
@@ -63,8 +64,8 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
   // Saved variations live on the creative row
   const variations: CreativeVariation[] = creative.ai_variations || [];
 
-  // To-video state
-  const [videoBusy, setVideoBusy] = useState(false);
+  // Animate-image state
+  const [animateOpen, setAnimateOpen] = useState(false);
 
   // Smoke test state
   type SmokeResult = { name: string; status: 'pending' | 'running' | 'pass' | 'fail' | 'skip'; detail?: string };
