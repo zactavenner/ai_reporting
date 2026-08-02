@@ -513,17 +513,16 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
           </Button>
         )}
 
-        {/* Image -> Video (Veo 3.1) */}
+        {/* Animate image -> video (Seedance / Grok / Veo) */}
         {isImageCreative && (
           <Button
             variant="outline"
             size="sm"
-            onClick={handleToVideo}
-            disabled={videoBusy}
+            onClick={() => setAnimateOpen(true)}
             className="gap-2"
           >
-            {videoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
-            {videoBusy ? 'Rendering Veo 3.1…' : 'Image → Video (Veo 3.1)'}
+            <Video className="h-4 w-4" />
+            Animate Image
           </Button>
         )}
 
