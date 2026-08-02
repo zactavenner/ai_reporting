@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
     const q = supabase
       .from("clients")
-      .select("id, name, meta_access_token, meta_ad_account_id")
+      .select("id, name, meta_access_token, meta_system_user_token, meta_ad_account_id")
       .eq("status", "active")
       .not("meta_ad_account_id", "is", null);
     const { data: clients, error } = clientId ? await q.eq("id", clientId) : await q;
