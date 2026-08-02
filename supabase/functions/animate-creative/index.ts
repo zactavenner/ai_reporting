@@ -143,7 +143,6 @@ async function submitVeo(job: Job) {
         parameters: {
           aspectRatio: job.aspect_ratio === "1:1" ? "16:9" : job.aspect_ratio,
           durationSeconds: Math.max(4, Math.min(8, Number(job.duration) || 5)),
-challenge: undefined,
         },
       }),
     },
