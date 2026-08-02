@@ -76,6 +76,9 @@ export function AnimateImageDialog({ open, onOpenChange, creativeId, clientId, i
     if (timer.current) { window.clearTimeout(timer.current); timer.current = null; }
   };
 
+  const retriedSave = useRef(false);
+  const savedRetryUsed = useRef(false);
+
   useEffect(() => stopPolling, []);
 
   const pollJob = (jobId: string) => {
