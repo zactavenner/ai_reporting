@@ -96,9 +96,10 @@ const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: nu
   { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s, 720p ($1.48) or 1080p ($1.92), first-frame or reference image-to-video", maxSeconds: 15, pricePerSecond: 0.0988 },
   { value: "x-ai/grok-imagine-video",     label: "Grok Imagine",   hint: "xAI Grok Imagine — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
   { value: "x-ai/grok-imagine-video-1.5",  label: "Grok Imagine 1.5", hint: "xAI Grok Imagine Video 1.5 — best first-frame image-to-video, 1–15s, up to 1080p", maxSeconds: 15, pricePerSecond: 0.14 },
+  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 2K only, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
 ];
 // Resolution caps per model. 4K has been removed from the UI.
-type VideoRes = "480p" | "720p" | "1080p" | "4k";
+type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   // Seedance 2.0 Fast on OpenRouter supports 480p and 720p only.
   "bytedance/seedance-2.0-fast": ["480p", "720p"],
@@ -106,6 +107,8 @@ const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   // Grok Imagine Video currently only supports 480p and 720p via OpenRouter /v1/videos.
   "x-ai/grok-imagine-video":     ["480p", "720p"],
   "x-ai/grok-imagine-video-1.5": ["480p", "720p", "1080p"],
+  // MiniMax H3 renders at a single resolution ("2K") per OpenRouter spec.
+  "minimax/hailuo-3":            ["2k"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
@@ -116,6 +119,7 @@ const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
   "x-ai/grok-imagine-video-1.5": { "480p": 0.08, "720p": 0.14, "1080p": 0.25 },
   // Seedance 2.0 Fast — published OpenRouter list rates.
   "bytedance/seedance-2.0-fast": { "480p": 0.0538, "720p": 0.121 },
+  "minimax/hailuo-3": { "2k": 0.13 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
   return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
@@ -123,6 +127,7 @@ function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): 
 function resolutionMultiplier(res: VideoRes): number {
   if (res === "480p") return 0.25;
   if (res === "720p") return 0.445;
+  if (res === "2k") return 1.4;
   return 1;
 }
 function videoMaxCostLabel(m: { maxSeconds: number; pricePerSecond: number }): string {
