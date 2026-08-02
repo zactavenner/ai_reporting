@@ -300,6 +300,7 @@ Deno.serve(async (req) => {
       if (id) sheetIdByClient.set((row as any).client_id, id);
     }
     const readySheets = new Set<string>();
+    const sheetIndexCache = new Map<string, SheetIndex>();
 
     const accounts = await loadAccounts(sb, body.client_id);
     const summary = {
@@ -351,7 +352,7 @@ Deno.serve(async (req) => {
             catch (e) { sheetStatus = 'error'; sheetErr = `ensureTab: ${(e as Error).message}`; }
           }
           if (sheetStatus === 'ok') {
-            try { await mirrorToSheet(clientSheetId, acct, date, rows); summary.sheet_ok++; }
+            try { await mirrorToSheet(clientSheetId, acct, date, rows, sheetIndexCache); summary.sheet_ok++; }
             catch (e) { sheetStatus = 'error'; sheetErr = (e as Error).message; summary.sheet_failed++; }
           } else {
             summary.sheet_failed++;
@@ -371,7 +372,53 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, dates, mode, summary }), {
+    // ---- Stale-spend watchdog -------------------------------------------
+    // Any active client with Meta sync enabled that has no ad_spend_daily row
+    // for yesterday gets one retry, then a logged discrepancy so Data Health
+    // shows it before the 6 AM PST report window.
+    const watchdog: Array<{ client_id: string; client_name: string; recovered: boolean }> = [];
+    if (mode === 'daily') {
+      const yday = yesterdayISO();
+      const clientIds = [...new Set(accounts.map((a) => a.client_id))];
+      for (const cid of clientIds) {
+        const { count } = await sb.from('ad_spend_daily')
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', cid).eq('date', yday);
+        if ((count ?? 0) > 0) continue;
+
+        const clientAccts = accounts.filter((a) => a.client_id === cid);
+        let recovered = 0;
+        for (const acct of clientAccts) {
+          try {
+            const rows = await fetchMetaInsights(acct, yday);
+            recovered += await upsertDaily(sb, acct, yday, rows);
+          } catch (e) {
+            console.error(`watchdog retry failed ${acct.client_name}`, (e as Error).message);
+          }
+        }
+        watchdog.push({
+          client_id: cid,
+          client_name: clientAccts[0]?.client_name ?? '',
+          recovered: recovered > 0,
+        });
+        if (recovered === 0) {
+          await sb.from('data_discrepancies').insert({
+            client_id: cid,
+            discrepancy_type: 'ad_spend_missing',
+            date_range_start: yday,
+            date_range_end: yday,
+            api_count: 0,
+            db_count: 0,
+            difference: 0,
+            severity: 'high',
+            status: 'open',
+            resolution_notes: `No ad_spend_daily rows for ${yday} after retry — check Meta token / ad account access.`,
+          });
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, dates, mode, summary, watchdog }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
