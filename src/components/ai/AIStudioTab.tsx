@@ -2701,7 +2701,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   for (const id of videoModels) {
                     for (const r of (VIDEO_MODEL_RES[id] || ["1080p"])) supportedSet.add(r);
                   }
-                  const supported = (["480p", "720p", "1080p", "4k"] as const).filter(r => supportedSet.has(r));
+                  const supported = (["480p", "720p", "1080p", "2k", "4k"] as VideoRes[]).filter(r => supportedSet.has(r));
                   if (supported.length === 0) return null;
                   const activeRes = supported.includes(videoResolution) ? videoResolution : supported[supported.length - 1];
                   if (activeRes !== videoResolution) {
@@ -2719,10 +2719,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             key={r}
                             type="button"
                             onClick={() => setVideoResolution(r)}
-                            title={proOnly ? "4K — Seedance Pro only. ~2.5× cost." : r === "720p" ? "720p draft quality" : "1080p Full HD"}
+                            title={proOnly ? "4K — Seedance Pro only. ~2.5× cost." : r === "2k" ? "2K — MiniMax H3 native resolution" : r === "720p" ? "720p draft quality" : "1080p Full HD"}
                             className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                           >
-                            {r === "4k" ? "4K" : r}
+                            {r === "4k" ? "4K" : r === "2k" ? "2K" : r}
                           </button>
                         );
                       })}
