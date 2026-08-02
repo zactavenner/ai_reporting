@@ -1343,7 +1343,9 @@ async function generateSeedanceVideo(opts: {
   const veoMax = 8;
   const effectiveDuration = isHappyHorse
     ? 15
-    : isVeo
+    : isHailuo
+      ? Math.max(5, Math.min(15, Math.round(opts.duration || 5)))
+      : isVeo
       ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
       : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
