@@ -24,6 +24,7 @@ export const MODEL_REGISTRY: Record<string, ModelInfo> = {
   "bytedance/seedance-2.0-pro": { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", provider: "ByteDance", contextTokens: 0, capability: "video" },
   "x-ai/grok-imagine-video": { id: "x-ai/grok-imagine-video", label: "Grok Imagine", provider: "xAI", contextTokens: 0, capability: "video" },
   "x-ai/grok-imagine-video-1.5": { id: "x-ai/grok-imagine-video-1.5", label: "Grok Imagine 1.5", provider: "xAI", contextTokens: 0, capability: "video" },
+  "minimax/hailuo-3": { id: "minimax/hailuo-3", label: "MiniMax H3", provider: "MiniMax", contextTokens: 0, capability: "video" },
   "alibaba/happyhorse-1.1": { id: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", provider: "Alibaba", contextTokens: 0, capability: "video" },
 };
 
@@ -63,6 +64,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
   { value: "bytedance/seedance-2.0-fast", id: "bytedance/seedance-2.0-fast", label: "Seedance 2.0 Fast", hint: "Fast text/image-to-video", maxSeconds: 15, pricePerSecond: 0.0538, supportsResolutions: ["480p", "720p"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "720p" },
   { value: "x-ai/grok-imagine-video", id: "x-ai/grok-imagine-video", label: "Grok Imagine", hint: "xAI cinematic video", maxSeconds: 15, pricePerSecond: 0.05, supportsResolutions: ["480p", "720p"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "720p" },
   { value: "x-ai/grok-imagine-video-1.5", id: "x-ai/grok-imagine-video-1.5", label: "Grok Imagine 1.5", hint: "Best first-frame image-to-video", maxSeconds: 15, pricePerSecond: 0.14, supportsResolutions: ["480p", "720p", "1080p"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "1080p" },
+  { value: "minimax/hailuo-3", id: "minimax/hailuo-3", label: "MiniMax H3", hint: "2K, first/last frame + reference identity", maxSeconds: 15, pricePerSecond: 0.13, supportsResolutions: ["2K"], defaultDuration: 5, durations: [5, 10, 15], maxRes: "4k" },
   { value: "alibaba/happyhorse-1.1", id: "alibaba/happyhorse-1.1", label: "HappyHorse 1.1", hint: "Identity-locked avatar video", maxSeconds: 15, pricePerSecond: 0.1278, supportsResolutions: ["720p", "1080p"], defaultDuration: 15, durations: [15], maxRes: "1080p" },
 ];
 

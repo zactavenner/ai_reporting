@@ -1210,6 +1210,7 @@ async function generateSeedanceVideo(opts: {
     "alibaba/happyhorse-1.1",
     "x-ai/grok-imagine-video-1.5",
     "x-ai/grok-imagine-video",
+    "minimax/hailuo-3",
   ];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
@@ -1246,6 +1247,15 @@ async function generateSeedanceVideo(opts: {
     "grok-imagine 1.5": "x-ai/grok-imagine-video-1.5",
     "x-ai/grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
     "xai/grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
+    "minimax/h3": "minimax/hailuo-3",
+    "minimax h3": "minimax/hailuo-3",
+    "minimax-h3": "minimax/hailuo-3",
+    "hailuo": "minimax/hailuo-3",
+    "hailuo-3": "minimax/hailuo-3",
+    "hailuo3": "minimax/hailuo-3",
+    "minimax/hailuo3": "minimax/hailuo-3",
+    "minimax/hailuo-03": "minimax/hailuo-3",
+    "h3": "minimax/hailuo-3",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
   // HARD RULE: when the caller explicitly passed a model id, never silently
@@ -1285,10 +1295,13 @@ async function generateSeedanceVideo(opts: {
   const isKling = model.startsWith("kwaivgi/kling");
   const isHappyHorse = model.startsWith("alibaba/happyhorse");
   const isGrok = model.startsWith("x-ai/grok");
+  const isHailuo = model.startsWith("minimax/hailuo");
   const modelLabel = isHappyHorse
     ? "HappyHorse 1.1"
     : isGrok
       ? (model === "x-ai/grok-imagine-video-1.5" ? "Grok Imagine 1.5" : "Grok Imagine")
+      : isHailuo
+      ? "MiniMax H3"
       : isSeedance
       ? (isSeedanceFast ? "Seedance Fast" : "Seedance Pro")
       : isKling
@@ -1314,15 +1327,25 @@ async function generateSeedanceVideo(opts: {
     else effectiveResolution = "720p";
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
+  else if (isHailuo) {
+    // MiniMax H3 on OpenRouter supports a single resolution: "2K".
+    effectiveResolution = "2k";
+  }
   // Seedance 2.0 Fast supports only 480p and 720p per spec.
   else if (isSeedanceFast && effectiveResolution !== "480p" && effectiveResolution !== "720p") effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
-  const wireResolution = effectiveResolution === "4k" ? "4K" : effectiveResolution;
+  const wireResolution = effectiveResolution === "4k"
+    ? "4K"
+    : effectiveResolution === "2k"
+      ? "2K"
+      : effectiveResolution;
   const veoMax = 8;
   const effectiveDuration = isHappyHorse
     ? 15
-    : isVeo
+    : isHailuo
+      ? Math.max(5, Math.min(15, Math.round(opts.duration || 5)))
+      : isVeo
       ? Math.max(4, Math.min(veoMax, Math.round(opts.duration || veoMax)))
       : Math.max(4, Math.min(isKling ? 10 : 15, Math.round(opts.duration || (isKling ? 10 : 15))));
 
@@ -1612,6 +1635,34 @@ async function generateSeedanceVideo(opts: {
     if (frames.length) body.frame_images = frames;
     if (providerIngredientUrl) {
       // Spec: visual guidance images go in `input_references`, not the legacy `reference_images` key.
+      body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+    }
+  } else if (isHailuo) {
+    // MiniMax H3 — OpenRouter /api/v1/videos contract (verified via /videos/models):
+    //   resolution: "2K" only, duration 5–15, aspect_ratio 21:9|16:9|4:3|1:1|3:4|9:16,
+    //   frame_images: first_frame + last_frame, input_references for identity/ingredient,
+    //   generate_audio supported.
+    const allowedAspects = new Set(["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+    const requestedAspect = opts.aspectRatio || "9:16";
+    body.resolution = "2K";
+    body.duration = Math.max(5, Math.min(15, Number(effectiveDuration) || 5));
+    body.aspect_ratio = allowedAspects.has(requestedAspect) ? requestedAspect : "9:16";
+    (body as any).generate_audio = opts.generateAudio === false ? false : true;
+    delete (body as any).size;
+    delete (body as any).seconds;
+    delete (body as any).first_frame;
+    delete (body as any).reference_images;
+    delete (body as any).image_url;
+
+    const frames: any[] = [];
+    if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
+    if (providerLastFrameUrl && providerLastFrameUrl !== providerImageUrl) {
+      frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
+    }
+    if (frames.length) body.frame_images = frames;
+    // Identity/ingredient reference is additive on H3 — it can be sent alongside keyframes
+    // so the same avatar/product persists across sequential 15s clips.
+    if (providerIngredientUrl && providerIngredientUrl !== providerImageUrl) {
       body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
   } else if (isHappyHorse) {
