@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import { AnimateImageDialog } from './AnimateImageDialog';
 import { 
   FileText, 
   Sparkles, 
@@ -63,8 +64,8 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
   // Saved variations live on the creative row
   const variations: CreativeVariation[] = creative.ai_variations || [];
 
-  // To-video state
-  const [videoBusy, setVideoBusy] = useState(false);
+  // Animate-image state
+  const [animateOpen, setAnimateOpen] = useState(false);
 
   // Smoke test state
   type SmokeResult = { name: string; status: 'pending' | 'running' | 'pass' | 'fail' | 'skip'; detail?: string };
@@ -344,66 +345,6 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
     }
   };
 
-  const handleToVideo = async () => {
-    if (!creative.file_url) return;
-    setVideoBusy(true);
-    try {
-      // Strong default prompt: animate the scene/background only — keep ALL text,
-      // tables, numbers, logos and typography perfectly static and identical.
-      const preserveTextPrompt = (editPrompt && editPrompt.trim().length > 0)
-        ? editPrompt
-        : 'Animate this static ad image with subtle, professional motion in the background and scene elements only (gentle parallax, soft camera push-in, natural ambient motion like light/shadow shifts, equipment, smoke, dust, or environment). CRITICAL: Do NOT modify, animate, warp, redraw, re-render, distort, or change ANY text, headlines, captions, numbers, tables, charts, logos, badges, or typography in any way — keep every word, letter, number and graphic element pixel-identical and perfectly static throughout the entire video. Preserve the exact layout, colors and composition.';
-
-      const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
-        body: {
-          action: 'to_video',
-          creative: { client_id: creative.client_id, file_url: creative.file_url },
-          imageUrl: creative.file_url,
-          editPrompt: preserveTextPrompt,
-          aspectRatio: creative.aspect_ratio === '1:1' ? '1:1' : creative.aspect_ratio === '16:9' ? '16:9' : '9:16',
-          duration: 5,
-        },
-      });
-      if (error) throw error;
-      const opId: string | undefined = data?.operationId;
-      if (!opId) {
-        if (data?.error) throw new Error(data.error);
-        throw new Error('Video kickoff failed');
-      }
-      toast.message('Veo 3.1 rendering — this takes 1–3 minutes…');
-
-      // Poll up to ~6 minutes
-      let videoUrl: string | null = null;
-      for (let i = 0; i < 60; i++) {
-        await new Promise(r => setTimeout(r, 6000));
-        const { data: poll } = await supabase.functions.invoke('poll-video-status', {
-          body: { operationId: opId },
-        });
-        if (poll?.status === 'completed' && poll.videoUrl) {
-          videoUrl = poll.videoUrl;
-          break;
-        }
-        if (poll?.status === 'failed') throw new Error(poll.error || 'Video failed');
-      }
-      if (!videoUrl) throw new Error('Video timed out');
-
-      const v: CreativeVariation = {
-        id: crypto.randomUUID(),
-        url: videoUrl,
-        type: 'video',
-        prompt: editPrompt || 'Animate ad image',
-        model: 'veo-3.1',
-        created_at: new Date().toISOString(),
-      };
-      await persistVariation(v);
-      toast.success('Video variation saved');
-      setVariationsOpen(true);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Video conversion failed');
-    } finally {
-      setVideoBusy(false);
-    }
-  };
 
   // Extract score from audit text
   const extractScore = (auditText: string): number | null => {
@@ -428,7 +369,7 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
       { name: 'AI Audit', status: 'pending' },
       { name: 'AI Edit / Markup', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
       { name: 'Auto Variations', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
-      { name: 'Image → Video (Veo 3.1 kickoff)', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
+      { name: 'Animate Image (models available)', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
     ];
     setSmokeResults(initial);
     const update = (i: number, patch: Partial<SmokeResult>) =>
@@ -498,24 +439,18 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
       }
     }
 
-    // 4) Image → Video (kickoff only)
+    // 4) Animate image (config check only — does not spend a render)
     if (isImageCreative) {
       update(3, { status: 'running' });
       try {
-        const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
-          body: {
-            action: 'to_video',
-            creative: { client_id: creative.client_id, file_url: creative.file_url },
-            imageUrl: creative.file_url,
-            editPrompt: 'Smoke test: subtle background motion, keep all text static.',
-            aspectRatio: creative.aspect_ratio === '1:1' ? '1:1' : creative.aspect_ratio === '16:9' ? '16:9' : '9:16',
-            duration: 5,
-          },
+        const { data, error } = await supabase.functions.invoke('animate-creative', {
+          body: { action: 'models' },
         });
         if (error) throw new Error(error.message);
         if (data?.error) throw new Error(data.error);
-        if (!data?.operationId) throw new Error('No operationId returned (Veo kickoff failed)');
-        update(3, { status: 'pass', detail: `Kickoff OK: ${String(data.operationId).slice(0, 40)}…` });
+        const models = (data?.models || []) as Array<{ label: string }>;
+        if (!models.length) throw new Error('No video models available');
+        update(3, { status: 'pass', detail: `${models.length} models · default ${data.default}` });
       } catch (e) {
         update(3, { status: 'fail', detail: e instanceof Error ? e.message : String(e) });
       }
@@ -572,17 +507,16 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
           </Button>
         )}
 
-        {/* Image -> Video (Veo 3.1) */}
+        {/* Animate image -> video (Seedance / Grok / Veo) */}
         {isImageCreative && (
           <Button
             variant="outline"
             size="sm"
-            onClick={handleToVideo}
-            disabled={videoBusy}
+            onClick={() => setAnimateOpen(true)}
             className="gap-2"
           >
-            {videoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
-            {videoBusy ? 'Rendering Veo 3.1…' : 'Image → Video (Veo 3.1)'}
+            <Video className="h-4 w-4" />
+            Animate Image
           </Button>
         )}
 
@@ -878,6 +812,21 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {isImageCreative && (
+        <AnimateImageDialog
+          open={animateOpen}
+          onOpenChange={setAnimateOpen}
+          creativeId={creative.id}
+          clientId={creative.client_id ?? null}
+          imageUrl={creative.file_url!}
+          aspectRatio={creative.aspect_ratio ?? null}
+          onCompleted={() => {
+            queryClient.invalidateQueries({ queryKey: ['creatives'] });
+            setVariationsOpen(true);
+          }}
+        />
+      )}
     </>
   );
 }
