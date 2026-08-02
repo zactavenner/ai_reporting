@@ -36,6 +36,16 @@ const isoNDaysAgo = (n: number) => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Minimum gap between Google Sheets gateway calls (read quota is per-minute
+// per project, and every client in the loop touches the same quota).
+const SHEETS_MIN_GAP_MS = 350;
+let sheetsLastCallAt = 0;
+async function sheetsThrottle() {
+  const wait = sheetsLastCallAt + SHEETS_MIN_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  sheetsLastCallAt = Date.now();
+}
+
 function extractSpreadsheetId(url: string | null | undefined): string | null {
   if (!url) return null;
   const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -137,18 +147,34 @@ async function gwFetch(path: string, init: RequestInit & { qs?: Record<string, s
   if (!lovableKey || !gsKey) throw new Error('sheets connector env missing');
   const url = new URL(`${GATEWAY}${path}`);
   for (const [k, v] of Object.entries(init.qs ?? {})) url.searchParams.set(k, v);
-  const res = await fetch(url.toString(), {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${lovableKey}`,
-      'X-Connection-Api-Key': gsKey,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`sheets ${res.status}: ${text.slice(0, 400)}`);
-  return text ? JSON.parse(text) : {};
+  // Sheets quota is per-minute; serialize requests with a small floor gap and
+  // back off on 429/5xx (honoring Retry-After). 4xx other than 429 never
+  // recovers on retry, so those throw immediately.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    await sheetsThrottle();
+    const res = await fetch(url.toString(), {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        'X-Connection-Api-Key': gsKey,
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+    const text = await res.text();
+    if (res.ok) return text ? JSON.parse(text) : {};
+    const retryable = res.status === 429 || res.status >= 500;
+    if (!retryable || attempt === 4) {
+      throw new Error(`sheets ${res.status}: ${text.slice(0, 400)}`);
+    }
+    const retryAfter = Number(res.headers.get('retry-after') ?? 0);
+    const waitMs = retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(30000, 2000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 750);
+    console.warn(`sheets ${res.status} on ${path} — retrying in ${waitMs}ms (attempt ${attempt})`);
+    await sleep(waitMs);
+  }
+  throw new Error('sheets: exhausted retries');
 }
 
 async function ensureTab(spreadsheetId: string) {
