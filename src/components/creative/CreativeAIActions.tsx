@@ -439,24 +439,18 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
       }
     }
 
-    // 4) Image → Video (kickoff only)
+    // 4) Animate image (config check only — does not spend a render)
     if (isImageCreative) {
       update(3, { status: 'running' });
       try {
-        const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
-          body: {
-            action: 'to_video',
-            creative: { client_id: creative.client_id, file_url: creative.file_url },
-            imageUrl: creative.file_url,
-            editPrompt: 'Smoke test: subtle background motion, keep all text static.',
-            aspectRatio: creative.aspect_ratio === '1:1' ? '1:1' : creative.aspect_ratio === '16:9' ? '16:9' : '9:16',
-            duration: 5,
-          },
+        const { data, error } = await supabase.functions.invoke('animate-creative', {
+          body: { action: 'models' },
         });
         if (error) throw new Error(error.message);
         if (data?.error) throw new Error(data.error);
-        if (!data?.operationId) throw new Error('No operationId returned (Veo kickoff failed)');
-        update(3, { status: 'pass', detail: `Kickoff OK: ${String(data.operationId).slice(0, 40)}…` });
+        const models = (data?.models || []) as Array<{ label: string }>;
+        if (!models.length) throw new Error('No video models available');
+        update(3, { status: 'pass', detail: `${models.length} models · default ${data.default}` });
       } catch (e) {
         update(3, { status: 'fail', detail: e instanceof Error ? e.message : String(e) });
       }
