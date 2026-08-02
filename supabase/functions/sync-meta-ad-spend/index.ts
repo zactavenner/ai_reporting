@@ -36,6 +36,16 @@ const isoNDaysAgo = (n: number) => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Minimum gap between Google Sheets gateway calls (read quota is per-minute
+// per project, and every client in the loop touches the same quota).
+const SHEETS_MIN_GAP_MS = 350;
+let sheetsLastCallAt = 0;
+async function sheetsThrottle() {
+  const wait = sheetsLastCallAt + SHEETS_MIN_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  sheetsLastCallAt = Date.now();
+}
+
 function extractSpreadsheetId(url: string | null | undefined): string | null {
   if (!url) return null;
   const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -137,18 +147,34 @@ async function gwFetch(path: string, init: RequestInit & { qs?: Record<string, s
   if (!lovableKey || !gsKey) throw new Error('sheets connector env missing');
   const url = new URL(`${GATEWAY}${path}`);
   for (const [k, v] of Object.entries(init.qs ?? {})) url.searchParams.set(k, v);
-  const res = await fetch(url.toString(), {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${lovableKey}`,
-      'X-Connection-Api-Key': gsKey,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`sheets ${res.status}: ${text.slice(0, 400)}`);
-  return text ? JSON.parse(text) : {};
+  // Sheets quota is per-minute; serialize requests with a small floor gap and
+  // back off on 429/5xx (honoring Retry-After). 4xx other than 429 never
+  // recovers on retry, so those throw immediately.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    await sheetsThrottle();
+    const res = await fetch(url.toString(), {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        'X-Connection-Api-Key': gsKey,
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+    const text = await res.text();
+    if (res.ok) return text ? JSON.parse(text) : {};
+    const retryable = res.status === 429 || res.status >= 500;
+    if (!retryable || attempt === 4) {
+      throw new Error(`sheets ${res.status}: ${text.slice(0, 400)}`);
+    }
+    const retryAfter = Number(res.headers.get('retry-after') ?? 0);
+    const waitMs = retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(30000, 2000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 750);
+    console.warn(`sheets ${res.status} on ${path} — retrying in ${waitMs}ms (attempt ${attempt})`);
+    await sleep(waitMs);
+  }
+  throw new Error('sheets: exhausted retries');
 }
 
 async function ensureTab(spreadsheetId: string) {
@@ -178,17 +204,36 @@ async function ensureTab(spreadsheetId: string) {
   }
 }
 
-async function mirrorToSheet(spreadsheetId: string, acct: AccountRow, date: string, rows: CampaignRow[]) {
-  if (!rows.length) return;
-  // Dedupe key = Date (A) + Campaign ID (M) + Account ID (N)
+type SheetIndex = { rowIndexByKey: Map<string, number>; nextRow: number };
+
+// One read per spreadsheet per run instead of one read per client/date —
+// the repeated A2:N reads were what tripped the Sheets read quota (429).
+async function loadSheetIndex(spreadsheetId: string, cache: Map<string, SheetIndex>): Promise<SheetIndex> {
+  const hit = cache.get(spreadsheetId);
+  if (hit) return hit;
   const existing = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A2:N`);
   const rowIndexByKey = new Map<string, number>(); // 1-based row number
-  for (let i = 0; i < (existing.values?.length ?? 0); i++) {
-    const r = existing.values[i];
+  const values = existing.values ?? [];
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
     // columns: A=date(0) ... M=campaign_id(12) N=account_id(13)
-    const key = `${r[0]}|${r[12] ?? ''}|${r[13] ?? ''}`;
-    rowIndexByKey.set(key, i + 2);
+    rowIndexByKey.set(`${r[0]}|${r[12] ?? ''}|${r[13] ?? ''}`, i + 2);
   }
+  const idx: SheetIndex = { rowIndexByKey, nextRow: values.length + 2 };
+  cache.set(spreadsheetId, idx);
+  return idx;
+}
+
+async function mirrorToSheet(
+  spreadsheetId: string,
+  acct: AccountRow,
+  date: string,
+  rows: CampaignRow[],
+  cache: Map<string, SheetIndex>,
+) {
+  if (!rows.length) return;
+  const index = await loadSheetIndex(spreadsheetId, cache);
+  const { rowIndexByKey } = index;
   const now = new Date().toISOString();
   const toAppend: any[][] = [];
   const updates: { range: string; values: any[][] }[] = [];
@@ -205,6 +250,10 @@ async function mirrorToSheet(spreadsheetId: string, acct: AccountRow, date: stri
       updates.push({ range: `${SHEET_TAB}!A${existingRow}:${LAST_COL}${existingRow}`, values: [row] });
     } else {
       toAppend.push(row);
+      // Reserve the row locally so a later account/date in the same run
+      // updates it instead of appending a duplicate.
+      rowIndexByKey.set(key, index.nextRow);
+      index.nextRow += 1;
     }
   }
   if (updates.length) {
@@ -251,6 +300,7 @@ Deno.serve(async (req) => {
       if (id) sheetIdByClient.set((row as any).client_id, id);
     }
     const readySheets = new Set<string>();
+    const sheetIndexCache = new Map<string, SheetIndex>();
 
     const accounts = await loadAccounts(sb, body.client_id);
     const summary = {
@@ -302,7 +352,7 @@ Deno.serve(async (req) => {
             catch (e) { sheetStatus = 'error'; sheetErr = `ensureTab: ${(e as Error).message}`; }
           }
           if (sheetStatus === 'ok') {
-            try { await mirrorToSheet(clientSheetId, acct, date, rows); summary.sheet_ok++; }
+            try { await mirrorToSheet(clientSheetId, acct, date, rows, sheetIndexCache); summary.sheet_ok++; }
             catch (e) { sheetStatus = 'error'; sheetErr = (e as Error).message; summary.sheet_failed++; }
           } else {
             summary.sheet_failed++;
@@ -322,7 +372,53 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, dates, mode, summary }), {
+    // ---- Stale-spend watchdog -------------------------------------------
+    // Any active client with Meta sync enabled that has no ad_spend_daily row
+    // for yesterday gets one retry, then a logged discrepancy so Data Health
+    // shows it before the 6 AM PST report window.
+    const watchdog: Array<{ client_id: string; client_name: string; recovered: boolean }> = [];
+    if (mode === 'daily') {
+      const yday = yesterdayISO();
+      const clientIds = [...new Set(accounts.map((a) => a.client_id))];
+      for (const cid of clientIds) {
+        const { count } = await sb.from('ad_spend_daily')
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', cid).eq('date', yday);
+        if ((count ?? 0) > 0) continue;
+
+        const clientAccts = accounts.filter((a) => a.client_id === cid);
+        let recovered = 0;
+        for (const acct of clientAccts) {
+          try {
+            const rows = await fetchMetaInsights(acct, yday);
+            recovered += await upsertDaily(sb, acct, yday, rows);
+          } catch (e) {
+            console.error(`watchdog retry failed ${acct.client_name}`, (e as Error).message);
+          }
+        }
+        watchdog.push({
+          client_id: cid,
+          client_name: clientAccts[0]?.client_name ?? '',
+          recovered: recovered > 0,
+        });
+        if (recovered === 0) {
+          await sb.from('data_discrepancies').insert({
+            client_id: cid,
+            discrepancy_type: 'ad_spend_missing',
+            date_range_start: yday,
+            date_range_end: yday,
+            api_count: 0,
+            db_count: 0,
+            difference: 0,
+            severity: 'high',
+            status: 'open',
+            resolution_notes: `No ad_spend_daily rows for ${yday} after retry — check Meta token / ad account access.`,
+          });
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, dates, mode, summary, watchdog }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {

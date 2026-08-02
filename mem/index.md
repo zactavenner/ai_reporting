@@ -11,3 +11,4 @@
 
 ## Memories
 - [AI Studio v2](mem://features/ai-studio/v2-architecture) — Server-persisted chat per user+client, Manus canvas, Gemini 3 Pro static ads, no image markdown in replies.
+- [Meta Lead Forms Page Token](mem://integrations/meta/lead-forms-page-token) — leadgen_forms needs per-page tokens; Sheets mirror quota handling.
