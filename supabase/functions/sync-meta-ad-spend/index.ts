@@ -204,17 +204,36 @@ async function ensureTab(spreadsheetId: string) {
   }
 }
 
-async function mirrorToSheet(spreadsheetId: string, acct: AccountRow, date: string, rows: CampaignRow[]) {
-  if (!rows.length) return;
-  // Dedupe key = Date (A) + Campaign ID (M) + Account ID (N)
+type SheetIndex = { rowIndexByKey: Map<string, number>; nextRow: number };
+
+// One read per spreadsheet per run instead of one read per client/date —
+// the repeated A2:N reads were what tripped the Sheets read quota (429).
+async function loadSheetIndex(spreadsheetId: string, cache: Map<string, SheetIndex>): Promise<SheetIndex> {
+  const hit = cache.get(spreadsheetId);
+  if (hit) return hit;
   const existing = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A2:N`);
   const rowIndexByKey = new Map<string, number>(); // 1-based row number
-  for (let i = 0; i < (existing.values?.length ?? 0); i++) {
-    const r = existing.values[i];
+  const values = existing.values ?? [];
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
     // columns: A=date(0) ... M=campaign_id(12) N=account_id(13)
-    const key = `${r[0]}|${r[12] ?? ''}|${r[13] ?? ''}`;
-    rowIndexByKey.set(key, i + 2);
+    rowIndexByKey.set(`${r[0]}|${r[12] ?? ''}|${r[13] ?? ''}`, i + 2);
   }
+  const idx: SheetIndex = { rowIndexByKey, nextRow: values.length + 2 };
+  cache.set(spreadsheetId, idx);
+  return idx;
+}
+
+async function mirrorToSheet(
+  spreadsheetId: string,
+  acct: AccountRow,
+  date: string,
+  rows: CampaignRow[],
+  cache: Map<string, SheetIndex>,
+) {
+  if (!rows.length) return;
+  const index = await loadSheetIndex(spreadsheetId, cache);
+  const { rowIndexByKey } = index;
   const now = new Date().toISOString();
   const toAppend: any[][] = [];
   const updates: { range: string; values: any[][] }[] = [];
@@ -231,6 +250,10 @@ async function mirrorToSheet(spreadsheetId: string, acct: AccountRow, date: stri
       updates.push({ range: `${SHEET_TAB}!A${existingRow}:${LAST_COL}${existingRow}`, values: [row] });
     } else {
       toAppend.push(row);
+      // Reserve the row locally so a later account/date in the same run
+      // updates it instead of appending a duplicate.
+      rowIndexByKey.set(key, index.nextRow);
+      index.nextRow += 1;
     }
   }
   if (updates.length) {
