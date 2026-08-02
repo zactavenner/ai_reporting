@@ -107,8 +107,8 @@ const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   // Grok Imagine Video currently only supports 480p and 720p via OpenRouter /v1/videos.
   "x-ai/grok-imagine-video":     ["480p", "720p"],
   "x-ai/grok-imagine-video-1.5": ["480p", "720p", "1080p"],
-  // MiniMax H3 renders at a single resolution ("2K") per OpenRouter spec.
-  "minimax/hailuo-3":            ["2k"],
+  // MiniMax H3: 720p (cheaper draft) or native 2K.
+  "minimax/hailuo-3":            ["720p", "2k"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
@@ -119,7 +119,7 @@ const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
   "x-ai/grok-imagine-video-1.5": { "480p": 0.08, "720p": 0.14, "1080p": 0.25 },
   // Seedance 2.0 Fast — published OpenRouter list rates.
   "bytedance/seedance-2.0-fast": { "480p": 0.0538, "720p": 0.121 },
-  "minimax/hailuo-3": { "2k": 0.13 },
+  "minimax/hailuo-3": { "720p": 0.065, "2k": 0.13 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
   return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
