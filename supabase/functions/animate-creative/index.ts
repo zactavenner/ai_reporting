@@ -46,6 +46,7 @@ const ALLOWED_MODELS: Record<string, { label: string; provider: "openrouter" | "
   "bytedance/seedance-2.0": { label: "Seedance 2.0 Pro", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.0938 },
   "bytedance/seedance-2.0-fast": { label: "Seedance 2.0 Fast", provider: "openrouter", maxRes: ["480p", "720p"], pricePerSecond: 0.0538 },
   "x-ai/grok-imagine-video-1.5": { label: "Grok Imagine 1.5", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.14 },
+  "minimax/hailuo-3": { label: "MiniMax H3", provider: "openrouter", maxRes: ["2K"], pricePerSecond: 0.13 },
   "google/veo-3.1-fast": { label: "Veo 3.1 Fast", provider: "openrouter", maxRes: ["720p", "1080p"], pricePerSecond: 0.15 },
   "veo-3.1": { label: "Veo 3.1", provider: "google", maxRes: ["720p", "1080p"], pricePerSecond: 0.4 },
 };
@@ -61,6 +62,10 @@ const MODEL_ALIASES: Record<string, string> = {
   "seedance-2.0-pro": "bytedance/seedance-2.0",
   "seedance-fast": "bytedance/seedance-2.0-fast",
   "grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
+  "minimax/h3": "minimax/hailuo-3",
+  hailuo3: "minimax/hailuo-3",
+  "hailuo-3": "minimax/hailuo-3",
+  "minimax-h3": "minimax/hailuo-3",
   veo3: "veo-3.1",
 };
 
@@ -95,6 +100,7 @@ function buildOpenRouterBody(job: Job, model: string) {
   const isSeedance = model.includes("seedance");
   const isGrok = model.includes("grok");
   const isVeo = model.includes("veo");
+  const isHailuo = model.includes("hailuo");
   const allowedAspects = new Set(["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"]);
   const aspect = allowedAspects.has(job.aspect_ratio) ? job.aspect_ratio : "9:16";
   const allowed = ALLOWED_MODELS[model]?.maxRes || ["720p"];
@@ -118,6 +124,10 @@ function buildOpenRouterBody(job: Job, model: string) {
     delete body.frame_images;
     delete body.generate_audio;
     body.image_url = job.source_image_url;
+  } else if (isHailuo) {
+    // MiniMax H3: 2K only, 5–15s, first/last frame keyframing via frame_images.
+    body.resolution = "2K";
+    body.duration = Math.max(5, Math.min(15, Number(job.duration) || 5));
   } else if (!isSeedance && !isGrok) {
     // Unknown OpenRouter video model — use the unified start-frame shape.
     delete body.frame_images;
