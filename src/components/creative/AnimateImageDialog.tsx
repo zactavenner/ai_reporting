@@ -23,10 +23,11 @@ type VideoModelOption = {
 };
 
 export const ANIMATE_MODELS: VideoModelOption[] = [
-  { id: 'bytedance/seedance-2.0-pro', label: 'Seedance 2.0 Pro', hint: 'Best at holding text and layout still', resolutions: ['480p', '720p', '1080p'], durations: [5, 10, 15], pricePerSecond: 0.0938 },
+  { id: 'bytedance/seedance-2.0', label: 'Seedance 2.0 Pro', hint: 'Best at holding text and layout still', resolutions: ['480p', '720p', '1080p'], durations: [5, 10, 15], pricePerSecond: 0.0938 },
   { id: 'x-ai/grok-imagine-video-1.5', label: 'Grok Imagine 1.5', hint: 'Cinematic first-frame motion', resolutions: ['480p', '720p', '1080p'], durations: [5, 10, 15], pricePerSecond: 0.14 },
   { id: 'bytedance/seedance-2.0-fast', label: 'Seedance 2.0 Fast', hint: 'Cheapest, quickest render', resolutions: ['480p', '720p'], durations: [5, 10, 15], pricePerSecond: 0.0538 },
-  { id: 'veo-3.1', label: 'Veo 3.1', hint: 'Google Veo (4–8s only)', resolutions: ['720p', '1080p'], durations: [5, 8], pricePerSecond: 0.4 },
+  { id: 'google/veo-3.1-fast', label: 'Veo 3.1 Fast', hint: 'Google Veo via OpenRouter', resolutions: ['720p', '1080p'], durations: [5, 8], pricePerSecond: 0.15 },
+  { id: 'veo-3.1', label: 'Veo 3.1 (Google direct)', hint: 'Uses the Gemini key, 4–8s only', resolutions: ['720p', '1080p'], durations: [5, 8], pricePerSecond: 0.4 },
 ];
 
 type JobRow = {
