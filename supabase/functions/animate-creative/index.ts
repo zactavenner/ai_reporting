@@ -42,14 +42,33 @@ type Job = {
 };
 
 const ALLOWED_MODELS: Record<string, { label: string; provider: "openrouter" | "google"; maxRes: string[]; pricePerSecond: number }> = {
-  "bytedance/seedance-2.0-pro": { label: "Seedance 2.0 Pro", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.0938 },
+  // Verified OpenRouter /api/v1/videos ids (the "-pro" suffix does not exist upstream).
+  "bytedance/seedance-2.0": { label: "Seedance 2.0 Pro", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.0938 },
   "bytedance/seedance-2.0-fast": { label: "Seedance 2.0 Fast", provider: "openrouter", maxRes: ["480p", "720p"], pricePerSecond: 0.0538 },
   "x-ai/grok-imagine-video-1.5": { label: "Grok Imagine 1.5", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.14 },
+  "google/veo-3.1-fast": { label: "Veo 3.1 Fast", provider: "openrouter", maxRes: ["720p", "1080p"], pricePerSecond: 0.15 },
   "veo-3.1": { label: "Veo 3.1", provider: "google", maxRes: ["720p", "1080p"], pricePerSecond: 0.4 },
 };
 
-const DEFAULT_MODEL = "bytedance/seedance-2.0-pro";
+const DEFAULT_MODEL = "bytedance/seedance-2.0";
 const DEFAULT_FALLBACKS = ["x-ai/grok-imagine-video-1.5", "bytedance/seedance-2.0-fast"];
+
+// Legacy / shorthand ids the UI or older callers may send.
+const MODEL_ALIASES: Record<string, string> = {
+  "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
+  "bytedance/seedance-2-pro": "bytedance/seedance-2.0",
+  "seedance-pro": "bytedance/seedance-2.0",
+  "seedance-2.0-pro": "bytedance/seedance-2.0",
+  "seedance-fast": "bytedance/seedance-2.0-fast",
+  "grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
+  veo3: "veo-3.1",
+};
+
+function resolveModel(id: unknown): string | null {
+  const raw = typeof id === "string" ? id.trim() : "";
+  const mapped = MODEL_ALIASES[raw] || raw;
+  return ALLOWED_MODELS[mapped] ? mapped : null;
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -75,6 +94,7 @@ async function getGeminiKey(): Promise<string | null> {
 function buildOpenRouterBody(job: Job, model: string) {
   const isSeedance = model.includes("seedance");
   const isGrok = model.includes("grok");
+  const isVeo = model.includes("veo");
   const allowedAspects = new Set(["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"]);
   const aspect = allowedAspects.has(job.aspect_ratio) ? job.aspect_ratio : "9:16";
   const allowed = ALLOWED_MODELS[model]?.maxRes || ["720p"];
@@ -92,7 +112,13 @@ function buildOpenRouterBody(job: Job, model: string) {
       { type: "image_url", image_url: { url: job.source_image_url }, frame_type: "first_frame" },
     ],
   };
-  if (!isSeedance && !isGrok) {
+  if (isVeo) {
+    // Veo on OpenRouter takes a single start frame and no resolution field.
+    delete body.resolution;
+    delete body.frame_images;
+    delete body.generate_audio;
+    body.image_url = job.source_image_url;
+  } else if (!isSeedance && !isGrok) {
     // Unknown OpenRouter video model — use the unified start-frame shape.
     delete body.frame_images;
     body.image_url = job.source_image_url;
@@ -369,9 +395,10 @@ Deno.serve(async (req) => {
       if (!creativeId || !imageUrl || !prompt) {
         return json({ error: "creativeId, imageUrl and prompt are required" }, 400);
       }
-      const model = ALLOWED_MODELS[body.model] ? String(body.model) : DEFAULT_MODEL;
+      const model = resolveModel(body.model) || DEFAULT_MODEL;
       const fallbacks = (Array.isArray(body.fallbackModels) ? body.fallbackModels : DEFAULT_FALLBACKS)
-        .filter((m: unknown) => typeof m === "string" && ALLOWED_MODELS[m as string] && m !== model);
+        .map(resolveModel)
+        .filter((m): m is string => !!m && m !== model);
 
       const { data: inserted, error } = await supa.from("creative_video_jobs").insert({
         creative_id: creativeId,
