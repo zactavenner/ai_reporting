@@ -345,66 +345,6 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
     }
   };
 
-  const handleToVideo = async () => {
-    if (!creative.file_url) return;
-    setVideoBusy(true);
-    try {
-      // Strong default prompt: animate the scene/background only — keep ALL text,
-      // tables, numbers, logos and typography perfectly static and identical.
-      const preserveTextPrompt = (editPrompt && editPrompt.trim().length > 0)
-        ? editPrompt
-        : 'Animate this static ad image with subtle, professional motion in the background and scene elements only (gentle parallax, soft camera push-in, natural ambient motion like light/shadow shifts, equipment, smoke, dust, or environment). CRITICAL: Do NOT modify, animate, warp, redraw, re-render, distort, or change ANY text, headlines, captions, numbers, tables, charts, logos, badges, or typography in any way — keep every word, letter, number and graphic element pixel-identical and perfectly static throughout the entire video. Preserve the exact layout, colors and composition.';
-
-      const { data, error } = await supabase.functions.invoke('creative-ai-audit', {
-        body: {
-          action: 'to_video',
-          creative: { client_id: creative.client_id, file_url: creative.file_url },
-          imageUrl: creative.file_url,
-          editPrompt: preserveTextPrompt,
-          aspectRatio: creative.aspect_ratio === '1:1' ? '1:1' : creative.aspect_ratio === '16:9' ? '16:9' : '9:16',
-          duration: 5,
-        },
-      });
-      if (error) throw error;
-      const opId: string | undefined = data?.operationId;
-      if (!opId) {
-        if (data?.error) throw new Error(data.error);
-        throw new Error('Video kickoff failed');
-      }
-      toast.message('Veo 3.1 rendering — this takes 1–3 minutes…');
-
-      // Poll up to ~6 minutes
-      let videoUrl: string | null = null;
-      for (let i = 0; i < 60; i++) {
-        await new Promise(r => setTimeout(r, 6000));
-        const { data: poll } = await supabase.functions.invoke('poll-video-status', {
-          body: { operationId: opId },
-        });
-        if (poll?.status === 'completed' && poll.videoUrl) {
-          videoUrl = poll.videoUrl;
-          break;
-        }
-        if (poll?.status === 'failed') throw new Error(poll.error || 'Video failed');
-      }
-      if (!videoUrl) throw new Error('Video timed out');
-
-      const v: CreativeVariation = {
-        id: crypto.randomUUID(),
-        url: videoUrl,
-        type: 'video',
-        prompt: editPrompt || 'Animate ad image',
-        model: 'veo-3.1',
-        created_at: new Date().toISOString(),
-      };
-      await persistVariation(v);
-      toast.success('Video variation saved');
-      setVariationsOpen(true);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Video conversion failed');
-    } finally {
-      setVideoBusy(false);
-    }
-  };
 
   // Extract score from audit text
   const extractScore = (auditText: string): number | null => {
