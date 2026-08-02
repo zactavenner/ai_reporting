@@ -82,8 +82,9 @@ export function AnimateImageDialog({ open, onOpenChange, creativeId, clientId, i
     stopPolling();
     timer.current = window.setTimeout(async () => {
       const { data, error } = await supabase.functions.invoke('animate-creative', {
-        body: { action: 'status', jobId },
+        body: { action: 'status', jobId, retry: retriedSave.current },
       });
+      retriedSave.current = false;
       if (error) { pollJob(jobId); return; }
       const next = (data as { job?: JobRow })?.job;
       if (next) {
@@ -94,6 +95,13 @@ export function AnimateImageDialog({ open, onOpenChange, creativeId, clientId, i
           return;
         }
         if (next.status === 'failed') {
+          // The clip rendered but the save hiccuped — retry the save once automatically.
+          if (!next.output_url && next.error?.toLowerCase().includes('download') && !savedRetryUsed.current) {
+            savedRetryUsed.current = true;
+            retriedSave.current = true;
+            pollJob(jobId);
+            return;
+          }
           toast.error(next.error || 'Animation failed');
           return;
         }
