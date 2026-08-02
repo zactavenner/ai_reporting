@@ -1210,6 +1210,7 @@ async function generateSeedanceVideo(opts: {
     "alibaba/happyhorse-1.1",
     "x-ai/grok-imagine-video-1.5",
     "x-ai/grok-imagine-video",
+    "minimax/hailuo-3",
   ];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
@@ -1246,6 +1247,15 @@ async function generateSeedanceVideo(opts: {
     "grok-imagine 1.5": "x-ai/grok-imagine-video-1.5",
     "x-ai/grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
     "xai/grok-imagine-1.5": "x-ai/grok-imagine-video-1.5",
+    "minimax/h3": "minimax/hailuo-3",
+    "minimax h3": "minimax/hailuo-3",
+    "minimax-h3": "minimax/hailuo-3",
+    "hailuo": "minimax/hailuo-3",
+    "hailuo-3": "minimax/hailuo-3",
+    "hailuo3": "minimax/hailuo-3",
+    "minimax/hailuo3": "minimax/hailuo-3",
+    "minimax/hailuo-03": "minimax/hailuo-3",
+    "h3": "minimax/hailuo-3",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
   // HARD RULE: when the caller explicitly passed a model id, never silently
@@ -1285,10 +1295,13 @@ async function generateSeedanceVideo(opts: {
   const isKling = model.startsWith("kwaivgi/kling");
   const isHappyHorse = model.startsWith("alibaba/happyhorse");
   const isGrok = model.startsWith("x-ai/grok");
+  const isHailuo = model.startsWith("minimax/hailuo");
   const modelLabel = isHappyHorse
     ? "HappyHorse 1.1"
     : isGrok
       ? (model === "x-ai/grok-imagine-video-1.5" ? "Grok Imagine 1.5" : "Grok Imagine")
+      : isHailuo
+      ? "MiniMax H3"
       : isSeedance
       ? (isSeedanceFast ? "Seedance Fast" : "Seedance Pro")
       : isKling
@@ -1314,11 +1327,19 @@ async function generateSeedanceVideo(opts: {
     else effectiveResolution = "720p";
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
+  else if (isHailuo) {
+    // MiniMax H3 on OpenRouter supports a single resolution: "2K".
+    effectiveResolution = "2k";
+  }
   // Seedance 2.0 Fast supports only 480p and 720p per spec.
   else if (isSeedanceFast && effectiveResolution !== "480p" && effectiveResolution !== "720p") effectiveResolution = "720p";
   else if (!isSeedancePro && effectiveResolution === "4k") effectiveResolution = "1080p";
   // OpenRouter Seedance expects the literal "4K" (uppercase) per /videos/models supported_resolutions.
-  const wireResolution = effectiveResolution === "4k" ? "4K" : effectiveResolution;
+  const wireResolution = effectiveResolution === "4k"
+    ? "4K"
+    : effectiveResolution === "2k"
+      ? "2K"
+      : effectiveResolution;
   const veoMax = 8;
   const effectiveDuration = isHappyHorse
     ? 15
