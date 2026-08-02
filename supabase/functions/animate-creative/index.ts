@@ -260,7 +260,12 @@ async function pollOnce(job: Job): Promise<{ done: boolean; url?: string; failed
 // ---------------------------------------------------------------- finalize
 
 async function storeAndAttach(job: Job, providerUrl: string) {
-  const res = await fetch(providerUrl);
+  // OpenRouter publishes the MP4 on its own authenticated /content endpoint, so the
+  // download needs the API key. Everything else is a plain signed URL.
+  const headers: Record<string, string> = providerUrl.includes("openrouter.ai")
+    ? { Authorization: `Bearer ${OPENROUTER_KEY}` }
+    : {};
+  const res = await fetch(providerUrl, { headers });
   if (!res.ok) throw new Error(`Could not download the finished video (${res.status})`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const path = `animated/${job.creative_id}/${job.id}.mp4`;
@@ -428,7 +433,17 @@ Deno.serve(async (req) => {
       if (!jobId) return json({ error: "jobId is required" }, 400);
       const { data, error } = await supa.from("creative_video_jobs").select("*").eq("id", jobId).maybeSingle();
       if (error || !data) return json({ error: "Job not found" }, 404);
-      const job = await advance(data as Job);
+      // A failed save (download/upload hiccup) is retryable while the provider job
+      // is still holding the finished clip.
+      let row = data as Job;
+      if (body.retry === true && row.status === "failed" && row.polling_url && !row.output_url) {
+        await supa.from("creative_video_jobs")
+          .update({ status: "rendering", error: null, progress_label: "Retrying…" })
+          .eq("id", jobId);
+        const { data: reset } = await supa.from("creative_video_jobs").select("*").eq("id", jobId).single();
+        row = reset as Job;
+      }
+      const job = await advance(row);
       return json({ job });
     }
 
