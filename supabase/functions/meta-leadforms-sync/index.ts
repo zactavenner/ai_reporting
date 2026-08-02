@@ -24,6 +24,18 @@ async function fetchAll(url: string, token: string): Promise<any[]> {
   return out;
 }
 
+// /{page-id}/leadgen_forms requires a Page Access Token — the ad-account
+// (user/system-user) token returns OAuth #190. Exchange it per page.
+async function getPageToken(pageId: string, token: string): Promise<string | null> {
+  const res = await fetch(`${GRAPH}/${pageId}?fields=access_token&access_token=${token}`);
+  if (!res.ok) {
+    console.error("page token exchange failed", pageId, res.status, await res.text());
+    return null;
+  }
+  const json: any = await res.json();
+  return json?.access_token ?? null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -46,7 +58,9 @@ Deno.serve(async (req) => {
     const results: any[] = [];
 
     for (const client of clients || []) {
-      const token = client.meta_access_token || Deno.env.get("META_SHARED_ACCESS_TOKEN");
+      const token = (client as any).meta_system_user_token
+        || client.meta_access_token
+        || Deno.env.get("META_SHARED_ACCESS_TOKEN");
       if (!token) continue;
       const acctId = client.meta_ad_account_id!.startsWith("act_")
         ? client.meta_ad_account_id!
@@ -60,9 +74,11 @@ Deno.serve(async (req) => {
 
       let clientForms = 0;
       for (const page of pages) {
+        const pageToken = await getPageToken(page.id, token);
+        if (!pageToken) continue;
         const forms = await fetchAll(
           `${GRAPH}/${page.id}/leadgen_forms?fields=id,name,status,locale,questions,question_page_custom_headline,thank_you_page,privacy_policy_url,leads_count`,
-          token,
+          pageToken,
         );
         for (const f of forms) {
           await supabase.from("meta_lead_forms").upsert(
