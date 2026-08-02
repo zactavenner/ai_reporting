@@ -818,6 +818,21 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {isImageCreative && (
+        <AnimateImageDialog
+          open={animateOpen}
+          onOpenChange={setAnimateOpen}
+          creativeId={creative.id}
+          clientId={creative.client_id ?? null}
+          imageUrl={creative.file_url!}
+          aspectRatio={creative.aspect_ratio ?? null}
+          onCompleted={() => {
+            queryClient.invalidateQueries({ queryKey: ['creatives'] });
+            setVariationsOpen(true);
+          }}
+        />
+      )}
     </>
   );
 }
