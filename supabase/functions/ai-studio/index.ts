@@ -1328,8 +1328,8 @@ async function generateSeedanceVideo(opts: {
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (isHailuo) {
-    // MiniMax H3 on OpenRouter supports a single resolution: "2K".
-    effectiveResolution = "2k";
+    // MiniMax H3: 720p draft or native 2K.
+    effectiveResolution = effectiveResolution === "720p" || effectiveResolution === "480p" ? "720p" : "2k";
   }
   // Seedance 2.0 Fast supports only 480p and 720p per spec.
   else if (isSeedanceFast && effectiveResolution !== "480p" && effectiveResolution !== "720p") effectiveResolution = "720p";
@@ -1644,7 +1644,7 @@ async function generateSeedanceVideo(opts: {
     //   generate_audio supported.
     const allowedAspects = new Set(["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
     const requestedAspect = opts.aspectRatio || "9:16";
-    body.resolution = "2K";
+    body.resolution = wireResolution === "720p" ? "720p" : "2K";
     body.duration = Math.max(5, Math.min(15, Number(effectiveDuration) || 5));
     body.aspect_ratio = allowedAspects.has(requestedAspect) ? requestedAspect : "9:16";
     (body as any).generate_audio = opts.generateAudio === false ? false : true;
