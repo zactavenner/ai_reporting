@@ -369,7 +369,7 @@ export function CreativeAIActions({ creative }: CreativeAIActionsProps) {
       { name: 'AI Audit', status: 'pending' },
       { name: 'AI Edit / Markup', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
       { name: 'Auto Variations', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
-      { name: 'Image → Video (Veo 3.1 kickoff)', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
+      { name: 'Animate Image (models available)', status: isImageCreative ? 'pending' : 'skip', detail: isImageCreative ? undefined : 'Image-only' },
     ];
     setSmokeResults(initial);
     const update = (i: number, patch: Partial<SmokeResult>) =>
