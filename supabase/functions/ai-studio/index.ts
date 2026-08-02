@@ -1637,6 +1637,34 @@ async function generateSeedanceVideo(opts: {
       // Spec: visual guidance images go in `input_references`, not the legacy `reference_images` key.
       body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
     }
+  } else if (isHailuo) {
+    // MiniMax H3 — OpenRouter /api/v1/videos contract (verified via /videos/models):
+    //   resolution: "2K" only, duration 5–15, aspect_ratio 21:9|16:9|4:3|1:1|3:4|9:16,
+    //   frame_images: first_frame + last_frame, input_references for identity/ingredient,
+    //   generate_audio supported.
+    const allowedAspects = new Set(["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+    const requestedAspect = opts.aspectRatio || "9:16";
+    body.resolution = "2K";
+    body.duration = Math.max(5, Math.min(15, Number(effectiveDuration) || 5));
+    body.aspect_ratio = allowedAspects.has(requestedAspect) ? requestedAspect : "9:16";
+    (body as any).generate_audio = opts.generateAudio === false ? false : true;
+    delete (body as any).size;
+    delete (body as any).seconds;
+    delete (body as any).first_frame;
+    delete (body as any).reference_images;
+    delete (body as any).image_url;
+
+    const frames: any[] = [];
+    if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
+    if (providerLastFrameUrl && providerLastFrameUrl !== providerImageUrl) {
+      frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
+    }
+    if (frames.length) body.frame_images = frames;
+    // Identity/ingredient reference is additive on H3 — it can be sent alongside keyframes
+    // so the same avatar/product persists across sequential 15s clips.
+    if (providerIngredientUrl && providerIngredientUrl !== providerImageUrl) {
+      body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+    }
   } else if (isHappyHorse) {
     // HappyHorse 1.1 on OpenRouter — /api/v1/videos schema (verified via ZodError response):
     //   frame_images: [{ type: "image_url", image_url: { url }, frame_type: "first_frame"|"last_frame" }]
