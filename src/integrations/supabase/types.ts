@@ -7644,6 +7644,98 @@ export type Database = {
           },
         ]
       }
+      creative_video_jobs: {
+        Row: {
+          aspect_ratio: string
+          attempts: number
+          client_id: string | null
+          completed_at: string | null
+          cost_usd: number | null
+          created_at: string
+          creative_id: string
+          duration: number
+          error: string | null
+          fallback_models: string[]
+          id: string
+          model: string
+          output_path: string | null
+          output_url: string | null
+          poll_count: number
+          polling_url: string | null
+          progress_label: string | null
+          prompt: string
+          provider: string
+          provider_job_id: string | null
+          resolution: string
+          source_image_url: string
+          status: string
+          updated_at: string
+          variation_id: string | null
+        }
+        Insert: {
+          aspect_ratio?: string
+          attempts?: number
+          client_id?: string | null
+          completed_at?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          creative_id: string
+          duration?: number
+          error?: string | null
+          fallback_models?: string[]
+          id?: string
+          model: string
+          output_path?: string | null
+          output_url?: string | null
+          poll_count?: number
+          polling_url?: string | null
+          progress_label?: string | null
+          prompt: string
+          provider?: string
+          provider_job_id?: string | null
+          resolution?: string
+          source_image_url: string
+          status?: string
+          updated_at?: string
+          variation_id?: string | null
+        }
+        Update: {
+          aspect_ratio?: string
+          attempts?: number
+          client_id?: string | null
+          completed_at?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          creative_id?: string
+          duration?: number
+          error?: string | null
+          fallback_models?: string[]
+          id?: string
+          model?: string
+          output_path?: string | null
+          output_url?: string | null
+          poll_count?: number
+          polling_url?: string | null
+          progress_label?: string | null
+          prompt?: string
+          provider?: string
+          provider_job_id?: string | null
+          resolution?: string
+          source_image_url?: string
+          status?: string
+          updated_at?: string
+          variation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_video_jobs_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "creatives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       creatives: {
         Row: {
           ai_performance_score: number | null
