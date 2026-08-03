@@ -91,9 +91,8 @@ const TOOLS = [
 
 async function orChat(body: Record<string, unknown>) {
   let lastErr = "";
-  const chain = (body as any).model
-    ? [(body as any).model as string, ...MODEL_CHAIN]
-    : [...(await preferredModel() ? [await preferredModel() as string] : []), ...MODEL_CHAIN];
+  const pref = (body as any).model || (await preferredModel());
+  const chain = [...new Set([...(pref ? [pref as string] : []), ...MODEL_CHAIN])];
   for (const model of chain) {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
