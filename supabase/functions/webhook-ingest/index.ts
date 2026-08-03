@@ -226,8 +226,10 @@ serve(async (req) => {
       let insertedCount = 0;
       
       for (const record of records) {
-        const reportedAt = record.reported_at || record.date || new Date().toISOString().split('T')[0];
-        
+        const rawReportedAt = record.reported_at || record.date || new Date().toISOString().split('T')[0];
+        // Normalize to a single per-day key so re-sends update instead of duplicating.
+        const reportedAt = `${String(rawReportedAt).slice(0, 10)}T00:00:00Z`;
+
         const adSpendRecord = {
           client_id: clientId,
           reported_at: reportedAt,
@@ -235,15 +237,15 @@ serve(async (req) => {
           impressions: parseInt(record.impressions) || null,
           clicks: parseInt(record.clicks) || null,
           platform: record.platform || 'facebook',
-          campaign_name: record.campaign_name || record.campaign || null,
-          ad_set_name: record.ad_set_name || record.adset || null,
+          campaign_name: record.campaign_name || record.campaign || '',
+          ad_set_name: record.ad_set_name || record.adset || '',
         };
 
         const { error: insertError } = await supabase
           .from('ad_spend_reports')
-          .upsert(adSpendRecord, { 
-            onConflict: 'client_id,reported_at,platform,campaign_name',
-            ignoreDuplicates: false 
+          .upsert(adSpendRecord, {
+            onConflict: 'client_id,reported_at,platform,campaign_name,ad_set_name',
+            ignoreDuplicates: false,
           });
 
         if (insertError) {

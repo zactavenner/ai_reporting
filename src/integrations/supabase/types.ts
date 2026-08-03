@@ -453,38 +453,38 @@ export type Database = {
       }
       ad_spend_reports: {
         Row: {
-          ad_set_name: string | null
-          campaign_name: string | null
+          ad_set_name: string
+          campaign_name: string
           clicks: number | null
           client_id: string
           created_at: string | null
           id: string
           impressions: number | null
-          platform: string | null
+          platform: string
           reported_at: string
           spend: number | null
         }
         Insert: {
-          ad_set_name?: string | null
-          campaign_name?: string | null
+          ad_set_name?: string
+          campaign_name?: string
           clicks?: number | null
           client_id: string
           created_at?: string | null
           id?: string
           impressions?: number | null
-          platform?: string | null
+          platform?: string
           reported_at: string
           spend?: number | null
         }
         Update: {
-          ad_set_name?: string | null
-          campaign_name?: string | null
+          ad_set_name?: string
+          campaign_name?: string
           clicks?: number | null
           client_id?: string
           created_at?: string | null
           id?: string
           impressions?: number | null
-          platform?: string | null
+          platform?: string
           reported_at?: string
           spend?: number | null
         }
