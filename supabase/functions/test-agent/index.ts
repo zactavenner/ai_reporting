@@ -109,42 +109,6 @@ Deno.serve(async (req) => {
     const caps: any = agent.capabilities || {};
     if (caps?.provider === "utari_persona" && caps?.mcp_url) {
       const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
-      const ctxLines: string[] = [];
-      if (clientName) ctxLines.push(`Client in scope: ${clientName}`);
-      if (brain?.voice) ctxLines.push(`Brand voice: ${brain.voice}`);
-      if (brain?.icp) ctxLines.push(`ICP: ${brain.icp}`);
-      if (brain?.brand_guidelines) ctxLines.push(`Brand guidelines: ${brain.brand_guidelines}`);
-      if (brain?.do_not_say) ctxLines.push(`Do NOT say: ${brain.do_not_say}`);
-      if (offers.length) {
-        ctxLines.push(`Active offer(s):`);
-        for (const o of offers) {
-          const bits = [
-            o.title && `Title: ${o.title}`,
-            o.offer_type && `Offer type: ${o.offer_type}`,
-            o.fund_name && `Fund: ${o.fund_name}`,
-            o.fund_type && `Type: ${o.fund_type}`,
-            o.raise_amount && `Raise: ${o.raise_amount}`,
-            o.target_investor && `Target investor: ${o.target_investor}`,
-            o.targeted_returns && `Targeted returns: ${o.targeted_returns}`,
-            o.min_investment && `Min investment: ${o.min_investment}`,
-            o.investment_range && `Investment range: ${o.investment_range}`,
-            o.hold_period && `Hold: ${o.hold_period}`,
-            o.distribution_schedule && `Distributions: ${o.distribution_schedule}`,
-            o.tax_advantages && `Tax advantages: ${o.tax_advantages}`,
-            o.credibility && `Credibility: ${o.credibility}`,
-            o.timeline && `Timeline: ${o.timeline}`,
-            o.accredited_only != null && `Accredited only: ${o.accredited_only ? "yes" : "no"}`,
-            o.reg_d_type && `Reg D: ${o.reg_d_type}`,
-            o.industry_focus && `Industry: ${o.industry_focus}`,
-            o.description && `Description: ${o.description}`,
-            o.additional_notes && `Notes: ${o.additional_notes}`,
-          ].filter(Boolean).join(" | ");
-          if (bits) ctxLines.push(`- ${bits}`);
-        }
-      }
-      if (offers.length === 0 && client_id) {
-        ctxLines.push(`No offer is configured for this client yet — ask for the offer details before making offer-specific recommendations.`);
-      }
 
       // Persistent conversation id per (agent, client) scope
       const scopeClient = client_id ?? "00000000-0000-0000-0000-000000000000";
@@ -156,12 +120,14 @@ Deno.serve(async (req) => {
         .maybeSingle();
       const existingConv = convRow?.conversation_id || null;
 
-      const contextBlock = ctxLines.length
-        ? `[CONTEXT — use this to ground your reply]\n${ctxLines.join("\n")}\n\n[MESSAGE]\n`
-        : "";
       // Always ground Jeremy in the client + offer context. Offers change over time and the
       // MCP conversation is long-lived, so re-sending the block every turn keeps him accurate.
-      const outbound = `${contextBlock}${lastUser}`;
+      const outbound = buildJeremyOutbound(lastUser, {
+        clientName,
+        brain,
+        offers,
+        clientId: client_id ?? null,
+      });
 
       let reply = "";
       let newConvId: string | null = null;
