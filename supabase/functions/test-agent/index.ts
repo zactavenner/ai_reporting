@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
         supa.from("client_agent_overrides").select("memory_md, instructions_md").eq("client_id", client_id).eq("agent_id", agent_id).maybeSingle(),
         supa.from("client_brain").select("voice, icp, brand_guidelines, do_not_say").eq("client_id", client_id).maybeSingle(),
         supa.from("clients").select("name").eq("id", client_id).maybeSingle(),
-        supa.from("client_offers").select("title, description, fund_name, fund_type, target_investor, targeted_returns, min_investment, hold_period, industry_focus, additional_notes, status").eq("client_id", client_id).order("created_at", { ascending: false }).limit(3),
+        supa.from("client_offers").select("title, description, offer_type, fund_name, fund_type, raise_amount, min_investment, investment_range, timeline, target_investor, targeted_returns, hold_period, distribution_schedule, tax_advantages, credibility, fund_history, industry_focus, accredited_only, reg_d_type, additional_notes, status").eq("client_id", client_id).order("created_at", { ascending: false }).limit(3),
       ]);
       override = ov.data;
       brain = br.data;
@@ -119,18 +119,30 @@ Deno.serve(async (req) => {
         for (const o of offers) {
           const bits = [
             o.title && `Title: ${o.title}`,
+            o.offer_type && `Offer type: ${o.offer_type}`,
             o.fund_name && `Fund: ${o.fund_name}`,
             o.fund_type && `Type: ${o.fund_type}`,
+            o.raise_amount && `Raise: ${o.raise_amount}`,
             o.target_investor && `Target investor: ${o.target_investor}`,
             o.targeted_returns && `Targeted returns: ${o.targeted_returns}`,
             o.min_investment && `Min investment: ${o.min_investment}`,
+            o.investment_range && `Investment range: ${o.investment_range}`,
             o.hold_period && `Hold: ${o.hold_period}`,
+            o.distribution_schedule && `Distributions: ${o.distribution_schedule}`,
+            o.tax_advantages && `Tax advantages: ${o.tax_advantages}`,
+            o.credibility && `Credibility: ${o.credibility}`,
+            o.timeline && `Timeline: ${o.timeline}`,
+            o.accredited_only != null && `Accredited only: ${o.accredited_only ? "yes" : "no"}`,
+            o.reg_d_type && `Reg D: ${o.reg_d_type}`,
             o.industry_focus && `Industry: ${o.industry_focus}`,
             o.description && `Description: ${o.description}`,
             o.additional_notes && `Notes: ${o.additional_notes}`,
           ].filter(Boolean).join(" | ");
           if (bits) ctxLines.push(`- ${bits}`);
         }
+      }
+      if (offers.length === 0 && client_id) {
+        ctxLines.push(`No offer is configured for this client yet — ask for the offer details before making offer-specific recommendations.`);
       }
 
       // Persistent conversation id per (agent, client) scope
@@ -146,8 +158,9 @@ Deno.serve(async (req) => {
       const contextBlock = ctxLines.length
         ? `[CONTEXT — use this to ground your reply]\n${ctxLines.join("\n")}\n\n[MESSAGE]\n`
         : "";
-      // Only prepend context on the first message of a conversation; keep continuity terse afterwards.
-      const outbound = existingConv ? lastUser : `${contextBlock}${lastUser}`;
+      // Always ground Jeremy in the client + offer context. Offers change over time and the
+      // MCP conversation is long-lived, so re-sending the block every turn keeps him accurate.
+      const outbound = `${contextBlock}${lastUser}`;
 
       let reply = "";
       let newConvId: string | null = null;
