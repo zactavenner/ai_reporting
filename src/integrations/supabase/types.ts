@@ -11455,6 +11455,126 @@ export type Database = {
         }
         Relationships: []
       }
+      jarvis_goal_events: {
+        Row: {
+          content: string | null
+          created_at: string
+          data: Json | null
+          goal_id: string
+          id: string
+          kind: string
+          title: string | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          data?: Json | null
+          goal_id: string
+          id?: string
+          kind: string
+          title?: string | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          data?: Json | null
+          goal_id?: string
+          id?: string
+          kind?: string
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_goal_events_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "jarvis_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jarvis_goals: {
+        Row: {
+          client_id: string | null
+          completed_at: string | null
+          counts: Json
+          created_at: string
+          created_by: string | null
+          error: string | null
+          goal: string
+          id: string
+          iteration: number
+          last_heartbeat_at: string | null
+          max_iterations: number
+          report_md: string | null
+          started_at: string | null
+          state: Json
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          completed_at?: string | null
+          counts?: Json
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          goal: string
+          id?: string
+          iteration?: number
+          last_heartbeat_at?: string | null
+          max_iterations?: number
+          report_md?: string | null
+          started_at?: string | null
+          state?: Json
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          completed_at?: string | null
+          counts?: Json
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          goal?: string
+          id?: string
+          iteration?: number
+          last_heartbeat_at?: string | null
+          max_iterations?: number
+          report_md?: string | null
+          started_at?: string | null
+          state?: Json
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_goals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jarvis_goals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jarvis_goals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       jarvis_messages: {
         Row: {
           channel: string
