@@ -91,7 +91,10 @@ const TOOLS = [
 
 async function orChat(body: Record<string, unknown>) {
   let lastErr = "";
-  for (const model of MODEL_CHAIN) {
+  const chain = (body as any).model
+    ? [(body as any).model as string, ...MODEL_CHAIN]
+    : [...(await preferredModel() ? [await preferredModel() as string] : []), ...MODEL_CHAIN];
+  for (const model of chain) {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -107,6 +110,15 @@ async function orChat(body: Record<string, unknown>) {
     console.warn("[mission]", lastErr);
   }
   throw new Error(`All models failed: ${lastErr}`);
+}
+
+/** Honour the agency-wide Jarvis model preference (same setting the chat UI uses). */
+let _preferred: string | null | undefined;
+async function preferredModel() {
+  if (_preferred !== undefined) return _preferred;
+  const { data } = await supa.from("agency_settings").select("jarvis_model").limit(1).maybeSingle();
+  _preferred = (data as any)?.jarvis_model || null;
+  return _preferred;
 }
 
 async function askJeremy(question: string, clientId: string | null) {
