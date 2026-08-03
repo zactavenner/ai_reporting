@@ -141,12 +141,17 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
         const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
         const { data } = await supa
           .from("daily_metrics")
-          .select("date, spend, leads, funded")
+          .select("date, ad_spend, leads, calls_showed, funded_investors")
           .eq("client_id", args.client_id)
           .gte("date", since);
         const roll = (data || []).reduce(
-          (a: any, r: any) => ({ spend: a.spend + Number(r.spend || 0), leads: a.leads + Number(r.leads || 0), funded: a.funded + Number(r.funded || 0) }),
-          { spend: 0, leads: 0, funded: 0 },
+          (a: any, r: any) => ({
+            spend: a.spend + Number(r.ad_spend || 0),
+            leads: a.leads + Number(r.leads || 0),
+            showed: a.showed + Number(r.calls_showed || 0),
+            funded: a.funded + Number(r.funded_investors || 0),
+          }),
+          { spend: 0, leads: 0, showed: 0, funded: 0 },
         );
         return { days, ...roll, cpl: roll.leads ? +(roll.spend / roll.leads).toFixed(2) : null };
       }
