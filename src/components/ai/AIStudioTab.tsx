@@ -72,7 +72,7 @@ type ChatVideo = {
 };
 type Attachment = { url: string; name: string; mime: string; text?: string; uploading?: boolean; fromOffer?: boolean; role?: string };
 
-const DEFAULT_CHAT_MODEL = "openrouter/deepseek/deepseek-v4-flash";
+const DEFAULT_CHAT_MODEL = "openrouter/deepseek/deepseek-v4-flash-latest";
 const CHAT_MODELS = [
   { value: DEFAULT_CHAT_MODEL, label: "DeepSeek V4 Flash (default)" },
   { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra" },
@@ -1706,7 +1706,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (a?.model) return a.model;
             // Copywriting agent defaults to DeepSeek V4 Flash when no explicit model is set.
             const label = `${a?.handle || ""} ${a?.name || ""} ${a?.role || ""}`.toLowerCase();
-            if (a && /copyw|copy writ/.test(label)) return "openrouter/deepseek/deepseek-v4-flash";
+            if (a && /copyw|copy writ/.test(label)) return "openrouter/deepseek/deepseek-v4-flash-latest";
           }
           return chatModel;
         })(),

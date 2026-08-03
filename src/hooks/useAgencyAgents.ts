@@ -60,7 +60,7 @@ export type OfferTraining = {
 
 export const AGENCY_AGENT_MODELS = [
   { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra (default)" },
-  { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+  { value: "openrouter/deepseek/deepseek-v4-flash-latest", label: "DeepSeek V4 Flash" },
   { value: "openai/gpt-5", label: "GPT-5" },
   { value: "openai/gpt-5-mini", label: "GPT-5 Mini" },
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (vision)" },

@@ -205,7 +205,7 @@ Deno.serve(async (req) => {
     }
     sys.push(`\nYou are being tested inside the Agent Workforce template. Answer directly, follow the memory/instructions above precisely, and be concise. This is a live test — respond as the agent, not as a generic assistant.`);
 
-    const model = agent.default_model || "openrouter/deepseek/deepseek-v4-flash";
+    const model = agent.default_model || "openrouter/deepseek/deepseek-v4-flash-latest";
     const cleanModel = model.startsWith("openrouter/") ? model.slice("openrouter/".length) : model;
 
     // 5. Call OpenRouter
