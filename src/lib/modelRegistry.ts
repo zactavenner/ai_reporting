@@ -13,7 +13,7 @@ export type ModelInfo = {
 
 export const MODEL_REGISTRY: Record<string, ModelInfo> = {
   "nvidia/nemotron-3-ultra-550b-a55b:free": { id: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra", provider: "OpenRouter", contextTokens: 1_000_000, capability: "chat" },
-  "openrouter/deepseek/deepseek-v4-flash": { id: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "DeepSeek", contextTokens: 128_000, capability: "chat" },
+  "openrouter/deepseek/deepseek-v4-flash-latest": { id: "openrouter/deepseek/deepseek-v4-flash-latest", label: "DeepSeek V4 Flash", provider: "DeepSeek", contextTokens: 128_000, capability: "chat" },
   "openai/gpt-5": { id: "openai/gpt-5", label: "GPT-5", provider: "OpenAI", contextTokens: 400_000, capability: "chat" },
   "openai/gpt-5-mini": { id: "openai/gpt-5-mini", label: "GPT-5 Mini", provider: "OpenAI", contextTokens: 200_000, capability: "chat" },
   "google/gemini-2.5-pro": { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: "Google", contextTokens: 2_000_000, capability: "chat" },

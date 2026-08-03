@@ -24,7 +24,7 @@ const JARVIS_MODEL_OPTIONS = [
   { value: "openai/gpt-5-mini", label: "GPT-5 Mini" },
   { value: "anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet" },
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { value: "openrouter/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+  { value: "openrouter/deepseek/deepseek-v4-flash-latest", label: "DeepSeek V4 Flash" },
 ];
 
 type Conversation = { id: string; title: string; updated_at: string };
