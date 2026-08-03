@@ -1,12 +1,16 @@
 import type { Client } from '@/hooks/useClients';
 import { AgentWorkforceV3 } from './AgentWorkforceV3';
 import { AllChannelsInbox } from './AllChannelsInbox';
+import { JarvisMissionsPanel } from './JarvisMissionsPanel';
 
 interface Props { clients: Client[]; }
 
 export function AgentsTab({ clients }: Props) {
   return (
     <div className="space-y-6">
+      {/* Persistent backend goal loop — Jarvis + specialist agents + Jeremy AI */}
+      <JarvisMissionsPanel />
+
       {/* Agent Workforce v3 — Claude-style profiles with Memory / Instructions / Files / Connectors / Models */}
       <AgentWorkforceV3 />
 
