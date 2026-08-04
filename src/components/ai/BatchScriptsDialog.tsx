@@ -25,27 +25,24 @@ interface Props {
     scripts: BatchScriptDraft[];
     model: string;
     aspect_ratio: "9:16" | "1:1" | "16:9";
-    resolution: "720p" | "1080p" | "4k";
+    resolution: "720p" | "2k";
     use_avatar: boolean;
     force_seedance: boolean;
   }) => void;
 }
 
-const MODEL_OPTIONS: { id: string; label: string; perClipCap: number; avatarSafe: boolean; resolutions: ("720p" | "1080p" | "4k")[] }[] = [
-  { id: "google/veo-3.1-fast",        label: "Veo 3.1 Fast — 8s/clip (avatar-safe)",   perClipCap: 8,  avatarSafe: true,  resolutions: ["1080p"] },
-  { id: "bytedance/seedance-2.0",     label: "Seedance 2.0 Pro — 15s/clip, 4K",         perClipCap: 15, avatarSafe: false, resolutions: ["720p", "1080p", "4k"] },
-  { id: "bytedance/seedance-2.0-fast",label: "Seedance Fast — 15s/clip, 720p",          perClipCap: 15, avatarSafe: false, resolutions: ["720p"] },
-  { id: "kwaivgi/kling-v3.0-std",     label: "Kling 3.0 — 10s/clip",                     perClipCap: 10, avatarSafe: true,  resolutions: ["1080p"] },
-  { id: "alibaba/happyhorse-1.1",     label: "HappyHorse 1.1 — 15s/clip, 1080p (avatar-safe)", perClipCap: 15, avatarSafe: true,  resolutions: ["1080p"] },
+// MiniMax H3 is the only approved video model across AI Studio.
+const MODEL_OPTIONS: { id: string; label: string; perClipCap: number; avatarSafe: boolean; resolutions: ("720p" | "2k")[] }[] = [
+  { id: "minimax/hailuo-3", label: "MiniMax H3 — 15s/clip, 720p or 2K (avatar-safe)", perClipCap: 15, avatarSafe: true, resolutions: ["720p", "2k"] },
 ];
 
 export function BatchScriptsDialog({ open, onOpenChange, hasAvatar, avatarName, defaultModel, onSubmit }: Props) {
   const [scripts, setScripts] = useState<BatchScriptDraft[]>([
     { title: "Script 1", voiceover: "", environment: "", target_duration_s: undefined },
   ]);
-  const [model, setModel] = useState<string>(defaultModel || "bytedance/seedance-2.0");
+  const [model, setModel] = useState<string>("minimax/hailuo-3");
   const [aspect, setAspect] = useState<"9:16" | "1:1" | "16:9">("9:16");
-  const [resolution, setResolution] = useState<"720p" | "1080p" | "4k">("1080p");
+  const [resolution, setResolution] = useState<"720p" | "2k">("2k");
   const [useAvatar, setUseAvatar] = useState(true);
   const [forceSeedance, setForceSeedance] = useState(false);
 
@@ -54,11 +51,9 @@ export function BatchScriptsDialog({ open, onOpenChange, hasAvatar, avatarName, 
   const updateScript = (i: number, patch: Partial<BatchScriptDraft>) => setScripts(s => s.map((x, idx) => idx === i ? { ...x, ...patch } : x));
 
   const modelMeta = MODEL_OPTIONS.find(m => m.id === model);
-  const effectiveModelForAvatar = (hasAvatar && useAvatar && !forceSeedance && !modelMeta?.avatarSafe)
-    ? "google/veo-3.1-fast"
-    : model;
+  const effectiveModelForAvatar = model;
   const effectiveCap = MODEL_OPTIONS.find(m => m.id === effectiveModelForAvatar)?.perClipCap || 15;
-  const allowedResolutions = modelMeta?.resolutions ?? ["1080p"];
+  const allowedResolutions = modelMeta?.resolutions ?? ["2k"];
   // Auto-correct resolution if user switches to a model that doesn't support it.
   if (!allowedResolutions.includes(resolution)) {
     setTimeout(() => setResolution(allowedResolutions[allowedResolutions.length - 1]), 0);
@@ -118,8 +113,7 @@ export function BatchScriptsDialog({ open, onOpenChange, hasAvatar, avatarName, 
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {allowedResolutions.includes("720p") && <SelectItem value="720p">720p</SelectItem>}
-                {allowedResolutions.includes("1080p") && <SelectItem value="1080p">1080p</SelectItem>}
-                {allowedResolutions.includes("4k") && <SelectItem value="4k">4K (Seedance Pro only)</SelectItem>}
+                {allowedResolutions.includes("2k") && <SelectItem value="2k">2K (native)</SelectItem>}
               </SelectContent>
             </Select>
           </div>

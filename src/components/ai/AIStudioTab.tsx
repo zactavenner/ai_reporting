@@ -91,34 +91,22 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // UI shows the total cost of generating a clip at maxSeconds so buyers
 // can compare apples-to-apples without doing math in their head.
 // Pricing base is 1080p USD/sec (from OpenRouter). 720p applies a multiplier.
+// MiniMax H3 is the ONLY video model. Seedance, Grok and HappyHorse were retired
+// from every AI Studio surface — H3 covers text-to-video, first/last frame
+// keyframing and reference-identity in one model at 720p or native 2K.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "ByteDance Seedance 2.0 Fast — 4–15s, 480p ($0.054/s) or 720p ($0.121/s), text/first-frame/last-frame/reference image-to-video, native audio", maxSeconds: 15, pricePerSecond: 0.121 },
-  { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s, 720p ($1.48) or 1080p ($1.92), first-frame or reference image-to-video", maxSeconds: 15, pricePerSecond: 0.0988 },
-  { value: "x-ai/grok-imagine-video",     label: "Grok Imagine",   hint: "xAI Grok Imagine — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
-  { value: "x-ai/grok-imagine-video-1.5",  label: "Grok Imagine 1.5", hint: "xAI Grok Imagine Video 1.5 — best first-frame image-to-video, 1–15s, up to 1080p", maxSeconds: 15, pricePerSecond: 0.14 },
-  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 2K only, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
+  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
 ];
+export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
-  // Seedance 2.0 Fast on OpenRouter supports 480p and 720p only.
-  "bytedance/seedance-2.0-fast": ["480p", "720p"],
-  "alibaba/happyhorse-1.1":      ["720p", "1080p"],
-  // Grok Imagine Video currently only supports 480p and 720p via OpenRouter /v1/videos.
-  "x-ai/grok-imagine-video":     ["480p", "720p"],
-  "x-ai/grok-imagine-video-1.5": ["480p", "720p", "1080p"],
   // MiniMax H3: 720p (cheaper draft) or native 2K.
   "minimax/hailuo-3":            ["720p", "2k"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
-  "alibaba/happyhorse-1.1":   { "720p": 0.0988, "1080p": 0.1278 },
-  // Grok Imagine Video: published OpenRouter base rate $0.05/sec for both resolutions.
-  "x-ai/grok-imagine-video":  { "480p": 0.05, "720p": 0.05 },
-  "x-ai/grok-imagine-video-1.5": { "480p": 0.08, "720p": 0.14, "1080p": 0.25 },
-  // Seedance 2.0 Fast — published OpenRouter list rates.
-  "bytedance/seedance-2.0-fast": { "480p": 0.0538, "720p": 0.121 },
   "minimax/hailuo-3": { "720p": 0.065, "2k": 0.13 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
@@ -792,8 +780,11 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
   const effectiveModel = video.effective_model || video.model || "";
   const effectiveDuration = video.effective_duration || video.duration || null;
   const effectiveResolution = video.effective_resolution || video.resolution || null;
-  const isHappyHorse = effectiveModel.toLowerCase().includes("happyhorse");
-  const happyHorseLocked = isHappyHorse && Number(effectiveDuration) === 15 && String(effectiveResolution || "").toLowerCase() === "1080p";
+  const isH3 = effectiveModel.toLowerCase().includes("hailuo");
+  const h3Locked =
+    isH3 &&
+    Number(effectiveDuration) === 15 &&
+    ["720p", "2k"].includes(String(effectiveResolution || "").toLowerCase());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const saveAsTraining = async () => {
@@ -862,12 +853,12 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
           }));
         } : undefined}
       />
-      {isHappyHorse && (
+      {isH3 && (
         <div className="mx-2 mt-2 rounded-lg border border-primary/25 bg-primary/5 p-2 text-[9px]">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="font-semibold text-foreground">HappyHorse render debug</span>
-            <Badge variant={happyHorseLocked ? "secondary" : "destructive"} className="h-4 px-1 text-[9px]">
-              {happyHorseLocked ? "Locked 15s/1080p" : "Check"}
+            <span className="font-semibold text-foreground">MiniMax H3 render debug</span>
+            <Badge variant={h3Locked ? "secondary" : "destructive"} className="h-4 px-1 text-[9px]">
+              {h3Locked ? `Locked 15s/${String(effectiveResolution).toLowerCase() === "2k" ? "2K" : "720p"}` : "Check"}
             </Badge>
           </div>
           <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
@@ -891,8 +882,8 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
             video_url: video.url,
             aspect_ratio: video.aspect_ratio || "9:16",
             duration: video.duration || 15,
-            resolution: video.resolution || "1080p",
-            model: video.model || "seedance-2.0-fast",
+            resolution: video.resolution || "2k",
+            model: video.model || ONLY_VIDEO_MODEL,
             requested_model: video.requested_model,
             requested_duration: video.requested_duration,
             requested_resolution: video.requested_resolution,
@@ -1026,9 +1017,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [videoResolution, setVideoResolution] = useState<VideoRes>(() => {
     try {
       const v = localStorage.getItem("ai-studio:video-resolution");
-      if (v === "480p" || v === "720p" || v === "1080p") return v;
+      // H3 only supports 720p and 2K. Anything else persisted from an older
+      // model set is migrated up to 2K.
+      if (v === "720p" || v === "2k") return v;
     } catch {}
-    return "1080p";
+    return "2k";
   });
   useEffect(() => {
     try { localStorage.setItem("ai-studio:video-resolution", videoResolution); } catch {}
@@ -1255,8 +1248,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // avatar) is visible and enforced instead of hidden behind a first click.
   useEffect(() => {
     if (selectedAgentMode === "video" && videoModels.length === 0) {
-      // Grok 1.5 is the strongest first-frame image-to-video model on OpenRouter.
-      setVideoModels(["x-ai/grok-imagine-video-1.5"]);
+      // MiniMax H3 is the only supported video model.
+      setVideoModels([ONLY_VIDEO_MODEL]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAgentMode]);
@@ -1663,7 +1656,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           if (videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${videoModel}", resolution="${videoResolution}", duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${ONLY_VIDEO_MODEL}" (MiniMax H3 is the ONLY approved video model — Seedance, Grok, HappyHorse and Veo are retired and must never be requested), resolution="${videoResolution}" (only "720p" or "2k" exist), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
@@ -1682,7 +1675,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoTotalDuration === 30) {
               const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
               lockLines.push(
-                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${videoModel}", duration=15, resolution="${videoResolution}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s HappyHorse/Seedance render.`,
+                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${ONLY_VIDEO_MODEL}", duration=15, resolution="${videoResolution}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s MiniMax H3 render.`,
               );
             }
           }
@@ -2719,7 +2712,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             key={r}
                             type="button"
                             onClick={() => setVideoResolution(r)}
-                            title={proOnly ? "4K — Seedance Pro only. ~2.5× cost." : r === "2k" ? "2K — MiniMax H3 native resolution" : r === "720p" ? "720p draft quality" : "1080p Full HD"}
+                            title={r === "2k" ? "2K — MiniMax H3 native resolution (higher than 720p)" : "720p — faster, cheaper draft"}
                             className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                           >
                             {r === "4k" ? "4K" : r === "2k" ? "2K" : r}
@@ -3142,7 +3135,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         onOpenChange={setBatchScriptsOpen}
         hasAvatar={!!selectedAvatar}
         avatarName={selectedAvatar?.name || null}
-        defaultModel={videoModel || "bytedance/seedance-2.0"}
+        defaultModel={ONLY_VIDEO_MODEL}
         onSubmit={(payload) => {
           // Build a chat message that nudges the LLM to call generate_script_batch.
           // Server-side handler validates and dispatches; results stream as
