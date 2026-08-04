@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, Circle, Loader2, XCircle, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { OnboardingBuildPanel } from './OnboardingBuildPanel';
 
 type ItemStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
 type SectionId = 'setup' | 'assets' | 'review';
@@ -48,9 +49,10 @@ interface Props {
   primaryOffer?: any;
   section: SectionId;
   onMarkActive?: (id: string) => void;
+  onOpenStudio?: () => void;
 }
 
-export function OnboardingAutomationPanel({ clientId, clientName, primaryOffer, section, onMarkActive }: Props) {
+export function OnboardingAutomationPanel({ clientId, clientName, primaryOffer, section, onMarkActive, onOpenStudio }: Props) {
   const [checklist, setChecklist] = useState<Record<string, ItemState>>({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -163,17 +165,25 @@ export function OnboardingAutomationPanel({ clientId, clientName, primaryOffer, 
   return (
     <div className="space-y-2">
       {section === 'assets' && (
-        <div className="rounded-lg border bg-muted/20 p-3 flex items-center justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <div className="text-xs text-muted-foreground">
-              {generating ? statusText : 'Generates ad copy, emails, SMS, 10 static ads, avatar, VSL.'}
+        <div className="mb-3 space-y-3">
+          <OnboardingBuildPanel
+            clientId={clientId}
+            clientName={clientName}
+            offerId={primaryOffer?.id || null}
+            onOpenStudio={onOpenStudio}
+          />
+          <div className="rounded-lg border bg-muted/20 p-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-muted-foreground" />
+              <div className="text-xs text-muted-foreground">
+                {generating ? statusText : 'Legacy one-shot generator (ad copy, emails, SMS, 10 static ads, avatar, VSL).'}
+              </div>
             </div>
+            <Button size="sm" variant="outline" onClick={generateAllAssets} disabled={generating}>
+              {generating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+              Run legacy generator
+            </Button>
           </div>
-          <Button size="sm" onClick={generateAllAssets} disabled={generating}>
-            {generating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-            Generate All Onboarding Assets
-          </Button>
         </div>
       )}
 
