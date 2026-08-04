@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { InsightsPanel } from './shared/InsightsPanel';
 import { AgentMcpPanel } from './shared/AgentMcpPanel';
 import { NewCampaignWizard } from './NewCampaignWizard';
+import { LaunchReadinessCard } from './LaunchReadinessCard';
 import { LaunchesTab } from './LaunchesTab';
 import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
@@ -478,6 +479,8 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
       </div>
 
       {/* Unattributed leads chip */}
+      <LaunchReadinessCard clientId={clientId} clientName={clientName} />
+
       {unattributedLeads.length > 0 && (
         <div className="flex items-center gap-2">
           <Badge
