@@ -25,6 +25,9 @@ import {
   type ComplianceIssue,
 } from '@/lib/adCompliance';
 import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { useLaunchReadiness } from './useLaunchReadiness';
+
+type SpecialAdCategoryChoice = '' | 'NONE' | 'FINANCIAL_PRODUCTS_SERVICES';
 
 interface NewCampaignWizardProps {
   open: boolean;
@@ -60,6 +63,7 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
   const [igActors, setIgActors] = useState<Asset[]>([]);
   const [leadForms, setLeadForms] = useState<Asset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
+  const [freshAssetPullAt, setFreshAssetPullAt] = useState<number | null>(null);
   const [pageId, setPageId] = useState('');
   const [instagramActorId, setInstagramActorId] = useState('');
   const [pixelId, setPixelId] = useState('');
@@ -77,6 +81,8 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
   const [overrideReason, setOverrideReason] = useState('');
   const [appendDisclosure, setAppendDisclosure] = useState(true);
   const [savingOverride, setSavingOverride] = useState(false);
+  // Meta special ad category review (explicit choice required)
+  const [specialAdCategory, setSpecialAdCategory] = useState<SpecialAdCategoryChoice>('');
   // Targeting
   const [ageMin, setAgeMin] = useState('30');
   const [ageMax, setAgeMax] = useState('65');
@@ -95,6 +101,55 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
   const [smsVerify, setSmsVerify] = useState(false);
   const [smsVerifyMessage, setSmsVerifyMessage] = useState('Your verification code is {{code}}. Reply STOP to opt out.');
   const createTask = useCreateTask();
+  const { data: readiness, refetch: refetchReadiness } = useLaunchReadiness(clientId);
+
+  const financialLocked = specialAdCategory === 'FINANCIAL_PRODUCTS_SERVICES';
+
+  // Gates that must be met before the wizard can submit anything to Meta.
+  const launchBlockers: string[] = (() => {
+    const out: string[] = [];
+    if (!name.trim()) out.push('Campaign name is empty');
+    if (specialAdCategory === '') out.push('Meta special ad category review not completed');
+    if (!freshAssetPullAt) out.push('Meta account assets not pulled in this session');
+    if (!pageId) out.push('No Facebook Page selected');
+    if (!pixelId) out.push('No Pixel selected');
+    if (pages.length === 0) out.push('No Facebook Pages available on the ad account');
+    if (pixels.length === 0) out.push('No Pixels available on the ad account');
+    if (files.length === 0) out.push('No creative attached');
+    for (const g of readiness?.blocking || []) {
+      if (['offer', 'compliance', 'lead_routing', 'ad_account'].includes(g.key)) {
+        out.push(`${g.label} — ${g.detail}`);
+      }
+    }
+    return out;
+  })();
+
+  const refreshAssets = async () => {
+    setAssetsLoading(true);
+    try {
+      const { data: pull, error } = await supabase.functions.invoke('fetch-meta-account-assets', { body: { clientId } });
+      if (error || !pull?.success) throw new Error(pull?.error || error?.message || 'Asset pull failed');
+      const { data: client } = await supabase
+        .from('clients').select('meta_ad_account_id').eq('id', clientId).single();
+      const acctId = String(client?.meta_ad_account_id || '').replace(/^act_/, '');
+      if (acctId) {
+        const { data: acct } = await supabase
+          .from('meta_ad_accounts')
+          .select('pages, pixels, instagram_actors')
+          .eq('ad_account_id', acctId).maybeSingle();
+        setPages((acct?.pages || []) as Asset[]);
+        setPixels((acct?.pixels || []) as Asset[]);
+        setIgActors((acct?.instagram_actors || []) as Asset[]);
+      }
+      setFreshAssetPullAt(Date.now());
+      toast.success('Account assets pulled');
+      refetchReadiness();
+    } catch (e: any) {
+      toast.error(e?.message || 'Asset pull failed');
+    } finally {
+      setAssetsLoading(false);
+    }
+  };
 
   const reset = () => {
     setStep(1); setName(''); setObjective('leads'); setBudget('100'); setResult(null);
@@ -107,6 +162,7 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
     setQuestions(DEFAULT_LEAD_FORM_QUESTIONS); setSmsVerify(false);
     setExemption('506c'); setComplianceOverride(null);
     setOverrideApprover(''); setOverrideReason(''); setAppendDisclosure(true);
+    setSpecialAdCategory(''); setFreshAssetPullAt(null);
   };
   const close = () => { reset(); onClose(); };
 
@@ -117,7 +173,8 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
       setAssetsLoading(true);
       try {
         // Kick a refresh (cached in meta_ad_accounts)
-        await supabase.functions.invoke('fetch-meta-account-assets', { body: { clientId } });
+        const { data: pull, error: pullErr } = await supabase.functions.invoke('fetch-meta-account-assets', { body: { clientId } });
+        if (!pullErr && pull?.success) setFreshAssetPullAt(Date.now());
         const { data: client } = await supabase
           .from('clients').select('meta_ad_account_id').eq('id', clientId).single();
         const acctId = String(client?.meta_ad_account_id || '').replace(/^act_/, '');
@@ -144,6 +201,7 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
         console.error('load meta assets', e);
       } finally {
         setAssetsLoading(false);
+        refetchReadiness();
       }
     })();
   }, [open, clientId]);
@@ -154,6 +212,22 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
   };
 
   const buildTargeting = () => {
+    // Meta restricts detailed targeting and gender selection for the
+    // Financial Products and Services special ad category.
+    if (financialLocked) {
+      return {
+        age_min: 18,
+        age_max: 65,
+        geo_locations: {
+          countries: (locations || 'US')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 25)
+            .map((s) => (s.length === 2 ? s.toUpperCase() : 'US')),
+        },
+      };
+    }
     const t: any = {
       age_min: Number(ageMin) || 18,
       age_max: Number(ageMax) || 65,
@@ -185,9 +259,12 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
 
   const launchToMeta = async () => {
     if (!name.trim()) { toast.error('Campaign name required'); return; }
+    if (specialAdCategory === '') { toast.error('Complete the Meta special ad category review first'); return; }
+    if (!freshAssetPullAt) { toast.error('Pull Meta account assets before submitting'); return; }
     if (!pageId) { toast.error('Pick a Facebook Page'); return; }
+    if (!pixelId) { toast.error('Pick a Pixel'); return; }
     if (files.length === 0) { toast.error('Add at least one creative'); return; }
-    if (objective === 'conversions' && !pixelId) { toast.error('Pick a Pixel for conversions'); return; }
+    if (launchBlockers.length > 0) { toast.error(`On hold: ${launchBlockers[0]}`); return; }
 
     // Compliance preflight (blocking)
     const issues = [
@@ -213,13 +290,13 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
         adSetName: `${name} — Ad Set 1`,
         pageId,
         instagramActorId: instagramActorId || undefined,
-        pixelId: objective === 'conversions' ? pixelId : undefined,
+        pixelId,
         customEventType: objective === 'conversions' ? customEventType : undefined,
         targeting: buildTargeting(),
         idempotencyKey: makeIdempotencyKey(`c_${clientId.slice(0, 8)}`),
         offeringExemption: exemption,
         complianceApprovalId: complianceOverride?.id ?? undefined,
-        specialAdCategories: ['FINANCIAL_PRODUCTS_SERVICES'],
+        specialAdCategories: financialLocked ? ['FINANCIAL_PRODUCTS_SERVICES'] : [],
         creatives: uploaded.map((u, i) => ({
           fileUrl: u.url,
           fileType: u.type,
@@ -444,10 +521,44 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                   Override recorded by {complianceOverride.approver}. Preflight will pass — compliance approval still required.
                 </div>
               )}
+              <div className="pt-2 border-t border-amber-200/50 dark:border-amber-900/40 space-y-2">
+                <div className="text-[11px] font-medium">Meta special ad category review (required)</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" variant={specialAdCategory === 'FINANCIAL_PRODUCTS_SERVICES' ? 'default' : 'outline'}
+                    className="h-8 text-[11px]" onClick={() => setSpecialAdCategory('FINANCIAL_PRODUCTS_SERVICES')}>
+                    Financial Products and Services
+                  </Button>
+                  <Button size="sm" variant={specialAdCategory === 'NONE' ? 'default' : 'outline'}
+                    className="h-8 text-[11px]" onClick={() => setSpecialAdCategory('NONE')}>
+                    No special category applies
+                  </Button>
+                </div>
+                {specialAdCategory === '' && (
+                  <div className="text-[10px] text-amber-800 dark:text-amber-300">
+                    Pick one. This wizard cannot submit until the review is recorded.
+                  </div>
+                )}
+                {financialLocked && (
+                  <div className="text-[10px] text-muted-foreground">
+                    Sends <code>FINANCIAL_PRODUCTS_SERVICES</code> to Meta. Targeting is locked to ages 18–65, all
+                    genders, and geo only — detailed interest, behavior, and custom-audience narrowing is not
+                    permitted in this category.
+                  </div>
+                )}
+              </div>
             </div>
             <div className="rounded-md border p-3 space-y-2 bg-muted/20">
               <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-2">
                 Meta assets {assetsLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 ml-auto"
+                  onClick={refreshAssets} disabled={assetsLoading}>
+                  Pull account assets
+                </Button>
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {freshAssetPullAt
+                  ? `Pulled ${new Date(freshAssetPullAt).toLocaleTimeString()} — ${pages.length} page(s), ${pixels.length} pixel(s)`
+                  : 'A fresh asset pull is required before this wizard can submit.'}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -469,17 +580,16 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label className="text-[11px]">Pixel</Label>
+                  <Select value={pixelId} onValueChange={setPixelId}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Pick pixel…" /></SelectTrigger>
+                    <SelectContent>
+                      {pixels.map((p) => <SelectItem key={p.id} value={p.id} className="text-xs">{p.name || p.id}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {objective === 'conversions' && (
-                  <>
-                    <div>
-                      <Label className="text-[11px]">Pixel</Label>
-                      <Select value={pixelId} onValueChange={setPixelId}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Pick pixel…" /></SelectTrigger>
-                        <SelectContent>
-                          {pixels.map((p) => <SelectItem key={p.id} value={p.id} className="text-xs">{p.name || p.id}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
                     <div>
                       <Label className="text-[11px]">Conversion event</Label>
                       <Select value={customEventType} onValueChange={setCustomEventType}>
@@ -493,7 +603,6 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                         </SelectContent>
                       </Select>
                     </div>
-                  </>
                 )}
               </div>
             </div>
@@ -503,18 +612,29 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
         {step === 2 && (
           <div className="space-y-3">
             <p className="text-[11px] text-muted-foreground">Targeting — age, gender, geo, interests, custom audiences.</p>
+            {financialLocked && (
+              <div className="rounded-md border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/10 p-2 text-[10px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  Financial Products and Services selected. Age is fixed at 18–65, gender is all, and interest,
+                  behavior, and custom-audience fields are not sent. Geo and placements remain editable.
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs">Age min</Label>
-                <Input type="number" min={18} max={65} value={ageMin} onChange={e => setAgeMin(e.target.value)} />
+                <Input type="number" min={18} max={65} disabled={financialLocked}
+                  value={financialLocked ? '18' : ageMin} onChange={e => setAgeMin(e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">Age max</Label>
-                <Input type="number" min={18} max={65} value={ageMax} onChange={e => setAgeMax(e.target.value)} />
+                <Input type="number" min={18} max={65} disabled={financialLocked}
+                  value={financialLocked ? '65' : ageMax} onChange={e => setAgeMax(e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">Gender</Label>
-                <Select value={gender} onValueChange={setGender}>
+                <Select value={financialLocked ? 'all' : gender} onValueChange={setGender} disabled={financialLocked}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
@@ -530,16 +650,19 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
             </div>
             <div>
               <Label className="text-xs">Interests (comma-separated)</Label>
-              <Textarea value={interests} onChange={e => setInterests(e.target.value)} rows={2}
+              <Textarea value={financialLocked ? '' : interests} disabled={financialLocked}
+                onChange={e => setInterests(e.target.value)} rows={2}
                 placeholder="Real estate investing, Robert Kiyosaki, Grant Cardone, Accredited investor" />
             </div>
             <div>
               <Label className="text-xs">Behaviors (optional)</Label>
-              <Input value={behaviors} onChange={e => setBehaviors(e.target.value)} placeholder="Business travelers, Small business owners" />
+              <Input value={financialLocked ? '' : behaviors} disabled={financialLocked}
+                onChange={e => setBehaviors(e.target.value)} placeholder="Business travelers, Small business owners" />
             </div>
             <div>
               <Label className="text-xs">Custom / Lookalike audiences (optional)</Label>
-              <Input value={customAudiences} onChange={e => setCustomAudiences(e.target.value)} placeholder="LAL 1% funded investors, Website visitors 180d" />
+              <Input value={financialLocked ? '' : customAudiences} disabled={financialLocked}
+                onChange={e => setCustomAudiences(e.target.value)} placeholder="LAL 1% funded investors, Website visitors 180d" />
             </div>
             <div>
               <Label className="text-xs">Placements</Label>
@@ -717,18 +840,35 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
             <div className="rounded-md border p-3 bg-muted/40 text-xs space-y-1">
               <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{name || '—'}</span></div>
               <div><span className="text-muted-foreground">Objective:</span> {objective} · <span className="text-muted-foreground">Budget:</span> ${budget}/day</div>
+              <div><span className="text-muted-foreground">Special ad category:</span> {specialAdCategory === 'FINANCIAL_PRODUCTS_SERVICES' ? 'Financial Products and Services' : specialAdCategory === 'NONE' ? 'None' : 'Not reviewed'}</div>
               <div><span className="text-muted-foreground">Page:</span> {pages.find((p) => p.id === pageId)?.name || pageId || '—'}
-                {objective === 'conversions' && <> · <span className="text-muted-foreground">Pixel:</span> {pixels.find((p) => p.id === pixelId)?.name || pixelId || '—'} ({customEventType})</>}</div>
-              <div><span className="text-muted-foreground">Age:</span> {ageMin}–{ageMax} · <span className="text-muted-foreground">Gender:</span> {gender}</div>
+                {' · '}<span className="text-muted-foreground">Pixel:</span> {pixels.find((p) => p.id === pixelId)?.name || pixelId || '—'}
+                {objective === 'conversions' && <> ({customEventType})</>}</div>
+              <div><span className="text-muted-foreground">Age:</span> {financialLocked ? '18–65' : `${ageMin}–${ageMax}`} · <span className="text-muted-foreground">Gender:</span> {financialLocked ? 'all' : gender}</div>
               <div><span className="text-muted-foreground">Locations:</span> {locations || '—'}</div>
-              {interests && <div><span className="text-muted-foreground">Interests:</span> {interests}</div>}
+              {!financialLocked && interests && <div><span className="text-muted-foreground">Interests:</span> {interests}</div>}
               {objective === 'leads' && (
                 <div><span className="text-muted-foreground">Lead form:</span> {leadFormMode === 'existing' ? (leadForms.find((f) => f.id === leadFormId)?.name || 'existing') : `new — ${questions.length} question${questions.length === 1 ? '' : 's'}`}</div>
               )}
               <div><span className="text-muted-foreground">Creatives:</span> {files.length} file{files.length === 1 ? '' : 's'}</div>
             </div>
+            {launchBlockers.length > 0 && (
+              <div className="rounded-md border border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-3 space-y-1.5">
+                <div className="text-[11px] font-semibold text-red-800 dark:text-red-300 flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" /> HOLD — {launchBlockers.length} item{launchBlockers.length === 1 ? '' : 's'} open
+                </div>
+                <ul className="space-y-0.5">
+                  {launchBlockers.map((b, i) => (
+                    <li key={i} className="text-[10px] text-red-800 dark:text-red-300">• {b}</li>
+                  ))}
+                </ul>
+                <div className="text-[10px] text-muted-foreground">
+                  Submission is disabled until these are resolved. Nothing has been created on Meta.
+                </div>
+              </div>
+            )}
             <p className="text-[11px] text-muted-foreground">
-              Everything will be created <b>PAUSED</b> on Meta. You'll have a chance to activate it in one click on the next screen.
+              Anything created is created <b>PAUSED</b> on Meta. Activation is a separate, explicit step.
             </p>
           </div>
         )}
@@ -764,7 +904,8 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
           <div className="flex gap-2">
             {step > 1 && step < 6 && <Button variant="outline" size="sm" onClick={() => setStep((step - 1) as Step)}>Back</Button>}
             {step < 5 && (
-              <Button size="sm" onClick={() => setStep((step + 1) as Step)} disabled={step === 1 && (!name.trim() || !pageId)}>
+              <Button size="sm" onClick={() => setStep((step + 1) as Step)}
+                disabled={step === 1 && (!name.trim() || !pageId || !pixelId || specialAdCategory === '' || !freshAssetPullAt)}>
                 Next
               </Button>
             )}
@@ -774,9 +915,9 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                   {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
                   Save as brief
                 </Button>
-                <Button size="sm" onClick={launchToMeta} disabled={launching || uploading}>
+                <Button size="sm" onClick={launchToMeta} disabled={launching || uploading || launchBlockers.length > 0}>
                   {launching ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Rocket className="h-3.5 w-3.5 mr-1" />}
-                  Launch to Meta (paused)
+                  {launchBlockers.length > 0 ? 'On hold' : 'Create on Meta (paused)'}
                 </Button>
               </>
             )}
