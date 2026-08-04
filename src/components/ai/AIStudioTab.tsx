@@ -1014,9 +1014,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [videoResolution, setVideoResolution] = useState<VideoRes>(() => {
     try {
       const v = localStorage.getItem("ai-studio:video-resolution");
-      if (v === "480p" || v === "720p" || v === "1080p") return v;
+      // H3 only supports 720p and 2K. Anything else persisted from an older
+      // model set is migrated up to 2K.
+      if (v === "720p" || v === "2k") return v;
     } catch {}
-    return "1080p";
+    return "2k";
   });
   useEffect(() => {
     try { localStorage.setItem("ai-studio:video-resolution", videoResolution); } catch {}
@@ -1243,8 +1245,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // avatar) is visible and enforced instead of hidden behind a first click.
   useEffect(() => {
     if (selectedAgentMode === "video" && videoModels.length === 0) {
-      // Grok 1.5 is the strongest first-frame image-to-video model on OpenRouter.
-      setVideoModels(["x-ai/grok-imagine-video-1.5"]);
+      // MiniMax H3 is the only supported video model.
+      setVideoModels([ONLY_VIDEO_MODEL]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAgentMode]);
