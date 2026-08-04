@@ -4420,11 +4420,11 @@ Deno.serve(async (req) => {
               const placeholderLabel = placeholderModels.length > 1
                 ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
                 : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
-              const placeholderDuration = placeholderModels[0] === "alibaba/happyhorse-1.1" ? 15 : (args.duration || 15);
-              // UI resolution wins; clamp to the model's max (Seedance Pro → 4K, others → 1080p/720p).
+              const placeholderDuration = 15;
+              // UI resolution wins; H3 supports 720p or 2k.
               const placeholderResolution = placeholderModels[0]
                 ? clampResForModel(placeholderModels[0])
-                : (requestedRes || "1080p");
+                : (requestedRes || "2k");
               // GUARANTEE: rewrite tool args BEFORE tool_start so the chat
               // label (`generate_video · <model>`) and downstream dispatch
               // both see the UI-selected model / duration / resolution and
@@ -4795,7 +4795,7 @@ Deno.serve(async (req) => {
                 }
                 const baseDuration = 15;
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
-                const argRes = (args.resolution === "720p" || args.resolution === "1080p" || args.resolution === "4k") ? args.resolution : null;
+                const argRes: VideoResChoice | null = args.resolution === "720p" ? "720p" : (args.resolution ? "2k" : null);
                  // Aspect priority: the LLM's explicit args.aspect_ratio wins
                  // when it is a valid video aspect (9:16 or 16:9). Otherwise
                  // fall back to prompt inference (userText + args.prompt), then
@@ -4812,9 +4812,7 @@ Deno.serve(async (req) => {
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
                 const promptText = String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : "");
                  const runOne = async (mdl: string, pid: string | null, segPrompt: string, segDuration: number, segImageUrl: string | null, segLastFrame: string | null) => {
-                   // UI-selected resolution wins. Only honor the LLM's args.resolution when the
-                   // user made NO selection (rawVideoResolution unset). This keeps Seedance Pro
-                   // at 4K when the user explicitly picked 4K, and keeps HappyHorse at 1080p.
+                   // UI-selected resolution wins (720p or 2k on H3).
                    const segRes = clampResForModel(mdl);
                   await recordVideoModelDecision(supa, "tool_video.clip_dispatch", {
                     conversation_id: conversationId,
@@ -5045,26 +5043,21 @@ Deno.serve(async (req) => {
                   adFormat,
                 );
                 const duration = 15;
-                // UI resolution wins over any LLM-suggested arg. Clamp to the
-                // selected (or to-be-selected) reel model's cap so Seedance Pro
-                // 4K stays 4K end-to-end and HappyHorse stays 1080p.
-                const promptRequestedReelModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "") ? "alibaba/happyhorse-1.1" : null;
+                // UI resolution wins over any LLM-suggested arg (H3: 720p or 2k).
+                const promptRequestedReelModel = null;
                 const promptAskedReelCompare = /\b(compare|a\/?b|side\s*-?by\s*-?side)\b/i.test(userText || "");
                 const reelVideoModel = uniqueSelectedVideoModels.length === 1
                   ? uniqueSelectedVideoModels[0]
                   : selectedVideoModel;
-                // Clamp to the chosen reel model's resolution cap. UI's
-                // `requestedRes` (4K when Seedance Pro is selected) wins over
-                // the LLM's args.resolution unless the model can't support it.
-                const resolution: "720p" | "1080p" | "4k" = reelVideoModel
+                const resolution: VideoResChoice = reelVideoModel
                   ? clampResForModel(reelVideoModel)
-                  : (args.resolution === "720p" ? "720p" : (args.resolution === "4k" ? "4k" : "1080p"));
+                  : (args.resolution === "720p" ? "720p" : "2k");
                 await recordVideoModelDecision(supa, "image_to_reel.model_source", {
                   conversation_id: conversationId,
                   client_id: clientId || null,
                   user_id: userId,
                   tool_arg_model: args.model || null,
-                  prompt_requested_happyhorse: !!promptRequestedReelModel,
+                  prompt_requested_model_override: !!promptRequestedReelModel,
                   compare_requested: promptAskedReelCompare,
                   ui_video_model: selectedVideoModel,
                   ui_video_models: uniqueSelectedVideoModels,
