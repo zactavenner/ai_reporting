@@ -61,6 +61,9 @@ ${clientName ? `CLIENT IN SCOPE: ${clientName} (client_id ${goal.client_id})` : 
 YOUR WORKFORCE (call them with tools, do not do their jobs yourself):
  - ask_client_agent — copywriting, video, media buying and any other specialist agent under a client.
  - ask_jeremy — Jeremy AI (external Persona MCP). Jeremy is your strategic second opinion. You MUST consult Jeremy before finalising creative/asset decisions, and record his verdict.
+ - save_asset — persist every finished written deliverable to the client library AND the AI Studio canvas. Nothing counts as delivered until it is saved.
+ - create_client_avatar / generate_static_ads — build the visual assets and assign them to the client.
+ - request_approval / check_approval — human sign-off gates. Creatives go to the agency for review; video scripts must be APPROVED before any avatar video is produced.
  - generate_video / check_video_job — the real video generation pipeline.
  - review_assets — the actual creative + asset libraries. Review them, judge them, and make decisions WITH Jeremy.
 
@@ -69,8 +72,10 @@ OPERATING RULES:
  2. Call log_progress after meaningful milestones so the live feed stays useful.
  3. Reviewing assets: pull them with review_assets, form your own verdict, then ask_jeremy for his, then reconcile into a decision and log it.
  4. Video jobs are async: start them, then keep checking with check_video_job on later steps. It is fine for the mission to run for a long time.
- 5. When — and only when — the mission is complete, call finish_mission with a full markdown report including counts (assets reviewed, videos generated, copy variants, agents consulted) and the decisions made.
- 6. If the mission is impossible, call finish_mission with status "failed" and explain precisely why.`;
+ 5. HARD GATE: never call generate_video for avatar videos until check_approval reports "approved" for the video-scripts approval item. If it is still pending, log progress and keep working other deliverables or wait for the next slice.
+ 6. Compliance: this is regulated capital raising. Never write "guaranteed". Use "targeted returns" and include SEC/FINRA-style risk disclaimers on any offer-facing copy.
+ 7. When — and only when — the mission is complete, call finish_mission with a full markdown report including counts (assets reviewed, videos generated, copy variants, agents consulted) and the decisions made.
+ 8. If the mission is impossible, call finish_mission with status "failed" and explain precisely why.`;
 }
 
 // ---------------------------------------------------------------- tools
@@ -81,6 +86,11 @@ const TOOLS = [
   { type: "function", function: { name: "ask_client_agent", description: "Delegate work to a specialist agent under a client (copywriting, video, media buying). Optional self-critique loops 1-3.", parameters: { type: "object", properties: { client_id: { type: "string" }, agent_handle: { type: "string" }, question: { type: "string" }, loops: { type: "number" } }, required: ["client_id", "agent_handle", "question"] } } },
   { type: "function", function: { name: "ask_jeremy", description: "Consult Jeremy AI (external Persona MCP) for strategy / asset judgement. Keeps a persistent conversation.", parameters: { type: "object", properties: { question: { type: "string" }, client_id: { type: "string" } }, required: ["question"] } } },
   { type: "function", function: { name: "review_assets", description: "Pull recent creatives, generated assets and video jobs for review.", parameters: { type: "object", properties: { client_id: { type: "string" }, limit: { type: "number" } } } } },
+  { type: "function", function: { name: "save_asset", description: "Persist a finished written deliverable (offer summary, angles, ad copy, emails, reminders, VSL, video scripts, FAQ scripts) to the client asset library AND onto the AI Studio canvas so the team sees it.", parameters: { type: "object", properties: { client_id: { type: "string" }, asset_type: { type: "string", description: "offer_summary | angles | ad_copy | nurture_emails | appointment_reminders | vsl | video_scripts | faq_scripts | static_ad_brief" }, title: { type: "string" }, content_md: { type: "string" }, notes: { type: "string" } }, required: ["asset_type", "title", "content_md"] } } },
+  { type: "function", function: { name: "create_client_avatar", description: "Create and assign an AI avatar to the client. Defaults to an attractive professional female around 30. Returns avatar_id + image_url for avatar video generation.", parameters: { type: "object", properties: { client_id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, gender: { type: "string" }, age_range: { type: "string" }, style: { type: "string" } } } } },
+  { type: "function", function: { name: "generate_static_ads", description: "Generate static ad creatives for the client with the Capital Raising style and put them on the canvas + creatives library.", parameters: { type: "object", properties: { client_id: { type: "string" }, count: { type: "number" }, aspect_ratio: { type: "string" }, offer_description: { type: "string" }, prompt: { type: "string" } } } } },
+  { type: "function", function: { name: "request_approval", description: "Send a deliverable to the agency approval queue for a human decision (creative review, video-script sign-off).", parameters: { type: "object", properties: { client_id: { type: "string" }, queue_type: { type: "string", description: "creative_review | video_scripts | onboarding_assets" }, title: { type: "string" }, summary: { type: "string" }, payload: { type: "object" }, priority: { type: "number" } }, required: ["queue_type", "title"] } } },
+  { type: "function", function: { name: "check_approval", description: "Check the status of an approval queue item created with request_approval. Returns pending | approved | rejected.", parameters: { type: "object", properties: { approval_id: { type: "string" } }, required: ["approval_id"] } } },
   { type: "function", function: { name: "generate_video", description: "Start a real video generation job from an image + prompt. Returns job_id to poll with check_video_job.", parameters: { type: "object", properties: { client_id: { type: "string" }, creative_id: { type: "string" }, image_url: { type: "string" }, prompt: { type: "string" }, duration: { type: "number" }, aspect_ratio: { type: "string" }, resolution: { type: "string" }, model: { type: "string" } }, required: ["image_url", "prompt"] } } },
   { type: "function", function: { name: "check_video_job", description: "Poll a video generation job started with generate_video.", parameters: { type: "object", properties: { job_id: { type: "string" } }, required: ["job_id"] } } },
   { type: "function", function: { name: "record_decision", description: "Record a decision Jarvis (with Jeremy) made about an asset or strategy. Shows on the mission feed and in the final report.", parameters: { type: "object", properties: { subject: { type: "string" }, decision: { type: "string" }, rationale: { type: "string" }, jeremy_verdict: { type: "string" } }, required: ["subject", "decision"] } } },
@@ -121,6 +131,61 @@ async function preferredModel() {
 }
 
 async function askJeremy(question: string, clientId: string | null) {
+  const { data: agents } = await supa
+    .from("agency_agents")
+    .select("id, name, capabilities")
+    .limit(200);
+  const jeremy = (agents || []).find((a: any) => (a.capabilities || {})?.provider === "utari_persona" && (a.capabilities || {})?.mcp_url);
+  if (!jeremy) return { error: "Jeremy AI (utari_persona) agent is not configured." };
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/test-agent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+    body: JSON.stringify({ agent_id: jeremy.id, client_id: clientId || null, messages: [{ role: "user", content: question }] }),
+  });
+  const jr = await r.json().catch(() => ({}));
+  if (!r.ok) return { error: jr?.error || `test-agent ${r.status}` };
+  return { agent: jeremy.name, reply: jr.reply };
+}
+
+/**
+ * Put a deliverable on the AI Studio canvas for the user who launched the mission,
+ * so everything the agents build shows up in one place for the team.
+ */
+async function pushToCanvas(goal: any, clientId: string, payload: any, kind = "text_artifact") {
+  try {
+    const userId = goal.created_by;
+    if (!userId) return { ok: false, error: "mission has no owner user; canvas skipped" };
+    let convoId: string | null = null;
+    const { data: existing } = await supa
+      .from("ai_studio_conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+    convoId = (existing as any)?.id || null;
+    if (!convoId) {
+      const { data: created, error } = await supa
+        .from("ai_studio_conversations")
+        .insert({ user_id: userId, client_id: clientId, title: "Onboarding build" })
+        .select("id")
+        .single();
+      if (error) return { ok: false, error: error.message };
+      convoId = created.id;
+    }
+    const { error: ciErr } = await supa.from("ai_studio_canvas_items").insert({
+      conversation_id: convoId,
+      user_id: userId,
+      kind,
+      payload: payload as any,
+    });
+    if (ciErr) return { ok: false, error: ciErr.message };
+    return { ok: true, conversation_id: convoId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function _askJeremyLegacy(question: string, clientId: string | null) {
   const { data: agents } = await supa
     .from("agency_agents")
     .select("id, name, capabilities")
@@ -200,6 +265,130 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
       }
       case "ask_jeremy":
         return await askJeremy(String(args.question || ""), args.client_id || goal.client_id || null);
+      case "save_asset": {
+        const cid = args.client_id || goal.client_id;
+        if (!cid) return { error: "client_id required" };
+        const content = String(args.content_md || "");
+        const ins = await supa.from("client_assets").insert({
+          client_id: cid,
+          asset_type: String(args.asset_type),
+          title: String(args.title).slice(0, 200),
+          status: "draft",
+          content: { markdown: content, source: "onboarding_build", goal_id: goal.id, notes: args.notes || null } as any,
+        }).select("id").single();
+        const canvas = await pushToCanvas(goal, cid, {
+          artifact_type: args.asset_type,
+          title: args.title,
+          content,
+          chars: content.length,
+          notes: args.notes || null,
+        });
+        return { ok: true, asset_id: ins.data?.id || null, on_canvas: canvas.ok, canvas_error: canvas.error };
+      }
+      case "create_client_avatar": {
+        const cid = args.client_id || goal.client_id;
+        if (!cid) return { error: "client_id required" };
+        const { data: client } = await supa.from("clients").select("name").eq("id", cid).maybeSingle();
+        const gender = args.gender || "female";
+        const ageRange = args.age_range || "26-35";
+        const description = args.description ||
+          `Attractive, polished professional woman around 30, warm and trustworthy on camera, presenting ${client?.name || "the fund"}'s investment opportunity. Modern office, natural lighting.`;
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/generate-avatar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+          body: JSON.stringify({
+            gender, ageRange, ethnicity: "mixed", style: args.style || "ugc",
+            background: "office",
+            backgroundPrompt: "Modern bright office with soft daylight, tasteful depth of field",
+            aspectRatio: "3:4", realism_level: "high", look_type: "professional",
+            avatar_description: description,
+          }),
+        });
+        const jr = await r.json().catch(() => ({}));
+        if (!r.ok || !jr?.imageUrl) return { error: jr?.error || `generate-avatar ${r.status}` };
+        const ins = await supa.from("avatars").insert({
+          name: args.name || `${client?.name || "Client"} Spokesperson`,
+          client_id: cid,
+          image_url: jr.imageUrl,
+          base_image_url: jr.imageUrl,
+          is_active: true,
+          style: args.style || "ugc",
+          gender, age_range: ageRange,
+          description,
+        }).select("id").single();
+        await pushToCanvas(goal, cid, { image_url: jr.imageUrl, prompt: description, aspect_ratio: "3:4", title: "Client avatar" }, "image");
+        return { ok: true, avatar_id: ins.data?.id || null, image_url: jr.imageUrl };
+      }
+      case "generate_static_ads": {
+        const cid = args.client_id || goal.client_id;
+        if (!cid) return { error: "client_id required" };
+        const count = Math.max(1, Math.min(6, Number(args.count) || 3));
+        const ratio = args.aspect_ratio || "1:1";
+        const { data: styles } = await supa.from("ad_styles").select("*").ilike("name", "%capital%raising%").limit(1);
+        const style = styles?.[0];
+        const { data: client } = await supa.from("clients").select("name, brand_colors, brand_fonts").eq("id", cid).maybeSingle();
+        const made: any[] = []; const errors: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const r = await fetch(`${SUPABASE_URL}/functions/v1/generate-static-ad`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+            body: JSON.stringify({
+              prompt: args.prompt || "",
+              stylePrompt: style?.prompt_template || "",
+              styleName: style?.name || "Capital Raising",
+              aspectRatio: ratio,
+              productDescription: args.offer_description || "",
+              offerDescription: args.offer_description || "",
+              brandColors: (client as any)?.brand_colors || [],
+              brandFonts: (client as any)?.brand_fonts || [],
+              projectId: `onboarding-${cid}`,
+              clientId: cid,
+              referenceImages: style?.reference_images || [],
+              primaryReferenceImage: style?.reference_images?.[0] || null,
+            }),
+          });
+          const jr = await r.json().catch(() => ({}));
+          if (r.ok && jr?.imageUrl) {
+            const cr = await supa.from("creatives").insert({
+              client_id: cid,
+              title: `${client?.name || "Onboarding"} - Static ${ratio} #${i + 1}`,
+              type: "image", file_url: jr.imageUrl, status: "draft",
+              source: "onboarding-build", aspect_ratio: ratio,
+            }).select("id").single();
+            await pushToCanvas(goal, cid, { image_url: jr.imageUrl, aspect_ratio: ratio, prompt: args.prompt || args.offer_description || "" }, "image");
+            made.push({ creative_id: cr.data?.id, image_url: jr.imageUrl });
+          } else {
+            errors.push(jr?.error || `generate-static-ad ${r.status}`);
+          }
+        }
+        return { generated: made.length, creatives: made, errors };
+      }
+      case "request_approval": {
+        const cid = args.client_id || goal.client_id;
+        const ins = await supa.from("approval_queue").insert({
+          client_id: cid || null,
+          queue_type: String(args.queue_type),
+          title: String(args.title).slice(0, 200),
+          summary: args.summary || null,
+          priority: Math.max(1, Math.min(5, Number(args.priority) || 2)),
+          status: "pending",
+          preview_payload: { ...(args.payload || {}), goal_id: goal.id } as any,
+          agent_reasoning: "Created by Jarvis during the onboarding asset build.",
+        }).select("id").single();
+        if (ins.error) return { error: ins.error.message };
+        await emit(goal.id, "progress", `Sent for approval: ${args.title}`, args.summary || null, { approval_id: ins.data?.id });
+        return { ok: true, approval_id: ins.data?.id, note: "Poll with check_approval. Do NOT produce avatar videos until video-script approval is 'approved'." };
+      }
+      case "check_approval": {
+        const { data, error } = await supa
+          .from("approval_queue")
+          .select("id, status, rejection_reason, title, resolved_at")
+          .eq("id", args.approval_id)
+          .maybeSingle();
+        if (error) return { error: error.message };
+        if (!data) return { error: "approval not found" };
+        return data;
+      }
       case "review_assets": {
         const limit = Math.max(1, Math.min(50, Number(args.limit) || 20));
         const cid = args.client_id || goal.client_id;
