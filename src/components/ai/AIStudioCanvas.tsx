@@ -600,12 +600,12 @@ export function AIStudioCanvas({
                 onEdit={p.video_url && onEditVideo ? (u) => onEditVideo(u, { prompt: p.video_prompt, aspect_ratio: p.aspect_ratio }) : undefined}
               />
               <p className="text-[10px] text-muted-foreground line-clamp-2 mt-2">{p.video_prompt}</p>
-              {isHappyHorse && (
+              {isH3 && (
                 <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 p-2 text-[10px]">
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="font-semibold text-foreground">HappyHorse render debug</span>
-                    <Badge variant={happyHorseLocked ? "secondary" : "destructive"} className="h-5 text-[10px]">
-                      {happyHorseLocked ? "Locked 15s / 1080p" : "Check settings"}
+                    <span className="font-semibold text-foreground">MiniMax H3 render debug</span>
+                    <Badge variant={h3Locked ? "secondary" : "destructive"} className="h-5 text-[10px]">
+                      {h3Locked ? `Locked 15s / ${String(effectiveResolution).toLowerCase() === "2k" ? "2K" : "720p"}` : "Check settings"}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-muted-foreground">
