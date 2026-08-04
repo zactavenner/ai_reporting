@@ -2780,27 +2780,13 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 };
 
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
-  "bytedance/seedance-2.0-fast": { maxDuration: 15, label: "Seedance 2.0 Fast (≤15s per clip, 720p max)" },
-  "bytedance/seedance-2.0":  { maxDuration: 15, label: "Seedance 2.0 Pro (≤15s per clip, up to 4K)" },
-  "kwaivgi/kling-v3.0-std":       { maxDuration: 10, label: "Kling 3.0 (≤10s per clip)" },
-  "kwaivgi/kling-v2.1-master":   { maxDuration: 10, label: "Kling Pro 2.1 Master (≤10s per clip, cinematic)" },
-  "google/veo-3.1-fast":         { maxDuration: 8,  label: "Veo 3.1 Fast (8s per clip)" },
-  "alibaba/happyhorse-1.1":      { maxDuration: 15, label: "HappyHorse 1.1 (≤15s per clip, 1080p)" },
-  "x-ai/grok-imagine-video-1.5": { maxDuration: 15, label: "Grok Imagine 1.5 (≤15s per clip, up to 1080p)" },
-  "x-ai/grok-imagine-video":     { maxDuration: 15, label: "Grok Imagine (≤15s per clip, up to 720p)" },
+  "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
 };
 
-// Models known to RELIABLY render synthetic / AI-generated human avatars.
-// Seedance's content filter rejects most photoreal AI avatars as "real people";
-// Veo and Kling handle them. When an avatar is selected we auto-route to a
-// compatible model unless the caller passes forceModel=true (explicit override).
-const AVATAR_SAFE_MODELS = new Set<string>([
-  "google/veo-3.1-fast",
-  "kwaivgi/kling-v3.0-std",
-  "kwaivgi/kling-v2.1-master",
-  "alibaba/happyhorse-1.1",
-]);
-const AVATAR_FALLBACK_MODEL = "google/veo-3.1-fast";
+// MiniMax H3 is the only video model and it handles synthetic avatars via
+// reference identity, so there is nothing left to reroute to.
+const AVATAR_SAFE_MODELS = new Set<string>(["minimax/hailuo-3"]);
+const AVATAR_FALLBACK_MODEL = "minimax/hailuo-3";
 
 export function resolveModelForAvatar(
   requestedModel: string,
