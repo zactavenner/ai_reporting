@@ -3994,7 +3994,7 @@ Deno.serve(async (req) => {
                 requested_model: routing.requested_model,
                 effective_model: model,
                 reason: routing.reason,
-                message: `Avatar locked to ${VIDEO_MODEL_CAPS[model]?.label || model} — Seedance rejects synthetic faces.`,
+                message: `Avatar locked to ${VIDEO_MODEL_CAPS[model]?.label || model} — avatar identity reference applied.`,
               });
               console.log(`[avatar-route] ${routing.requested_model} → ${model} (avatar=${selectedAvatar?.id})`);
             }
@@ -4031,7 +4031,7 @@ Deno.serve(async (req) => {
             const args = {
               prompt: segment.prompt,
               aspect_ratio: aspect,
-              duration: model === "alibaba/happyhorse-1.1" ? 15 : segment.duration,
+              duration: 15,
               resolution: segRes,
               image_url: imageUrl,
               last_frame_url: lastFrameUrl,
@@ -4053,8 +4053,8 @@ Deno.serve(async (req) => {
             const r = await generateSeedanceVideo({
                 prompt: segment.prompt + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : ""),
                 aspectRatio: aspect,
-                // HappyHorse hard-locks to 15s internally; everything else respects the segment/user duration.
-                duration: model === "alibaba/happyhorse-1.1" ? 15 : (segment.duration || 15),
+                // MiniMax H3 renders 15s clips.
+                duration: 15,
                 resolution: segRes,
                 imageUrl,
                 lastFrameUrl,
@@ -4789,7 +4789,7 @@ Deno.serve(async (req) => {
                       requested_model: r.requested,
                       effective_model: r.model,
                       reason: r.reason,
-                      message: `Avatar locked to ${VIDEO_MODEL_CAPS[r.model]?.label || r.model} — Seedance rejects synthetic faces.`,
+                      message: `Avatar locked to ${VIDEO_MODEL_CAPS[r.model]?.label || r.model} — avatar identity reference applied.`,
                     });
                   }
                 }
