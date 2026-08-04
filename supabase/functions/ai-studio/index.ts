@@ -5161,7 +5161,7 @@ Deno.serve(async (req) => {
                   // the outer `requestedRes` (intentional) but clamp to the
                   // chosen model's cap so each script respects e.g. Seedance
                   // Pro 4K or HappyHorse 1080p.
-                  const batchRequestedRes: "720p" | "1080p" | "4k" = requestedModel
+                  const batchRequestedRes: VideoResChoice = requestedModel
                     ? clampResForModel(requestedModel)
                     : requestedRes;
                   const groupId = crypto.randomUUID();
@@ -5241,9 +5241,7 @@ Deno.serve(async (req) => {
                     });
 
                     const clipSettled = await Promise.allSettled(segs.map(async (seg, i) => {
-                      const segRes = clampResForModel(mdl) === "720p"
-                        ? "720p"
-                        : (batchRequestedRes === "4k" && mdl !== "bytedance/seedance-2.0" ? "1080p" : batchRequestedRes);
+                      const segRes = clampResForModel(mdl) === "720p" ? "720p" : batchRequestedRes;
                       await recordVideoModelDecision(supa, "script_batch.clip_dispatch", {
                         conversation_id: conversationId,
                         client_id: clientId || null,
