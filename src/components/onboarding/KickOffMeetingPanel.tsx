@@ -19,7 +19,7 @@ export function KickOffMeetingPanel({ clientName }: { clientName?: string }) {
   const [elapsed, setElapsed] = useState(0);
   const [total, setTotalElapsed] = useState(0);
   const timer = useRef<number | null>(null);
-  const total = KICKOFF_AGENDA.reduce((s, a) => s + a.minutes, 0);
+  const totalMinutes = KICKOFF_AGENDA.reduce((s, a) => s + a.minutes, 0);
   const completed = Object.values(done).filter(Boolean).length;
 
   useEffect(() => {
