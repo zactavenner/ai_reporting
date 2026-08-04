@@ -13,12 +13,7 @@ import { VideoPlayerCard } from "./VideoPlayerCard";
 export function modelLabel(model?: string): string {
   if (!model) return "model";
   const m = model.toLowerCase();
-  if (m.includes("seedance") && m.includes("fast")) return "Seedance 2.0 Fast";
-  if (m.includes("seedance")) return "Seedance 2.0 Pro";
-  if (m.includes("kling") && m.includes("pro")) return "Kling 3.0 Pro";
-  if (m.includes("kling")) return "Kling 3.0 Fast";
-  if (m.includes("veo")) return "Veo 3.1 Fast";
-  if (m.includes("happyhorse") || m.includes("happy-horse")) return "HappyHorse 1.1";
+  if (m.includes("hailuo") || m.includes("minimax")) return "MiniMax H3";
   if (m.includes("riverflow")) return "Riverflow v2 Pro";
   if (m.includes("gpt-image") || m === "openai") return "GPT Image 2";
   if (m.includes("gemini-3") && m.includes("pro")) return "Gemini 3 Pro";
@@ -570,8 +565,11 @@ export function AIStudioCanvas({
           const effectiveResolution = p.effective_resolution || p.resolution || "—";
           const wireResolution = p.wire_resolution || effectiveResolution;
           const wireSize = p.wire_size || null;
-          const isHappyHorse = String(effectiveModel || p.model || "").toLowerCase().includes("happyhorse");
-          const happyHorseLocked = isHappyHorse && Number(effectiveDuration) === 15 && String(effectiveResolution).toLowerCase() === "1080p";
+          const isH3 = String(effectiveModel || p.model || "").toLowerCase().includes("hailuo");
+          const h3Locked =
+            isH3 &&
+            Number(effectiveDuration) === 15 &&
+            ["720p", "2k"].includes(String(effectiveResolution).toLowerCase());
           return (
             <Card key={e.id} data-canvas-card className="p-3">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
