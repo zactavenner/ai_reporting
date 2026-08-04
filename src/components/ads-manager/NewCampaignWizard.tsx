@@ -904,7 +904,8 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
           <div className="flex gap-2">
             {step > 1 && step < 6 && <Button variant="outline" size="sm" onClick={() => setStep((step - 1) as Step)}>Back</Button>}
             {step < 5 && (
-              <Button size="sm" onClick={() => setStep((step + 1) as Step)} disabled={step === 1 && (!name.trim() || !pageId)}>
+              <Button size="sm" onClick={() => setStep((step + 1) as Step)}
+                disabled={step === 1 && (!name.trim() || !pageId || !pixelId || specialAdCategory === '' || !freshAssetPullAt)}>
                 Next
               </Button>
             )}
@@ -914,9 +915,9 @@ export function NewCampaignWizard({ open, onClose, clientId, clientName }: NewCa
                   {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
                   Save as brief
                 </Button>
-                <Button size="sm" onClick={launchToMeta} disabled={launching || uploading}>
+                <Button size="sm" onClick={launchToMeta} disabled={launching || uploading || launchBlockers.length > 0}>
                   {launching ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Rocket className="h-3.5 w-3.5 mr-1" />}
-                  Launch to Meta (paused)
+                  {launchBlockers.length > 0 ? 'On hold' : 'Create on Meta (paused)'}
                 </Button>
               </>
             )}
