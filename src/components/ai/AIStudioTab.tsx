@@ -3132,7 +3132,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         onOpenChange={setBatchScriptsOpen}
         hasAvatar={!!selectedAvatar}
         avatarName={selectedAvatar?.name || null}
-        defaultModel={videoModel || "bytedance/seedance-2.0"}
+        defaultModel={ONLY_VIDEO_MODEL}
         onSubmit={(payload) => {
           // Build a chat message that nudges the LLM to call generate_script_batch.
           // Server-side handler validates and dispatches; results stream as
