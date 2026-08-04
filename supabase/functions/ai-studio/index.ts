@@ -1251,36 +1251,30 @@ async function generateSeedanceVideo(opts: {
     "h3": "minimax/hailuo-3",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
-  // HARD RULE: when the caller explicitly passed a model id, never silently
-  // substitute a different model. If we can't resolve it, throw a clear,
-  // surfaced error so the user sees exactly which selection was lost rather
-  // than discovering a Seedance render where HappyHorse was requested.
-  // Only when the caller passed NO model at all do we default to Seedance Fast.
-  let model: string;
+  // HARD RULE: every video render goes to MiniMax H3. Retired models (Seedance,
+  // Grok, HappyHorse, Kling, Veo) are coerced to H3 and the coercion is logged,
+  // so an LLM hallucinating an old id can never break or downgrade a render.
+  let model = "minimax/hailuo-3";
   let modelOverrideReason: string;
   if (!rawModel) {
-    model = "bytedance/seedance-2.0-fast";
-    modelOverrideReason = "empty_defaulted";
-  } else if (ALLOWED.includes(normalized)) {
-    model = normalized;
+    modelOverrideReason = "empty_defaulted_h3";
+  } else if (normalized === model) {
     modelOverrideReason = normalized !== rawModel ? "alias_normalized" : "none";
   } else {
-    const isHappy = /happy.?hou?rse/i.test(rawModel) || /alibaba\/happyhorse/i.test(rawModel);
-    const label = isHappy ? "HappyHorse" : rawModel;
-    const msg = isHappy
-      ? `HappyHorse model id was lost before the OpenRouter request (received "${rawModel}", normalized "${normalized}"). Refusing to silently substitute Seedance.`
-      : `Video model "${rawModel}" is not in the supported list (${ALLOWED.join(", ")}). Refusing to silently substitute a different model.`;
-    console.error(`[generateSeedanceVideo] ${msg}`);
-    await recordVideoModelDecision(supa, "generateSeedanceVideo.invalid_model", {
+    modelOverrideReason = "coerced_to_h3";
+    console.warn(`[generateSeedanceVideo] coercing retired video model "${rawModel}" → minimax/hailuo-3`);
+    await recordVideoModelDecision(supa, "generateSeedanceVideo.coerced_to_h3", {
       conversation_id: opts.conversationId,
       client_id: opts.clientId,
       user_id: opts.userId,
       requested_model: opts.model || null,
       raw_model: rawModel,
       normalized_model: normalized || null,
-      error: msg,
+      model,
+      rerouted_from: rawModel,
+      rerouted_to: model,
+      rerouted_reason: "h3_only_policy",
     });
-    throw new Error(msg);
   }
   const isVeo = model.startsWith("google/veo");
   const isSeedanceFast = model === "bytedance/seedance-2.0-fast";
