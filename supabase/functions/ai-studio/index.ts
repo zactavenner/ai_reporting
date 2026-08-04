@@ -3932,11 +3932,8 @@ Deno.serve(async (req) => {
           const totalDuration = 15;
           // UI Format dropdown is authoritative for video: only Reel 9:16 or Video 16:9.
           const aspect = resolveVideoAspect(userText, adFormat);
-          const promptRequestedVideoModel = /\b(?:happy\s*-?\s*horse|happyhorse|horse)\b/i.test(userText || "")
-            ? "alibaba/happyhorse-1.1"
-            : null;
-          // UI video buttons are authoritative. Mentions in the prompt are logged
-          // for audit only and must not switch Seedance ↔ HappyHorse.
+          // MiniMax H3 is the only model; prompt mentions are logged for audit only.
+          const promptRequestedVideoModel = null;
           const modelSource = uniqueSelectedVideoModels.length ? uniqueSelectedVideoModels : [selectedVideoModel];
           const modelsToRun = modelSource
             .filter((m): m is string => !!m)
@@ -3945,7 +3942,7 @@ Deno.serve(async (req) => {
             conversation_id: conversationId,
             client_id: clientId || null,
             user_id: userId,
-            user_requested_happyhorse: !!promptRequestedVideoModel,
+            user_requested_model_override: !!promptRequestedVideoModel,
             compare_requested: false,
             ui_video_model: selectedVideoModel,
             ui_video_models: uniqueSelectedVideoModels,
