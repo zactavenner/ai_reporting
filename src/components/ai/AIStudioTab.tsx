@@ -780,8 +780,11 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
   const effectiveModel = video.effective_model || video.model || "";
   const effectiveDuration = video.effective_duration || video.duration || null;
   const effectiveResolution = video.effective_resolution || video.resolution || null;
-  const isHappyHorse = effectiveModel.toLowerCase().includes("happyhorse");
-  const happyHorseLocked = isHappyHorse && Number(effectiveDuration) === 15 && String(effectiveResolution || "").toLowerCase() === "1080p";
+  const isH3 = effectiveModel.toLowerCase().includes("hailuo");
+  const h3Locked =
+    isH3 &&
+    Number(effectiveDuration) === 15 &&
+    ["720p", "2k"].includes(String(effectiveResolution || "").toLowerCase());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const saveAsTraining = async () => {
@@ -850,12 +853,12 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
           }));
         } : undefined}
       />
-      {isHappyHorse && (
+      {isH3 && (
         <div className="mx-2 mt-2 rounded-lg border border-primary/25 bg-primary/5 p-2 text-[9px]">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="font-semibold text-foreground">HappyHorse render debug</span>
-            <Badge variant={happyHorseLocked ? "secondary" : "destructive"} className="h-4 px-1 text-[9px]">
-              {happyHorseLocked ? "Locked 15s/1080p" : "Check"}
+            <span className="font-semibold text-foreground">MiniMax H3 render debug</span>
+            <Badge variant={h3Locked ? "secondary" : "destructive"} className="h-4 px-1 text-[9px]">
+              {h3Locked ? `Locked 15s/${String(effectiveResolution).toLowerCase() === "2k" ? "2K" : "720p"}` : "Check"}
             </Badge>
           </div>
           <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
