@@ -179,19 +179,24 @@ We're excited to get started and make this a big success together!
 
 — {{am_name}}`;
 
-export const KICKOFF_AGENDA = [
-  { title: 'Welcome & Expectations', minutes: 3, note: 'Quick intro & set expectations for today\'s call' },
+export const KICKOFF_AGENDA: Array<{
+  title: string;
+  minutes: number;
+  note: string;
+  link?: { label: string; url: string };
+}> = [
+  { title: 'Welcome & Expectations', minutes: 3, note: 'Quick intro & set expectations for today\'s call', link: { label: 'Deck', url: 'https://aicapitalraising.com/deck' } },
   { title: 'Current Status & Next Steps', minutes: 5, note: 'Recap and overview of what\'s been completed & outstanding' },
   { title: 'Scorecard Walkthrough', minutes: 3, note: 'New Lead → Booked → Funded → Scorecard flow' },
-  { title: 'Review Campaign Assets', minutes: 7, note: 'Walk through creatives, ad copy, funnel (preview)' },
-  { title: 'Access & Task Completion', minutes: 5, note: 'Review outstanding access / tasks needed from client' },
-  { title: 'Capital Calculator & Scaling', minutes: 5, note: 'Expected ad spend vs return, scaling strategy, funding timeline' },
+  { title: 'Review Campaign Assets', minutes: 7, note: 'Creatives, ad copy, funnel preview — open discussion for feedback, confirm final adjustments' },
+  { title: 'Access & Task Completion', minutes: 5, note: 'Outstanding access / tasks from client — complete live if possible, else send Loom. Use client document' },
+  { title: 'Capital Calculator & Scaling', minutes: 5, note: 'Expected ad spend vs return, scaling strategy, funding timeline', link: { label: 'Calculator', url: 'https://aicapitalraising.com/calculator' } },
   { title: 'Q&A & Next Steps', minutes: 2, note: 'Answer questions and recap action items' },
-  { title: 'Closing', minutes: 2, note: 'Reiterate key goals and alignment' },
+  { title: 'Closing', minutes: 2, note: 'Reiterate key goals and alignment · schedule the weekly call' },
 ];
 
 export const KICKOFF_LINKS = [
-  { label: 'Pitch Deck', url: 'https://deck.aicapitalraising.com' },
+  { label: 'Pitch Deck', url: 'https://aicapitalraising.com/deck' },
   { label: 'Capital Calculator', url: 'https://aicapitalraising.com/calculator' },
   { label: 'Onboarding Form', url: 'https://aicapitalraising.com/onboarding' },
   { label: 'Meta Access', url: 'https://aicapitalraising.com/access' },

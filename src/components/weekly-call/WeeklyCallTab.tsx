@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { PastCallsChat } from './PastCallsChat';
 import { ClientCallNotesPanel } from './ClientCallNotesPanel';
 import { PastCallPlayer } from '@/components/shared/PastCallPlayer';
+import { KickOffMeetingPanel } from '@/components/onboarding/KickOffMeetingPanel';
+import { Rocket, ChevronDown } from 'lucide-react';
 
 interface Row {
   id: string;
@@ -30,6 +32,7 @@ interface Row {
 
 export function WeeklyCallTab({ clientId }: { clientId: string }) {
   const [history, setHistory] = useState<Row[]>([]);
+  const [kickoffOpen, setKickoffOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
@@ -87,6 +90,19 @@ export function WeeklyCallTab({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant={kickoffOpen ? 'secondary' : 'outline'}
+          onClick={() => setKickoffOpen((v) => !v)}
+        >
+          <Rocket className="h-3.5 w-3.5 mr-1" />
+          {kickoffOpen ? 'Hide kick-off call' : 'Run kick-off call'}
+          <ChevronDown className={`h-3.5 w-3.5 ml-1 transition-transform ${kickoffOpen ? 'rotate-180' : ''}`} />
+        </Button>
+      </div>
+      {kickoffOpen && <KickOffMeetingPanel />}
+
       <Card className="p-4 md:p-6">
         <div className="flex items-center gap-2 mb-4">
           <CalendarClock className="h-5 w-5 text-primary" />
