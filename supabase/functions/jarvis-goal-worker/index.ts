@@ -142,6 +142,61 @@ async function askJeremy(question: string, clientId: string | null) {
   return { agent: jeremy.name, reply: jr.reply };
 }
 
+/**
+ * Put a deliverable on the AI Studio canvas for the user who launched the mission,
+ * so everything the agents build shows up in one place for the team.
+ */
+async function pushToCanvas(goal: any, clientId: string, payload: any, kind = "text_artifact") {
+  try {
+    const userId = goal.created_by;
+    if (!userId) return { ok: false, error: "mission has no owner user; canvas skipped" };
+    let convoId: string | null = null;
+    const { data: existing } = await supa
+      .from("ai_studio_conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+    convoId = (existing as any)?.id || null;
+    if (!convoId) {
+      const { data: created, error } = await supa
+        .from("ai_studio_conversations")
+        .insert({ user_id: userId, client_id: clientId, title: "Onboarding build" })
+        .select("id")
+        .single();
+      if (error) return { ok: false, error: error.message };
+      convoId = created.id;
+    }
+    const { error: ciErr } = await supa.from("ai_studio_canvas_items").insert({
+      conversation_id: convoId,
+      user_id: userId,
+      kind,
+      payload: payload as any,
+    });
+    if (ciErr) return { ok: false, error: ciErr.message };
+    return { ok: true, conversation_id: convoId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function _askJeremyLegacy(question: string, clientId: string | null) {
+  const { data: agents } = await supa
+    .from("agency_agents")
+    .select("id, name, capabilities")
+    .limit(200);
+  const jeremy = (agents || []).find((a: any) => (a.capabilities || {})?.provider === "utari_persona" && (a.capabilities || {})?.mcp_url);
+  if (!jeremy) return { error: "Jeremy AI (utari_persona) agent is not configured." };
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/test-agent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+    body: JSON.stringify({ agent_id: jeremy.id, client_id: clientId || null, messages: [{ role: "user", content: question }] }),
+  });
+  const jr = await r.json().catch(() => ({}));
+  if (!r.ok) return { error: jr?.error || `test-agent ${r.status}` };
+  return { agent: jeremy.name, reply: jr.reply };
+}
+
 async function execTool(name: string, args: any, goal: any): Promise<any> {
   try {
     switch (name) {
