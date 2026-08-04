@@ -91,34 +91,22 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // UI shows the total cost of generating a clip at maxSeconds so buyers
 // can compare apples-to-apples without doing math in their head.
 // Pricing base is 1080p USD/sec (from OpenRouter). 720p applies a multiplier.
+// MiniMax H3 is the ONLY video model. Seedance, Grok and HappyHorse were retired
+// from every AI Studio surface — H3 covers text-to-video, first/last frame
+// keyframing and reference-identity in one model at 720p or native 2K.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "bytedance/seedance-2.0-fast", label: "Seedance Fast",  hint: "ByteDance Seedance 2.0 Fast — 4–15s, 480p ($0.054/s) or 720p ($0.121/s), text/first-frame/last-frame/reference image-to-video, native audio", maxSeconds: 15, pricePerSecond: 0.121 },
-  { value: "alibaba/happyhorse-1.1",      label: "HappyHorse 1.1", hint: "Alibaba HappyHorse — 15s, 720p ($1.48) or 1080p ($1.92), first-frame or reference image-to-video", maxSeconds: 15, pricePerSecond: 0.0988 },
-  { value: "x-ai/grok-imagine-video",     label: "Grok Imagine",   hint: "xAI Grok Imagine — text/image/reference-to-video, 1–15s, up to 720p, 7 aspect ratios", maxSeconds: 15, pricePerSecond: 0.05 },
-  { value: "x-ai/grok-imagine-video-1.5",  label: "Grok Imagine 1.5", hint: "xAI Grok Imagine Video 1.5 — best first-frame image-to-video, 1–15s, up to 1080p", maxSeconds: 15, pricePerSecond: 0.14 },
-  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 2K only, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
+  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
 ];
+export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
-  // Seedance 2.0 Fast on OpenRouter supports 480p and 720p only.
-  "bytedance/seedance-2.0-fast": ["480p", "720p"],
-  "alibaba/happyhorse-1.1":      ["720p", "1080p"],
-  // Grok Imagine Video currently only supports 480p and 720p via OpenRouter /v1/videos.
-  "x-ai/grok-imagine-video":     ["480p", "720p"],
-  "x-ai/grok-imagine-video-1.5": ["480p", "720p", "1080p"],
   // MiniMax H3: 720p (cheaper draft) or native 2K.
   "minimax/hailuo-3":            ["720p", "2k"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
-  "alibaba/happyhorse-1.1":   { "720p": 0.0988, "1080p": 0.1278 },
-  // Grok Imagine Video: published OpenRouter base rate $0.05/sec for both resolutions.
-  "x-ai/grok-imagine-video":  { "480p": 0.05, "720p": 0.05 },
-  "x-ai/grok-imagine-video-1.5": { "480p": 0.08, "720p": 0.14, "1080p": 0.25 },
-  // Seedance 2.0 Fast — published OpenRouter list rates.
-  "bytedance/seedance-2.0-fast": { "480p": 0.0538, "720p": 0.121 },
   "minimax/hailuo-3": { "720p": 0.065, "2k": 0.13 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
