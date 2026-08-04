@@ -1201,17 +1201,10 @@ async function generateSeedanceVideo(opts: {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  const ALLOWED = [
-    "bytedance/seedance-2.0-fast",
-    "bytedance/seedance-2.0",
-    "kwaivgi/kling-v3.0-std",
-    "kwaivgi/kling-v2.1-master",
-    "google/veo-3.1-fast",
-    "alibaba/happyhorse-1.1",
-    "x-ai/grok-imagine-video-1.5",
-    "x-ai/grok-imagine-video",
-    "minimax/hailuo-3",
-  ];
+  // MiniMax H3 is the ONLY approved video model. Seedance, Grok, HappyHorse,
+  // Kling and Veo are retired everywhere in AI Studio; any other requested id
+  // is coerced to H3 instead of failing the render.
+  const ALLOWED = ["minimax/hailuo-3"];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
   const ALIASES: Record<string, string> = {
