@@ -205,6 +205,130 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
       }
       case "ask_jeremy":
         return await askJeremy(String(args.question || ""), args.client_id || goal.client_id || null);
+      case "save_asset": {
+        const cid = args.client_id || goal.client_id;
+        if (!cid) return { error: "client_id required" };
+        const content = String(args.content_md || "");
+        const ins = await supa.from("client_assets").insert({
+          client_id: cid,
+          asset_type: String(args.asset_type),
+          title: String(args.title).slice(0, 200),
+          status: "draft",
+          content: { markdown: content, source: "onboarding_build", goal_id: goal.id, notes: args.notes || null } as any,
+        }).select("id").single();
+        const canvas = await pushToCanvas(goal, cid, {
+          artifact_type: args.asset_type,
+          title: args.title,
+          content,
+          chars: content.length,
+          notes: args.notes || null,
+        });
+        return { ok: true, asset_id: ins.data?.id || null, on_canvas: canvas.ok, canvas_error: canvas.error };
+      }
+      case "create_client_avatar": {
+        const cid = args.client_id || goal.client_id;
+        if (!cid) return { error: "client_id required" };
+        const { data: client } = await supa.from("clients").select("name").eq("id", cid).maybeSingle();
+        const gender = args.gender || "female";
+        const ageRange = args.age_range || "26-35";
+        const description = args.description ||
+          `Attractive, polished professional woman around 30, warm and trustworthy on camera, presenting ${client?.name || "the fund"}'s investment opportunity. Modern office, natural lighting.`;
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/generate-avatar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+          body: JSON.stringify({
+            gender, ageRange, ethnicity: "mixed", style: args.style || "ugc",
+            background: "office",
+            backgroundPrompt: "Modern bright office with soft daylight, tasteful depth of field",
+            aspectRatio: "3:4", realism_level: "high", look_type: "professional",
+            avatar_description: description,
+          }),
+        });
+        const jr = await r.json().catch(() => ({}));
+        if (!r.ok || !jr?.imageUrl) return { error: jr?.error || `generate-avatar ${r.status}` };
+        const ins = await supa.from("avatars").insert({
+          name: args.name || `${client?.name || "Client"} Spokesperson`,
+          client_id: cid,
+          image_url: jr.imageUrl,
+          base_image_url: jr.imageUrl,
+          is_active: true,
+          style: args.style || "ugc",
+          gender, age_range: ageRange,
+          description,
+        }).select("id").single();
+        await pushToCanvas(goal, cid, { image_url: jr.imageUrl, prompt: description, aspect_ratio: "3:4", title: "Client avatar" }, "image");
+        return { ok: true, avatar_id: ins.data?.id || null, image_url: jr.imageUrl };
+      }
+      case "generate_static_ads": {
+        const cid = args.client_id || goal.client_id;
+        if (!cid) return { error: "client_id required" };
+        const count = Math.max(1, Math.min(6, Number(args.count) || 3));
+        const ratio = args.aspect_ratio || "1:1";
+        const { data: styles } = await supa.from("ad_styles").select("*").ilike("name", "%capital%raising%").limit(1);
+        const style = styles?.[0];
+        const { data: client } = await supa.from("clients").select("name, brand_colors, brand_fonts").eq("id", cid).maybeSingle();
+        const made: any[] = []; const errors: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const r = await fetch(`${SUPABASE_URL}/functions/v1/generate-static-ad`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
+            body: JSON.stringify({
+              prompt: args.prompt || "",
+              stylePrompt: style?.prompt_template || "",
+              styleName: style?.name || "Capital Raising",
+              aspectRatio: ratio,
+              productDescription: args.offer_description || "",
+              offerDescription: args.offer_description || "",
+              brandColors: (client as any)?.brand_colors || [],
+              brandFonts: (client as any)?.brand_fonts || [],
+              projectId: `onboarding-${cid}`,
+              clientId: cid,
+              referenceImages: style?.reference_images || [],
+              primaryReferenceImage: style?.reference_images?.[0] || null,
+            }),
+          });
+          const jr = await r.json().catch(() => ({}));
+          if (r.ok && jr?.imageUrl) {
+            const cr = await supa.from("creatives").insert({
+              client_id: cid,
+              title: `${client?.name || "Onboarding"} - Static ${ratio} #${i + 1}`,
+              type: "image", file_url: jr.imageUrl, status: "draft",
+              source: "onboarding-build", aspect_ratio: ratio,
+            }).select("id").single();
+            await pushToCanvas(goal, cid, { image_url: jr.imageUrl, aspect_ratio: ratio, prompt: args.prompt || args.offer_description || "" }, "image");
+            made.push({ creative_id: cr.data?.id, image_url: jr.imageUrl });
+          } else {
+            errors.push(jr?.error || `generate-static-ad ${r.status}`);
+          }
+        }
+        return { generated: made.length, creatives: made, errors };
+      }
+      case "request_approval": {
+        const cid = args.client_id || goal.client_id;
+        const ins = await supa.from("approval_queue").insert({
+          client_id: cid || null,
+          queue_type: String(args.queue_type),
+          title: String(args.title).slice(0, 200),
+          summary: args.summary || null,
+          priority: Math.max(1, Math.min(5, Number(args.priority) || 2)),
+          status: "pending",
+          preview_payload: { ...(args.payload || {}), goal_id: goal.id } as any,
+          agent_reasoning: "Created by Jarvis during the onboarding asset build.",
+        }).select("id").single();
+        if (ins.error) return { error: ins.error.message };
+        await emit(goal.id, "progress", `Sent for approval: ${args.title}`, args.summary || null, { approval_id: ins.data?.id });
+        return { ok: true, approval_id: ins.data?.id, note: "Poll with check_approval. Do NOT produce avatar videos until video-script approval is 'approved'." };
+      }
+      case "check_approval": {
+        const { data, error } = await supa
+          .from("approval_queue")
+          .select("id, status, rejection_reason, title, resolved_at")
+          .eq("id", args.approval_id)
+          .maybeSingle();
+        if (error) return { error: error.message };
+        if (!data) return { error: "approval not found" };
+        return data;
+      }
       case "review_assets": {
         const limit = Math.max(1, Math.min(50, Number(args.limit) || 20));
         const cid = args.client_id || goal.client_id;
