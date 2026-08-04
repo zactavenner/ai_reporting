@@ -569,6 +569,7 @@ function ClientOnboardingCard({
                 primaryOffer={primaryOffer}
                 section="assets"
                 onMarkActive={onMarkActive}
+                onOpenStudio={() => window.open(`/client/${client.clientId}?tab=ai-studio`, '_blank')}
               />
               {client.assets.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
