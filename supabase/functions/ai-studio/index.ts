@@ -3171,36 +3171,25 @@ Deno.serve(async (req) => {
     ? imageModels.filter((m) => m === "nano-banana" || m === "openai" || m === "riverflow")
     : [];
 
-  const ALLOWED_VIDEO_MODELS = [
-    "bytedance/seedance-2.0-fast",
-    "bytedance/seedance-2.0",
-    "kwaivgi/kling-v3.0-std",
-    "kwaivgi/kling-v2.1-master",
-    "google/veo-3.1-fast",
-    "alibaba/happyhorse-1.1",
-  ];
+  // MiniMax H3 only. Any legacy id from the UI or the LLM maps onto it.
+  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3"];
   const VIDEO_MODEL_ALIASES: Record<string, string> = {
-    "seedance-pro": "bytedance/seedance-2.0",
-    "seedance-2.0-pro": "bytedance/seedance-2.0",
-    "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
-    "seedance-fast": "bytedance/seedance-2.0-fast",
-    "seedance-2.0-fast": "bytedance/seedance-2.0-fast",
-    "happyhorse": "alibaba/happyhorse-1.1",
-    "happy-horse": "alibaba/happyhorse-1.1",
-    "happy horse": "alibaba/happyhorse-1.1",
-    "happyhourse": "alibaba/happyhorse-1.1",
-    "happy-hourse": "alibaba/happyhorse-1.1",
-    "happy hourse": "alibaba/happyhorse-1.1",
-    "horse": "alibaba/happyhorse-1.1",
-    "hourse": "alibaba/happyhorse-1.1",
-    "happyhorse-1.1": "alibaba/happyhorse-1.1",
-    "alibaba/happy-horse-1.1": "alibaba/happyhorse-1.1",
+    "h3": "minimax/hailuo-3",
+    "minimax/h3": "minimax/hailuo-3",
+    "minimax h3": "minimax/hailuo-3",
+    "minimax-h3": "minimax/hailuo-3",
+    "hailuo": "minimax/hailuo-3",
+    "hailuo-3": "minimax/hailuo-3",
+    "hailuo3": "minimax/hailuo-3",
+    "minimax/hailuo3": "minimax/hailuo-3",
   };
   const normalizeVideoModel = (m: unknown): string | null => {
     if (typeof m !== "string") return null;
     const raw = m.trim();
+    if (!raw) return null;
     const normalized = VIDEO_MODEL_ALIASES[raw.toLowerCase()] || VIDEO_MODEL_ALIASES[raw] || raw;
-    return ALLOWED_VIDEO_MODELS.includes(normalized) ? normalized : null;
+    // Retired models (Seedance / Grok / HappyHorse / Kling / Veo) collapse to H3.
+    return ALLOWED_VIDEO_MODELS.includes(normalized) ? normalized : "minimax/hailuo-3";
   };
   const selectedVideoModels: string[] = Array.isArray(videoModels)
     ? videoModels.map(normalizeVideoModel).filter((m): m is string => !!m)
@@ -3212,22 +3201,15 @@ Deno.serve(async (req) => {
     : (uniqueSelectedVideoModels[0] || null);
   const hasSelectedVideoModel = !!selectedVideoModel || uniqueSelectedVideoModels.length > 0;
 
-  // Resolution clamping per model. Only Seedance Pro supports 4K.
-  const MODEL_MAX_RES: Record<string, "720p" | "1080p" | "4k"> = {
-    "bytedance/seedance-2.0-fast": "720p",
-    "bytedance/seedance-2.0":      "4k",
-    "kwaivgi/kling-v3.0-std":      "1080p",
-    "kwaivgi/kling-v2.1-master":   "1080p",
-    "google/veo-3.1-fast":         "1080p",
-    "alibaba/happyhorse-1.1":      "1080p",
+  // H3 supports exactly two resolutions: 720p (draft) and native 2K.
+  const MODEL_MAX_RES: Record<string, VideoResChoice> = {
+    "minimax/hailuo-3": "2k",
   };
-  const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "4k": 3 };
-  const requestedRes: "720p" | "1080p" | "4k" =
-    rawVideoResolution === "720p" || rawVideoResolution === "1080p" || rawVideoResolution === "4k"
-      ? rawVideoResolution
-      : "1080p";
-  function clampResForModel(model: string): "720p" | "1080p" | "4k" {
-    const cap = MODEL_MAX_RES[model] || "1080p";
+  const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "2k": 3, "4k": 4 };
+  const requestedRes: VideoResChoice =
+    rawVideoResolution === "720p" ? "720p" : "2k";
+  function clampResForModel(model: string): VideoResChoice {
+    const cap = MODEL_MAX_RES[model] || "2k";
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
   }
 
