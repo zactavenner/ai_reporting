@@ -2779,6 +2779,8 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
   curiosity_gap: "COPY FRAMEWORK: Curiosity Gap. Open an information loop in the hook ('The 1 thing 90% of investors miss…'), tease the payoff visually, withhold the full answer — CTA promises to deliver it.",
 };
 
+// The only two resolutions MiniMax H3 offers. Legacy values are mapped onto them.
+type VideoResChoice = "720p" | "2k";
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
 };
