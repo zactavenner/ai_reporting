@@ -879,8 +879,8 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
             video_url: video.url,
             aspect_ratio: video.aspect_ratio || "9:16",
             duration: video.duration || 15,
-            resolution: video.resolution || "1080p",
-            model: video.model || "seedance-2.0-fast",
+            resolution: video.resolution || "2k",
+            model: video.model || ONLY_VIDEO_MODEL,
             requested_model: video.requested_model,
             requested_duration: video.requested_duration,
             requested_resolution: video.requested_resolution,
@@ -1653,7 +1653,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           if (videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${videoModel}", resolution="${videoResolution}", duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${ONLY_VIDEO_MODEL}" (MiniMax H3 is the ONLY approved video model — Seedance, Grok, HappyHorse and Veo are retired and must never be requested), resolution="${videoResolution}" (only "720p" or "2k" exist), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
@@ -1672,7 +1672,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoTotalDuration === 30) {
               const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
               lockLines.push(
-                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${videoModel}", duration=15, resolution="${videoResolution}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s HappyHorse/Seedance render.`,
+                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${ONLY_VIDEO_MODEL}", duration=15, resolution="${videoResolution}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s MiniMax H3 render.`,
               );
             }
           }
