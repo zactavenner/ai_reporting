@@ -2709,7 +2709,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             key={r}
                             type="button"
                             onClick={() => setVideoResolution(r)}
-                            title={proOnly ? "4K — Seedance Pro only. ~2.5× cost." : r === "2k" ? "2K — MiniMax H3 native resolution" : r === "720p" ? "720p draft quality" : "1080p Full HD"}
+                            title={r === "2k" ? "2K — MiniMax H3 native resolution (higher than 720p)" : "720p — faster, cheaper draft"}
                             className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                           >
                             {r === "4k" ? "4K" : r === "2k" ? "2K" : r}
