@@ -8,6 +8,7 @@
 //   reloads and can be finished by a cron sweep.
 // - Surfaces the provider's real status + message instead of a generic error.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { condenseVideoPrompt } from "../_shared/videoPrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -108,7 +109,7 @@ function buildOpenRouterBody(job: Job, model: string) {
 
   const body: Record<string, unknown> = {
     model,
-    prompt: job.prompt,
+    prompt: condenseVideoPrompt(job.prompt),
     aspect_ratio: aspect,
     duration: Math.max(1, Math.min(15, Number(job.duration) || 5)),
     resolution,
