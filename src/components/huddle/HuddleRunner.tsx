@@ -320,7 +320,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           await (supabase as any)
             .from('huddle_client_reviews')
             .upsert(
-              { huddle_id: huddle.id, client_id: current.id, position: idx, status },
+              { huddle_id: huddle.id, client_id: current.id, position: idx, status, duration_s: clientElapsed },
               { onConflict: 'huddle_id,client_id' },
             );
         } catch (e) {
