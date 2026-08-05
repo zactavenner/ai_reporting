@@ -17940,6 +17940,22 @@ export type Database = {
           total_leads: number
         }[]
       }
+      get_client_spend_days: {
+        Args: { p_client_id: string; p_from: string; p_to: string }
+        Returns: {
+          date: string
+          spend: number
+        }[]
+      }
+      get_client_spend_freshness: {
+        Args: { p_client_id: string }
+        Returns: {
+          finished_at: string
+          sheet_status: string
+          status: string
+          sync_date: string
+        }[]
+      }
       get_sync_queue_stats: {
         Args: never
         Returns: {
