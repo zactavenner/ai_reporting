@@ -104,6 +104,14 @@ function getBaseUrl(region: string): string {
 }
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 const GHL_HEADERS = (apiKey: string) => ({
   Authorization: `Bearer ${apiKey}`,
   Version: '2021-07-28',
