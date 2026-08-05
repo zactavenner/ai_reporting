@@ -3231,8 +3231,8 @@ Deno.serve(async (req) => {
     ? imageModels.filter((m) => m === "nano-banana" || m === "openai" || m === "riverflow")
     : [];
 
-  // MiniMax H3 only. Any legacy id from the UI or the LLM maps onto it.
-  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3"];
+  // Two approved video models: MiniMax H3 (720p / 2K) and Seedance 2.0 (720p only).
+  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3", "bytedance/seedance-2.0"];
   const VIDEO_MODEL_ALIASES: Record<string, string> = {
     "h3": "minimax/hailuo-3",
     "minimax/h3": "minimax/hailuo-3",
@@ -3242,13 +3242,19 @@ Deno.serve(async (req) => {
     "hailuo-3": "minimax/hailuo-3",
     "hailuo3": "minimax/hailuo-3",
     "minimax/hailuo3": "minimax/hailuo-3",
+    "seedance": "bytedance/seedance-2.0",
+    "seedance-2.0": "bytedance/seedance-2.0",
+    "seedance-pro": "bytedance/seedance-2.0",
+    "seedance-2.0-pro": "bytedance/seedance-2.0",
+    "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
+    "bytedance/seedance-2.0-fast": "bytedance/seedance-2.0",
   };
   const normalizeVideoModel = (m: unknown): string | null => {
     if (typeof m !== "string") return null;
     const raw = m.trim();
     if (!raw) return null;
     const normalized = VIDEO_MODEL_ALIASES[raw.toLowerCase()] || VIDEO_MODEL_ALIASES[raw] || raw;
-    // Retired models (Seedance / Grok / HappyHorse / Kling / Veo) collapse to H3.
+    // Retired models (Grok / HappyHorse / Kling / Veo) collapse to H3.
     return ALLOWED_VIDEO_MODELS.includes(normalized) ? normalized : "minimax/hailuo-3";
   };
   const selectedVideoModels: string[] = Array.isArray(videoModels)
@@ -3261,17 +3267,22 @@ Deno.serve(async (req) => {
     : (uniqueSelectedVideoModels[0] || null);
   const hasSelectedVideoModel = !!selectedVideoModel || uniqueSelectedVideoModels.length > 0;
 
-  // H3 supports exactly two resolutions: 720p (draft) and native 2K.
+  // H3 supports 720p and native 2K. Seedance 2.0 is 720p only.
   const MODEL_MAX_RES: Record<string, VideoResChoice> = {
     "minimax/hailuo-3": "2k",
+    "bytedance/seedance-2.0": "720p",
   };
   const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "2k": 3, "4k": 4 };
-  const requestedRes: VideoResChoice =
-    "2k";
+  // Honour the resolution the user picked in the composer; only clamp it to the
+  // selected renderer's ceiling (so Seedance never gets asked for 2K).
+  const rawRes = String(rawVideoResolution || "").toLowerCase();
+  const requestedRes: VideoResChoice = rawRes === "720p" ? "720p" : "2k";
   function clampResForModel(model: string): VideoResChoice {
     const cap = MODEL_MAX_RES[model] || "2k";
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
   }
+  // Resolution actually locked for the model the user selected.
+  const lockedRes: VideoResChoice = clampResForModel(selectedVideoModel || "minimax/hailuo-3");
 
   // Pure-chat mode detection: agent is OFF and the user has NOT selected any
   // image or video model in the composer. In this case AI Studio should behave
