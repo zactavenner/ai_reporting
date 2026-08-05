@@ -164,7 +164,7 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
           </div>
 
           <div className="space-y-2">
-            <Label>Webhook Secret (optional)</Label>
+            <Label>Webhook Secret</Label>
             <Input
               type="password"
               value={webhookSecret}
@@ -172,7 +172,10 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
               placeholder="HMAC SHA-256 secret for signature verification"
             />
             <p className="text-xs text-muted-foreground">
-              If set, incoming webhooks will be verified using X-MG-Signature header
+              Incoming webhooks are always verified against the backend
+              MEETGEEK_WEBHOOK_SECRET using the X-MG-Signature header. Unsigned or
+              mismatched payloads are rejected, so this must match the secret configured
+              in MeetGeek.
             </p>
           </div>
 
@@ -190,6 +193,10 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
             </div>
             <p className="text-xs text-muted-foreground">
               Paste this URL in MeetGeek → Settings → Webhooks → "Meeting Analyzed" event
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Client mapping is resolved on the backend from meeting attendees, so the
+              client_id in this URL is never trusted for tenant assignment.
             </p>
           </div>
 
