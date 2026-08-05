@@ -5498,6 +5498,91 @@ export type Database = {
           },
         ]
       }
+      client_meetgeek_settings: {
+        Row: {
+          bot_join_policy: string
+          client_id: string
+          created_at: string
+          enabled: boolean
+          ghl_calendar_id: string | null
+          ghl_calendar_name: string | null
+          ghl_location_id: string | null
+          id: string
+          last_bot_join_at: string | null
+          last_completed_meeting_at: string | null
+          last_crm_sync_at: string | null
+          last_error: string | null
+          last_error_at: string | null
+          last_event_at: string | null
+          mapping_error: string | null
+          mapping_valid: boolean
+          updated_at: string
+          webhook_secret_configured: boolean
+        }
+        Insert: {
+          bot_join_policy?: string
+          client_id: string
+          created_at?: string
+          enabled?: boolean
+          ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          last_bot_join_at?: string | null
+          last_completed_meeting_at?: string | null
+          last_crm_sync_at?: string | null
+          last_error?: string | null
+          last_error_at?: string | null
+          last_event_at?: string | null
+          mapping_error?: string | null
+          mapping_valid?: boolean
+          updated_at?: string
+          webhook_secret_configured?: boolean
+        }
+        Update: {
+          bot_join_policy?: string
+          client_id?: string
+          created_at?: string
+          enabled?: boolean
+          ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          last_bot_join_at?: string | null
+          last_completed_meeting_at?: string | null
+          last_crm_sync_at?: string | null
+          last_error?: string | null
+          last_error_at?: string | null
+          last_event_at?: string | null
+          mapping_error?: string | null
+          mapping_valid?: boolean
+          updated_at?: string
+          webhook_secret_configured?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_meetgeek_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_meetgeek_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_meetgeek_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_offer_files: {
         Row: {
           client_id: string
@@ -12527,6 +12612,141 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meeting_call_activity: {
+        Row: {
+          action_items: Json
+          agent_joined_at: string | null
+          attendee_email: string | null
+          client_id: string
+          created_at: string
+          crm_attempts: number
+          crm_sync_error: string | null
+          crm_sync_status: string
+          crm_synced_at: string | null
+          duration_minutes: number | null
+          ended_at: string | null
+          error_message: string | null
+          ghl_calendar_id: string | null
+          ghl_contact_id: string | null
+          ghl_event_id: string | null
+          ghl_location_id: string | null
+          id: string
+          idempotency_key: string
+          lead_id: string | null
+          meetgeek_event_id: string | null
+          meetgeek_meeting_id: string | null
+          meeting_record_id: string | null
+          recording_url: string | null
+          source: string
+          started_at: string | null
+          status: string
+          summary: string | null
+          title: string | null
+          transcript_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          action_items?: Json
+          agent_joined_at?: string | null
+          attendee_email?: string | null
+          client_id: string
+          created_at?: string
+          crm_attempts?: number
+          crm_sync_error?: string | null
+          crm_sync_status?: string
+          crm_synced_at?: string | null
+          duration_minutes?: number | null
+          ended_at?: string | null
+          error_message?: string | null
+          ghl_calendar_id?: string | null
+          ghl_contact_id?: string | null
+          ghl_event_id?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          idempotency_key: string
+          lead_id?: string | null
+          meetgeek_event_id?: string | null
+          meetgeek_meeting_id?: string | null
+          meeting_record_id?: string | null
+          recording_url?: string | null
+          source?: string
+          started_at?: string | null
+          status?: string
+          summary?: string | null
+          title?: string | null
+          transcript_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action_items?: Json
+          agent_joined_at?: string | null
+          attendee_email?: string | null
+          client_id?: string
+          created_at?: string
+          crm_attempts?: number
+          crm_sync_error?: string | null
+          crm_sync_status?: string
+          crm_synced_at?: string | null
+          duration_minutes?: number | null
+          ended_at?: string | null
+          error_message?: string | null
+          ghl_calendar_id?: string | null
+          ghl_contact_id?: string | null
+          ghl_event_id?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          idempotency_key?: string
+          lead_id?: string | null
+          meetgeek_event_id?: string | null
+          meetgeek_meeting_id?: string | null
+          meeting_record_id?: string | null
+          recording_url?: string | null
+          source?: string
+          started_at?: string | null
+          status?: string
+          summary?: string | null
+          title?: string | null
+          transcript_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_call_activity_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meeting_call_activity_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_call_activity_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meeting_call_activity_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_call_activity_meeting_record_id_fkey"
+            columns: ["meeting_record_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_records"
+            referencedColumns: ["id"]
           },
         ]
       }

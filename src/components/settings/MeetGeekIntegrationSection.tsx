@@ -9,6 +9,7 @@ import { Video, RefreshCw, Loader2, Copy, CheckCircle, Eye, EyeOff } from 'lucid
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { MeetGeekCalendarSection } from './MeetGeekCalendarSection';
 
 interface MeetGeekIntegrationSectionProps {
   clientId: string;
@@ -231,6 +232,8 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
               Re-match unmatched
             </Button>
           </div>
+
+          <MeetGeekCalendarSection clientId={clientId} />
         </div>
       )}
     </div>

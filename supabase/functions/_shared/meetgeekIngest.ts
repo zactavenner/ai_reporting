@@ -42,6 +42,23 @@ export interface LeadMatch {
 }
 
 export interface IngestDeps {
+  /**
+   * Optional per-client calendar gate. When provided it is the sole authority for
+   * which client a meeting belongs to and whether it may be ingested at all.
+   * It also records the client-scoped call-activity lifecycle.
+   */
+  calendarGate?(meeting: NormalizedMeeting): Promise<{
+    ok: boolean;
+    status: number;
+    rejected?: string;
+    clientId?: string | null;
+    matched?: boolean;
+    crmSyncStatus?: string;
+    activityId?: string;
+    duplicate?: boolean;
+    /** No per-client MeetGeek config exists — fall back to legacy resolution. */
+    bypass?: boolean;
+  }>;
   /** Returns true when an event with this dedupe key was already processed. */
   findProcessedEvent(dedupeKey: string): Promise<{ id: string; status: string } | null>;
   recordEvent(input: {
@@ -87,6 +104,8 @@ export interface IngestResult {
   matched?: boolean;
   matchConfidence?: number;
   ghlNoteStatus?: string;
+  activityId?: string;
+  clientId?: string | null;
 }
 
 export const MEETGEEK_SIGNATURE_HEADER = 'x-mg-signature';
@@ -325,7 +344,50 @@ export async function ingestMeetgeekWebhook(args: {
       return { ok: true, status: 202, reason: 'meeting_not_completed' };
     }
 
-    const clientId = await deps.resolveClientId(meeting);
+    // Per-client calendar gate (production path). Rejects unconfigured,
+    // wrong-calendar, cross-client and ambiguous bookings before any CRM write.
+    let gatedClientId: string | null | undefined;
+    let activityId: string | undefined;
+    let gateOwnsCrm = false;
+    if (deps.calendarGate) {
+      const gate = await deps.calendarGate(meeting);
+      activityId = gate.activityId;
+      if (!gate.ok && !gate.bypass) {
+        await deps.updateEvent(event.id, {
+          status: 'rejected',
+          errorMessage: gate.rejected || 'calendar_gate_rejected',
+          clientId: gate.clientId ?? null,
+        });
+        return {
+          ok: false,
+          status: gate.status || 403,
+          reason: gate.rejected || 'calendar_gate_rejected',
+          activityId,
+          clientId: gate.clientId ?? null,
+        };
+      }
+      if (gate.duplicate) {
+        await deps.updateEvent(event.id, { status: 'processed', clientId: gate.clientId ?? null });
+        return {
+          ok: true,
+          status: 200,
+          duplicate: true,
+          reason: 'duplicate_event',
+          activityId,
+          clientId: gate.clientId ?? null,
+          matched: gate.matched,
+          ghlNoteStatus: gate.crmSyncStatus,
+        };
+      }
+      if (!gate.bypass) {
+        gatedClientId = gate.clientId ?? null;
+        gateOwnsCrm = true;
+      }
+    }
+
+    const clientId = gatedClientId !== undefined
+      ? gatedClientId
+      : await deps.resolveClientId(meeting);
     const record = await deps.upsertMeetingRecord(meeting, clientId);
 
     const emails = meeting.participants
@@ -338,11 +400,16 @@ export async function ingestMeetgeekWebhook(args: {
     let ghlNoteError: string | null = null;
     let ghlContactId: string | null = null;
 
-    if (match.lead && clientId) {
+    // When the calendar gate is active it already performed the single, mapped
+    // CRM write-back — never write the note twice.
+    if (match.lead && clientId && !gateOwnsCrm) {
       const res = await deps.writeGhlNote({ clientId, lead: match.lead, note: buildMeetingNote(meeting) });
       ghlNoteStatus = res.status;
       ghlContactId = res.contactId;
       ghlNoteError = res.error || null;
+    } else if (match.lead && clientId) {
+      ghlContactId = match.lead.external_id || null;
+      ghlNoteStatus = 'delegated_to_calendar_gate';
     }
 
     await deps.upsertLeadContext({
@@ -366,6 +433,8 @@ export async function ingestMeetgeekWebhook(args: {
       matched: !!match.lead,
       matchConfidence: match.confidence,
       ghlNoteStatus,
+      activityId,
+      clientId,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown_error';

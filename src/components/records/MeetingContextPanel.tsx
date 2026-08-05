@@ -3,6 +3,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, Video, CheckCircle2, AlertCircle, MinusCircle, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { MeetingCallActivityList } from '@/components/meetings/MeetingCallActivityList';
 
 interface MeetingContextPanelProps {
   leadId?: string | null;
@@ -54,7 +55,20 @@ export function MeetingContextPanel({ leadId, isOpen, onToggle }: MeetingContext
     },
   });
 
-  if (!leadId || meetings.length === 0) return null;
+  const { data: activityCount = 0 } = useQuery({
+    queryKey: ['meeting-call-activity-count', leadId],
+    enabled: !!leadId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('meeting_call_activity' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', leadId!);
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  if (!leadId || (meetings.length === 0 && activityCount === 0)) return null;
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
@@ -62,7 +76,7 @@ export function MeetingContextPanel({ leadId, isOpen, onToggle }: MeetingContext
         <span className="flex items-center gap-2">
           <Video className="h-4 w-4" />
           Meetings
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{meetings.length}</Badge>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{meetings.length + activityCount}</Badge>
         </span>
         <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </CollapsibleTrigger>
@@ -121,6 +135,12 @@ export function MeetingContextPanel({ leadId, isOpen, onToggle }: MeetingContext
             </div>
           );
         })}
+        {activityCount > 0 && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Call activity</p>
+            <MeetingCallActivityList leadId={leadId} limit={5} />
+          </div>
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
