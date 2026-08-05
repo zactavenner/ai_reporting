@@ -104,7 +104,7 @@ async function invokeAiStudioForCreative(opts: {
   // guarantees the agent cannot drift to other providers or sizes.
   const lockedImageModels = isVideo ? null : ["openai"]; // openai => GPT Image 2
   const lockedVideoModel = isVideo ? "bytedance/seedance-2.0-fast" : null;
-  const lockedVideoResolution = isVideo ? "720p" : null;
+  const lockedVideoResolution = isVideo ? "2k" : null;
 
   const refBlock = approvedReferences.length
     ? [
@@ -119,7 +119,7 @@ async function invokeAiStudioForCreative(opts: {
     : "";
 
   const guard = [
-    `🔒 HERMES HARD-LOCK — generate ${isVideo ? "a 15s 720p video" : "a static ad image"} for **${client.name}** now.`,
+    `🔒 HERMES HARD-LOCK — generate ${isVideo ? "a 15s 2K video" : "a static ad image"} for **${client.name}** now.`,
     `MANDATORY: Your FIRST and ONLY action this turn MUST be a tool_call to ${isVideo ? "generate_seedance_video" : "generate_static_ad"}. DO NOT write a script, plan, brief, or any chat reply. Emit the tool_call immediately. Text-only responses are forbidden.`,
     isVideo
       ? `Use ONLY model="bytedance/seedance-2.0-fast" at resolution="720p" duration=15s. Do not switch models.`

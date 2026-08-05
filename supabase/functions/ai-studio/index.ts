@@ -1315,8 +1315,9 @@ async function generateSeedanceVideo(opts: {
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (isHailuo) {
-    // MiniMax H3: 720p draft or native 2K.
-    effectiveResolution = effectiveResolution === "720p" || effectiveResolution === "480p" ? "720p" : "2k";
+    // MiniMax H3 on OpenRouter supports ONLY native 2K (supported_resolutions: ["2K"]).
+    // Any other value (720p/480p/1080p/4k) is rejected with HTTP 400, so coerce to 2k.
+    effectiveResolution = "2k";
   }
   // Seedance 2.0 Fast supports only 480p and 720p per spec.
   else if (isSeedanceFast && effectiveResolution !== "480p" && effectiveResolution !== "720p") effectiveResolution = "720p";
@@ -1631,7 +1632,8 @@ async function generateSeedanceVideo(opts: {
     //   generate_audio supported.
     const allowedAspects = new Set(["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
     const requestedAspect = opts.aspectRatio || "9:16";
-    body.resolution = wireResolution === "720p" ? "720p" : "2K";
+    // H3 accepts the literal "2K" only.
+    body.resolution = "2K";
     body.duration = Math.max(5, Math.min(15, Number(effectiveDuration) || 5));
     body.aspect_ratio = allowedAspects.has(requestedAspect) ? requestedAspect : "9:16";
     (body as any).generate_audio = opts.generateAudio === false ? false : true;
@@ -2599,14 +2601,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality 15-second video clip with MiniMax H3 (minimax/hailuo-3) — the ONLY video model available. Seedance, Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration is 15s per clip and resolution is either '720p' or '2k'.",
+      description: "Generate a single high-quality 15-second video clip with MiniMax H3 (minimax/hailuo-3) — the ONLY video model available. Seedance, Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration is 15s per clip and resolution is always '2k' (H3 native).",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16"], description: "Video format. Only 9:16 Reel and 16:9 Video are supported." },
           duration: { type: "integer", enum: [15], description: "Clip length in seconds. Only 15 seconds is supported in AI Studio." },
-          resolution: { type: "string", enum: ["720p", "2k"], description: "MiniMax H3 supports exactly two resolutions: '720p' (draft) or '2k' (native, default). Honor the user's VIDEO RESOLUTION PREFERENCE from the system prompt." },
+          resolution: { type: "string", enum: ["2k"], description: "MiniMax H3 renders natively at 2K only. 720p/1080p/4k do not exist on this model and are rejected by the provider." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME. H3 supports first+last frame control for precise motion endpoints." },
           ingredient_url: { type: "string", description: "Optional URL of an INGREDIENT / PRODUCT / SUBJECT / AVATAR reference image. H3 preserves this identity across the clip. Pass whenever the user pinned an ingredient in the video frame slots." },
@@ -2704,7 +2706,7 @@ const tools = [
           },
           model: { type: "string", enum: ["minimax/hailuo-3"], description: "Always 'minimax/hailuo-3' — the only video model." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
-          resolution: { type: "string", enum: ["720p", "2k"], description: "MiniMax H3 supports '720p' or '2k' (default)." },
+          resolution: { type: "string", enum: ["2k"], description: "MiniMax H3 renders natively at 2K only." },
         },
         required: ["scripts"],
       },
@@ -2780,9 +2782,9 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 };
 
 // The only two resolutions MiniMax H3 offers. Legacy values are mapped onto them.
-type VideoResChoice = "720p" | "2k";
+type VideoResChoice = "2k";
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
-  "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
+  "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, native 2K)" },
 };
 
 // MiniMax H3 is the only video model and it handles synthetic avatars via
@@ -3209,7 +3211,7 @@ Deno.serve(async (req) => {
   };
   const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "2k": 3, "4k": 4 };
   const requestedRes: VideoResChoice =
-    rawVideoResolution === "720p" ? "720p" : "2k";
+    "2k";
   function clampResForModel(model: string): VideoResChoice {
     const cap = MODEL_MAX_RES[model] || "2k";
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
@@ -4795,7 +4797,7 @@ Deno.serve(async (req) => {
                 }
                 const baseDuration = 15;
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
-                const argRes: VideoResChoice | null = args.resolution === "720p" ? "720p" : (args.resolution ? "2k" : null);
+                const argRes: VideoResChoice | null = args.resolution ? "2k" : null;
                  // Aspect priority: the LLM's explicit args.aspect_ratio wins
                  // when it is a valid video aspect (9:16 or 16:9). Otherwise
                  // fall back to prompt inference (userText + args.prompt), then
@@ -5051,7 +5053,7 @@ Deno.serve(async (req) => {
                   : selectedVideoModel;
                 const resolution: VideoResChoice = reelVideoModel
                   ? clampResForModel(reelVideoModel)
-                  : (args.resolution === "720p" ? "720p" : "2k");
+                  : "2k";
                 await recordVideoModelDecision(supa, "image_to_reel.model_source", {
                   conversation_id: conversationId,
                   client_id: clientId || null,
@@ -5231,7 +5233,7 @@ Deno.serve(async (req) => {
                     });
 
                     const clipSettled = await Promise.allSettled(segs.map(async (seg, i) => {
-                      const segRes = clampResForModel(mdl) === "720p" ? "720p" : batchRequestedRes;
+                      const segRes = batchRequestedRes;
                       await recordVideoModelDecision(supa, "script_batch.clip_dispatch", {
                         conversation_id: conversationId,
                         client_id: clientId || null,
