@@ -75,16 +75,23 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
     return Math.max(0, Math.floor((Date.now() - started) / 1000));
   }, [huddle?.started_at, timing.elapsed]);
 
-  // Per-client count-up: resets when sub_index changes inside the clients
-  // segment. Ticks locally every 500ms so operators see live seconds.
-  const [clientStart, setClientStart] = useState<number>(() => Date.now());
+  // Per-client count-up: derived from the persisted `sub_started_at` stamp so a
+  // refresh or page close keeps counting from the same time.
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
-  useEffect(() => { setClientStart(Date.now()); }, [timer?.sub_index, timer?.segment_index, huddle?.id]);
   useEffect(() => {
     const id = window.setInterval(() => setNowTick(Date.now()), 500);
     return () => window.clearInterval(id);
   }, []);
-  const clientElapsed = Math.max(0, Math.floor((nowTick - clientStart) / 1000));
+  const clientStart = timer?.sub_started_at
+    ? new Date(timer.sub_started_at).getTime()
+    : timer?.segment_started_at
+    ? new Date(timer.segment_started_at).getTime()
+    : nowTick;
+  const clientRef = timer?.paused_at ? new Date(timer.paused_at).getTime() : nowTick;
+  const clientElapsed = Math.max(
+    0,
+    Math.floor((clientRef - clientStart) / 1000) - (timer?.sub_paused_elapsed_s || 0),
+  );
 
   // Chime when a segment's planned time runs out. The huddle NEVER auto-ends or
   // auto-advances unless the facilitator explicitly enables auto-advance — the
@@ -251,10 +258,13 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   const resume = async () => {
     if (!timer || timer.running) return;
     let pausedElapsed = timer.paused_elapsed_s || 0;
+    let subPausedElapsed = timer.sub_paused_elapsed_s || 0;
     if (timer.paused_at && timer.segment_started_at) {
-      pausedElapsed += Math.floor((Date.now() - new Date(timer.paused_at).getTime()) / 1000);
+      const gap = Math.floor((Date.now() - new Date(timer.paused_at).getTime()) / 1000);
+      pausedElapsed += gap;
+      subPausedElapsed += gap;
     }
-    await updateTimer({ running: true, paused_at: null, paused_elapsed_s: pausedElapsed });
+    await updateTimer({ running: true, paused_at: null, paused_elapsed_s: pausedElapsed, sub_paused_elapsed_s: subPausedElapsed });
   };
 
   const bump30 = async () => {
@@ -310,7 +320,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
           await (supabase as any)
             .from('huddle_client_reviews')
             .upsert(
-              { huddle_id: huddle.id, client_id: current.id, position: idx, status },
+              { huddle_id: huddle.id, client_id: current.id, position: idx, status, duration_s: clientElapsed },
               { onConflict: 'huddle_id,client_id' },
             );
         } catch (e) {
@@ -531,6 +541,7 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
             clients={clients}
             currentClientIdx={timer.sub_index}
             huddleId={huddle.id}
+            currentClientElapsed={clientElapsed}
           />
         </aside>
       </div>

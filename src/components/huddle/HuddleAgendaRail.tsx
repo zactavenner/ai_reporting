@@ -11,6 +11,8 @@ interface Props {
   clients?: Client[];
   currentClientIdx?: number;
   huddleId?: string;
+  /** Live seconds for the client currently under review (persisted upstream). */
+  currentClientElapsed?: number;
 }
 
 function fmtDur(s: number) {
@@ -19,7 +21,7 @@ function fmtDur(s: number) {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
-export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentClientIdx, huddleId }: Props) {
+export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentClientIdx, huddleId, currentClientElapsed }: Props) {
   const clientIndex = currentClientIdx ?? 0;
   const clientsSeg = agenda.find((s) => s.key === 'clients');
   const targetPerClient = clientsSeg && clients && clients.length > 0
@@ -46,15 +48,9 @@ export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentCl
     return () => { cancelled = true; window.clearInterval(id); };
   }, [huddleId]);
 
-  // Live tick for current client
-  const [liveStart, setLiveStart] = useState<number>(() => Date.now());
-  const [now, setNow] = useState<number>(() => Date.now());
-  useEffect(() => { setLiveStart(Date.now()); }, [clientIndex, huddleId]);
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 500);
-    return () => window.clearInterval(id);
-  }, []);
-  const liveElapsed = Math.max(0, Math.floor((now - liveStart) / 1000));
+  // Live seconds for the current client come from the persisted huddle timer so
+  // the count-up survives refreshes; fall back to 0 when not provided.
+  const liveElapsed = Math.max(0, Math.floor(currentClientElapsed ?? 0));
   const totalClientTime =
     Object.values(durations).reduce((a, b) => a + (b || 0), 0) + liveElapsed;
 
