@@ -4,8 +4,16 @@
 // every client/location value must come from the server-side config row.
 
 import { normalizeEmail, type NormalizedMeeting } from './meetgeekIngest.ts';
+import { scoreMeetingQuality } from './meetgeekQuality.ts';
 
 export type BotJoinPolicy = 'never' | 'selected_calendar_video_only' | 'all_video_on_calendar';
+
+/**
+ * `selected_calendar` (default, safest): only the one chosen calendar may ingest.
+ * `all_mapped_calendars`: any calendar inside the client's mapped location may
+ * ingest — still never across locations/tenants.
+ */
+export type IngestMode = 'selected_calendar' | 'all_mapped_calendars';
 
 export interface MeetgeekClientConfig {
   clientId: string;
@@ -16,6 +24,7 @@ export interface MeetgeekClientConfig {
   ghlCalendarId: string | null;
   ghlCalendarName?: string | null;
   botJoinPolicy: BotJoinPolicy;
+  mode?: IngestMode;
   mappingValid: boolean;
   webhookSecretConfigured?: boolean;
 }
@@ -76,7 +85,10 @@ export function evaluateCalendarGate(args: {
   if (!config) return { allowed: false, reason: 'not_configured' };
   if (!config.enabled) return { allowed: false, reason: 'integration_disabled' };
   if (!config.mappingValid || !config.ghlLocationId) return { allowed: false, reason: 'mapping_invalid' };
-  if (!config.ghlCalendarId) return { allowed: false, reason: 'no_calendar_selected' };
+  const mode: IngestMode = config.mode || 'selected_calendar';
+  if (mode === 'selected_calendar' && !config.ghlCalendarId) {
+    return { allowed: false, reason: 'no_calendar_selected' };
+  }
 
   const appointments = args.appointments || [];
   if (appointments.length === 0) return { allowed: false, reason: 'appointment_not_found' };
@@ -87,7 +99,9 @@ export function evaluateCalendarGate(args: {
     return { allowed: false, reason: 'cross_client_location' };
   }
 
-  const onSelected = appointments.filter((a) => a.calendarId === config.ghlCalendarId);
+  const onSelected = mode === 'all_mapped_calendars'
+    ? appointments.filter((a) => a.locationId === config.ghlLocationId || !a.locationId)
+    : appointments.filter((a) => a.calendarId === config.ghlCalendarId);
   if (onSelected.length === 0) return { allowed: false, reason: 'calendar_not_selected' };
 
   const unique = dedupeByEventId(onSelected);
