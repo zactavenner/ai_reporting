@@ -168,6 +168,7 @@ async function loadMeetgeekConfig(supabase: any, clientId: string): Promise<Meet
     ghlCalendarId: data.ghl_calendar_id,
     ghlCalendarName: data.ghl_calendar_name,
     botJoinPolicy: data.bot_join_policy,
+    mode: data.ingest_mode === 'all_mapped_calendars' ? 'all_mapped_calendars' : 'selected_calendar',
     mappingValid: !!data.mapping_valid,
     webhookSecretConfigured: !!data.webhook_secret_configured,
   };
