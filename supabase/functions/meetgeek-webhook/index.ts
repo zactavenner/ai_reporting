@@ -192,28 +192,30 @@ function buildLifecycleDeps(supabase: any): LifecycleDeps {
           .limit(50);
         for (const row of data || []) candidateIds.add(row.client_id as string);
       }
-      if (candidateIds.size === 0) {
-        const byTitle = await matchClientByTitle(supabase, meeting.title || '');
-        if (byTitle) candidateIds.add(byTitle);
-      }
+      // Deliberately NO title-based fallback here: a meeting title is
+      // attacker-controllable text and must never assign a tenant.
       // Only clients with an enabled MeetGeek config qualify; ambiguity is refused.
       const configs: MeetgeekClientConfig[] = [];
       for (const id of candidateIds) {
         const cfg = await loadMeetgeekConfig(supabase, id);
         if (cfg?.enabled) configs.push(cfg);
       }
-      if (configs.length !== 1) return configs.length > 1 ? null : null;
+      if (configs.length !== 1) return null;
       return configs[0];
     },
     async findAppointments(config, meeting) {
-      if (!config.ghlCalendarId || !config.ghlLocationId) return [];
+      const mode = config.mode || 'selected_calendar';
+      if (!config.ghlLocationId) return [];
+      if (mode === 'selected_calendar' && !config.ghlCalendarId) return [];
       const { apiKey, locationId } = await getMappedGhl(supabase, config.clientId);
       if (!apiKey || !locationId || locationId !== config.ghlLocationId) return [];
       const anchor = meeting.startedAt ? new Date(meeting.startedAt).getTime() : Date.now();
       const startTime = anchor - 60 * 60 * 1000;
       const endTime = anchor + 60 * 60 * 1000;
       const url = `${GHL_BASE}/calendars/events?locationId=${encodeURIComponent(locationId)}`
-        + `&calendarId=${encodeURIComponent(config.ghlCalendarId)}`
+        + (mode === 'selected_calendar' && config.ghlCalendarId
+          ? `&calendarId=${encodeURIComponent(config.ghlCalendarId)}`
+          : '')
         + `&startTime=${startTime}&endTime=${endTime}`;
       const res = await fetch(url, { headers: GHL_HEADERS(apiKey) });
       if (!res.ok) return [];
