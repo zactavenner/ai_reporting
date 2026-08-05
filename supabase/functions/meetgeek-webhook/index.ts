@@ -344,6 +344,11 @@ Deno.serve(async (req) => {
     const body = JSON.parse(rawBody);
     console.log('Received webhook/request:', JSON.stringify(body).slice(0, 500));
 
+    // Every internal action is admin surface — require a real caller identity.
+    if (!(await requireInternalAuth(req))) {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    }
+
     // Determine client_id from body or query
     const clientId = body.client_id || new URL(req.url).searchParams.get('client_id');
 
