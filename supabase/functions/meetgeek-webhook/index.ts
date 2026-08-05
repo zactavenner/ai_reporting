@@ -119,6 +119,30 @@ const GHL_HEADERS = (apiKey: string) => ({
   Accept: 'application/json',
 });
 
+/**
+ * Internal (non-provider) actions require either a valid Supabase user JWT or
+ * the service-role key (cron). Anonymous callers can never drive admin actions.
+ */
+async function requireInternalAuth(req: Request): Promise<boolean> {
+  const authHeader = req.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return false;
+  const token = authHeader.slice(7).trim();
+  if (!token) return false;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  if (serviceKey && token === serviceKey) return true;
+  try {
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data, error } = await authClient.auth.getClaims(token);
+    return !error && !!data?.claims?.sub;
+  } catch {
+    return false;
+  }
+}
+
 /** Server-side only: reads the client's mapped HighLevel credentials. */
 async function getMappedGhl(supabase: any, clientId: string): Promise<{ apiKey: string | null; locationId: string | null }> {
   const { data } = await supabase
