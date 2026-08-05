@@ -3,10 +3,20 @@ import {
   ingestMeetgeekWebhook,
   MEETGEEK_SIGNATURE_HEADER,
   normalizeEmail,
+  buildMeetingNote,
   type IngestDeps,
   type LeadRow,
   type NormalizedMeeting,
 } from '../_shared/meetgeekIngest.ts';
+import {
+  buildActivityRow,
+  evaluateCalendarGate,
+  GATE_REJECTION_MESSAGES,
+  processCalendarMeeting,
+  type CalendarAppointment,
+  type LifecycleDeps,
+  type MeetgeekClientConfig,
+} from '../_shared/meetgeekCalendarGate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -91,6 +101,174 @@ async function verifySignature(body: string, signature: string, secret: string):
 
 function getBaseUrl(region: string): string {
   return region === 'eu' ? 'https://api-eu.meetgeek.ai' : 'https://api-us.meetgeek.ai';
+}
+
+const GHL_BASE = 'https://services.leadconnectorhq.com';
+const GHL_HEADERS = (apiKey: string) => ({
+  Authorization: `Bearer ${apiKey}`,
+  Version: '2021-07-28',
+  'Content-Type': 'application/json',
+  Accept: 'application/json',
+});
+
+/** Server-side only: reads the client's mapped HighLevel credentials. */
+async function getMappedGhl(supabase: any, clientId: string): Promise<{ apiKey: string | null; locationId: string | null }> {
+  const { data } = await supabase
+    .from('clients')
+    .select('ghl_api_key, ghl_location_id')
+    .eq('id', clientId)
+    .maybeSingle();
+  return { apiKey: data?.ghl_api_key || null, locationId: data?.ghl_location_id || null };
+}
+
+function isVideoAppointment(ev: any): boolean {
+  const candidates = [ev?.address, ev?.meetingUrl, ev?.location, ev?.notes]
+    .filter((v) => typeof v === 'string')
+    .join(' ')
+    .toLowerCase();
+  if (/zoom\.us|meet\.google|teams\.microsoft|whereby|webex|https?:\/\//.test(candidates)) return true;
+  const type = String(ev?.meetingLocationType || ev?.appointmentLocationType || '').toLowerCase();
+  return ['zoom', 'google', 'gmeet', 'ms_teams', 'teams', 'custom'].includes(type);
+}
+
+function toGhlAppointment(ev: any): CalendarAppointment {
+  return {
+    eventId: String(ev?.id || ev?.eventId || ''),
+    calendarId: ev?.calendarId ? String(ev.calendarId) : null,
+    locationId: ev?.locationId ? String(ev.locationId) : null,
+    contactId: ev?.contactId ? String(ev.contactId) : null,
+    attendeeEmail: normalizeEmail(ev?.contact?.email || ev?.email || null),
+    title: ev?.title || ev?.appointmentStatus || null,
+    startTime: ev?.startTime ? new Date(ev.startTime).toISOString() : null,
+    endTime: ev?.endTime ? new Date(ev.endTime).toISOString() : null,
+    isVideo: isVideoAppointment(ev),
+  };
+}
+
+/** Loads the per-client MeetGeek config. Health/status is server-owned. */
+async function loadMeetgeekConfig(supabase: any, clientId: string): Promise<MeetgeekClientConfig | null> {
+  const { data } = await supabase
+    .from('client_meetgeek_settings')
+    .select('*')
+    .eq('client_id', clientId)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    clientId: data.client_id,
+    enabled: !!data.enabled,
+    ghlLocationId: data.ghl_location_id,
+    ghlCalendarId: data.ghl_calendar_id,
+    ghlCalendarName: data.ghl_calendar_name,
+    botJoinPolicy: data.bot_join_policy,
+    mappingValid: !!data.mapping_valid,
+    webhookSecretConfigured: !!data.webhook_secret_configured,
+  };
+}
+
+/** Builds the calendar-gated lifecycle dependencies (all IO, service role). */
+function buildLifecycleDeps(supabase: any): LifecycleDeps {
+  return {
+    async getConfigForMeeting(meeting) {
+      // Client authority: an attendee that already exists as a lead of a client
+      // whose MeetGeek integration is configured. Never from the request URL.
+      const emails = meeting.participants
+        .map((p) => normalizeEmail(p.email))
+        .filter((e): e is string => !!e);
+      const candidateIds = new Set<string>();
+      if (emails.length) {
+        const { data } = await supabase
+          .from('leads')
+          .select('client_id')
+          .in('email', emails)
+          .not('client_id', 'is', null)
+          .limit(50);
+        for (const row of data || []) candidateIds.add(row.client_id as string);
+      }
+      if (candidateIds.size === 0) {
+        const byTitle = await matchClientByTitle(supabase, meeting.title || '');
+        if (byTitle) candidateIds.add(byTitle);
+      }
+      // Only clients with an enabled MeetGeek config qualify; ambiguity is refused.
+      const configs: MeetgeekClientConfig[] = [];
+      for (const id of candidateIds) {
+        const cfg = await loadMeetgeekConfig(supabase, id);
+        if (cfg?.enabled) configs.push(cfg);
+      }
+      if (configs.length !== 1) return configs.length > 1 ? null : null;
+      return configs[0];
+    },
+    async findAppointments(config, meeting) {
+      if (!config.ghlCalendarId || !config.ghlLocationId) return [];
+      const { apiKey, locationId } = await getMappedGhl(supabase, config.clientId);
+      if (!apiKey || !locationId || locationId !== config.ghlLocationId) return [];
+      const anchor = meeting.startedAt ? new Date(meeting.startedAt).getTime() : Date.now();
+      const startTime = anchor - 60 * 60 * 1000;
+      const endTime = anchor + 60 * 60 * 1000;
+      const url = `${GHL_BASE}/calendars/events?locationId=${encodeURIComponent(locationId)}`
+        + `&calendarId=${encodeURIComponent(config.ghlCalendarId)}`
+        + `&startTime=${startTime}&endTime=${endTime}`;
+      const res = await fetch(url, { headers: GHL_HEADERS(apiKey) });
+      if (!res.ok) return [];
+      const json = await res.json().catch(() => ({}));
+      const events = json?.events || json?.appointments || [];
+      return (Array.isArray(events) ? events : [])
+        .map(toGhlAppointment)
+        .filter((a: CalendarAppointment) => !!a.eventId);
+    },
+    async findActivity(source, idempotencyKey) {
+      const { data } = await supabase
+        .from('meeting_call_activity')
+        .select('id, status, crm_sync_status, crm_attempts')
+        .eq('source', source)
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle();
+      return data || null;
+    },
+    async upsertActivity(row) {
+      const { data, error } = await supabase
+        .from('meeting_call_activity')
+        .upsert(row as any, { onConflict: 'source,idempotency_key' })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    async patchActivity(id, patch) {
+      await supabase.from('meeting_call_activity').update(patch).eq('id', id);
+    },
+    async matchLead(config, emails) {
+      const { data } = await supabase
+        .from('leads')
+        .select('id, external_id, email')
+        .eq('client_id', config.clientId)
+        .in('email', emails)
+        .limit(1);
+      return data?.[0] || null;
+    },
+    async writeGhlNote({ config, contactId, note }) {
+      const { apiKey, locationId } = await getMappedGhl(supabase, config.clientId);
+      if (!apiKey || !locationId || locationId !== config.ghlLocationId) {
+        return { status: 'skipped', error: 'ghl_mapping_unavailable' };
+      }
+      try {
+        const res = await fetch(`${GHL_BASE}/contacts/${contactId}/notes`, {
+          method: 'POST',
+          headers: GHL_HEADERS(apiKey),
+          body: JSON.stringify({ body: note }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { status: 'error', error: `GHL ${res.status}: ${text.slice(0, 300)}` };
+        }
+        return { status: 'written' };
+      } catch (e) {
+        return { status: 'error', error: e instanceof Error ? e.message : 'ghl_request_failed' };
+      }
+    },
+    async touchHealth(clientId, patch) {
+      await supabase.from('client_meetgeek_settings').update(patch).eq('client_id', clientId);
+    },
+  };
 }
 
 Deno.serve(async (req) => {
