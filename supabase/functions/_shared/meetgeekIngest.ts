@@ -342,7 +342,46 @@ export async function ingestMeetgeekWebhook(args: {
       return { ok: true, status: 202, reason: 'meeting_not_completed' };
     }
 
-    const clientId = await deps.resolveClientId(meeting);
+    // Per-client calendar gate (production path). Rejects unconfigured,
+    // wrong-calendar, cross-client and ambiguous bookings before any CRM write.
+    let gatedClientId: string | null | undefined;
+    let activityId: string | undefined;
+    if (deps.calendarGate) {
+      const gate = await deps.calendarGate(meeting);
+      activityId = gate.activityId;
+      if (!gate.ok) {
+        await deps.updateEvent(event.id, {
+          status: 'rejected',
+          errorMessage: gate.rejected || 'calendar_gate_rejected',
+          clientId: gate.clientId ?? null,
+        });
+        return {
+          ok: false,
+          status: gate.status || 403,
+          reason: gate.rejected || 'calendar_gate_rejected',
+          activityId,
+          clientId: gate.clientId ?? null,
+        };
+      }
+      if (gate.duplicate) {
+        await deps.updateEvent(event.id, { status: 'processed', clientId: gate.clientId ?? null });
+        return {
+          ok: true,
+          status: 200,
+          duplicate: true,
+          reason: 'duplicate_event',
+          activityId,
+          clientId: gate.clientId ?? null,
+          matched: gate.matched,
+          ghlNoteStatus: gate.crmSyncStatus,
+        };
+      }
+      gatedClientId = gate.clientId ?? null;
+    }
+
+    const clientId = gatedClientId !== undefined
+      ? gatedClientId
+      : await deps.resolveClientId(meeting);
     const record = await deps.upsertMeetingRecord(meeting, clientId);
 
     const emails = meeting.participants
@@ -383,6 +422,8 @@ export async function ingestMeetgeekWebhook(args: {
       matched: !!match.lead,
       matchConfidence: match.confidence,
       ghlNoteStatus,
+      activityId,
+      clientId,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown_error';
