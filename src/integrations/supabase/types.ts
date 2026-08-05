@@ -7040,6 +7040,61 @@ export type Database = {
           },
         ]
       }
+      client_weekly_report_notes: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          next_plan: string | null
+          risks: string | null
+          updated_at: string
+          week_start: string
+          wins: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          next_plan?: string | null
+          risks?: string | null
+          updated_at?: string
+          week_start: string
+          wins?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          next_plan?: string | null
+          risks?: string | null
+          updated_at?: string
+          week_start?: string
+          wins?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_weekly_report_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_weekly_report_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_weekly_report_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           account_manager: string | null
