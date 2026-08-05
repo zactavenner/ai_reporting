@@ -1,6 +1,7 @@
 import { User, Mail, Phone, DollarSign, Calendar, Tag, ExternalLink, Hash, Globe, FileText, ChevronDown, Link2, StickyNote, Clock, Target, RefreshCw, Loader2 } from 'lucide-react';
 import { useLeadEnrichment, useEnrichLead } from '@/hooks/useLeadEnrichment';
 import { EnrichmentSection } from '@/components/records/EnrichmentSection';
+import { MeetingContextPanel } from '@/components/records/MeetingContextPanel';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -132,6 +133,7 @@ export function UniversalRecordPanel({
     enrichment: true,
     ghl: false,
     timeline: true,
+    meetings: true,
   });
 
   // Get client info for GHL location
@@ -550,6 +552,11 @@ export function UniversalRecordPanel({
           {/* Lead Enrichment */}
           {!isPublicView && (
             <>
+              <MeetingContextPanel
+                leadId={linkedLead?.id || (recordType === 'lead' ? record?.id : null)}
+                isOpen={sectionsOpen.meetings}
+                onToggle={() => toggleSection('meetings')}
+              />
               <EnrichmentSection
                 enrichment={enrichment}
                 isLoading={enrichmentLoading}
