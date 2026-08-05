@@ -584,8 +584,9 @@ function buildIngestDeps(supabase: any): IngestDeps {
       const lifecycle = buildLifecycleDeps(supabase);
       const config = await lifecycle.getConfigForMeeting(meeting);
       if (!config) {
-        // No per-client MeetGeek configuration — keep legacy ingestion behaviour.
-        return { ok: true, status: 200, bypass: true };
+        // Fail closed: no unambiguous, enabled per-client configuration means we
+        // refuse to guess a tenant and refuse to ingest.
+        return { ok: false, status: 403, rejected: 'not_configured', clientId: null };
       }
       const result = await processCalendarMeeting({
         meeting,
