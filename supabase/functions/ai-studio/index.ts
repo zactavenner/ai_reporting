@@ -2651,14 +2651,14 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality 15-second video clip with MiniMax H3 (minimax/hailuo-3) — the ONLY video model available. Seedance, Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration is 15s per clip and resolution is always '2k' (H3 native).",
+      description: "Generate a single high-quality 15-second video clip with MiniMax H3 (minimax/hailuo-3) — the ONLY video model available. Seedance, Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration is 15s per clip and resolution is '720p' or '2k' (default 2k) — use the resolution locked in the composer.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16"], description: "Video format. Only 9:16 Reel and 16:9 Video are supported." },
           duration: { type: "integer", enum: [15], description: "Clip length in seconds. Only 15 seconds is supported in AI Studio." },
-          resolution: { type: "string", enum: ["2k"], description: "MiniMax H3 renders natively at 2K only. 720p/1080p/4k do not exist on this model and are rejected by the provider." },
+          resolution: { type: "string", enum: ["720p", "2k"], description: "MiniMax H3 renders at 720p or native 2K. 480p/1080p/4k do not exist on this model and are rejected by the provider. Default '2k'." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME. H3 supports first+last frame control for precise motion endpoints." },
           ingredient_url: { type: "string", description: "Optional URL of an INGREDIENT / PRODUCT / SUBJECT / AVATAR reference image. H3 preserves this identity across the clip. Pass whenever the user pinned an ingredient in the video frame slots." },
@@ -2756,7 +2756,7 @@ const tools = [
           },
           model: { type: "string", enum: ["minimax/hailuo-3"], description: "Always 'minimax/hailuo-3' — the only video model." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
-          resolution: { type: "string", enum: ["2k"], description: "MiniMax H3 renders natively at 2K only." },
+          resolution: { type: "string", enum: ["720p", "2k"], description: "MiniMax H3 renders at 720p or native 2K. Default '2k'." },
         },
         required: ["scripts"],
       },
