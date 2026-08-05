@@ -92,23 +92,27 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // UI shows the total cost of generating a clip at maxSeconds so buyers
 // can compare apples-to-apples without doing math in their head.
 // Pricing base is 1080p USD/sec (from OpenRouter). 720p applies a multiplier.
-// MiniMax H3 is the ONLY video model. Seedance, Grok and HappyHorse were retired
-// from every AI Studio surface — H3 covers text-to-video, first/last frame
-// keyframing and reference-identity in one model at 720p or native 2K.
+// Two approved video models: MiniMax H3 (720p / native 2K) and Seedance (720p only).
+// Grok, HappyHorse, Veo and Kling stay retired across every AI Studio surface.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
   { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
+  { value: "bytedance/seedance-2.0",      label: "Seedance",        hint: "Seedance 2.0 — 720p only, up to 15s, text-to-video + first/last frame keyframing + reference images, native audio", maxSeconds: 15, pricePerSecond: 0.0938 },
 ];
 export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
+export const SEEDANCE_VIDEO_MODEL = "bytedance/seedance-2.0";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   // MiniMax H3 renders at 720p (cheaper/faster) or native 2K.
   "minimax/hailuo-3":            ["720p", "2k"],
+  // Seedance is locked to 720p in Reporting 5.0.
+  "bytedance/seedance-2.0":      ["720p"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
   "minimax/hailuo-3": { "720p": 0.06, "2k": 0.13 },
+  "bytedance/seedance-2.0": { "720p": 0.0538 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
   return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
