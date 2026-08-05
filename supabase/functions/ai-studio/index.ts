@@ -3035,7 +3035,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
   ctx.videoResolution
-    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. 4K is not exposed in the UI; HappyHorse is hard-locked server-side to 1080p.`
+    ? `VIDEO RESOLUTION HARD-LOCK: resolution="${ctx.videoResolution}" for the selected renderer${ctx.videoModel ? ` ("${ctx.videoModel}")` : ""}. Pass resolution: "${ctx.videoResolution}" on EVERY generate_seedance_video tool_call. MiniMax H3 supports "720p" and "2k"; Seedance 2.0 (bytedance/seedance-2.0) supports "720p" only. Never upgrade or downgrade this value, and never switch the model to change the resolution.`
     : null,
   ctx.videoAspect
     ? `VIDEO FORMAT PREFERENCE: The user selected video aspect_ratio "${ctx.videoAspect}". Video generation supports ONLY 9:16 Reel and 16:9 Video. NEVER pass 1:1 to a video tool; 1:1 is for static images only.`
