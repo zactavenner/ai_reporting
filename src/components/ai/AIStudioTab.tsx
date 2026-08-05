@@ -95,19 +95,20 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // from every AI Studio surface — H3 covers text-to-video, first/last frame
 // keyframing and reference-identity in one model at 720p or native 2K.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
+  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — native 2K only (OpenRouter rejects 720p for this model), 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
 ];
 export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
-  // MiniMax H3: 720p (cheaper draft) or native 2K.
-  "minimax/hailuo-3":            ["720p", "2k"],
+  // MiniMax H3 on OpenRouter advertises supported_resolutions: ["2K"] only.
+  // Sending 720p returns HTTP 400 "Resolution 720p is not supported for this model".
+  "minimax/hailuo-3":            ["2k"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
-  "minimax/hailuo-3": { "720p": 0.065, "2k": 0.13 },
+  "minimax/hailuo-3": { "2k": 0.13 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
   return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
