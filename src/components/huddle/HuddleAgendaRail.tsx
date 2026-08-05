@@ -55,6 +55,8 @@ export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentCl
     return () => window.clearInterval(id);
   }, []);
   const liveElapsed = Math.max(0, Math.floor((now - liveStart) / 1000));
+  const totalClientTime =
+    Object.values(durations).reduce((a, b) => a + (b || 0), 0) + liveElapsed;
 
   return (
     <div className="flex flex-col h-full">
@@ -137,6 +139,10 @@ export function HuddleAgendaRail({ agenda, currentSegmentIdx, clients, currentCl
                           })}
                         </div>
                       </ScrollArea>
+                      <div className="mt-2 pt-2 border-t text-[10px] text-muted-foreground flex items-center justify-between">
+                        <span>Total on clients</span>
+                        <span className="font-mono tabular-nums">{fmtDur(totalClientTime)}</span>
+                      </div>
                     </div>
                   )}
                 </div>

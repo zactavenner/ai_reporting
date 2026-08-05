@@ -32,7 +32,9 @@ export const DEFAULT_TIMER: TimerState = {
   segment_started_at: null,
   paused_at: null,
   paused_elapsed_s: 0,
-  auto_advance: true,
+  // Never auto-advance / auto-end: the huddle counts up until the facilitator
+  // moves on or finishes.
+  auto_advance: false,
   running: false,
   finished: false,
   extra_s: 0,
