@@ -96,20 +96,19 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // from every AI Studio surface — H3 covers text-to-video, first/last frame
 // keyframing and reference-identity in one model at 720p or native 2K.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — native 2K only (OpenRouter rejects 720p for this model), 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
+  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
 ];
 export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
-  // MiniMax H3 on OpenRouter advertises supported_resolutions: ["2K"] only.
-  // Sending 720p returns HTTP 400 "Resolution 720p is not supported for this model".
-  "minimax/hailuo-3":            ["2k"],
+  // MiniMax H3 renders at 720p (cheaper/faster) or native 2K.
+  "minimax/hailuo-3":            ["720p", "2k"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
-  "minimax/hailuo-3": { "2k": 0.13 },
+  "minimax/hailuo-3": { "720p": 0.06, "2k": 0.13 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
   return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
@@ -786,7 +785,7 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
   const h3Locked =
     isH3 &&
     Number(effectiveDuration) === 15 &&
-    String(effectiveResolution || "").toLowerCase() === "2k";
+    ["720p", "2k"].includes(String(effectiveResolution || "").toLowerCase());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const saveAsTraining = async () => {
@@ -860,7 +859,7 @@ function ChatVideoPreview({ video, clientId, clientName }: { video: ChatVideo; c
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="font-semibold text-foreground">MiniMax H3 render debug</span>
             <Badge variant={h3Locked ? "secondary" : "destructive"} className="h-4 px-1 text-[9px]">
-              {h3Locked ? "Locked 15s/2K" : "Check"}
+              {h3Locked ? `Locked 15s/${String(effectiveResolution || "").toLowerCase() === "2k" ? "2K" : "720p"}` : "Check"}
             </Badge>
           </div>
           <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
@@ -1019,9 +1018,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [videoResolution, setVideoResolution] = useState<VideoRes>(() => {
     try {
       const v = localStorage.getItem("ai-studio:video-resolution");
-      // H3 only supports 720p and 2K. Anything else persisted from an older
+      // H3 supports 720p and 2K. Anything else persisted from an older
       // model set is migrated up to 2K.
-      if (v === "2k") return v;
+      if (v === "2k" || v === "720p") return v as VideoRes;
     } catch {}
     return "2k";
   });
@@ -1674,7 +1673,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           if (videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${ONLY_VIDEO_MODEL}" (MiniMax H3 is the ONLY approved video model — Seedance, Grok, HappyHorse and Veo are retired and must never be requested), resolution="2k" (H3 renders natively at 2K only; 720p is rejected by OpenRouter), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${ONLY_VIDEO_MODEL}" (MiniMax H3 is the ONLY approved video model — Seedance, Grok, HappyHorse and Veo are retired and must never be requested), resolution="${videoResolution}" (H3 supports "720p" and "2k" only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
@@ -2730,7 +2729,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             key={r}
                             type="button"
                             onClick={() => setVideoResolution(r)}
-                            title={r === "2k" ? "2K — MiniMax H3 native resolution (only resolution OpenRouter accepts for H3)" : r}
+                            title={r === "2k" ? "2K — MiniMax H3 native resolution (highest quality)" : r === "720p" ? "720p — faster and cheaper H3 render" : r}
                             className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                           >
                             {r === "4k" ? "4K" : r === "2k" ? "2K" : r}
