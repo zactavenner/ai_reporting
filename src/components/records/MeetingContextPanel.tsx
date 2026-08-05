@@ -3,6 +3,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, Video, CheckCircle2, AlertCircle, MinusCircle, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { MeetingCallActivityList } from '@/components/meetings/MeetingCallActivityList';
 
 interface MeetingContextPanelProps {
   leadId?: string | null;
