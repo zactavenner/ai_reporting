@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: orModel,
-        prompt: creative.seedance_prompt,
+        prompt: condenseVideoPrompt(creative.seedance_prompt),
         resolution: useHappyHorse
           ? (String(effectiveResolution).toLowerCase() === '4k' ? '1080p' : String(effectiveResolution).toLowerCase())
           : (String(effectiveResolution).toLowerCase() === '4k' ? '4K' : effectiveResolution),
