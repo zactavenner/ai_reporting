@@ -273,23 +273,24 @@ export async function processCalendarMeeting(args: {
   const appointments = await deps.findAppointments(config, meeting);
   const decision = evaluateCalendarGate({ config, appointments });
 
-  if (!decision.allowed) {
+  if (decision.allowed !== true) {
+    const reason: GateRejection = decision.reason;
     const row = buildActivityRow({
       config,
       stage: 'rejected',
       meeting,
       appointment: appointments.find((a) => a.calendarId === config.ghlCalendarId) ?? null,
       crmStatus: 'not_applicable',
-      errorMessage: GATE_REJECTION_MESSAGES[decision.reason],
+      errorMessage: GATE_REJECTION_MESSAGES[reason],
     });
     const existing = await deps.findActivity(row.source, row.idempotency_key);
-    if (existing) return { ok: true, status: 200, duplicate: true, rejected: decision.reason, activityId: existing.id, clientId: config.clientId };
+    if (existing) return { ok: true, status: 200, duplicate: true, rejected: reason, activityId: existing.id, clientId: config.clientId };
     const saved = await deps.upsertActivity(row);
     await deps.touchHealth(config.clientId, {
-      last_error: GATE_REJECTION_MESSAGES[decision.reason],
+      last_error: GATE_REJECTION_MESSAGES[reason],
       last_error_at: new Date().toISOString(),
     });
-    return { ok: false, status: 403, rejected: decision.reason, activityId: saved.id, clientId: config.clientId };
+    return { ok: false, status: 403, rejected: reason, activityId: saved.id, clientId: config.clientId };
   }
 
   const appointment = decision.appointment;
