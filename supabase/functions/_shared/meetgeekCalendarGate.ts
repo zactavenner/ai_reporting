@@ -324,6 +324,8 @@ export async function processCalendarMeeting(args: {
   const lead = emails.length ? await deps.matchLead(config, emails) : null;
   const stage: ActivityStage = lead ? 'completed' : 'unmatched';
 
+  const quality = scoreMeetingQuality({ meeting, matched: !!lead });
+
   const baseRow = buildActivityRow({
     config,
     stage,
@@ -333,6 +335,7 @@ export async function processCalendarMeeting(args: {
     attendeeEmail: lead?.email ?? appointmentEmail,
     agentJoinedAt: meeting.startedAt,
     crmStatus: 'pending',
+    quality,
   });
 
   const existing = await deps.findActivity(baseRow.source, baseRow.idempotency_key);
@@ -395,5 +398,6 @@ export async function processCalendarMeeting(args: {
     matched: !!lead,
     crmSyncStatus: crmStatus,
     clientId: config.clientId,
+    qualityRating: quality.rating,
   };
 }
