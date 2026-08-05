@@ -1641,7 +1641,7 @@ async function generateSeedanceVideo(opts: {
 
   const body: Record<string, unknown> = {
     model,
-    prompt: opts.prompt,
+    prompt: condenseVideoPrompt(opts.prompt),
     aspect_ratio: opts.aspectRatio,
     duration: effectiveDuration,
   };
