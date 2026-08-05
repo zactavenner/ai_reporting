@@ -1110,3 +1110,96 @@ async function processMeeting(supabase: any, apiKey: string, baseUrl: string, me
     return { success: false, error: message, callUpdated: false };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Safe, self-contained test event.
+// Proves database ingestion + client isolation using ONLY our own gate and
+// tables. It registers no external webhook, calls no MeetGeek endpoint and
+// invents no provider payload/header format.
+// ---------------------------------------------------------------------------
+async function runMeetgeekTestEvent(
+  supabase: any,
+  clientId: string,
+  mode: 'match' | 'wrong_calendar' | 'wrong_client',
+): Promise<Record<string, unknown>> {
+  const config = await loadMeetgeekConfig(supabase, clientId);
+  if (!config) {
+    return { ok: false, error: 'MeetGeek is not configured for this client yet. Save the configuration first.' };
+  }
+  if (!config.mappingValid || !config.ghlCalendarId) {
+    return { ok: false, error: config.ghlCalendarId ? 'Mapping is invalid — re-save the configuration.' : 'Select a calendar first.' };
+  }
+
+  const now = new Date();
+  const stamp = now.toISOString();
+  const syntheticMeeting: NormalizedMeeting = {
+    meetingExternalId: `selftest-${clientId.slice(0, 8)}-${now.getTime()}`,
+    eventId: null,
+    title: 'MeetGeek configuration self-test',
+    status: 'analyzed',
+    isCompleted: true,
+    startedAt: stamp,
+    endedAt: stamp,
+    durationMinutes: 0,
+    language: null,
+    hostEmail: null,
+    participants: [],
+    summary: 'Synthetic self-test row. No external provider call was made.',
+    actionItems: [],
+    transcriptUrl: null,
+    recordingUrl: null,
+    sourceUrl: null,
+  };
+
+  // The appointment is synthetic but the gate is the real one.
+  const appointment: CalendarAppointment = {
+    eventId: `selftest-evt-${now.getTime()}`,
+    calendarId: mode === 'wrong_calendar' ? `${config.ghlCalendarId}-not-selected` : config.ghlCalendarId,
+    locationId: mode === 'wrong_client' ? `${config.ghlLocationId}-other` : config.ghlLocationId,
+    contactId: null,
+    attendeeEmail: null,
+    title: 'MeetGeek configuration self-test',
+    startTime: stamp,
+    endTime: stamp,
+    isVideo: true,
+  };
+
+  const decision = evaluateCalendarGate({ config, appointments: [appointment] });
+  const rejected = decision.allowed ? null : decision.reason;
+
+  const row = buildActivityRow({
+    config,
+    stage: rejected ? 'rejected' : 'test',
+    appointment: rejected ? null : appointment,
+    meeting: syntheticMeeting,
+    crmStatus: 'not_applicable',
+    errorMessage: rejected ? GATE_REJECTION_MESSAGES[rejected] : null,
+    source: 'meetgeek_selftest',
+  });
+
+  const { data, error } = await supabase
+    .from('meeting_call_activity')
+    .upsert(row as any, { onConflict: 'source,idempotency_key' })
+    .select('id, client_id, status, error_message')
+    .single();
+  if (error) {
+    return { ok: false, error: `Database ingestion failed: ${error.message}` };
+  }
+
+  // Isolation proof: this key must resolve to exactly one row, for this client.
+  const { count } = await supabase
+    .from('meeting_call_activity')
+    .select('id', { count: 'exact', head: true })
+    .eq('source', 'meetgeek_selftest')
+    .eq('idempotency_key', row.idempotency_key)
+    .neq('client_id', clientId);
+
+  return {
+    ok: true,
+    mode,
+    gate: rejected ? 'rejected' : 'allowed',
+    reason: rejected ? GATE_REJECTION_MESSAGES[rejected] : null,
+    activity: data,
+    isolation_ok: (count ?? 0) === 0,
+  };
+}
