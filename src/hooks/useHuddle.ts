@@ -184,7 +184,17 @@ export function useTodayHuddle() {
 
   const updateTimer = async (patch: Partial<TimerState>) => {
     if (!huddle) return;
-    const next: TimerState = { ...huddle.timer_state, ...patch };
+    const prev = huddle.timer_state;
+    const next: TimerState = { ...prev, ...patch };
+    // Persist the per-client (sub-position) start time so the count-up
+    // continues across refreshes. Restamp whenever the position moves.
+    const movedSub =
+      (patch.sub_index !== undefined && patch.sub_index !== (prev.sub_index ?? 0)) ||
+      (patch.segment_index !== undefined && patch.segment_index !== prev.segment_index);
+    if (patch.sub_started_at === undefined && (movedSub || !next.sub_started_at)) {
+      next.sub_started_at = new Date().toISOString();
+      next.sub_paused_elapsed_s = 0;
+    }
     setHuddle({ ...huddle, timer_state: next });
     await supabase.from('huddles').update({ timer_state: next as any }).eq('id', huddle.id);
   };
