@@ -41,8 +41,10 @@ type Row = {
 
 const ROWS: Row[] = [
   { label: 'Ad spend', value: (m) => m.adSpend, fmt: money, invert: true, emphasis: true },
-  { label: 'Leads', value: (m) => m.leads, fmt: int },
-  { label: 'Cost per lead', value: (m) => (m.leads ? m.adSpend / m.leads : 0), fmt: money2, invert: true },
+  { label: 'Leads (all CRM records)', value: (m) => m.leads, fmt: int },
+  { label: 'Valid leads (email + phone)', value: (m) => m.validLeads, fmt: int, emphasis: true },
+  { label: 'Spam / invalid leads', value: (m) => m.leads - m.validLeads, fmt: int, invert: true },
+  { label: 'Cost per valid lead', value: (m) => (m.validLeads ? m.adSpend / m.validLeads : 0), fmt: money2, invert: true },
   { label: 'Discovery calls booked', value: (m) => m.discoveryCalls, fmt: int },
   { label: 'Cost per discovery call', value: (m) => (m.discoveryCalls ? m.adSpend / m.discoveryCalls : 0), fmt: money2, invert: true },
   { label: 'Showed calls', value: (m) => m.showedCalls, fmt: int },
