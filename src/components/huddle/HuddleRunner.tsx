@@ -86,8 +86,9 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
   }, []);
   const clientElapsed = Math.max(0, Math.floor((nowTick - clientStart) / 1000));
 
-  // Chime + auto-advance on segment end. Only the facilitator auto-advances so
-  // multiple viewers don't race to write the next segment.
+  // Chime when a segment's planned time runs out. The huddle NEVER auto-ends or
+  // auto-advances unless the facilitator explicitly enables auto-advance — the
+  // clock just keeps counting up (overrun) until someone moves on.
   useEffect(() => {
     if (!timer || !timer.running) return;
     if (timing.remaining <= 0 && chimed.current !== timing.idx) {
@@ -96,18 +97,6 @@ export function HuddleRunner({ onFinish }: { onFinish?: () => void }) {
       if (timer.auto_advance && isFacilitator) next();
     }
   }, [timing.remaining, timer?.running, isFacilitator]);
-
-  // Hard cap: 2 hours then auto-finish (nothing runs forever)
-  const HARD_CAP_S = 7200;
-  useEffect(() => {
-    if (!huddle?.started_at || timer?.finished || autoFinishedRef.current) return;
-    if (meetingElapsed >= HARD_CAP_S) {
-      autoFinishedRef.current = true;
-      toast.message('2-hour cap reached — wrapping huddle');
-      finish();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetingElapsed, timer?.finished, huddle?.started_at]);
 
   const startRecording = async () => {
     try {
