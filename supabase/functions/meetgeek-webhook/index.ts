@@ -412,6 +412,9 @@ Deno.serve(async (req) => {
         const enabled = !!body.enabled;
         const policy = ['never', 'selected_calendar_video_only', 'all_video_on_calendar']
           .includes(body.bot_join_policy) ? body.bot_join_policy : 'selected_calendar_video_only';
+        const ingestMode = body.ingest_mode === 'all_mapped_calendars'
+          ? 'all_mapped_calendars'
+          : 'selected_calendar';
         const requestedCalendarId = body.ghl_calendar_id ? String(body.ghl_calendar_id) : null;
 
         let mappingValid = false;
@@ -420,8 +423,10 @@ Deno.serve(async (req) => {
 
         if (!apiKey || !locationId) {
           mappingError = 'No mapped HighLevel location/API key for this client.';
-        } else if (!requestedCalendarId) {
+        } else if (!requestedCalendarId && ingestMode === 'selected_calendar') {
           mappingError = 'Select a HighLevel calendar for MeetGeek to operate on.';
+        } else if (!requestedCalendarId && ingestMode === 'all_mapped_calendars') {
+          mappingValid = true;
         } else {
           const res = await fetch(
             `${GHL_BASE}/calendars/?locationId=${encodeURIComponent(locationId)}`,
@@ -451,6 +456,7 @@ Deno.serve(async (req) => {
             ghl_calendar_id: mappingValid ? requestedCalendarId : null,
             ghl_calendar_name: calendarName,
             bot_join_policy: policy,
+            ingest_mode: ingestMode,
             mapping_valid: mappingValid,
             mapping_error: mappingError,
             webhook_secret_configured: secretConfigured,
