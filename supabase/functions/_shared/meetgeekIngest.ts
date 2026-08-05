@@ -42,6 +42,21 @@ export interface LeadMatch {
 }
 
 export interface IngestDeps {
+  /**
+   * Optional per-client calendar gate. When provided it is the sole authority for
+   * which client a meeting belongs to and whether it may be ingested at all.
+   * It also records the client-scoped call-activity lifecycle.
+   */
+  calendarGate?(meeting: NormalizedMeeting): Promise<{
+    ok: boolean;
+    status: number;
+    rejected?: string;
+    clientId?: string | null;
+    matched?: boolean;
+    crmSyncStatus?: string;
+    activityId?: string;
+    duplicate?: boolean;
+  }>;
   /** Returns true when an event with this dedupe key was already processed. */
   findProcessedEvent(dedupeKey: string): Promise<{ id: string; status: string } | null>;
   recordEvent(input: {
@@ -87,6 +102,8 @@ export interface IngestResult {
   matched?: boolean;
   matchConfidence?: number;
   ghlNoteStatus?: string;
+  activityId?: string;
+  clientId?: string | null;
 }
 
 export const MEETGEEK_SIGNATURE_HEADER = 'x-mg-signature';
