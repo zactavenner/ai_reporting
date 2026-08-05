@@ -1,5 +1,6 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { condenseVideoPrompt } from '../_shared/videoPrompt.ts';
 
 const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
