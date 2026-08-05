@@ -46,7 +46,7 @@ const ALLOWED_MODELS: Record<string, { label: string; provider: "openrouter" | "
   "bytedance/seedance-2.0": { label: "Seedance 2.0 Pro", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.0938 },
   "bytedance/seedance-2.0-fast": { label: "Seedance 2.0 Fast", provider: "openrouter", maxRes: ["480p", "720p"], pricePerSecond: 0.0538 },
   "x-ai/grok-imagine-video-1.5": { label: "Grok Imagine 1.5", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.14 },
-  "minimax/hailuo-3": { label: "MiniMax H3", provider: "openrouter", maxRes: ["720p", "2K"], pricePerSecond: 0.13 },
+  "minimax/hailuo-3": { label: "MiniMax H3", provider: "openrouter", maxRes: ["2K"], pricePerSecond: 0.13 },
   "google/veo-3.1-fast": { label: "Veo 3.1 Fast", provider: "openrouter", maxRes: ["720p", "1080p"], pricePerSecond: 0.15 },
   "veo-3.1": { label: "Veo 3.1", provider: "google", maxRes: ["720p", "1080p"], pricePerSecond: 0.4 },
 };
@@ -125,8 +125,9 @@ function buildOpenRouterBody(job: Job, model: string) {
     delete body.generate_audio;
     body.image_url = job.source_image_url;
   } else if (isHailuo) {
-    // MiniMax H3: 720p draft or native 2K, 5–15s, first/last frame keyframing.
-    body.resolution = resolution === "720p" ? "720p" : "2K";
+    // MiniMax H3: native 2K ONLY (OpenRouter rejects any other resolution), 5–15s,
+    // first/last frame keyframing.
+    body.resolution = "2K";
     body.duration = Math.max(5, Math.min(15, Number(job.duration) || 5));
   } else if (!isSeedance && !isGrok) {
     // Unknown OpenRouter video model — use the unified start-frame shape.

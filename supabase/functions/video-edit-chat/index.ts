@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model,
         prompt: newPrompt,
-        resolution: source.resolution || "720p",
+        resolution: source.resolution || "2k",
         aspect_ratio: aspect,
         duration: source.duration_seconds || 5,
         ...(source.poster_url ? { image_url: source.poster_url } : {}),

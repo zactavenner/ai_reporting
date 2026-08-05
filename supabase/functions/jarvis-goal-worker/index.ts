@@ -414,7 +414,7 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
             prompt: args.prompt,
             duration: Math.max(1, Math.min(15, Number(args.duration) || 8)),
             aspectRatio: args.aspect_ratio || "9:16",
-            resolution: args.resolution || "720p",
+            resolution: "2k", // MiniMax H3 renders natively at 2K only
             ...(args.model ? { model: args.model } : {}),
           }),
         });
