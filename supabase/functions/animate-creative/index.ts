@@ -44,8 +44,8 @@ type Job = {
 
 const ALLOWED_MODELS: Record<string, { label: string; provider: "openrouter" | "google"; maxRes: string[]; pricePerSecond: number }> = {
   // Verified OpenRouter /api/v1/videos ids (the "-pro" suffix does not exist upstream).
-  "bytedance/seedance-2.0": { label: "Seedance 2.0 Pro", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.0938 },
-  "bytedance/seedance-2.0-fast": { label: "Seedance 2.0 Fast", provider: "openrouter", maxRes: ["480p", "720p"], pricePerSecond: 0.0538 },
+  "bytedance/seedance-2.0": { label: "Seedance", provider: "openrouter", maxRes: ["720p"], pricePerSecond: 0.0538 },
+  "bytedance/seedance-2.0-fast": { label: "Seedance Fast", provider: "openrouter", maxRes: ["720p"], pricePerSecond: 0.0538 },
   "x-ai/grok-imagine-video-1.5": { label: "Grok Imagine 1.5", provider: "openrouter", maxRes: ["480p", "720p", "1080p"], pricePerSecond: 0.14 },
   "minimax/hailuo-3": { label: "MiniMax H3", provider: "openrouter", maxRes: ["720p", "2K"], pricePerSecond: 0.13 },
   "google/veo-3.1-fast": { label: "Veo 3.1 Fast", provider: "openrouter", maxRes: ["720p", "1080p"], pricePerSecond: 0.15 },
