@@ -84,12 +84,13 @@ export function useWeeklyReport(clientId: string | undefined) {
       const endIso = (d: string) => `${d}T23:59:59.999Z`;
 
       const [spendRes, leadRes, callRes, fundedRes, syncRes, discRes] = await Promise.all([
-        supabase
-          .from('ad_spend_daily')
-          .select('date, spend')
-          .eq('client_id', clientId!)
-          .gte('date', priorFrom)
-          .lte('date', to),
+        // Client-scoped RPC so shared (unauthenticated) report links still see
+        // real spend instead of silently rendering $0 under RLS.
+        supabase.rpc('get_client_spend_days', {
+          p_client_id: clientId!,
+          p_from: priorFrom,
+          p_to: to,
+        }),
         supabase
           .from('leads')
           .select('id, external_id, name, email, phone, created_at, source, campaign_name, is_spam, questions, current_disposition, quality_score')
@@ -111,12 +112,7 @@ export function useWeeklyReport(clientId: string | undefined) {
           .gte('funded_at', startIso(priorFrom))
           .lte('funded_at', endIso(to))
           .limit(2000),
-        supabase
-          .from('ad_spend_sync_runs')
-          .select('sync_date, finished_at, status, sheet_status, sheet_error')
-          .eq('client_id', clientId!)
-          .order('finished_at', { ascending: false })
-          .limit(1),
+        supabase.rpc('get_client_spend_freshness', { p_client_id: clientId! }),
         supabase
           .from('data_discrepancies')
           .select('id', { count: 'exact', head: true })
