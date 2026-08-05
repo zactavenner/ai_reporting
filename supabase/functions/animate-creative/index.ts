@@ -425,7 +425,7 @@ Deno.serve(async (req) => {
         prompt,
         source_image_url: imageUrl,
         aspect_ratio: ["1:1", "16:9", "9:16", "4:3", "3:4"].includes(body.aspectRatio) ? body.aspectRatio : "9:16",
-        resolution: ["480p", "720p", "1080p"].includes(body.resolution) ? body.resolution : "720p",
+        resolution: ["480p", "720p", "1080p", "2k", "2K"].includes(body.resolution) ? body.resolution : "720p",
         duration: Math.max(1, Math.min(15, Number(body.duration) || 5)),
         status: "queued",
         progress_label: "Submitting…",
