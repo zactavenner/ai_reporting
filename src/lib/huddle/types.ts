@@ -18,6 +18,13 @@ export interface TimerState {
    * to step client-by-client without advancing the segment).
    */
   sub_index?: number;
+  /**
+   * When the current sub-position (client) started — persisted so the
+   * per-client count-up survives a refresh / page close.
+   */
+  sub_started_at?: string | null;
+  /** Accumulated pause offset for the current sub-position. */
+  sub_paused_elapsed_s?: number;
 }
 
 export const DEFAULT_AGENDA: AgendaSegment[] = [
@@ -39,4 +46,6 @@ export const DEFAULT_TIMER: TimerState = {
   finished: false,
   extra_s: 0,
   sub_index: 0,
+  sub_started_at: null,
+  sub_paused_elapsed_s: 0,
 };
