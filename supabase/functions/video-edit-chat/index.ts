@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { condenseVideoPrompt } from "../_shared/videoPrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model,
-        prompt: newPrompt,
+        prompt: condenseVideoPrompt(newPrompt),
         resolution: source.resolution || "2k",
         aspect_ratio: aspect,
         duration: source.duration_seconds || 5,
