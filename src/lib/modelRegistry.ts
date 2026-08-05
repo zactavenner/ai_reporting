@@ -20,8 +20,9 @@ export const MODEL_REGISTRY: Record<string, ModelInfo> = {
   "anthropic/claude-3.7-sonnet": { id: "anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet", provider: "Anthropic", contextTokens: 200_000, capability: "chat" },
   "openai/gpt-image-2": { id: "openai/gpt-image-2", label: "GPT Image 2", provider: "OpenAI", contextTokens: 0, capability: "image" },
   "google/gemini-3.1-flash-image": { id: "google/gemini-3.1-flash-image", label: "Nano Banana Pro", provider: "Google", contextTokens: 0, capability: "image" },
-  // MiniMax H3 is the only video model. Seedance / Grok / HappyHorse are retired.
+  // Approved video models: MiniMax H3 (720p/2K) and Seedance (720p only).
   "minimax/hailuo-3": { id: "minimax/hailuo-3", label: "MiniMax H3", provider: "MiniMax", contextTokens: 0, capability: "video" },
+  "bytedance/seedance-2.0": { id: "bytedance/seedance-2.0", label: "Seedance", provider: "ByteDance", contextTokens: 0, capability: "video" },
 };
 
 export const CONNECTOR_REGISTRY: Record<string, { label: string; emoji: string }> = {
@@ -58,6 +59,7 @@ export type VideoModelSpec = {
 
 export const VIDEO_MODELS: VideoModelSpec[] = [
   { value: "minimax/hailuo-3", id: "minimax/hailuo-3", label: "MiniMax H3", hint: "720p or native 2K • first/last frame + reference identity", maxSeconds: 15, pricePerSecond: 0.13, supportsResolutions: ["720p", "2k"], defaultDuration: 15, durations: [5, 10, 15], maxRes: "2k" },
+  { value: "bytedance/seedance-2.0", id: "bytedance/seedance-2.0", label: "Seedance", hint: "720p only • first/last frame keyframing + reference images", maxSeconds: 15, pricePerSecond: 0.0538, supportsResolutions: ["720p"], defaultDuration: 15, durations: [5, 10, 15], maxRes: "720p" },
 ];
 
 export const OFFER_IMAGE_ROLES = [

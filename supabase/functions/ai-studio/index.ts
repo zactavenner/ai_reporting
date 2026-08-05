@@ -1234,10 +1234,10 @@ async function generateSeedanceVideo(opts: {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // MiniMax H3 is the ONLY approved video model. Seedance, Grok, HappyHorse,
-  // Kling and Veo are retired everywhere in AI Studio; any other requested id
-  // is coerced to H3 instead of failing the render.
-  const ALLOWED = ["minimax/hailuo-3"];
+  // Approved video models: MiniMax H3 (720p / native 2K) and Seedance 2.0 (720p only).
+  // Grok, HappyHorse, Kling and Veo are retired everywhere in AI Studio; any other
+  // requested id is coerced to H3 instead of failing the render.
+  const ALLOWED = ["minimax/hailuo-3", "bytedance/seedance-2.0"];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
   const ALIASES: Record<string, string> = {
@@ -1284,14 +1284,14 @@ async function generateSeedanceVideo(opts: {
     "h3": "minimax/hailuo-3",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
-  // HARD RULE: every video render goes to MiniMax H3. Retired models (Seedance,
-  // Grok, HappyHorse, Kling, Veo) are coerced to H3 and the coercion is logged,
+  // HARD RULE: renders go to MiniMax H3 or Seedance 2.0 only. Retired models
+  // (Grok, HappyHorse, Kling, Veo) are coerced to H3 and the coercion is logged,
   // so an LLM hallucinating an old id can never break or downgrade a render.
-  let model = "minimax/hailuo-3";
+  let model = ALLOWED.includes(normalized) ? normalized : "minimax/hailuo-3";
   let modelOverrideReason: string;
   if (!rawModel) {
     modelOverrideReason = "empty_defaulted_h3";
-  } else if (normalized === model) {
+  } else if (ALLOWED.includes(normalized)) {
     modelOverrideReason = normalized !== rawModel ? "alias_normalized" : "none";
   } else {
     modelOverrideReason = "coerced_to_h3";
@@ -1306,7 +1306,7 @@ async function generateSeedanceVideo(opts: {
       model,
       rerouted_from: rawModel,
       rerouted_to: model,
-      rerouted_reason: "h3_only_policy",
+      rerouted_reason: "approved_video_models_only",
     });
   }
   const isVeo = model.startsWith("google/veo");
@@ -1346,7 +1346,10 @@ async function generateSeedanceVideo(opts: {
     else if (effectiveResolution === "1080p" && grokAllows1080) effectiveResolution = "1080p";
     else effectiveResolution = "720p";
   }
-  else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
+  else if (isSeedance) {
+    // Seedance is locked to 720p in Reporting 5.0 (both Pro and Fast ids).
+    effectiveResolution = "720p";
+  }
   else if (isHailuo) {
     // MiniMax H3 supports 720p and native 2K. Everything else (480p/1080p/4k)
     // is rejected by the provider, so coerce to the nearest supported value.
@@ -1868,16 +1871,16 @@ async function generateSeedanceVideo(opts: {
         _avatarFallbackAttempt: attempt + 1,
       });
     }
-    // For Seedance avatar moderation failures, retry once on HappyHorse (avatar-safe)
-    // rather than Veo, so OpenRouter video generations stay inside the approved model set.
+    // Seedance avatar moderation failures retry once as text-to-video on Seedance
+    // itself — HappyHorse and every other legacy fallback target is retired.
     if (isSeedance && opts.imageUrl && attempt < 1) {
       emit({
         stage: "submitting",
-        label: "Seedance rejected the avatar — retrying on HappyHorse 1.1…",
-        model: "alibaba/happyhorse-1.1",
+        label: "Seedance rejected the reference image — retrying as text-to-video…",
+        model,
         percent: 4,
         rerouted_from: model,
-        rerouted_to: "alibaba/happyhorse-1.1",
+        rerouted_to: model,
         rerouted_reason: reason.slice(0, 160),
       });
       await recordVideoModelDecision(supa, "generateSeedanceVideo.fallback", {
@@ -1885,14 +1888,14 @@ async function generateSeedanceVideo(opts: {
         client_id: opts.clientId,
         user_id: opts.userId,
         from_model: model,
-        to_model: "alibaba/happyhorse-1.1",
+        to_model: model,
         reason: reason.slice(0, 240),
         requested_duration: opts.duration,
         fallback_duration: 15,
         requested_resolution: opts.resolution,
-        fallback_resolution: "1080p",
+        fallback_resolution: "720p",
         fallback_attempt: attempt + 1,
-        fallback_chain: "seedance_to_happyhorse",
+        fallback_chain: "seedance_text_to_video_retry",
       });
       if (pendingCanvasItemId) {
         try { await supa.from("ai_studio_canvas_items").delete().eq("id", pendingCanvasItemId); } catch {}
@@ -1900,9 +1903,12 @@ async function generateSeedanceVideo(opts: {
       }
       return await generateSeedanceVideo({
         ...opts,
-        model: "alibaba/happyhorse-1.1",
+        model,
         duration: 15,
-        resolution: "1080p",
+        resolution: "720p",
+        imageUrl: null,
+        lastFrameUrl: null,
+        ingredientUrl: null,
         _avatarFallbackAttempt: attempt + 1,
       });
     }

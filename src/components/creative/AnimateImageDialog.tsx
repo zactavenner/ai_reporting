@@ -22,9 +22,10 @@ type VideoModelOption = {
   pricePerSecond: number;
 };
 
-// MiniMax H3 is the only approved video model. Seedance / Grok / Veo retired.
+// Approved video models: MiniMax H3 (720p/2K) and Seedance (720p only). Grok / Veo retired.
 export const ANIMATE_MODELS: VideoModelOption[] = [
   { id: 'minimax/hailuo-3', label: 'MiniMax H3', hint: '720p or 2K, holds brand text + identity, 5–15s', resolutions: ['720p', '2K'], durations: [5, 10, 15], pricePerSecond: 0.13 },
+  { id: 'bytedance/seedance-2.0', label: 'Seedance', hint: '720p only, first/last frame keyframing, 5–15s', resolutions: ['720p'], durations: [5, 10, 15], pricePerSecond: 0.0538 },
 ];
 
 type JobRow = {
