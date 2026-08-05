@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +39,7 @@ import { ClientOffersSection } from "@/components/offers/ClientOffersSection";
 import { VideoStylesPopover, useVideoStyles, buildVideoStyleBlock } from "./VideoStylesManager";
 import { ImageStylesPopover, useImageStyles, buildImageStyleBlock } from "./ImageStylesManager";
 import { BatchScriptsDialog } from "./BatchScriptsDialog";
+import { StudioGoalDialog } from "./StudioGoalDialog";
 
 interface Props {
   clientId: string;
@@ -1089,6 +1090,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [batchScriptsOpen, setBatchScriptsOpen] = useState(false);
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [caretPos, setCaretPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents" | "avatars">("chat");
@@ -2866,6 +2868,15 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     )}
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setGoalDialogOpen(true)}
+                  title="Set a goal — Jarvis keeps working it on the backend (video, copy, Jeremy AI) until every deliverable is finished, even if you close this page."
+                  className="h-7 px-2 rounded-lg text-[10px] inline-flex items-center gap-1 border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition"
+                >
+                  <Target className="h-3 w-3" />
+                  Set goal
+                </button>
                 {selectedAgentMode === "video" && (
                   <button
                     type="button"
@@ -3130,6 +3141,13 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         target={disclaimerTarget}
         clientId={clientId}
         conversationId={conversationId}
+      />
+      <StudioGoalDialog
+        open={goalDialogOpen}
+        onOpenChange={setGoalDialogOpen}
+        clientId={clientId}
+        clientName={clientName}
+        offerContext={goalOfferContext}
       />
       <BatchScriptsDialog
         open={batchScriptsOpen}
