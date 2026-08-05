@@ -312,6 +312,121 @@ Deno.serve(async (req) => {
     // Determine client_id from body or query
     const clientId = body.client_id || new URL(req.url).searchParams.get('client_id');
 
+    // -----------------------------------------------------------------
+    // Per-client MeetGeek configuration + health (server-derived only).
+    // The browser may name a client, but location/calendar authority is
+    // always re-derived here from the client's mapped GHL credentials.
+    // -----------------------------------------------------------------
+    const configActions = ['mg_list_calendars', 'mg_get_config', 'mg_save_config', 'mg_test_event'];
+    if (configActions.includes(body.action)) {
+      if (!clientId) {
+        return jsonResponse({ error: 'client_id is required' }, 400);
+      }
+      const secretConfigured = !!Deno.env.get('MEETGEEK_WEBHOOK_SECRET');
+      const { apiKey, locationId } = await getMappedGhl(supabase, clientId);
+
+      if (body.action === 'mg_list_calendars') {
+        if (!apiKey || !locationId) {
+          return jsonResponse({
+            calendars: [],
+            location_mapped: false,
+            error: 'This client has no mapped HighLevel location or API key.',
+          }, 200);
+        }
+        const res = await fetch(
+          `${GHL_BASE}/calendars/?locationId=${encodeURIComponent(locationId)}`,
+          { headers: GHL_HEADERS(apiKey) },
+        );
+        if (!res.ok) {
+          const text = await res.text();
+          return jsonResponse({
+            calendars: [],
+            location_mapped: true,
+            error: `HighLevel calendar list failed (${res.status}).`,
+            details: text.slice(0, 200),
+          }, 200);
+        }
+        const json = await res.json().catch(() => ({}));
+        const calendars = (json?.calendars || []).map((c: any) => ({
+          id: String(c.id),
+          name: c.name || 'Untitled calendar',
+          isActive: c.isActive !== false,
+        }));
+        return jsonResponse({ calendars, location_mapped: true });
+      }
+
+      if (body.action === 'mg_get_config') {
+        const { data } = await supabase
+          .from('client_meetgeek_settings')
+          .select('*')
+          .eq('client_id', clientId)
+          .maybeSingle();
+        return jsonResponse({
+          config: data || null,
+          location_mapped: !!(apiKey && locationId),
+          webhook_secret_configured: secretConfigured,
+        });
+      }
+
+      if (body.action === 'mg_save_config') {
+        const enabled = !!body.enabled;
+        const policy = ['never', 'selected_calendar_video_only', 'all_video_on_calendar']
+          .includes(body.bot_join_policy) ? body.bot_join_policy : 'selected_calendar_video_only';
+        const requestedCalendarId = body.ghl_calendar_id ? String(body.ghl_calendar_id) : null;
+
+        let mappingValid = false;
+        let mappingError: string | null = null;
+        let calendarName: string | null = null;
+
+        if (!apiKey || !locationId) {
+          mappingError = 'No mapped HighLevel location/API key for this client.';
+        } else if (!requestedCalendarId) {
+          mappingError = 'Select a HighLevel calendar for MeetGeek to operate on.';
+        } else {
+          const res = await fetch(
+            `${GHL_BASE}/calendars/?locationId=${encodeURIComponent(locationId)}`,
+            { headers: GHL_HEADERS(apiKey) },
+          );
+          if (!res.ok) {
+            mappingError = `Could not validate the calendar against HighLevel (${res.status}).`;
+          } else {
+            const json = await res.json().catch(() => ({}));
+            const match = (json?.calendars || []).find((c: any) => String(c.id) === requestedCalendarId);
+            if (!match) {
+              mappingError = 'That calendar does not belong to this client’s HighLevel location.';
+            } else {
+              mappingValid = true;
+              calendarName = match.name || null;
+            }
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('client_meetgeek_settings')
+          .upsert({
+            client_id: clientId,
+            enabled: enabled && mappingValid,
+            // Server-derived, never taken from the request body.
+            ghl_location_id: locationId,
+            ghl_calendar_id: mappingValid ? requestedCalendarId : null,
+            ghl_calendar_name: calendarName,
+            bot_join_policy: policy,
+            mapping_valid: mappingValid,
+            mapping_error: mappingError,
+            webhook_secret_configured: secretConfigured,
+          }, { onConflict: 'client_id' })
+          .select('*')
+          .single();
+        if (error) throw error;
+        return jsonResponse({ success: mappingValid, config: data, error: mappingError });
+      }
+
+      if (body.action === 'mg_test_event') {
+        const result = await runMeetgeekTestEvent(supabase, clientId, body.mode || 'match');
+        return jsonResponse(result, result.ok ? 200 : 400);
+      }
+    }
+
     // Fetch per-client MeetGeek settings from client_settings
     let meetgeekApiKey = '';
     let meetgeekWebhookSecret = '';
