@@ -4154,9 +4154,9 @@ Deno.serve(async (req) => {
             } else if (agentToolPolicy === "video_only") {
               if (IMAGE_TOOL_NAMES.has(n)) return false;
             }
-            if (n === "image_to_reel") return hasImage && hasVideo;
+            if (n === "image_to_reel") return hasImage && videoAuthorized;
             if (IMAGE_TOOL_NAMES.has(n)) return hasImage;
-            if (VIDEO_TOOL_NAMES.has(n)) return hasVideo;
+            if (VIDEO_TOOL_NAMES.has(n)) return videoAuthorized;
             return true;
           });
 
