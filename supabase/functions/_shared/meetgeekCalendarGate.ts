@@ -169,6 +169,9 @@ export interface ActivityRow {
   crm_sync_error: string | null;
   crm_attempts: number;
   error_message: string | null;
+  quality_rating: number | null;
+  quality_rubric: { label: string; points: number; max: number }[] | null;
+  quality_summary: string | null;
 }
 
 /** Builds the canonical activity row. Client/location come from config only. */
@@ -186,6 +189,7 @@ export function buildActivityRow(args: {
   crmAttempts?: number;
   errorMessage?: string | null;
   source?: string;
+  quality?: { rating: number; rubric: { label: string; points: number; max: number }[]; summary: string } | null;
 }): ActivityRow {
   const { config, stage, appointment, meeting } = args;
   return {
@@ -199,7 +203,7 @@ export function buildActivityRow(args: {
       meetgeekEventId: meeting?.eventId ?? null,
     }),
     ghl_location_id: config.ghlLocationId,
-    ghl_calendar_id: config.ghlCalendarId,
+    ghl_calendar_id: appointment?.calendarId ?? config.ghlCalendarId,
     ghl_event_id: appointment?.eventId ?? null,
     ghl_contact_id: appointment?.contactId ?? null,
     meetgeek_meeting_id: meeting?.meetingExternalId ?? null,
@@ -221,6 +225,9 @@ export function buildActivityRow(args: {
     crm_sync_error: args.crmError ?? null,
     crm_attempts: args.crmAttempts ?? 0,
     error_message: args.errorMessage ?? null,
+    quality_rating: args.quality?.rating ?? null,
+    quality_rubric: args.quality?.rubric ?? null,
+    quality_summary: args.quality?.summary ?? null,
   };
 }
 
