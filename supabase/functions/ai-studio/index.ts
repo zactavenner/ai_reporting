@@ -3205,7 +3205,7 @@ Deno.serve(async (req) => {
     videoModel?: string | null;
     videoModels?: string[] | null;
     videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
-    videoResolution?: "720p" | "1080p" | "4k" | null;
+    videoResolution?: "720p" | "1080p" | "2k" | "4k" | null;
     avatarId?: string | null;
     adFormat?: string | null;
     hookFramework?: string | null;
@@ -3795,7 +3795,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel || undefined, videoModels: uniqueSelectedVideoModels, videoResolution: requestedRes, videoAspect: videoAspectFromAdFormat(adFormat), videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel || undefined, videoModels: uniqueSelectedVideoModels, videoResolution: lockedRes, videoAspect: videoAspectFromAdFormat(adFormat), videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
