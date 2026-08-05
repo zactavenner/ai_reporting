@@ -1,4 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  ingestMeetgeekWebhook,
+  MEETGEEK_SIGNATURE_HEADER,
+  normalizeEmail,
+  type IngestDeps,
+  type LeadRow,
+  type NormalizedMeeting,
+} from '../_shared/meetgeekIngest.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -96,6 +104,30 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const rawBody = await req.text();
+
+    // ---------------------------------------------------------------
+    // Signed provider webhook path (meeting intelligence bridge).
+    // The raw body is verified BEFORE it is parsed. Unsigned provider
+    // payloads are rejected. Internal UI calls use `action` instead.
+    // ---------------------------------------------------------------
+    const signatureHeader = req.headers.get(MEETGEEK_SIGNATURE_HEADER);
+    let hasInternalAction = false;
+    if (!signatureHeader) {
+      try { hasInternalAction = !!JSON.parse(rawBody)?.action; } catch { hasInternalAction = false; }
+    }
+    if (signatureHeader || !hasInternalAction) {
+      const result = await ingestMeetgeekWebhook({
+        rawBody,
+        signatureHeader,
+        secret: Deno.env.get('MEETGEEK_WEBHOOK_SECRET') || '',
+        deps: buildIngestDeps(supabase),
+      });
+      return new Response(JSON.stringify(result), {
+        status: result.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = JSON.parse(rawBody);
     console.log('Received webhook/request:', JSON.stringify(body).slice(0, 500));
 
@@ -146,20 +178,6 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
-
-    // Verify webhook signature if secret is configured
-    const signature = req.headers.get('x-mg-signature');
-    if (meetgeekWebhookSecret && signature) {
-      const isValid = await verifySignature(rawBody, signature, meetgeekWebhookSecret);
-      if (!isValid) {
-        console.error('Invalid webhook signature');
-        return new Response(JSON.stringify({ error: 'Invalid signature' }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      console.log('Webhook signature verified');
     }
 
     const baseUrl = getBaseUrl(meetgeekRegion);
@@ -238,15 +256,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Handle MeetGeek webhook (meeting analyzed)
-    if (body.meeting_id) {
-      const result = await processMeeting(supabase, meetgeekApiKey, baseUrl, body.meeting_id, clientId);
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     return new Response(JSON.stringify({ message: 'No action taken' }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -260,6 +269,151 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Ingestion dependencies (all IO, service-role only, server-side mapping only)
+// ---------------------------------------------------------------------------
+function buildIngestDeps(supabase: any): IngestDeps {
+  return {
+    async findProcessedEvent(dedupeKey) {
+      const { data } = await supabase
+        .from('meeting_ingest_events')
+        .select('id, status')
+        .eq('provider', 'meetgeek')
+        .eq('dedupe_key', dedupeKey)
+        .maybeSingle();
+      return data || null;
+    },
+    async recordEvent(input) {
+      const { data, error } = await supabase
+        .from('meeting_ingest_events')
+        .insert({
+          provider: 'meetgeek',
+          dedupe_key: input.dedupeKey,
+          event_id: input.eventId,
+          meeting_external_id: input.meetingExternalId,
+          client_id: input.clientId,
+          signature_valid: input.signatureValid,
+          status: input.status,
+          error_message: input.errorMessage ?? null,
+          payload: input.payload as any,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    async updateEvent(id, patch) {
+      const update: Record<string, unknown> = {};
+      if (patch.status !== undefined) update.status = patch.status;
+      if (patch.errorMessage !== undefined) update.error_message = patch.errorMessage;
+      if (patch.clientId !== undefined) update.client_id = patch.clientId;
+      await supabase.from('meeting_ingest_events').update(update).eq('id', id);
+    },
+    async resolveClientId(meeting: NormalizedMeeting) {
+      // 1. Server-side mapping via an attendee that already exists as a lead.
+      const emails = meeting.participants
+        .map((p) => normalizeEmail(p.email))
+        .filter((e): e is string => !!e);
+      if (emails.length) {
+        const { data } = await supabase
+          .from('leads')
+          .select('client_id')
+          .in('email', emails)
+          .not('client_id', 'is', null)
+          .limit(1);
+        if (data?.[0]?.client_id) return data[0].client_id as string;
+      }
+      // 2. Fall back to the existing canonical title-matching heuristic.
+      return await matchClientByTitle(supabase, meeting.title || '');
+    },
+    async upsertMeetingRecord(meeting, clientId) {
+      const { data, error } = await supabase
+        .from('meeting_records')
+        .upsert({
+          provider: 'meetgeek',
+          meeting_external_id: meeting.meetingExternalId,
+          client_id: clientId,
+          title: meeting.title,
+          status: meeting.status,
+          started_at: meeting.startedAt,
+          ended_at: meeting.endedAt,
+          duration_minutes: meeting.durationMinutes,
+          language: meeting.language,
+          host_email: meeting.hostEmail,
+          participants: meeting.participants as any,
+          summary: meeting.summary,
+          action_items: meeting.actionItems as any,
+          transcript_url: meeting.transcriptUrl,
+          recording_url: meeting.recordingUrl,
+          source_url: meeting.sourceUrl,
+        }, { onConflict: 'provider,meeting_external_id' })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    async findLeadsByEmails(clientId, emails) {
+      let query = supabase
+        .from('leads')
+        .select('id, client_id, email, name, external_id')
+        .in('email', emails);
+      if (clientId) query = query.eq('client_id', clientId);
+      const { data, error } = await query.limit(50);
+      if (error) throw error;
+      return (data || []) as LeadRow[];
+    },
+    async upsertLeadContext(input) {
+      const { error } = await supabase
+        .from('lead_meeting_context')
+        .upsert({
+          meeting_record_id: input.meetingRecordId,
+          lead_id: input.leadId,
+          client_id: input.clientId,
+          matched_email: input.matchedEmail,
+          match_method: input.matchMethod,
+          match_confidence: input.matchConfidence,
+          ghl_contact_id: input.ghlContactId,
+          ghl_note_status: input.ghlNoteStatus,
+          ghl_note_error: input.ghlNoteError ?? null,
+          ghl_note_at: input.ghlNoteStatus === 'written' ? new Date().toISOString() : null,
+        }, { onConflict: 'meeting_record_id,lead_id' });
+      if (error) throw error;
+    },
+    async writeGhlNote({ clientId, lead, note }) {
+      const contactId = lead.external_id || null;
+      if (!contactId) return { status: 'skipped', contactId: null, error: 'no_ghl_contact_id' };
+      const { data: client } = await supabase
+        .from('clients')
+        .select('ghl_api_key, ghl_location_id')
+        .eq('id', clientId)
+        .maybeSingle();
+      const apiKey = client?.ghl_api_key;
+      if (!apiKey || !client?.ghl_location_id) {
+        return { status: 'skipped', contactId, error: 'ghl_credentials_missing' };
+      }
+      try {
+        const res = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/notes`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Version: '2021-07-28',
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ body: note }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { status: 'error', contactId, error: `GHL ${res.status}: ${text.slice(0, 300)}` };
+        }
+        return { status: 'written', contactId };
+      } catch (e) {
+        return { status: 'error', contactId, error: e instanceof Error ? e.message : 'ghl_request_failed' };
+      }
+    },
+  };
+}
 
 async function syncCallTranscript(
   supabase: any, apiKey: string, baseUrl: string,
