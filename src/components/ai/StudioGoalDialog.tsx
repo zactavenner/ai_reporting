@@ -31,6 +31,7 @@ export function StudioGoalDialog({ open, onOpenChange, clientId, clientName, off
   const [count, setCount] = useState("10");
   const [seconds, setSeconds] = useState("30");
   const [aspect, setAspect] = useState<"9:16" | "16:9" | "1:1">("9:16");
+  const [resolution, setResolution] = useState<"720p" | "2k">("2k");
   const [quality, setQuality] = useState("Broadcast-quality, native audio, avatar identity consistent across every clip.");
   const [maxSteps, setMaxSteps] = useState("300");
   const [busy, setBusy] = useState(false);
@@ -44,7 +45,7 @@ export function StudioGoalDialog({ open, onOpenChange, clientId, clientName, off
     lines.push("");
     lines.push(`TARGET OUTPUT: ${n} finished ${deliverable === "mixed" ? "deliverables" : deliverable === "video" ? "videos" : deliverable === "static" ? "static ads" : "copy assets"}.`);
     if (deliverable === "video" || deliverable === "mixed") {
-      lines.push(`VIDEO SPEC: ${secs}s each at aspect ${aspect}, MiniMax H3 (minimax/hailuo-3) at native 2K. H3 caps at 15s per clip, so each ${secs}s video = ${clips} sequential 15s clip${clips === 1 ? "" : "s"} with identical talent, wardrobe, lighting and pacing. 720p does not exist on H3 — always request resolution "2k".`);
+      lines.push(`VIDEO SPEC: ${secs}s each at aspect ${aspect}, MiniMax H3 (minimax/hailuo-3) at resolution "${resolution}". H3 caps at 15s per clip, so each ${secs}s video = ${clips} sequential 15s clip${clips === 1 ? "" : "s"} with identical talent, wardrobe, lighting and pacing. H3 supports only "720p" and "2k" — always request resolution "${resolution}".`);
     }
     lines.push(`QUALITY BAR: ${quality.trim() || "Agency-grade, on-brand, compliant."}`);
     lines.push("");
@@ -162,8 +163,26 @@ export function StudioGoalDialog({ open, onOpenChange, clientId, clientName, off
           </div>
 
           {(deliverable === "video" || deliverable === "mixed") && (
+            <div className="space-y-1 w-32">
+              <Label className="text-[11px] text-muted-foreground">Resolution</Label>
+              <div className="flex items-center gap-1">
+                {(["720p", "2k"] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setResolution(r)}
+                    className={`px-2 py-1 rounded-lg text-[10px] border transition ${resolution === r ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                  >
+                    {r === "2k" ? "2K" : r}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(deliverable === "video" || deliverable === "mixed") && (
             <p className="text-[10px] text-muted-foreground">
-              MiniMax H3 renders 15s per clip at native 2K, so {Math.max(5, Number(seconds) || 15)}s ={" "}
+              MiniMax H3 renders 15s per clip at {resolution === "2k" ? "native 2K" : "720p"}, so {Math.max(5, Number(seconds) || 15)}s ={" "}
               {Math.ceil(Math.max(5, Number(seconds) || 15) / 15)} stitched clips per video.
             </p>
           )}
