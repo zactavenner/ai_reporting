@@ -1091,6 +1091,21 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const [input, setInput] = useState("");
   const [batchScriptsOpen, setBatchScriptsOpen] = useState(false);
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  // Offer context handed to a backend goal so Jarvis has the same offer knowledge
+  // the chat composer sends.
+  const goalOfferContext = useMemo(() => {
+    const list = selectedOfferId === "all"
+      ? (clientOffers as any[])
+      : (clientOffers as any[]).filter((o) => o.id === selectedOfferId);
+    if (!list?.length) return undefined;
+    return list.map((o: any, i: number) => {
+      const parts = [`OFFER ${i + 1}: ${o.title}`];
+      if (o.description) parts.push(o.description);
+      const files = (clientOfferFiles as any[]).filter((f) => f.offer_id === o.id);
+      files.forEach((f: any, idx: number) => parts.push(`  ${idx + 1}. ${f.file_name} → ${f.file_url}`));
+      return parts.join("\n");
+    }).join("\n\n---\n\n");
+  }, [clientOffers, clientOfferFiles, selectedOfferId]);
   const [caretPos, setCaretPos] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [aiStudioTab, setAiStudioTab] = useState<"chat" | "agents" | "avatars">("chat");
