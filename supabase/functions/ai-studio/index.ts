@@ -26,6 +26,39 @@ function getOpenRouterKey(context = "OpenRouter") {
   return key;
 }
 
+// MiniMax H3 (and most OpenRouter video models) hard-reject prompts over
+// 7000 characters with "invalid params, content[0].text too long".
+// Long specialist system briefs + style locks + segment wrappers routinely blow
+// past that, so every video submit runs through this condenser first.
+export const VIDEO_PROMPT_MAX_CHARS = 6500;
+
+export function condenseVideoPrompt(raw: string, limit = VIDEO_PROMPT_MAX_CHARS): string {
+  let p = String(raw || "")
+    // collapse runaway whitespace / blank lines that pad these briefs out
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^[ \t]+|[ \t]+$/gm, "")
+    .trim();
+  if (p.length <= limit) return p;
+
+  // Drop decorative markdown that carries no instruction value.
+  p = p
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/\*\*/g, "")
+    .replace(/^[-•*]\s+/gm, "- ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (p.length <= limit) return p;
+
+  // Keep the head (subject/scene/style) and the tail (CTA, compliance,
+  // continuity locks) — those matter most to the render.
+  const headLen = Math.floor(limit * 0.72);
+  const tailLen = limit - headLen - 24;
+  const head = p.slice(0, headLen).replace(/\s+\S*$/, "");
+  const tail = p.slice(p.length - tailLen).replace(/^\S*\s+/, "");
+  return `${head}\n[...]\n${tail}`.slice(0, limit);
+}
+
 function base64UrlEncode(value: ArrayBuffer): string {
   const bytes = new Uint8Array(value);
   let binary = "";
