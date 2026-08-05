@@ -109,7 +109,7 @@ function buildOpenRouterBody(job: Job, model: string) {
 
   const body: Record<string, unknown> = {
     model,
-    prompt: job.prompt,
+    prompt: condenseVideoPrompt(job.prompt),
     aspect_ratio: aspect,
     duration: Math.max(1, Math.min(15, Number(job.duration) || 5)),
     resolution,
