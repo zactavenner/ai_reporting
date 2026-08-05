@@ -2729,7 +2729,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                             key={r}
                             type="button"
                             onClick={() => setVideoResolution(r)}
-                            title={r === "2k" ? "2K — MiniMax H3 native resolution (only resolution OpenRouter accepts for H3)" : r}
+                            title={r === "2k" ? "2K — MiniMax H3 native resolution (highest quality)" : r === "720p" ? "720p — faster and cheaper H3 render" : r}
                             className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                           >
                             {r === "4k" ? "4K" : r === "2k" ? "2K" : r}
