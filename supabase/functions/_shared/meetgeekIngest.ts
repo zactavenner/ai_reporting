@@ -394,11 +394,16 @@ export async function ingestMeetgeekWebhook(args: {
     let ghlNoteError: string | null = null;
     let ghlContactId: string | null = null;
 
-    if (match.lead && clientId) {
+    // When the calendar gate is active it already performed the single, mapped
+    // CRM write-back — never write the note twice.
+    if (match.lead && clientId && !deps.calendarGate) {
       const res = await deps.writeGhlNote({ clientId, lead: match.lead, note: buildMeetingNote(meeting) });
       ghlNoteStatus = res.status;
       ghlContactId = res.contactId;
       ghlNoteError = res.error || null;
+    } else if (match.lead && clientId) {
+      ghlContactId = match.lead.external_id || null;
+      ghlNoteStatus = 'delegated_to_calendar_gate';
     }
 
     await deps.upsertLeadContext({
