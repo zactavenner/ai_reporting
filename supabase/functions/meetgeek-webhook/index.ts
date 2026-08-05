@@ -453,6 +453,30 @@ Deno.serve(async (req) => {
 // ---------------------------------------------------------------------------
 function buildIngestDeps(supabase: any): IngestDeps {
   return {
+    // Production path: per-client calendar gating + client-scoped call activity.
+    async calendarGate(meeting: NormalizedMeeting) {
+      const lifecycle = buildLifecycleDeps(supabase);
+      const config = await lifecycle.getConfigForMeeting(meeting);
+      if (!config) {
+        // No per-client MeetGeek configuration — keep legacy ingestion behaviour.
+        return { ok: true, status: 200, bypass: true };
+      }
+      const result = await processCalendarMeeting({
+        meeting,
+        noteBuilder: (m) => buildMeetingNote(m),
+        deps: lifecycle,
+      });
+      return {
+        ok: result.ok,
+        status: result.status,
+        rejected: result.rejected,
+        clientId: result.clientId ?? null,
+        matched: result.matched,
+        crmSyncStatus: result.crmSyncStatus,
+        activityId: result.activityId,
+        duplicate: result.duplicate,
+      };
+    },
     async findProcessedEvent(dedupeKey) {
       const { data } = await supabase
         .from('meeting_ingest_events')
