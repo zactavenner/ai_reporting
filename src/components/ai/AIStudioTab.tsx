@@ -1676,8 +1676,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const lockLines: string[] = [];
           if (videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
+            const isSeedanceLock = videoModel === SEEDANCE_VIDEO_MODEL;
+            const lockedModel = isSeedanceLock ? SEEDANCE_VIDEO_MODEL : ONLY_VIDEO_MODEL;
+            const lockedRes = isSeedanceLock ? "720p" : videoResolution;
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${ONLY_VIDEO_MODEL}" (MiniMax H3 is the ONLY approved video model — Seedance, Grok, HappyHorse and Veo are retired and must never be requested), resolution="${videoResolution}" (H3 supports "720p" and "2k" only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${lockedModel}" (only MiniMax H3 "${ONLY_VIDEO_MODEL}" and Seedance "${SEEDANCE_VIDEO_MODEL}" are approved — Grok, HappyHorse, Kling and Veo are retired and must never be requested), resolution="${lockedRes}" (H3 supports "720p" and "2k"; Seedance is 720p only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
@@ -1696,7 +1699,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoTotalDuration === 30) {
               const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
               lockLines.push(
-                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${ONLY_VIDEO_MODEL}", duration=15, resolution="${videoResolution}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s MiniMax H3 render.`,
+                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${lockedModel}", duration=15, resolution="${lockedRes}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s render.`,
               );
             }
           }
