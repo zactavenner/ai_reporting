@@ -2657,19 +2657,19 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality 15-second video clip with MiniMax H3 (minimax/hailuo-3) — the ONLY video model available. Seedance, Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration is 15s per clip and resolution is '720p' or '2k' (default 2k) — use the resolution locked in the composer.",
+      description: "Generate a single high-quality 15-second video clip with MiniMax H3 (minimax/hailuo-3) or Seedance 2.0 (bytedance/seedance-2.0) — the only two approved video models. Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration is 15s per clip. Always pass the model AND resolution locked in the composer: H3 supports '720p' or '2k'; Seedance is '720p' only.",
       parameters: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "What should happen in the clip — subject, action, environment, camera move, lighting, mood." },
           aspect_ratio: { type: "string", enum: ["16:9", "9:16"], description: "Video format. Only 9:16 Reel and 16:9 Video are supported." },
           duration: { type: "integer", enum: [15], description: "Clip length in seconds. Only 15 seconds is supported in AI Studio." },
-          resolution: { type: "string", enum: ["720p", "2k"], description: "MiniMax H3 renders at 720p or native 2K. 480p/1080p/4k do not exist on this model and are rejected by the provider. Default '2k'." },
+          resolution: { type: "string", enum: ["720p", "2k"], description: "Use the resolution locked in the composer. MiniMax H3 renders at 720p or native 2K; Seedance 2.0 renders at 720p only. 480p/1080p/4k are rejected by these providers." },
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME. H3 supports first+last frame control for precise motion endpoints." },
           ingredient_url: { type: "string", description: "Optional URL of an INGREDIENT / PRODUCT / SUBJECT / AVATAR reference image. H3 preserves this identity across the clip. Pass whenever the user pinned an ingredient in the video frame slots." },
-          model: { type: "string", enum: ["minimax/hailuo-3"], description: "Always 'minimax/hailuo-3'. All other video models are retired." },
-          force_model: { type: "boolean", description: "Deprecated — there is only one video model. Leave unset." },
+          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0"], description: "The renderer locked in the composer. All other video models are retired." },
+          force_model: { type: "boolean", description: "Deprecated. Leave unset." },
         },
         required: ["prompt"],
       },
@@ -2760,9 +2760,9 @@ const tools = [
               required: ["voiceover"],
             },
           },
-          model: { type: "string", enum: ["minimax/hailuo-3"], description: "Always 'minimax/hailuo-3' — the only video model." },
+          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0"], description: "The renderer locked in the composer." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
-          resolution: { type: "string", enum: ["720p", "2k"], description: "MiniMax H3 renders at 720p or native 2K. Default '2k'." },
+          resolution: { type: "string", enum: ["720p", "2k"], description: "Use the composer's locked resolution. H3: 720p or 2K. Seedance 2.0: 720p only." },
         },
         required: ["scripts"],
       },
@@ -2841,11 +2841,12 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 type VideoResChoice = "720p" | "2k";
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
+  "bytedance/seedance-2.0": { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, 720p only)" },
 };
 
 // MiniMax H3 is the only video model and it handles synthetic avatars via
 // reference identity, so there is nothing left to reroute to.
-const AVATAR_SAFE_MODELS = new Set<string>(["minimax/hailuo-3"]);
+const AVATAR_SAFE_MODELS = new Set<string>(["minimax/hailuo-3", "bytedance/seedance-2.0"]);
 const AVATAR_FALLBACK_MODEL = "minimax/hailuo-3";
 
 export function resolveModelForAvatar(
@@ -3035,7 +3036,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
   ctx.videoResolution
-    ? `VIDEO RESOLUTION PREFERENCE: The user selected resolution "${ctx.videoResolution}". Pass resolution: "${ctx.videoResolution}" on every generate_seedance_video tool_call. 4K is not exposed in the UI; HappyHorse is hard-locked server-side to 1080p.`
+    ? `VIDEO RESOLUTION HARD-LOCK: resolution="${ctx.videoResolution}" for the selected renderer${ctx.videoModel ? ` ("${ctx.videoModel}")` : ""}. Pass resolution: "${ctx.videoResolution}" on EVERY generate_seedance_video tool_call. MiniMax H3 supports "720p" and "2k"; Seedance 2.0 (bytedance/seedance-2.0) supports "720p" only. Never upgrade or downgrade this value, and never switch the model to change the resolution.`
     : null,
   ctx.videoAspect
     ? `VIDEO FORMAT PREFERENCE: The user selected video aspect_ratio "${ctx.videoAspect}". Video generation supports ONLY 9:16 Reel and 16:9 Video. NEVER pass 1:1 to a video tool; 1:1 is for static images only.`
@@ -3204,7 +3205,7 @@ Deno.serve(async (req) => {
     videoModel?: string | null;
     videoModels?: string[] | null;
     videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
-    videoResolution?: "720p" | "1080p" | "4k" | null;
+    videoResolution?: "720p" | "1080p" | "2k" | "4k" | null;
     avatarId?: string | null;
     adFormat?: string | null;
     hookFramework?: string | null;
@@ -3231,8 +3232,8 @@ Deno.serve(async (req) => {
     ? imageModels.filter((m) => m === "nano-banana" || m === "openai" || m === "riverflow")
     : [];
 
-  // MiniMax H3 only. Any legacy id from the UI or the LLM maps onto it.
-  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3"];
+  // Two approved video models: MiniMax H3 (720p / 2K) and Seedance 2.0 (720p only).
+  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3", "bytedance/seedance-2.0"];
   const VIDEO_MODEL_ALIASES: Record<string, string> = {
     "h3": "minimax/hailuo-3",
     "minimax/h3": "minimax/hailuo-3",
@@ -3242,13 +3243,19 @@ Deno.serve(async (req) => {
     "hailuo-3": "minimax/hailuo-3",
     "hailuo3": "minimax/hailuo-3",
     "minimax/hailuo3": "minimax/hailuo-3",
+    "seedance": "bytedance/seedance-2.0",
+    "seedance-2.0": "bytedance/seedance-2.0",
+    "seedance-pro": "bytedance/seedance-2.0",
+    "seedance-2.0-pro": "bytedance/seedance-2.0",
+    "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
+    "bytedance/seedance-2.0-fast": "bytedance/seedance-2.0",
   };
   const normalizeVideoModel = (m: unknown): string | null => {
     if (typeof m !== "string") return null;
     const raw = m.trim();
     if (!raw) return null;
     const normalized = VIDEO_MODEL_ALIASES[raw.toLowerCase()] || VIDEO_MODEL_ALIASES[raw] || raw;
-    // Retired models (Seedance / Grok / HappyHorse / Kling / Veo) collapse to H3.
+    // Retired models (Grok / HappyHorse / Kling / Veo) collapse to H3.
     return ALLOWED_VIDEO_MODELS.includes(normalized) ? normalized : "minimax/hailuo-3";
   };
   const selectedVideoModels: string[] = Array.isArray(videoModels)
@@ -3261,17 +3268,22 @@ Deno.serve(async (req) => {
     : (uniqueSelectedVideoModels[0] || null);
   const hasSelectedVideoModel = !!selectedVideoModel || uniqueSelectedVideoModels.length > 0;
 
-  // H3 supports exactly two resolutions: 720p (draft) and native 2K.
+  // H3 supports 720p and native 2K. Seedance 2.0 is 720p only.
   const MODEL_MAX_RES: Record<string, VideoResChoice> = {
     "minimax/hailuo-3": "2k",
+    "bytedance/seedance-2.0": "720p",
   };
   const RES_RANK: Record<string, number> = { "720p": 1, "1080p": 2, "2k": 3, "4k": 4 };
-  const requestedRes: VideoResChoice =
-    "2k";
+  // Honour the resolution the user picked in the composer; only clamp it to the
+  // selected renderer's ceiling (so Seedance never gets asked for 2K).
+  const rawRes = String(rawVideoResolution || "").toLowerCase();
+  const requestedRes: VideoResChoice = rawRes === "720p" ? "720p" : "2k";
   function clampResForModel(model: string): VideoResChoice {
     const cap = MODEL_MAX_RES[model] || "2k";
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
   }
+  // Resolution actually locked for the model the user selected.
+  const lockedRes: VideoResChoice = clampResForModel(selectedVideoModel || "minimax/hailuo-3");
 
   // Pure-chat mode detection: agent is OFF and the user has NOT selected any
   // image or video model in the composer. In this case AI Studio should behave
@@ -3783,7 +3795,7 @@ Deno.serve(async (req) => {
   };
 
   const convo: any[] = [
-    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel || undefined, videoModels: uniqueSelectedVideoModels, videoResolution: requestedRes, videoAspect: videoAspectFromAdFormat(adFormat), videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
+    { role: "system", content: SYSTEM({ docUrl: effectiveDocUrl ?? undefined, docId, sheetUrl, sheetId, quality, brandSummary, imageModels: selectedImageModels, videoModel: selectedVideoModel || undefined, videoModels: uniqueSelectedVideoModels, videoResolution: lockedRes, videoAspect: videoAspectFromAdFormat(adFormat), videoFrames: videoFrames ?? null, adFormat: adFormat ?? null, hookFramework: hookFramework ?? null, burnCaptions: !!burnCaptions, avatar: selectedAvatar }) },
     ...priorMessages,
     { role: "user", content: persistedUserText },
   ];
