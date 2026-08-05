@@ -56,6 +56,7 @@ import { SheetStatsReportDialog, type StatHighlight } from './SheetStatsReportDi
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { TopCreativeCard } from './TopCreativeCard';
+import { WeeklyReportCard } from './WeeklyReportCard';
 
 function SheetSetupPrompt({ clientId, isPublicView }: { clientId: string; isPublicView?: boolean }) {
   const [url, setUrl] = useState('');
@@ -1169,6 +1170,9 @@ export function SheetStatsTab({ clientId, isPublicView }: Props) {
           <p className="text-sm text-muted-foreground">No data in the selected range.</p>
         </Card>
       )}
+
+      {/* Weekly report — last 7d vs prior 7d, lead quality, freshness, commentary */}
+      <WeeklyReportCard clientId={clientId} isPublicView={isPublicView} />
 
       {/* Velocity trend — WoW / MoM funded $ */}
       {velocity && (
