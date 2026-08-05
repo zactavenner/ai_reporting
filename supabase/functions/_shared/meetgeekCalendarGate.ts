@@ -273,6 +273,7 @@ export interface LifecycleResult {
   matched?: boolean;
   crmSyncStatus?: string;
   clientId?: string | null;
+  qualityRating?: number;
 }
 
 /**
