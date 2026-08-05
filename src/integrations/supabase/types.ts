@@ -12255,6 +12255,90 @@ export type Database = {
           },
         ]
       }
+      lead_meeting_context: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          ghl_contact_id: string | null
+          ghl_note_at: string | null
+          ghl_note_error: string | null
+          ghl_note_status: string
+          id: string
+          lead_id: string | null
+          match_confidence: number
+          match_method: string | null
+          matched_email: string | null
+          meeting_record_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          ghl_contact_id?: string | null
+          ghl_note_at?: string | null
+          ghl_note_error?: string | null
+          ghl_note_status?: string
+          id?: string
+          lead_id?: string | null
+          match_confidence?: number
+          match_method?: string | null
+          matched_email?: string | null
+          meeting_record_id: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          ghl_contact_id?: string | null
+          ghl_note_at?: string | null
+          ghl_note_error?: string | null
+          ghl_note_status?: string
+          id?: string
+          lead_id?: string | null
+          match_confidence?: number
+          match_method?: string | null
+          matched_email?: string | null
+          meeting_record_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_meeting_context_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "lead_meeting_context_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_meeting_context_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "lead_meeting_context_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_meeting_context_meeting_record_id_fkey"
+            columns: ["meeting_record_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           ad_id: string | null
@@ -12439,6 +12523,164 @@ export type Database = {
           },
           {
             foreignKeyName: "media_buyer_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meeting_ingest_events: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          dedupe_key: string
+          error_message: string | null
+          event_id: string | null
+          id: string
+          meeting_external_id: string | null
+          payload: Json
+          provider: string
+          signature_valid: boolean
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          dedupe_key: string
+          error_message?: string | null
+          event_id?: string | null
+          id?: string
+          meeting_external_id?: string | null
+          payload?: Json
+          provider?: string
+          signature_valid?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          dedupe_key?: string
+          error_message?: string | null
+          event_id?: string | null
+          id?: string
+          meeting_external_id?: string | null
+          payload?: Json
+          provider?: string
+          signature_valid?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_ingest_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meeting_ingest_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_ingest_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meeting_records: {
+        Row: {
+          action_items: Json
+          client_id: string | null
+          created_at: string
+          duration_minutes: number | null
+          ended_at: string | null
+          host_email: string | null
+          id: string
+          language: string | null
+          meeting_external_id: string
+          participants: Json
+          provider: string
+          raw: Json
+          recording_url: string | null
+          source_url: string | null
+          started_at: string | null
+          status: string | null
+          summary: string | null
+          title: string | null
+          transcript_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          action_items?: Json
+          client_id?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          ended_at?: string | null
+          host_email?: string | null
+          id?: string
+          language?: string | null
+          meeting_external_id: string
+          participants?: Json
+          provider?: string
+          raw?: Json
+          recording_url?: string | null
+          source_url?: string | null
+          started_at?: string | null
+          status?: string | null
+          summary?: string | null
+          title?: string | null
+          transcript_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action_items?: Json
+          client_id?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          ended_at?: string | null
+          host_email?: string | null
+          id?: string
+          language?: string | null
+          meeting_external_id?: string
+          participants?: Json
+          provider?: string
+          raw?: Json
+          recording_url?: string | null
+          source_url?: string | null
+          started_at?: string | null
+          status?: string | null
+          summary?: string | null
+          title?: string | null
+          transcript_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meeting_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_records_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
