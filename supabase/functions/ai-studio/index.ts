@@ -3930,7 +3930,12 @@ Deno.serve(async (req) => {
         : null;
 
       try {
-        if (hasSelectedVideoModel && shouldDirectGenerateVideoPrompt(userText || "", hasSelectedVideoModel)) {
+        // Button-driven policy: the fast-path video generator only fires when the
+        // user clicked a video specialist, or an orchestrator (Jarvis / Jeremy /
+        // account manager) that is allowed to delegate to video sub-agents.
+        const directVideoAuthorized = hasSelectedVideoModel
+          && (agentToolPolicy === "video_only" || /jarvis|jeremy|account_manager|master/i.test(String(agentSlug || "")));
+        if (directVideoAuthorized && shouldDirectGenerateVideoPrompt(userText || "", hasSelectedVideoModel)) {
           const totalDuration = 15;
           // UI Format dropdown is authoritative for video: only Reel 9:16 or Video 16:9.
           const aspect = resolveVideoAspect(userText, adFormat);
