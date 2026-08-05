@@ -135,6 +135,12 @@ export function MeetingContextPanel({ leadId, isOpen, onToggle }: MeetingContext
             </div>
           );
         })}
+        {activityCount > 0 && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Call activity</p>
+            <MeetingCallActivityList leadId={leadId} limit={5} />
+          </div>
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
