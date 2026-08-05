@@ -8,6 +8,7 @@
 //   reloads and can be finished by a cron sweep.
 // - Surfaces the provider's real status + message instead of a generic error.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { condenseVideoPrompt } from "../_shared/videoPrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
