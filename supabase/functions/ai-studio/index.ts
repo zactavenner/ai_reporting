@@ -1234,10 +1234,10 @@ async function generateSeedanceVideo(opts: {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // MiniMax H3 is the ONLY approved video model. Seedance, Grok, HappyHorse,
-  // Kling and Veo are retired everywhere in AI Studio; any other requested id
-  // is coerced to H3 instead of failing the render.
-  const ALLOWED = ["minimax/hailuo-3"];
+  // Approved video models: MiniMax H3 (720p / native 2K) and Seedance 2.0 (720p only).
+  // Grok, HappyHorse, Kling and Veo are retired everywhere in AI Studio; any other
+  // requested id is coerced to H3 instead of failing the render.
+  const ALLOWED = ["minimax/hailuo-3", "bytedance/seedance-2.0"];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
   const ALIASES: Record<string, string> = {
@@ -1284,14 +1284,14 @@ async function generateSeedanceVideo(opts: {
     "h3": "minimax/hailuo-3",
   };
   const normalized = ALIASES[rawModel.toLowerCase()] || ALIASES[rawModel] || rawModel;
-  // HARD RULE: every video render goes to MiniMax H3. Retired models (Seedance,
-  // Grok, HappyHorse, Kling, Veo) are coerced to H3 and the coercion is logged,
+  // HARD RULE: renders go to MiniMax H3 or Seedance 2.0 only. Retired models
+  // (Grok, HappyHorse, Kling, Veo) are coerced to H3 and the coercion is logged,
   // so an LLM hallucinating an old id can never break or downgrade a render.
-  let model = "minimax/hailuo-3";
+  let model = ALLOWED.includes(normalized) ? normalized : "minimax/hailuo-3";
   let modelOverrideReason: string;
   if (!rawModel) {
     modelOverrideReason = "empty_defaulted_h3";
-  } else if (normalized === model) {
+  } else if (ALLOWED.includes(normalized)) {
     modelOverrideReason = normalized !== rawModel ? "alias_normalized" : "none";
   } else {
     modelOverrideReason = "coerced_to_h3";
@@ -1306,7 +1306,7 @@ async function generateSeedanceVideo(opts: {
       model,
       rerouted_from: rawModel,
       rerouted_to: model,
-      rerouted_reason: "h3_only_policy",
+      rerouted_reason: "approved_video_models_only",
     });
   }
   const isVeo = model.startsWith("google/veo");
