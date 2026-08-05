@@ -4,6 +4,7 @@
 // Actual polling + rehost is done by the cron-driven video-batch-poll function.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { condenseVideoPrompt } from "../_shared/videoPrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -107,7 +108,7 @@ async function submitOpenRouterVideo(opts: {
   const isHappyHorse = opts.model.startsWith("alibaba/happyhorse");
   const body: Record<string, unknown> = {
     model: opts.model,
-    prompt: opts.prompt,
+    prompt: condenseVideoPrompt(opts.prompt),
     aspect_ratio: opts.aspect,
     duration: isHappyHorse ? 15 : opts.duration,
   };
