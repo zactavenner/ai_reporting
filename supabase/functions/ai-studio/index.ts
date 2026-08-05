@@ -4125,6 +4125,13 @@ Deno.serve(async (req) => {
           ]);
           const hasImage = selectedImageModels.length > 0;
           const hasVideo = uniqueSelectedVideoModels.length > 0 || !!selectedVideoModel;
+          // BUTTON-DRIVEN VIDEO POLICY: video generation only runs when the user
+          // actually clicked the Video Ads Specialist (agentToolPolicy "video_only")
+          // or an orchestrator that is allowed to delegate to sub-agents
+          // (Jarvis / account manager / Jeremy). Any other agent — or no agent —
+          // can never produce video, even if a video model is left selected.
+          const isVideoOrchestrator = /jarvis|jeremy|account_manager|master/i.test(String(agentSlug || ""));
+          const videoAuthorized = hasVideo && (agentToolPolicy === "video_only" || isVideoOrchestrator);
           // Storyboarding is fully disabled. The legacy multi-scene pipeline
           // (plan_storyboard / generate_scene_image / generate_scene_video) is
           // never exposed to the LLM — all video requests go through
