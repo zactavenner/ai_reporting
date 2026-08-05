@@ -1348,9 +1348,9 @@ async function generateSeedanceVideo(opts: {
   }
   else if (isSeedanceFast && (effectiveResolution === "1080p" || effectiveResolution === "4k")) effectiveResolution = "720p";
   else if (isHailuo) {
-    // MiniMax H3 on OpenRouter supports ONLY native 2K (supported_resolutions: ["2K"]).
-    // Any other value (720p/480p/1080p/4k) is rejected with HTTP 400, so coerce to 2k.
-    effectiveResolution = "2k";
+    // MiniMax H3 supports 720p and native 2K. Everything else (480p/1080p/4k)
+    // is rejected by the provider, so coerce to the nearest supported value.
+    effectiveResolution = effectiveResolution === "720p" ? "720p" : "2k";
   }
   // Seedance 2.0 Fast supports only 480p and 720p per spec.
   else if (isSeedanceFast && effectiveResolution !== "480p" && effectiveResolution !== "720p") effectiveResolution = "720p";
@@ -2832,9 +2832,9 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 };
 
 // The only two resolutions MiniMax H3 offers. Legacy values are mapped onto them.
-type VideoResChoice = "2k";
+type VideoResChoice = "720p" | "2k";
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
-  "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, native 2K)" },
+  "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
 };
 
 // MiniMax H3 is the only video model and it handles synthetic avatars via
