@@ -225,7 +225,8 @@ function normalizeActionItems(raw: unknown): string[] {
 }
 
 function normalizeParticipants(payload: Record<string, any>): MeetgeekParticipant[] {
-  const raw = payload.participants || payload.attendees || payload.meeting?.participants || [];
+  const raw = payload.participants || payload.attendees || payload.participant_emails
+    || payload.attendee_emails || payload.meeting?.participants || [];
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const out: MeetgeekParticipant[] = [];
