@@ -49,47 +49,17 @@ function getBaseUrl(region: string): string {
   return region === 'eu' ? 'https://api-eu.meetgeek.ai' : 'https://api-us.meetgeek.ai';
 }
 
-/** Agency roles allowed to read or configure client meeting/transcript data. */
-const ADMIN_ROLES = ['admin', 'owner'];
-
 /**
  * Internal (non-provider) actions require the service-role key (cron) or a
- * valid Supabase user JWT whose email maps to an AGENCY ADMIN in
- * `agency_members`. A plain signed-in session is NOT sufficient: HPA has no
- * verified client-to-user membership table, so client transcript data is
- * restricted to agency admins rather than pseudo-scoped per client.
- * The tables themselves stay service-role only.
+ * Supabase user JWT whose subject is explicitly allowlisted in
+ * `reporting_operator_users` (service-role only, no public policies).
+ *
+ * A plain signed-in session is NEVER sufficient: this project has no verified
+ * client-to-user membership mapping, so these endpoints are an agency-OPERATOR
+ * authorization boundary — not a client/tenant scope and not investor or lead
+ * authorization. Until an operator is provisioned, every read/config write is
+ * refused with 403 and a bootstrap message.
  */
-async function requireInternalAuth(req: Request, supabase: any): Promise<boolean> {
-  const authHeader = req.headers.get('Authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) return false;
-  const token = authHeader.slice(7).trim();
-  if (!token) return false;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-  if (serviceKey && token === serviceKey) return true;
-  try {
-    const authClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data, error } = await authClient.auth.getClaims(token);
-    const claims: any = data?.claims;
-    if (error || !claims?.sub) return false;
-    const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : '';
-    if (!email) return false;
-    // Role lookup uses the service client so it cannot be spoofed by the caller.
-    const { data: member } = await supabase
-      .from('agency_members')
-      .select('role')
-      .ilike('email', email)
-      .in('role', ADMIN_ROLES)
-      .maybeSingle();
-    return !!member;
-  } catch {
-    return false;
-  }
-}
 
 /** Server-side only: reads the client's mapped HighLevel credentials. */
 async function getMappedGhl(supabase: any, clientId: string): Promise<{ apiKey: string | null; locationId: string | null }> {
