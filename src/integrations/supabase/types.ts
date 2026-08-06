@@ -5765,6 +5765,9 @@ export type Database = {
           meta_page_id: string | null
           meta_pixel_id: string | null
           min_investment: string | null
+          offer_review_notes: string | null
+          offer_reviewed_at: string | null
+          offer_reviewed_by: string | null
           offer_type: string
           pitch_deck_url: string | null
           raise_amount: string | null
@@ -5811,6 +5814,9 @@ export type Database = {
           meta_page_id?: string | null
           meta_pixel_id?: string | null
           min_investment?: string | null
+          offer_review_notes?: string | null
+          offer_reviewed_at?: string | null
+          offer_reviewed_by?: string | null
           offer_type?: string
           pitch_deck_url?: string | null
           raise_amount?: string | null
@@ -5857,6 +5863,9 @@ export type Database = {
           meta_page_id?: string | null
           meta_pixel_id?: string | null
           min_investment?: string | null
+          offer_review_notes?: string | null
+          offer_reviewed_at?: string | null
+          offer_reviewed_by?: string | null
           offer_type?: string
           pitch_deck_url?: string | null
           raise_amount?: string | null
