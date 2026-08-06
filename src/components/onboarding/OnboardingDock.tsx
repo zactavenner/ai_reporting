@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { forwardRef, useCallback, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -317,8 +317,6 @@ export function OnboardingDock({ clientId, clientName, offerId, onOpenCanvas }: 
 }
 
 /* ── Section shell ───────────────────────────────────────────── */
-
-import { forwardRef, type ReactNode } from 'react';
 
 const StageSection = forwardRef<HTMLDivElement, {
   stage: StageDef;
