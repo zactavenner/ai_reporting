@@ -187,16 +187,6 @@ async function resolveWebhookSecret(supabase: any): Promise<string> {
   }
 }
 
-async function mgGetUnused(apiKey: string, baseUrl: string, path: string): Promise<any | null> {
-  try {
-    const res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Fetches the real insights KPIs, transcript and summary for a meeting whose
  * calendar mapping has already been validated. Quality scoring consumes ONLY
