@@ -500,7 +500,7 @@ export async function ingestMeetgeekWebhook(args: {
     return { ok: false, status: 400, reason: 'invalid_json' };
   }
 
-  const meeting = normalizeMeetgeekPayload(payload);
+  let meeting = normalizeMeetgeekPayload(payload);
   if (!meeting) {
     return { ok: false, status: 400, reason: 'missing_meeting_id' };
   }
