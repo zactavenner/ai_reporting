@@ -410,8 +410,16 @@ export async function processCalendarMeeting(args: {
   if (deps.enrichMeeting) {
     meeting = await deps.enrichMeeting(config, meeting);
   }
-  // Quality is derived exclusively from provider KPI insights.
-  const quality = scoreQaScorecard({ insights: meeting.insights ?? null });
+  // Operational QA is derived exclusively from the ACTUAL provider artifacts:
+  // transcript, MeetGeek summary, action items and analytics. Nothing is inferred
+  // from duration, recording presence or CRM matching.
+  const quality = scoreCapitalRaisingQA({
+    transcript: meeting.transcriptText ?? null,
+    summary: meeting.summary ?? null,
+    actionItems: meeting.actionItems ?? [],
+    analytics: meeting.insights ?? null,
+    crm: { leadMatched: !!lead, ghlContactId: lead?.external_id ?? null, noteWritten: false },
+  });
 
   const baseRow = buildActivityRow({
     config,
