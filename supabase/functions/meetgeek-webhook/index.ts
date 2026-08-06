@@ -48,13 +48,18 @@ function getBaseUrl(region: string): string {
   return region === 'eu' ? 'https://api-eu.meetgeek.ai' : 'https://api-us.meetgeek.ai';
 }
 
+/** Agency roles allowed to read or configure client meeting/transcript data. */
+const ADMIN_ROLES = ['admin', 'owner'];
+
 /**
- * Internal (non-provider) actions require either a valid Supabase user JWT or
- * the service-role key (cron). Anonymous callers can never drive them, and all
- * client transcript/meeting reads go through here — the tables themselves are
- * service-role only.
+ * Internal (non-provider) actions require the service-role key (cron) or a
+ * valid Supabase user JWT whose email maps to an AGENCY ADMIN in
+ * `agency_members`. A plain signed-in session is NOT sufficient: HPA has no
+ * verified client-to-user membership table, so client transcript data is
+ * restricted to agency admins rather than pseudo-scoped per client.
+ * The tables themselves stay service-role only.
  */
-async function requireInternalAuth(req: Request): Promise<boolean> {
+async function requireInternalAuth(req: Request, supabase: any): Promise<boolean> {
   const authHeader = req.headers.get('Authorization') || '';
   if (!authHeader.startsWith('Bearer ')) return false;
   const token = authHeader.slice(7).trim();
@@ -68,7 +73,18 @@ async function requireInternalAuth(req: Request): Promise<boolean> {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data, error } = await authClient.auth.getClaims(token);
-    return !error && !!data?.claims?.sub;
+    const claims: any = data?.claims;
+    if (error || !claims?.sub) return false;
+    const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : '';
+    if (!email) return false;
+    // Role lookup uses the service client so it cannot be spoofed by the caller.
+    const { data: member } = await supabase
+      .from('agency_members')
+      .select('role')
+      .ilike('email', email)
+      .in('role', ADMIN_ROLES)
+      .maybeSingle();
+    return !!member;
   } catch {
     return false;
   }
@@ -480,8 +496,8 @@ Deno.serve(async (req) => {
     const body = JSON.parse(rawBody);
 
     // Every internal action is admin/tenant surface — require a real caller.
-    if (!(await requireInternalAuth(req))) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
+    if (!(await requireInternalAuth(req, supabase))) {
+      return jsonResponse({ error: 'Forbidden: agency admin access required' }, 403);
     }
 
     const clientId = body.client_id || new URL(req.url).searchParams.get('client_id');
