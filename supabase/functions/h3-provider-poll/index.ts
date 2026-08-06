@@ -142,22 +142,16 @@ Deno.serve(async (req) => {
         const res = await fetch(pollUrl(row.external_job_id), {
           headers: { Authorization: `Bearer ${apiKey}` },
         });
-        const payload = await res.json().catch(() => ({}));
+        const payload: OpenRouterVideoJob = await res.json().catch(() => ({}));
         if (!res.ok) {
           providerError = `OpenRouter HTTP ${res.status}: ${JSON.stringify(payload).slice(0, 400)}`;
         } else {
           providerStatus = String(payload?.status ?? "pending").toLowerCase();
           generationId = typeof payload?.generation_id === "string" ? payload.generation_id : null;
           pollingUrl = typeof payload?.polling_url === "string" ? payload.polling_url : null;
-          const cost = payload?.usage?.cost;
-          costAmount = typeof cost === "number" ? cost : null;
+          costAmount = extractCostUsd(payload);
           contentUrl = extractContentUrl(payload);
-          const perJobError = payload?.error;
-          if (perJobError) {
-            providerError = typeof perJobError === "string"
-              ? perJobError.slice(0, 400)
-              : JSON.stringify(perJobError).slice(0, 400);
-          }
+          providerError = extractProviderError(payload);
         }
       } catch (e) {
         providerError = String(e).slice(0, 400);
@@ -176,37 +170,34 @@ Deno.serve(async (req) => {
         update.cost_currency = "USD";
       }
 
-      // Normalized state only ever moves forward, and only on evidence.
-      //   pending     -> Submitted (stays exactly where it is)
-      //   in_progress -> Rendering
-      //   completed   -> Downloaded, but ONLY once a downloadable source asset
-      //                  is actually present and verified.
-      if (row.workflow_state === "submitted" && /in_progress|processing|rendering|running/.test(providerStatus)) {
-        update.workflow_state = "rendering";
-      }
-
-      if (providerStatus === "completed") {
+      // "completed" is a provider claim, not an asset. Only a verified,
+      // downloadable source asset lets a job reach Downloaded.
+      let assetVerified = false;
+      if (providerStatus === "completed" && !providerError) {
         if (contentUrl) {
           const probe = await assetIsDownloadable(contentUrl, apiKey);
-          assetNote = probe.detail;
-          if (probe.ok) {
-            update.source_asset_url = contentUrl;
-            // The state machine forbids skipping states, so a job still sitting
-            // at Submitted is walked Submitted -> Rendering -> Downloaded.
-            if (row.workflow_state === "submitted") {
-              await admin.from("h3_creatives").update({ workflow_state: "rendering" }).eq("id", row.id);
-            }
-            update.workflow_state = "downloaded";
-          } else {
-            // Provider claims completed but no usable asset — hold position and
-            // record why rather than advancing on an unverified claim.
-            assetNote = `held at ${row.workflow_state}: ${probe.detail}`;
-            delete update.workflow_state;
-          }
+          assetVerified = probe.ok;
+          assetNote = probe.ok ? probe.detail : `held at ${row.workflow_state}: ${probe.detail}`;
+          if (probe.ok) update.source_asset_url = contentUrl;
         } else {
           assetNote = `held at ${row.workflow_state}: completed without a content URL`;
-          delete update.workflow_state;
         }
+      }
+
+      // pending -> Submitted (hold), in_progress -> Rendering,
+      // completed -> Downloaded only with a verified asset.
+      const nextState = nextWorkflowState({
+        current: row.workflow_state,
+        providerStatus,
+        assetVerified,
+      });
+      if (nextState) {
+        // The DB state machine forbids skipping states, so a job still sitting
+        // at Submitted is walked Submitted -> Rendering -> Downloaded.
+        if (nextState === "downloaded" && row.workflow_state === "submitted") {
+          await admin.from("h3_creatives").update({ workflow_state: "rendering" }).eq("id", row.id);
+        }
+        update.workflow_state = nextState;
       }
 
       const { error: upErr } = await admin.from("h3_creatives").update(update).eq("id", row.id);
