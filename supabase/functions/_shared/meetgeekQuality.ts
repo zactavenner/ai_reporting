@@ -388,7 +388,8 @@ export function scoreCapitalRaisingQA(input: QaInput): QaScorecard {
   const nextHit = excerpt(corpus, NEXT_STEP_TERMS);
   const timeHit = nextHit ? excerpt(corpus, TIME_ANCHOR) : null;
   let nextStep: QaNextStep | null = null;
-  if (!transcriptMaterial && !summary && actionItems.length === 0) {
+  if (!transcriptMaterial) {
+    // Without a material transcript there is no evidence either way — never infer.
     categories.push(cat('next_step', 0, [], { insufficient: true }));
   } else if (!nextHit) {
     categories.push(cat('next_step', 0, ['no next step was agreed']));
