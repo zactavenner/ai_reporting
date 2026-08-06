@@ -190,3 +190,39 @@ describe('ingestMeetgeekWebhook', () => {
     expect(note).toContain('- Send deck');
   });
 });
+describe('calendar gate is fail-closed', () => {
+  it('refuses ingestion when the gate rejects, and writes no CRM note', async () => {
+    const { deps, calls } = makeDeps({
+      calendarGate: async () => ({ ok: false, status: 403, rejected: 'not_configured', clientId: null }),
+    });
+    const raw = JSON.stringify(payload);
+    const res = await ingestMeetgeekWebhook({ rawBody: raw, signatureHeader: await sign(raw), secret: SECRET, deps });
+    expect(res).toMatchObject({ ok: false, status: 403, reason: 'not_configured' });
+    expect(calls.notes).toHaveLength(0);
+    expect(calls.meetings).toHaveLength(0);
+    expect(calls.updates.at(-1).status).toBe('rejected');
+  });
+
+  it('lets the gate own the tenant and the single CRM write', async () => {
+    const { deps, calls } = makeDeps({
+      calendarGate: async () => ({ ok: true, status: 200, clientId: 'gated-client', matched: true, crmSyncStatus: 'written', activityId: 'act-9' }),
+    });
+    const raw = JSON.stringify(payload);
+    const res = await ingestMeetgeekWebhook({ rawBody: raw, signatureHeader: await sign(raw), secret: SECRET, deps });
+    expect(res).toMatchObject({ ok: true, clientId: 'gated-client', activityId: 'act-9' });
+    expect(calls.meetings[0].c).toBe('gated-client');
+    expect(calls.notes).toHaveLength(0);
+    expect(calls.contexts[0].ghlNoteStatus).toBe('delegated_to_calendar_gate');
+  });
+
+  it('collapses a gate-reported duplicate without re-writing', async () => {
+    const { deps, calls } = makeDeps({
+      calendarGate: async () => ({ ok: true, status: 200, duplicate: true, clientId: 'c1', activityId: 'act-1' }),
+    });
+    const raw = JSON.stringify(payload);
+    const res = await ingestMeetgeekWebhook({ rawBody: raw, signatureHeader: await sign(raw), secret: SECRET, deps });
+    expect(res.duplicate).toBe(true);
+    expect(calls.meetings).toHaveLength(0);
+    expect(calls.notes).toHaveLength(0);
+  });
+});
