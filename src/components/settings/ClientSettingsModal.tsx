@@ -1081,8 +1081,7 @@ export function ClientSettingsModal({ client, open, onOpenChange, initialTab }: 
             {/* Calendar Tracking Section */}
             <CalendarTrackingSection
               clientId={client.id}
-              ghlApiKey={client?.ghl_api_key || undefined}
-              ghlLocationId={client?.ghl_location_id || undefined}
+              ghlConfigured={Boolean(client?.ghl_api_key && client?.ghl_location_id)}
               trackedCalendarIds={trackedCalendarIds}
               reconnectCalendarIds={reconnectCalendarIds}
               onTrackedChange={setTrackedCalendarIds}
