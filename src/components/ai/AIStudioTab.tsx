@@ -2979,10 +2979,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       {/* RIGHT — Canvas */}
       {showCanvas && (
       <Card className={`${showChat && mobileView !== "canvas" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden min-h-0 ${canvasFsClass}`}>
-        <Tabs defaultValue="canvas" className="flex-1 flex flex-col min-h-0">
+        <Tabs value={studioTab} onValueChange={setStudioTab} className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
-            <TabsList className="self-start">
+            <TabsList className="self-start flex-wrap h-auto">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
+              <TabsTrigger value="onboarding"><Rocket className="h-4 w-4 mr-1" /> Onboarding</TabsTrigger>
               <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> Agent Training</TabsTrigger>
@@ -3139,6 +3140,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
           <TabsContent value="h3runs" className="flex-1 m-0 overflow-auto p-4">
             <H3RunManager clientId={clientId} />
+          </TabsContent>
+
+          <TabsContent value="onboarding" className="flex-1 m-0 overflow-hidden p-4 data-[state=active]:flex data-[state=inactive]:hidden">
+            <OnboardingDock
+              clientId={clientId}
+              clientName={clientName}
+              onOpenCanvas={() => setStudioTab("canvas")}
+            />
           </TabsContent>
 
         </Tabs>
