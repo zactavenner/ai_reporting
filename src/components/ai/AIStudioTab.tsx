@@ -18,6 +18,7 @@ import { useClient } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder, modelLabel } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
+import { H3RunManager } from "@/components/h3/H3RunManager";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
