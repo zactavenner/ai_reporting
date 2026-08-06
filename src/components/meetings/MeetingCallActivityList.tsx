@@ -64,16 +64,13 @@ export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props)
     queryKey: ['meeting-call-activity', clientId, leadId, limit],
     enabled: !!(clientId || leadId),
     queryFn: async () => {
-      let q = supabase
-        .from('meeting_call_activity')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-      if (clientId) q = q.eq('client_id', clientId);
-      if (leadId) q = q.eq('lead_id', leadId);
-      const { data, error } = await q;
+      // Meeting/transcript tables are service-role only. Reads go through the
+      // JWT-authenticated server endpoint, never straight at the table.
+      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
+        body: { action: 'mg_activity', client_id: clientId ?? null, lead_id: leadId ?? null, limit },
+      });
       if (error) throw error;
-      return (data || []) as unknown as ActivityRow[];
+      return ((data?.activity || []) as unknown[]) as ActivityRow[];
     },
   });
 
