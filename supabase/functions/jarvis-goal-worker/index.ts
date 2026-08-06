@@ -29,6 +29,73 @@ const MODEL_CHAIN = [
 /** Wall-clock budget per invocation. Under the edge function limit, then we re-arm. */
 const SLICE_MS = 45_000;
 
+/**
+ * HARD PRODUCTION BUDGETS.
+ * These are enforced server-side against real row counts — the model is NOT
+ * trusted to count. Without this an autonomous mission will happily re-call
+ * generate_static_ads on every iteration forever (it once produced 716
+ * near-identical statics for one client).
+ */
+export const ONBOARDING_STATIC_BUDGET = 10;
+export const ONBOARDING_VIDEO_BUDGET = 4;
+
+/** The 10 distinct static concepts. One slot per creative — never repeat a slot. */
+const STATIC_CONCEPTS: { slot: string; ratio: string; direction: string }[] = [
+  { slot: "market-thesis", ratio: "1:1", direction: "Bold market-thesis statement card: why this market and why now, one confident sentence, data-led." },
+  { slot: "fund-terms", ratio: "4:5", direction: "Clean fund terms card: minimum investment, hold period and targeted returns laid out as a tight spec sheet." },
+  { slot: "track-record", ratio: "1:1", direction: "Credibility / track record proof: prior performance and operator history rendered as a trust badge layout." },
+  { slot: "distributions", ratio: "9:16", direction: "Distribution schedule angle: cadence of income, calm premium chart-style visual." },
+  { slot: "tax-advantage", ratio: "4:5", direction: "Tax advantage angle: the structural benefit stated plainly with a document/ledger visual motif." },
+  { slot: "entry-point", ratio: "1:1", direction: "Entry point clarity: what it takes to participate, removing the 'this isn't for me' objection." },
+  { slot: "timing", ratio: "9:16", direction: "Timing / scarcity of the window, framed on real market conditions — never hype, never promissory." },
+  { slot: "spokesperson", ratio: "4:5", direction: "Spokesperson credibility portrait with a short authority quote overlaid." },
+  { slot: "risk-managed", ratio: "1:1", direction: "Risk-managed framing: how downside is controlled, with the required risk disclaimer visible." },
+  { slot: "direct-cta", ratio: "9:16", direction: "Direct call-to-action: book the call, accredited-investor callout, minimal and high-contrast." },
+];
+
+/** The 4 natural-motion UGC video styles. One slot per video — never repeat a slot. */
+const VIDEO_STYLES: { slot: string; label: string; direction: string }[] = [
+  { slot: "podcast", label: "Podcast clip", direction: "Podcast-style two-shot: spokesperson mid-conversation on a mic, natural head movement and hand gestures, warm studio lighting, shallow depth of field, looks like a clipped long-form episode." },
+  { slot: "street_interview", label: "Street interview", direction: "Street interview: handheld camera, spokesperson answering on a busy city sidewalk, natural ambient movement of people behind, slight camera sway, candid documentary feel." },
+  { slot: "walk_and_talk", label: "Walk and talk", direction: "Walk-and-talk: spokesperson walking toward camera through a business district, camera tracking backward, natural gait, hair and clothing moving, continuous motion throughout." },
+  { slot: "broll", label: "B-roll narration", direction: "Cinematic b-roll: slow dolly and crane moves over the market/asset, no talking head, motion in every frame, narration-driven." },
+];
+
+/** Real remaining budget from the database, per client + kind. */
+async function remainingBudget(clientId: string, kind: "static" | "video") {
+  if (kind === "static") {
+    const { count } = await supa
+      .from("creatives")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .eq("source", "onboarding-build");
+    const used = Number(count || 0);
+    return { used, budget: ONBOARDING_STATIC_BUDGET, remaining: Math.max(0, ONBOARDING_STATIC_BUDGET - used) };
+  }
+  const { count } = await supa
+    .from("creative_video_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .in("status", ["queued", "processing", "pending", "running", "completed", "succeeded"]);
+  const used = Number(count || 0);
+  return { used, budget: ONBOARDING_VIDEO_BUDGET, remaining: Math.max(0, ONBOARDING_VIDEO_BUDGET - used) };
+}
+
+/** Which concept slots have already been produced for this client. */
+async function usedStaticSlots(clientId: string): Promise<Set<string>> {
+  const { data } = await supa
+    .from("creatives")
+    .select("title")
+    .eq("client_id", clientId)
+    .eq("source", "onboarding-build");
+  const used = new Set<string>();
+  for (const row of data || []) {
+    const m = /\[([a-z-]+)\]/.exec(String((row as any).title || ""));
+    if (m) used.add(m[1]);
+  }
+  return used;
+}
+
 const supa = createClient(SUPABASE_URL, SERVICE);
 
 function j(b: unknown, s = 200) {
