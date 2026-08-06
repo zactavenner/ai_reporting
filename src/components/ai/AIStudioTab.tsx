@@ -1162,6 +1162,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Mobile-only view switcher: shows either Chat or Canvas at < lg width
   // so both panels don't stack into a giant scroll on phones.
   const [mobileView, setMobileView] = useState<"chat" | "canvas">("chat");
+  // Right-pane tab (controlled so the onboarding dock can jump back to the canvas).
+  const [studioTab, setStudioTab] = useState<string>("canvas");
   // Fullscreen mode for either pane — useful on phones/tablets.
   const [fullscreen, setFullscreen] = useState<"none" | "chat" | "canvas">("none");
   useEffect(() => {
