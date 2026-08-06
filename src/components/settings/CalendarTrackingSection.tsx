@@ -16,8 +16,8 @@ interface GHLCalendar {
 
 interface CalendarTrackingSectionProps {
   clientId: string;
-  ghlApiKey?: string;
-  ghlLocationId?: string;
+  /** True when the client has GHL credentials saved server-side. The API key is never sent to the browser flow. */
+  ghlConfigured?: boolean;
   trackedCalendarIds: string[];
   reconnectCalendarIds: string[];
   onTrackedChange: (ids: string[]) => void;
@@ -26,8 +26,7 @@ interface CalendarTrackingSectionProps {
 
 export function CalendarTrackingSection({
   clientId,
-  ghlApiKey,
-  ghlLocationId,
+  ghlConfigured,
   trackedCalendarIds,
   reconnectCalendarIds,
   onTrackedChange,
@@ -38,7 +37,7 @@ export function CalendarTrackingSection({
   const [error, setError] = useState<string | null>(null);
 
   const fetchCalendars = async () => {
-    if (!ghlApiKey || !ghlLocationId) {
+    if (!ghlConfigured || !clientId) {
       setError('GHL credentials not configured');
       return;
     }
@@ -47,9 +46,10 @@ export function CalendarTrackingSection({
     setError(null);
 
     try {
-      // Use edge function to proxy GHL API request (avoids CORS issues)
+      // Credentials stay server-side: we only send the client id. The edge
+      // function loads the GHL key/location itself and validates results.
       const { data, error: fnError } = await supabase.functions.invoke('fetch-ghl-calendars', {
-        body: { ghlApiKey, ghlLocationId },
+        body: { action: 'list', clientId },
       });
 
       if (fnError) {
@@ -74,10 +74,10 @@ export function CalendarTrackingSection({
   };
 
   useEffect(() => {
-    if (ghlApiKey && ghlLocationId) {
+    if (ghlConfigured && clientId) {
       fetchCalendars();
     }
-  }, [ghlApiKey, ghlLocationId]);
+  }, [ghlConfigured, clientId]);
 
   const toggleTrackedCalendar = (calendarId: string) => {
     const newIds = trackedCalendarIds.includes(calendarId)
@@ -93,7 +93,7 @@ export function CalendarTrackingSection({
     onReconnectChange(newIds);
   };
 
-  if (!ghlApiKey || !ghlLocationId) {
+  if (!ghlConfigured) {
     return (
       <div className="border-2 border-border p-4 bg-muted/20">
         <div className="flex items-center gap-2 text-muted-foreground">
