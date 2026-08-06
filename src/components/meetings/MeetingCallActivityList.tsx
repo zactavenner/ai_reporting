@@ -27,7 +27,17 @@ interface ActivityRow {
   crm_sync_status: string | null;
   crm_sync_error: string | null;
   error_message: string | null;
+  quality_rating: number | null;
+  quality_rubric: unknown;
+  quality_summary: string | null;
   created_at: string;
+}
+
+function qualityTone(rating: number): string {
+  if (rating >= 8) return 'text-emerald-600 border-emerald-500/30';
+  if (rating >= 6) return 'text-primary border-primary/30';
+  if (rating >= 4) return 'text-amber-600 border-amber-500/30';
+  return 'text-destructive border-destructive/30';
 }
 
 const statusMeta: Record<string, { label: string; className: string }> = {
@@ -100,7 +110,18 @@ export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props)
                   {row.attendee_email ? ` · ${row.attendee_email}` : ''}
                 </p>
               </div>
-              <Badge variant="outline" className={status.className}>{status.label}</Badge>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {typeof row.quality_rating === 'number' && (
+                  <Badge
+                    variant="outline"
+                    className={qualityTone(row.quality_rating)}
+                    title={row.quality_summary || undefined}
+                  >
+                    {row.quality_rating}/10
+                  </Badge>
+                )}
+                <Badge variant="outline" className={status.className}>{status.label}</Badge>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -109,7 +130,9 @@ export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props)
                 {crm?.label || row.crm_sync_status}
               </span>
               {row.agent_joined_at && (
-                <span className="text-muted-foreground">Bot present</span>
+                <span className="flex items-center gap-1 text-primary">
+                  <Video className="h-3.5 w-3.5" /> Bot joined
+                </span>
               )}
               {row.recording_url && (
                 <a href={row.recording_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
@@ -124,6 +147,19 @@ export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props)
             </div>
 
             {row.summary && <p className="text-xs text-muted-foreground line-clamp-3">{row.summary}</p>}
+
+            {Array.isArray(row.quality_rubric) && (row.quality_rubric as any[]).length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {(row.quality_rubric as { label: string; points: number; max: number }[]).map((r, i) => (
+                  <span
+                    key={i}
+                    className={`text-[10px] border px-1.5 py-0.5 ${r.points >= r.max ? 'text-emerald-600 border-emerald-500/30' : 'text-muted-foreground border-border'}`}
+                  >
+                    {r.label} {r.points}/{r.max}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {items.length > 0 && (
               <ul className="text-xs list-disc pl-4 space-y-0.5">
