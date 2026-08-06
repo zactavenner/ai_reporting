@@ -147,12 +147,12 @@ async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<{ ap
 async function resolveAgencyMeetgeekApi(supabase: any): Promise<{ apiKey: string; baseUrl: string } | null> {
   const { data: agency } = await supabase
     .from('agency_settings')
-    .select('meetgeek_api_key, meetgeek_region')
+    .select('meetgeek_api_key')
     .limit(1)
     .maybeSingle();
   const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
   if (!apiKey) return null;
-  const region = agency?.meetgeek_region || (apiKey.startsWith('eu-') ? 'eu' : 'us');
+  const region = (Deno.env.get('MEETGEEK_REGION') || (apiKey.startsWith('eu-') ? 'eu' : 'us')).toLowerCase();
   return { apiKey, baseUrl: getBaseUrl(region) };
 }
 
