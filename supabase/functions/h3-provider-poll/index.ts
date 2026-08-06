@@ -1,25 +1,65 @@
 // Server-side H3 provider status + polling.
 //
+// PROVIDER CONTRACT: these jobs were submitted through OpenRouter, not directly
+// to MiniMax. The only credential is the server-side OPENROUTER_API_KEY. It is
+// never sent to the browser, never persisted to the database, and never echoed
+// in a response or an audit event.
+//
 // Hard rules:
 // - Operator-only. A valid JWT is never sufficient: the caller must be
 //   allowlisted in public.reporting_operator_users (or be the service role).
 //   This function holds the service-role key, so it is the only place H3 rows
 //   are written server-side and it must not be callable by arbitrary users.
-// - Never submits or re-submits a job. Poll only, by existing external job ID.
-// - Requires a configured server-side secret (MINIMAX_API_KEY). If absent we
-//   return an honest disconnected status instead of inventing a result.
+// - POLL ONLY. This function issues exactly one request shape:
+//   GET https://openrouter.ai/api/v1/videos/{external_job_id}. It never POSTs
+//   /videos and never touches any generation endpoint, so it cannot submit or
+//   re-submit a job or spend provider credit.
+// - Requires the OPENROUTER_API_KEY server secret. If absent we return an
+//   honest disconnected status instead of inventing a result.
 // - Idempotent: a pending provider job is left exactly as-is.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { authorizeOperator } from "../_shared/operatorAuth.ts";
+import {
+  extractContentUrl,
+  extractCostUsd,
+  extractProviderError,
+  isVideoContentType,
+  nextWorkflowState,
+  openRouterPollUrl as pollUrl,
+  type OpenRouterVideoJob,
+} from "../_shared/h3Provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const PROVIDER_LABEL = "OpenRouter / MiniMax Hailuo 3";
+const PROVIDER_LABEL = "OpenRouter";
 const NOT_CONFIGURED =
-  "Connection required to resume polling — no server-side MiniMax provider credential is configured. Add MINIMAX_API_KEY in Project Settings → Secrets.";
+  "Connection required to resume polling — no server-side OpenRouter credential is configured. Add OPENROUTER_API_KEY in Project Settings → Secrets.";
+
+/**
+ * "completed" from the provider is a claim, not an asset. Confirm the content
+ * URL actually serves a downloadable video before we call anything Downloaded.
+ * Headers only — the body is cancelled so we never pull the whole render.
+ */
+async function assetIsDownloadable(url: string, apiKey: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Range: "bytes=0-0" },
+    });
+    const type = res.headers.get("content-type") ?? "";
+    const len = res.headers.get("content-length") ?? "";
+    try { await res.body?.cancel(); } catch { /* already drained */ }
+    if (!res.ok && res.status !== 206) return { ok: false, detail: `content HTTP ${res.status}` };
+    if (!isVideoContentType(type)) {
+      return { ok: false, detail: `unexpected content-type "${type}"` };
+    }
+    return { ok: true, detail: `${type}${len ? ` (${len} bytes/range)` : ""}` };
+  } catch (e) {
+    return { ok: false, detail: `content probe failed: ${String(e).slice(0, 200)}` };
+  }
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -34,7 +74,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action ?? "status");
-    const apiKey = Deno.env.get("MINIMAX_API_KEY");
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -62,7 +102,7 @@ Deno.serve(async (req) => {
       return json({
         connected: !!apiKey,
         provider: PROVIDER_LABEL,
-        reason: apiKey ? "Provider credential configured." : NOT_CONFIGURED,
+        reason: apiKey ? "OpenRouter credential configured server-side." : NOT_CONFIGURED,
       });
     }
 
@@ -77,7 +117,7 @@ Deno.serve(async (req) => {
 
     const { data: rows, error } = await admin
       .from("h3_creatives")
-      .select("id, external_job_id, provider_status, workflow_state")
+      .select("id, external_job_id, provider_status, workflow_state, source_asset_url")
       .in("id", creativeIds);
     if (error) return json({ error: error.message }, 500);
 
@@ -92,16 +132,26 @@ Deno.serve(async (req) => {
 
       let providerStatus = row.provider_status;
       let providerError: string | null = null;
+      let generationId: string | null = null;
+      let pollingUrl: string | null = null;
+      let costAmount: number | null = null;
+      let contentUrl: string | null = null;
+      let assetNote = "";
+
       try {
-        const res = await fetch(
-          `https://api.minimax.io/v1/query/video_generation?task_id=${encodeURIComponent(row.external_job_id)}`,
-          { headers: { Authorization: `Bearer ${apiKey}` } },
-        );
-        const payload = await res.json().catch(() => ({}));
+        const res = await fetch(pollUrl(row.external_job_id), {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        const payload: OpenRouterVideoJob = await res.json().catch(() => ({}));
         if (!res.ok) {
-          providerError = `HTTP ${res.status}: ${JSON.stringify(payload).slice(0, 400)}`;
+          providerError = `OpenRouter HTTP ${res.status}: ${JSON.stringify(payload).slice(0, 400)}`;
         } else {
-          providerStatus = String(payload?.status ?? payload?.task_status ?? "pending").toLowerCase();
+          providerStatus = String(payload?.status ?? "pending").toLowerCase();
+          generationId = typeof payload?.generation_id === "string" ? payload.generation_id : null;
+          pollingUrl = typeof payload?.polling_url === "string" ? payload.polling_url : null;
+          costAmount = extractCostUsd(payload);
+          contentUrl = extractContentUrl(payload);
+          providerError = extractProviderError(payload);
         }
       } catch (e) {
         providerError = String(e).slice(0, 400);
@@ -109,21 +159,70 @@ Deno.serve(async (req) => {
 
       const update: Record<string, unknown> = {
         provider_status: providerStatus,
-        polling_ref: row.external_job_id,
+        // polling_url as returned by the provider; fall back to the canonical
+        // read-only poll URL for this job so the ref is never a dead value.
+        polling_ref: pollingUrl ?? pollUrl(row.external_job_id),
         provider_error: providerError,
       };
-      // Normalized state only ever moves forward one step, and only when the
-      // provider itself reports progress. Pending stays exactly where it is.
-      if (row.workflow_state === "submitted" && /processing|rendering|running/.test(providerStatus)) {
-        update.workflow_state = "rendering";
+      if (generationId) update.provider_generation_id = generationId;
+      if (costAmount !== null) {
+        update.cost_amount = costAmount;
+        update.cost_currency = "USD";
       }
-      await admin.from("h3_creatives").update(update).eq("id", row.id);
+
+      // "completed" is a provider claim, not an asset. Only a verified,
+      // downloadable source asset lets a job reach Downloaded.
+      let assetVerified = false;
+      if (providerStatus === "completed" && !providerError) {
+        if (contentUrl) {
+          const probe = await assetIsDownloadable(contentUrl, apiKey);
+          assetVerified = probe.ok;
+          assetNote = probe.ok ? probe.detail : `held at ${row.workflow_state}: ${probe.detail}`;
+          if (probe.ok) update.source_asset_url = contentUrl;
+        } else {
+          assetNote = `held at ${row.workflow_state}: completed without a content URL`;
+        }
+      }
+
+      // pending -> Submitted (hold), in_progress -> Rendering,
+      // completed -> Downloaded only with a verified asset.
+      const nextState = nextWorkflowState({
+        current: row.workflow_state,
+        providerStatus,
+        assetVerified,
+      });
+      if (nextState) {
+        // The DB state machine forbids skipping states, so a job still sitting
+        // at Submitted is walked Submitted -> Rendering -> Downloaded.
+        if (nextState === "downloaded" && row.workflow_state === "submitted") {
+          await admin.from("h3_creatives").update({ workflow_state: "rendering" }).eq("id", row.id);
+        }
+        update.workflow_state = nextState;
+      }
+
+      const { error: upErr } = await admin.from("h3_creatives").update(update).eq("id", row.id);
+      if (upErr) {
+        results[row.id] = `persist_failed: ${upErr.message}`;
+        continue;
+      }
       await admin.from("h3_creative_events").insert({
         creative_id: row.id,
         event_type: "provider_poll",
-        detail: { provider_status: providerStatus, provider_error: providerError },
+        detail: {
+          provider: PROVIDER_LABEL,
+          job_id: row.external_job_id,
+          provider_status: providerStatus,
+          generation_id: generationId,
+          polling_url: update.polling_ref,
+          cost_usd: costAmount,
+          asset: assetNote || null,
+          provider_error: providerError,
+          workflow_state: update.workflow_state ?? row.workflow_state,
+        },
       });
-      results[row.id] = providerStatus;
+      results[row.id] = providerError
+        ? `${providerStatus} (error)`
+        : String(update.workflow_state ?? providerStatus);
     }
 
     return json({ connected: true, provider: PROVIDER_LABEL, results });

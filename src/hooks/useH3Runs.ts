@@ -29,6 +29,8 @@ export type H3Creative = {
   model: string;
   external_job_id: string | null;
   internal_generation_id: string;
+  /** generation_id returned by OpenRouter for this job (not ours). */
+  provider_generation_id: string | null;
   polling_ref: string | null;
   first_frame_asset_url: string | null;
   prompt: string | null;
@@ -296,7 +298,11 @@ export function useH3Mutations(runId?: string | null) {
   return { patch, advance, reject, saveScriptRevision, createRun, createCreative };
 }
 
-/** Server-side provider connection + polling. Never re-submits a pending job. */
+/**
+ * Server-side OpenRouter connection status. The OPENROUTER_API_KEY lives only
+ * in the edge function environment — it is never sent to or stored by the
+ * browser or the database. Polling never re-submits a pending job.
+ */
 export function useH3ProviderConnection() {
   return useQuery({
     queryKey: ["h3-provider-connection"],
@@ -306,7 +312,7 @@ export function useH3ProviderConnection() {
         body: { action: "status" },
       });
       if (error) {
-        return { connected: false, reason: "Provider status endpoint unreachable.", provider: "MiniMax Hailuo 3" };
+        return { connected: false, reason: "OpenRouter status endpoint unreachable.", provider: "OpenRouter" };
       }
       return data as { connected: boolean; reason: string; provider: string };
     },
