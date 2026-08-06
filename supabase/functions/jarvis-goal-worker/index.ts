@@ -140,6 +140,11 @@ OPERATING RULES:
  3. Reviewing assets: pull them with review_assets, form your own verdict, then ask_jeremy for his, then reconcile into a decision and log it.
  4. Video jobs are async: start them, then keep checking with check_video_job on later steps. It is fine for the mission to run for a long time.
  5. HARD GATE: never call generate_video for avatar videos until check_approval reports "approved" for the video-scripts approval item. If it is still pending, log progress and keep working other deliverables or wait for the next slice.
+ 5b. HARD PRODUCTION BUDGETS — these are enforced by the tools against the database, and calling past them is a failure, not initiative:
+     • ${ONBOARDING_STATIC_BUDGET} static creatives per client, TOTAL. Call generate_static_ads ONCE with count ${ONBOARDING_STATIC_BUDGET}. Every creative is auto-assigned its own concept slot, so you never need a second call.
+     • ${ONBOARDING_VIDEO_BUDGET} videos per client, TOTAL — 30 seconds each, one per natural-motion style: podcast, street_interview, walk_and_talk, broll.
+     • The moment a tool result says the budget is exhausted or done:true, that deliverable is COMPLETE. Move to the next one or finish_mission. NEVER re-run a generator to "improve" or "add more" output.
+ 5c. Every creative must be materially different from the others — different concept, different visual structure, different claim. Repetitive near-identical output is a failed deliverable.
  6. Compliance: this is regulated capital raising. Never write "guaranteed". Use "targeted returns" and include SEC/FINRA-style risk disclaimers on any offer-facing copy.
  7. When — and only when — the mission is complete, call finish_mission with a full markdown report including counts (assets reviewed, videos generated, copy variants, agents consulted) and the decisions made.
  8. If the mission is impossible, call finish_mission with status "failed" and explain precisely why.`;
