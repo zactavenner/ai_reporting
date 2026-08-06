@@ -476,8 +476,9 @@ Deno.serve(async (req) => {
     const clientId = body.client_id || new URL(req.url).searchParams.get('client_id');
 
     // -----------------------------------------------------------------
-    // Client-scoped read endpoint for the UI. Meeting/transcript tables
-    // are service-role only, so all reads are funnelled through here.
+    // Operator read endpoint for the UI. Meeting/transcript tables are
+    // service-role only, so all reads funnel through here after the operator
+    // allowlist check above. This is not a per-client tenant scope.
     // -----------------------------------------------------------------
     if (body.action === 'mg_activity') {
       const leadId = body.lead_id ? String(body.lead_id) : null;
