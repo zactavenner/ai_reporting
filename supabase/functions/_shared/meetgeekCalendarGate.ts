@@ -4,7 +4,7 @@
 // every client/location value must come from the server-side config row.
 
 import { normalizeEmail, type NormalizedMeeting } from './meetgeekIngest.ts';
-import { scoreMeetingQuality } from './meetgeekQuality.ts';
+import { scoreMeetingQuality, type MeetingQuality, type QualityRubricItem } from './meetgeekQuality.ts';
 
 export type BotJoinPolicy = 'never' | 'selected_calendar_video_only' | 'all_video_on_calendar';
 
@@ -48,6 +48,8 @@ export type GateRejection =
   | 'mapping_invalid'
   | 'no_calendar_selected'
   | 'calendar_not_selected'
+  | 'unknown_calendar'
+  | 'appointment_location_missing'
   | 'cross_client_location'
   | 'ambiguous_appointment'
   | 'appointment_not_found'
@@ -64,12 +66,30 @@ export const GATE_REJECTION_MESSAGES: Record<GateRejection, string> = {
   mapping_invalid: 'The HighLevel location mapping for this client is invalid — re-validate it in Settings.',
   no_calendar_selected: 'No HighLevel calendar has been selected for this client.',
   calendar_not_selected: 'The booking is not on the calendar selected for this client.',
+  unknown_calendar: 'The booking is on a calendar that is not part of this client’s mapped location.',
+  appointment_location_missing: 'The booking returned no HighLevel location, so tenant ownership cannot be proven.',
   cross_client_location: 'The booking belongs to a different HighLevel location than this client.',
   ambiguous_appointment: 'More than one calendar booking matched this meeting — refusing to guess.',
   appointment_not_found: 'No booking on the selected calendar matched this meeting.',
   not_video_meeting: 'The booking has no video conferencing link.',
   bot_join_disabled: 'The bot-join policy for this client is set to never join.',
 };
+
+/**
+ * Non-reversible short digest so rejection logs can be correlated without ever
+ * printing a raw HighLevel calendar/location identifier.
+ */
+export function hashIdForLog(value: string | null | undefined): string {
+  if (!value) return 'none';
+  let h1 = 0x811c9dc5;
+  let h2 = 0x1000193;
+  for (let i = 0; i < value.length; i++) {
+    h1 = (h1 ^ value.charCodeAt(i)) >>> 0;
+    h1 = Math.imul(h1, 0x01000193) >>> 0;
+    h2 = (h2 + Math.imul(value.charCodeAt(i) + i, 0x85ebca6b)) >>> 0;
+  }
+  return `cal_${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+}
 
 /**
  * Decides whether a MeetGeek meeting may be ingested for a client, based ONLY on
@@ -98,11 +118,27 @@ export function evaluateCalendarGate(args: {
   if (appointments.some((a) => a.locationId && a.locationId !== config.ghlLocationId)) {
     return { allowed: false, reason: 'cross_client_location' };
   }
+  // A missing location can NEVER be treated as "probably ours".
+  if (appointments.some((a) => !a.locationId)) {
+    return { allowed: false, reason: 'appointment_location_missing' };
+  }
 
-  const onSelected = mode === 'all_mapped_calendars'
-    ? appointments.filter((a) => a.locationId === config.ghlLocationId || !a.locationId)
-    : appointments.filter((a) => a.calendarId === config.ghlCalendarId);
-  if (onSelected.length === 0) return { allowed: false, reason: 'calendar_not_selected' };
+  const inLocation = appointments.filter((a) => a.locationId === config.ghlLocationId);
+  if (inLocation.length === 0) return { allowed: false, reason: 'cross_client_location' };
+
+  let onSelected: CalendarAppointment[];
+  if (mode === 'all_mapped_calendars') {
+    // Every appointment must carry a calendar id inside the mapped location.
+    onSelected = inLocation.filter((a) => !!a.calendarId);
+    if (onSelected.length === 0) return { allowed: false, reason: 'unknown_calendar' };
+  } else {
+    // A booking without a calendar id can never be proven to be the selected one.
+    if (inLocation.some((a) => !a.calendarId)) {
+      return { allowed: false, reason: 'unknown_calendar' };
+    }
+    onSelected = inLocation.filter((a) => a.calendarId === config.ghlCalendarId);
+    if (onSelected.length === 0) return { allowed: false, reason: 'calendar_not_selected' };
+  }
 
   const unique = dedupeByEventId(onSelected);
   if (unique.length > 1) return { allowed: false, reason: 'ambiguous_appointment' };
@@ -170,7 +206,7 @@ export interface ActivityRow {
   crm_attempts: number;
   error_message: string | null;
   quality_rating: number | null;
-  quality_rubric: { label: string; points: number; max: number }[] | null;
+  quality_rubric: QualityRubricItem[] | null;
   quality_summary: string | null;
 }
 
@@ -189,7 +225,7 @@ export function buildActivityRow(args: {
   crmAttempts?: number;
   errorMessage?: string | null;
   source?: string;
-  quality?: { rating: number; rubric: { label: string; points: number; max: number }[]; summary: string } | null;
+  quality?: MeetingQuality | null;
 }): ActivityRow {
   const { config, stage, appointment, meeting } = args;
   return {
@@ -260,6 +296,12 @@ export interface LifecycleDeps {
   upsertActivity(row: ActivityRow): Promise<{ id: string }>;
   patchActivity(id: string, patch: Record<string, unknown>): Promise<void>;
   matchLead(config: MeetgeekClientConfig, emails: string[]): Promise<{ id: string; external_id: string | null; email: string | null } | null>;
+  /**
+   * Authenticated provider fetch for a calendar-VALIDATED meeting: insights KPIs
+   * plus the real transcript/summary. Runs before quality scoring; never called
+   * for rejected meetings.
+   */
+  enrichMeeting?(config: MeetgeekClientConfig, meeting: NormalizedMeeting): Promise<NormalizedMeeting>;
   writeGhlNote(input: { config: MeetgeekClientConfig; contactId: string; note: string }): Promise<{ status: 'written' | 'skipped' | 'error'; error?: string }>;
   touchHealth(clientId: string, patch: Record<string, unknown>): Promise<void>;
 }
@@ -273,7 +315,7 @@ export interface LifecycleResult {
   matched?: boolean;
   crmSyncStatus?: string;
   clientId?: string | null;
-  qualityRating?: number;
+  qualityRating?: number | null;
 }
 
 /**
@@ -282,10 +324,15 @@ export interface LifecycleResult {
  */
 export async function processCalendarMeeting(args: {
   meeting: NormalizedMeeting;
-  noteBuilder: (meeting: NormalizedMeeting, appointment: CalendarAppointment | null) => string;
+  noteBuilder: (
+    meeting: NormalizedMeeting,
+    appointment: CalendarAppointment | null,
+    quality: MeetingQuality | null,
+  ) => string;
   deps: LifecycleDeps;
 }): Promise<LifecycleResult> {
-  const { meeting, deps, noteBuilder } = args;
+  const { deps, noteBuilder } = args;
+  let meeting = args.meeting;
 
   const config = await deps.getConfigForMeeting(meeting);
   if (!config) return { ok: false, status: 403, rejected: 'not_configured', clientId: null };
@@ -297,6 +344,14 @@ export async function processCalendarMeeting(args: {
 
   if (decision.allowed !== true) {
     const reason: GateRejection = decision.reason;
+    // Rejection logs carry hashed identifiers only — never raw calendar ids.
+    console.warn('[meetgeek] gate rejected', JSON.stringify({
+      reason,
+      client: config.clientId,
+      configured_calendar: hashIdForLog(config.ghlCalendarId),
+      seen_calendars: appointments.map((a) => hashIdForLog(a.calendarId)),
+      seen_locations: appointments.map((a) => hashIdForLog(a.locationId)),
+    }));
     const row = buildActivityRow({
       config,
       stage: 'rejected',
@@ -325,7 +380,13 @@ export async function processCalendarMeeting(args: {
   const lead = emails.length ? await deps.matchLead(config, emails) : null;
   const stage: ActivityStage = lead ? 'completed' : 'unmatched';
 
-  const quality = scoreMeetingQuality({ meeting, matched: !!lead });
+  // Provider insights + real transcript/summary are fetched only now, after the
+  // calendar mapping has been validated for this client.
+  if (deps.enrichMeeting) {
+    meeting = await deps.enrichMeeting(config, meeting);
+  }
+  // Quality is derived exclusively from provider KPI insights.
+  const quality = scoreMeetingQuality({ insights: meeting.insights ?? null });
 
   const baseRow = buildActivityRow({
     config,
@@ -362,7 +423,8 @@ export async function processCalendarMeeting(args: {
 
   const contactId = lead?.external_id || appointment.contactId || null;
   if (lead && contactId) {
-    const res = await deps.writeGhlNote({ config, contactId, note: noteBuilder(meeting, appointment) });
+    // Notes are written ONLY for an unambiguous, in-tenant, matched meeting.
+    const res = await deps.writeGhlNote({ config, contactId, note: noteBuilder(meeting, appointment, quality) });
     const next = nextCrmState({ status: res.status, attempts: attemptsSoFar, error: res.error });
     crmStatus = next.crm_sync_status;
     crmError = res.error ?? null;

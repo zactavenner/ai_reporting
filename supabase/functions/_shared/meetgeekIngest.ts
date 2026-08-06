@@ -1,6 +1,12 @@
 // Shared, dependency-injected MeetGeek ingestion core.
 // Pure logic lives here so it can be unit-tested outside the Deno runtime.
 
+import {
+  parseMeetgeekInsights,
+  type MeetgeekMeetingInsights,
+  type MeetingQuality,
+} from './meetgeekQuality.ts';
+
 export interface MeetgeekParticipant {
   name?: string | null;
   email?: string | null;
@@ -24,6 +30,14 @@ export interface NormalizedMeeting {
   transcriptUrl: string | null;
   recordingUrl: string | null;
   sourceUrl: string | null;
+  /**
+   * Provider KPI insights (`GET /v1/meetings/{id}/insights`). This is the ONLY
+   * input allowed to drive the quality score. Null until the authenticated
+   * provider fetch has run for a calendar-validated meeting.
+   */
+  insights?: MeetgeekMeetingInsights | null;
+  /** Full transcript text fetched from the provider (never used for scoring). */
+  transcriptText?: string | null;
 }
 
 export interface LeadRow {
@@ -250,6 +264,10 @@ export function normalizeMeetgeekPayload(payload: Record<string, any>): Normaliz
     recordingUrl: firstString(payload?.recording_url, meeting?.recording_url, meeting?.video_url),
     sourceUrl: firstString(payload?.meetgeek_url, meeting?.meetgeek_url)
       || `https://app.meetgeek.ai/meetings/${meetingExternalId}`,
+    // Webhook payloads may or may not embed insights. When they don't, the
+    // authenticated provider fetch fills this in after the calendar gate.
+    insights: parseMeetgeekInsights(payload?.insights ?? payload?.kpis ?? null),
+    transcriptText: null,
   };
 }
 
@@ -269,22 +287,88 @@ export function matchLeadByEmail(participants: MeetgeekParticipant[], leads: Lea
   return { lead: null, matchedEmail: emails[0] || null, matchMethod: 'none', confidence: 0 };
 }
 
-export function buildMeetingNote(meeting: NormalizedMeeting): string {
-  const lines: string[] = ['Meeting Intelligence (MeetGeek)'];
-  if (meeting.title) lines.push(`Title: ${meeting.title}`);
-  if (meeting.startedAt) lines.push(`When: ${meeting.startedAt}`);
-  if (meeting.durationMinutes != null) lines.push(`Duration: ${meeting.durationMinutes} min`);
+/** Hard upper bound for a CRM note body. */
+export const GHL_NOTE_MAX_CHARS = 4000;
+
+/**
+ * Bounded CRM note. Priority when the budget is tight:
+ *   1. header + links + action items + action-owner coverage  (never dropped)
+ *   2. composite + two lowest quality categories               (kept)
+ *   3. meeting summary                                         (trimmed first)
+ *   4. quality summary prose                                   (trimmed last)
+ */
+export function buildMeetingNote(
+  meeting: NormalizedMeeting,
+  quality?: MeetingQuality | null,
+): string {
+  const head: string[] = ['Meeting Intelligence (MeetGeek)'];
+  if (meeting.title) head.push(`Title: ${meeting.title}`);
+  if (meeting.startedAt) head.push(`When: ${meeting.startedAt}`);
+  if (meeting.durationMinutes != null) head.push(`Duration: ${meeting.durationMinutes} min`);
   const attendees = meeting.participants.map((p) => p.email || p.name).filter(Boolean);
-  if (attendees.length) lines.push(`Attendees: ${attendees.join(', ')}`);
-  if (meeting.summary) lines.push('', 'Summary:', meeting.summary.slice(0, 1500));
+  if (attendees.length) head.push(`Attendees: ${attendees.slice(0, 15).join(', ')}`);
+
+  const actions: string[] = [];
   if (meeting.actionItems.length) {
-    lines.push('', 'Action items:');
-    meeting.actionItems.slice(0, 10).forEach((a) => lines.push(`- ${a}`));
+    actions.push('', 'Action items:');
+    meeting.actionItems.slice(0, 10).forEach((a) => actions.push(`- ${a.slice(0, 200)}`));
   }
-  if (meeting.recordingUrl) lines.push('', `Recording: ${meeting.recordingUrl}`);
-  if (meeting.transcriptUrl) lines.push(`Transcript: ${meeting.transcriptUrl}`);
-  else if (meeting.sourceUrl) lines.push(`Transcript: ${meeting.sourceUrl}`);
-  return lines.join('\n').slice(0, 8000);
+
+  const ownerCoverage: string[] = [];
+  const total = meeting.insights?.actionItemsTotal;
+  if (typeof total === 'number' && total > 0) {
+    const owned = Math.min(Math.max(meeting.insights?.actionItemsWithOwner ?? 0, 0), total);
+    ownerCoverage.push('', `Action owners: ${owned}/${total} action items have an owner.`);
+  }
+
+  const qualityHead: string[] = [];
+  const qualityTail: string[] = [];
+  if (quality) {
+    if (quality.rating === null) {
+      qualityHead.push('', 'Meeting quality: not scored (insufficient source data).');
+    } else {
+      qualityHead.push('', `Meeting quality: ${quality.rating}/10 (MeetGeek KPI composite).`);
+      const lowest = (quality.rubric || [])
+        .filter((r) => r.score !== null)
+        .sort((a, b) => (a.score as number) - (b.score as number))
+        .slice(0, 2)
+        .map((r) => `${r.label} ${r.score}/10`);
+      if (lowest.length) qualityHead.push(`Lowest categories: ${lowest.join(', ')}.`);
+      if (quality.summary) qualityTail.push('', quality.summary);
+    }
+  }
+
+  const links: string[] = [];
+  if (meeting.recordingUrl) links.push('', `Recording: ${meeting.recordingUrl}`);
+  if (meeting.transcriptUrl) links.push(`Transcript: ${meeting.transcriptUrl}`);
+  else if (meeting.sourceUrl) links.push(`Transcript: ${meeting.sourceUrl}`);
+
+  const fixed = [...head, ...qualityHead, ...actions, ...ownerCoverage, ...links];
+  let budget = GHL_NOTE_MAX_CHARS - (fixed.join('\n').length + 1);
+
+  // Trim the meeting summary first.
+  const summaryBlock: string[] = [];
+  if (meeting.summary && budget > 120) {
+    const room = Math.min(1500, budget - 60);
+    summaryBlock.push('', 'Summary:', truncate(meeting.summary, room));
+    budget -= summaryBlock.join('\n').length;
+  }
+
+  // Quality prose is trimmed last, only with whatever budget remains.
+  const tail: string[] = [];
+  if (qualityTail.length && budget > 40) {
+    tail.push('', truncate(qualityTail.join('\n').trim(), budget - 2));
+  }
+
+  const note = [...head, ...qualityHead, ...summaryBlock, ...actions, ...ownerCoverage, ...links, ...tail]
+    .join('\n');
+  return note.slice(0, GHL_NOTE_MAX_CHARS);
+}
+
+function truncate(text: string, max: number): string {
+  if (max <= 0) return '';
+  const clean = text.trim();
+  return clean.length <= max ? clean : `${clean.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
 
 /**

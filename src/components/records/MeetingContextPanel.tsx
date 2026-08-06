@@ -36,37 +36,24 @@ const noteStatusMeta: Record<string, { label: string; icon: typeof CheckCircle2;
 };
 
 export function MeetingContextPanel({ leadId, isOpen, onToggle }: MeetingContextPanelProps) {
-  const { data: meetings = [] } = useQuery({
-    queryKey: ['lead-meeting-context', leadId],
+  // Transcript/meeting tables are service-role only: one JWT-authenticated
+  // server call returns both the meeting context and the activity timeline.
+  const { data } = useQuery({
+    queryKey: ['lead-meeting-activity', leadId],
     enabled: !!leadId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('lead_meeting_context' as any)
-        .select(`id, match_confidence, ghl_note_status, ghl_note_error,
-          meeting_records:meeting_record_id (
-            id, title, started_at, duration_minutes, summary, action_items,
-            recording_url, transcript_url, source_url
-          )`)
-        .eq('lead_id', leadId!)
-        .order('created_at', { ascending: false })
-        .limit(10);
+      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
+        body: { action: 'mg_activity', lead_id: leadId, limit: 25 },
+      });
       if (error) throw error;
-      return ((data || []) as unknown as MeetingContextRow[]).filter((r) => r.meeting_records);
+      return {
+        meetings: ((data?.meetings || []) as unknown as MeetingContextRow[]).filter((r) => r.meeting_records),
+        activityCount: Array.isArray(data?.activity) ? data.activity.length : 0,
+      };
     },
   });
-
-  const { data: activityCount = 0 } = useQuery({
-    queryKey: ['meeting-call-activity-count', leadId],
-    enabled: !!leadId,
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('meeting_call_activity' as any)
-        .select('id', { count: 'exact', head: true })
-        .eq('lead_id', leadId!);
-      if (error) throw error;
-      return count || 0;
-    },
-  });
+  const meetings = data?.meetings ?? [];
+  const activityCount = data?.activityCount ?? 0;
 
   if (!leadId || (meetings.length === 0 && activityCount === 0)) return null;
 
