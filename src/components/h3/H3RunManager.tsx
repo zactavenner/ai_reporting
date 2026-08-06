@@ -99,7 +99,7 @@ export function H3RunManager({ clientId }: { clientId?: string | null }) {
               : "border-amber-500/50 text-amber-700 dark:text-amber-400"}`}
           >
             <PlugZap className="h-3 w-3 mr-1" />
-            {conn?.connected ? "Provider connected" : "Connection required to resume polling"}
+            {conn?.connected ? "OpenRouter connected" : "OpenRouter connection required to resume polling"}
           </Badge>
         </div>
       </Card>
