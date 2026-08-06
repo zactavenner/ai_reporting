@@ -102,10 +102,18 @@ Deno.serve(async (req) => {
 
     // ---- GATE 1: the offer must be reviewed by a human before any automation.
     if (!offer) {
+      if (body.action === "preview") {
+        return j({ ok: true, prompt: brief(client, null, prompts), offer_id: null });
+      }
       return j({
         error: "No offer on file for this client. Add and review the offer before starting the build.",
         code: "offer_missing",
       }, 409);
+    }
+
+    // Read-only: return the exact prompt this client's build would run with.
+    if (body.action === "preview") {
+      return j({ ok: true, prompt: brief(client, offer, prompts), offer_id: offer.id });
     }
     if (!offer.offer_reviewed_at) {
       return j({
