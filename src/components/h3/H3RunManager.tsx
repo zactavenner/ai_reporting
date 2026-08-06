@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, PlugZap, Film } from "lucide-react";
+import { Loader2, Plus, PlugZap, Film, ShieldAlert } from "lucide-react";
 import {
   useH3Creatives,
   useH3Mutations,
   useH3ProviderConnection,
   useH3Runs,
+  useH3Access,
 } from "@/hooks/useH3Runs";
 import { H3Dashboard } from "./H3Dashboard";
 import { H3CreativeCard } from "./H3CreativeCard";
@@ -20,6 +21,7 @@ import { H3CreativeDetail } from "./H3CreativeDetail";
  * separate app. Scales to many clients: one run per client campaign batch.
  */
 export function H3RunManager({ clientId }: { clientId?: string | null }) {
+  const { data: access, isLoading: accessLoading } = useH3Access();
   const { data: runs = [], isLoading: runsLoading } = useH3Runs(clientId ?? undefined);
   const [runId, setRunId] = useState<string>("");
   const activeRunId = runId || runs[0]?.id || "";
@@ -33,6 +35,42 @@ export function H3RunManager({ clientId }: { clientId?: string | null }) {
   useEffect(() => { setSelectedId(""); }, [activeRunId]);
   const selected = creatives.find((c) => c.id === selectedId) ?? creatives[0] ?? null;
   const activeRun = runs.find((r) => r.id === activeRunId);
+
+  if (accessLoading) {
+    return (
+      <Card className="p-8 grid place-items-center">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </Card>
+    );
+  }
+
+  // Honest authorization state. H3 records are restricted to provisioned agency
+  // operators, so we never render an empty run list as if there were no data.
+  if (access && !access.allowed) {
+    const bootstrap = access.code === "no_operators_provisioned";
+    return (
+      <Card className="p-6 space-y-3 border-amber-500/40">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="text-sm font-semibold">
+            {bootstrap ? "Operator bootstrap required" : "Operator access required"}
+          </span>
+          <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-700 dark:text-amber-400">
+            {access.status ?? 403}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {access.error ??
+            "Your account is not a provisioned reporting operator, so H3 creative runs cannot be read or modified."}
+        </p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {bootstrap
+            ? "No reporting operators exist yet. An administrator must add the first user to the operator allowlist server-side before H3 runs become available. The allowlist is intentionally not writable from the app."
+            : "Access to H3 runs is limited to the agency-operator allowlist. Ask an administrator to provision your account server-side."}
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-3">

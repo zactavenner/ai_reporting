@@ -1,11 +1,16 @@
 // Server-side H3 provider status + polling.
 //
 // Hard rules:
+// - Operator-only. A valid JWT is never sufficient: the caller must be
+//   allowlisted in public.reporting_operator_users (or be the service role).
+//   This function holds the service-role key, so it is the only place H3 rows
+//   are written server-side and it must not be callable by arbitrary users.
 // - Never submits or re-submits a job. Poll only, by existing external job ID.
 // - Requires a configured server-side secret (MINIMAX_API_KEY). If absent we
 //   return an honest disconnected status instead of inventing a result.
 // - Idempotent: a pending provider job is left exactly as-is.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { authorizeOperator } from "../_shared/operatorAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +36,28 @@ Deno.serve(async (req) => {
     const action = String(body?.action ?? "status");
     const apiKey = Deno.env.get("MINIMAX_API_KEY");
 
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Agency-operator authorization boundary — enforced before anything else.
+    const auth = await authorizeOperator(req, admin, createClient);
+
+    // The access probe always answers 200 so the UI can render an honest
+    // "not an operator" / "bootstrap required" state instead of a dead screen.
+    if (action === "access") {
+      return json(
+        auth.ok
+          ? { allowed: true, via: auth.via }
+          : { allowed: false, code: auth.code, status: auth.status, error: auth.error },
+      );
+    }
+
+    if (!auth.ok) {
+      return json({ error: auth.error, code: auth.code }, auth.status);
+    }
+
     if (action === "status") {
       return json({
         connected: !!apiKey,
@@ -47,11 +74,6 @@ Deno.serve(async (req) => {
 
     const creativeIds: string[] = Array.isArray(body?.creativeIds) ? body.creativeIds : [];
     if (!creativeIds.length) return json({ error: "creativeIds required" }, 400);
-
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     const { data: rows, error } = await admin
       .from("h3_creatives")
