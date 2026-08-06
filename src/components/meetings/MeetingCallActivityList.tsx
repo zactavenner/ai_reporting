@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { Badge } from '@/components/ui/badge';
 import {
   Video, CheckCircle2, AlertCircle, MinusCircle, ExternalLink, Clock, RefreshCw,
@@ -66,11 +66,7 @@ export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props)
     queryFn: async () => {
       // Meeting/transcript tables are service-role only. Reads go through the
       // operator-authorized server endpoint, never straight at the table.
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'mg_activity', client_id: clientId ?? null, lead_id: leadId ?? null, limit },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(String(data.error));
+      const data = await invokeMeetgeek<any>({ action: 'mg_activity', client_id: clientId ?? null, lead_id: leadId ?? null, limit });
       return ((data?.activity || []) as unknown[]) as ActivityRow[];
     },
   });

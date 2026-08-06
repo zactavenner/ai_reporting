@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, Video, CheckCircle2, AlertCircle, MinusCircle, ExternalLink } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { MeetingCallActivityList } from '@/components/meetings/MeetingCallActivityList';
 
 interface MeetingContextPanelProps {
