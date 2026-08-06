@@ -149,7 +149,7 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
             Hard limits per client: <span className="font-medium text-foreground">10 statics</span> ({counts.statics}/10 made) and{' '}
-            <span className="font-medium text-foreground">4 × 30s videos</span> ({counts.videos}/4 started) — podcast, street interview, walk-and-talk, b-roll.
+            <span className="font-medium text-foreground">5 × 30s videos</span> ({counts.videos}/5 started) — podcast, street interview, walk-and-talk, b-roll, split screen.
           </p>
           {locked && (
             <p className="text-[11px] text-amber-600 mt-1">Approve the offer above to unlock the build.</p>
