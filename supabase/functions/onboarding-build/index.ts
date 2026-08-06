@@ -56,14 +56,19 @@ DELIVERABLES (in this order, one save_asset call each):
 6. vsl — a full VSL script with timestamps and the hook/story/offer/close structure.
 7. video_scripts — 5 video ad scripts (hook, body, CTA, on-screen text, shot notes), written for a female spokesperson around 30.
 8. faq_scripts — 5 FAQ video scripts answering the real objections of this investor profile.
-9. static_ad_brief — the creative direction for the static ads, then call generate_static_ads (count 3-6, mix 1:1 and 9:16) to actually produce them.
+9. static_ad_brief — the creative direction for the statics, then call generate_static_ads ONCE with count 10. That is the entire static budget: 10 creatives, each on its own concept slot and aspect ratio. Do not call it a second time.
 10. create_client_avatar — create and assign the client avatar: attractive professional female, around 30, warm and credible on camera.
+
+HARD OUTPUT LIMITS FOR THIS ONBOARDING (enforced by the tools):
+ - Exactly 10 static creatives, all driven by THIS client's offer above — no generic fund filler.
+ - Exactly 4 videos, 30 seconds each, natural and full of motion, one per style: podcast clip, street interview, walk-and-talk, cinematic b-roll.
+ - When a generator reports its budget is exhausted, that deliverable is done. Never re-run it.
 
 THEN:
 A. Consult Jeremy (ask_jeremy) on the angles, the ad copy and the video scripts BEFORE finalising them, and record_decision with his verdict each time.
 B. request_approval with queue_type "creative_review" for the static ads + avatar (list the creative ids / urls in the payload).
 C. request_approval with queue_type "video_scripts" for the 5 video ad scripts + 5 FAQ scripts.
-D. Poll check_approval. ONLY once the video_scripts approval is "approved" may you produce avatar videos: use generate_video with the avatar image and each approved script's hook (9:16, 720p), then poll check_video_job.
+D. Poll check_approval. ONLY once the video_scripts approval is "approved" may you produce videos: pick the 4 strongest approved scripts and call generate_video once per style (podcast, street_interview, walk_and_talk, broll) with the avatar image, duration 30, 9:16 — then poll check_video_job.
 E. If an approval is rejected, read the rejection reason, rewrite the affected deliverable, save it again and request approval once more.
 F. finish_mission with a markdown report: deliverables saved, creatives generated, Jeremy verdicts, approval states and videos produced.`;
 }
@@ -95,6 +100,38 @@ Deno.serve(async (req) => {
       offer = data?.[0] || null;
     }
 
+    // ---- GATE 1: the offer must be reviewed by a human before any automation.
+    if (!offer) {
+      return j({
+        error: "No offer on file for this client. Add and review the offer before starting the build.",
+        code: "offer_missing",
+      }, 409);
+    }
+    if (!offer.offer_reviewed_at) {
+      return j({
+        error: "This client's offer has not been reviewed yet. Review and confirm the offer details, then start the build.",
+        code: "offer_not_reviewed",
+        offer_id: offer.id,
+      }, 409);
+    }
+
+    // ---- GATE 2: never run two builds for the same client at once. Concurrent
+    // missions were a direct cause of runaway duplicate creative generation.
+    const { data: live } = await supa
+      .from("jarvis_goals")
+      .select("id, status")
+      .eq("client_id", clientId)
+      .ilike("title", "Onboarding build%")
+      .in("status", ["queued", "running"])
+      .limit(1);
+    if (live?.length && !body.force) {
+      return j({
+        error: "An onboarding build is already running for this client.",
+        code: "already_running",
+        goal_id: live[0].id,
+      }, 409);
+    }
+
     const r = await fetch(`${SUPABASE_URL}/functions/v1/jarvis-goal-worker`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
@@ -104,7 +141,8 @@ Deno.serve(async (req) => {
         goal: brief(client, offer),
         client_id: clientId,
         created_by: body.created_by || null,
-        max_iterations: 400,
+        // Budgets do the real limiting now; a tight ceiling stops runaway loops.
+        max_iterations: 120,
       }),
     });
     const jr = await r.json().catch(() => ({}));

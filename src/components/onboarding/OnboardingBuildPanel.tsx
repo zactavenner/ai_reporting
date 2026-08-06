@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle2, Circle, Loader2, Sparkles, ShieldCheck, Video, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { OfferReviewGate, type OfferReviewState } from './OfferReviewGate';
 
 const DELIVERABLES: { key: string; label: string }[] = [
   { key: 'offer_summary', label: 'Offer summary · location · strategy · credibility' },
@@ -16,7 +17,7 @@ const DELIVERABLES: { key: string; label: string }[] = [
   { key: 'vsl', label: 'VSL script' },
   { key: 'video_scripts', label: '5 video ad scripts' },
   { key: 'faq_scripts', label: '5 FAQ video scripts' },
-  { key: 'static_ad_brief', label: 'Static ad direction + creatives' },
+  { key: 'static_ad_brief', label: 'Static ad direction + 10 statics' },
 ];
 
 interface Props {
@@ -34,6 +35,10 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
   const [avatar, setAvatar] = useState<any>(null);
   const [starting, setStarting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [review, setReview] = useState<OfferReviewState>({ offerId: null, reviewed: false });
+  const [counts, setCounts] = useState({ statics: 0, videos: 0 });
+
+  const onReviewChange = useCallback((s: OfferReviewState) => setReview(s), []);
 
   const refresh = useCallback(async () => {
     const [g, a, ap, av] = await Promise.all([
@@ -50,6 +55,13 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
     setAssetTypes(new Set((a.data || []).map((r: any) => r.asset_type)));
     setApprovals(ap.data || []);
     setAvatar(av.data?.[0] || null);
+    const [sc, vc] = await Promise.all([
+      supabase.from('creatives').select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId).eq('source', 'onboarding-build'),
+      supabase.from('creative_video_jobs').select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId),
+    ]);
+    setCounts({ statics: sc.count || 0, videos: vc.count || 0 });
     if (found) {
       const { data: ev } = await supabase.from('jarvis_goal_events')
         .select('id, kind, title, content, created_at')
@@ -82,7 +94,7 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
         body: {
           password: 'HPA1234$',
           client_id: clientId,
-          offer_id: offerId || null,
+          offer_id: offerId || review.offerId || null,
           created_by: auth?.user?.id || null,
         },
       });
@@ -110,6 +122,7 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
   }
 
   const running = goal && ['queued', 'running'].includes(goal.status);
+  const locked = !review.reviewed;
 
   if (loading) {
     return <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>;
@@ -117,11 +130,13 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
 
   return (
     <div className="space-y-3">
+      <OfferReviewGate clientId={clientId} onChange={onReviewChange} />
+
       <Card className="p-3 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">AI Studio onboarding build</span>
+            <span className="text-sm font-medium">Step 2 · AI Studio onboarding build</span>
             {goal && (
               <Badge variant={goal.status === 'completed' ? 'default' : running ? 'secondary' : 'outline'} className="text-[10px] capitalize">
                 {goal.status}
@@ -132,6 +147,13 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
             Jeremy AI + the client agents build the offer summary, 5 angles, ad copy, 10 nurture emails, reminders, VSL, static ads,
             a 30-year-old female avatar, 5 video ad scripts and 5 FAQ scripts — straight onto the AI Studio canvas.
           </p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Hard limits per client: <span className="font-medium text-foreground">10 statics</span> ({counts.statics}/10 made) and{' '}
+            <span className="font-medium text-foreground">4 × 30s videos</span> ({counts.videos}/4 started) — podcast, street interview, walk-and-talk, b-roll.
+          </p>
+          {locked && (
+            <p className="text-[11px] text-amber-600 mt-1">Approve the offer above to unlock the build.</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {onOpenStudio && (
@@ -139,9 +161,9 @@ export function OnboardingBuildPanel({ clientId, clientName, offerId, onOpenStud
               <ExternalLink className="h-3.5 w-3.5 mr-1" /> Open AI Studio
             </Button>
           )}
-          <Button size="sm" onClick={start} disabled={starting || !!running}>
+          <Button size="sm" onClick={start} disabled={starting || !!running || locked}>
             {starting || running ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-            {running ? 'Building…' : goal ? 'Rebuild all assets' : 'Build all assets'}
+            {running ? 'Building…' : locked ? 'Locked — review offer' : goal ? 'Rebuild all assets' : 'Build all assets'}
           </Button>
         </div>
       </Card>

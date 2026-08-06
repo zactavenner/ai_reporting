@@ -29,6 +29,73 @@ const MODEL_CHAIN = [
 /** Wall-clock budget per invocation. Under the edge function limit, then we re-arm. */
 const SLICE_MS = 45_000;
 
+/**
+ * HARD PRODUCTION BUDGETS.
+ * These are enforced server-side against real row counts — the model is NOT
+ * trusted to count. Without this an autonomous mission will happily re-call
+ * generate_static_ads on every iteration forever (it once produced 716
+ * near-identical statics for one client).
+ */
+export const ONBOARDING_STATIC_BUDGET = 10;
+export const ONBOARDING_VIDEO_BUDGET = 4;
+
+/** The 10 distinct static concepts. One slot per creative — never repeat a slot. */
+const STATIC_CONCEPTS: { slot: string; ratio: string; direction: string }[] = [
+  { slot: "market-thesis", ratio: "1:1", direction: "Bold market-thesis statement card: why this market and why now, one confident sentence, data-led." },
+  { slot: "fund-terms", ratio: "4:5", direction: "Clean fund terms card: minimum investment, hold period and targeted returns laid out as a tight spec sheet." },
+  { slot: "track-record", ratio: "1:1", direction: "Credibility / track record proof: prior performance and operator history rendered as a trust badge layout." },
+  { slot: "distributions", ratio: "9:16", direction: "Distribution schedule angle: cadence of income, calm premium chart-style visual." },
+  { slot: "tax-advantage", ratio: "4:5", direction: "Tax advantage angle: the structural benefit stated plainly with a document/ledger visual motif." },
+  { slot: "entry-point", ratio: "1:1", direction: "Entry point clarity: what it takes to participate, removing the 'this isn't for me' objection." },
+  { slot: "timing", ratio: "9:16", direction: "Timing / scarcity of the window, framed on real market conditions — never hype, never promissory." },
+  { slot: "spokesperson", ratio: "4:5", direction: "Spokesperson credibility portrait with a short authority quote overlaid." },
+  { slot: "risk-managed", ratio: "1:1", direction: "Risk-managed framing: how downside is controlled, with the required risk disclaimer visible." },
+  { slot: "direct-cta", ratio: "9:16", direction: "Direct call-to-action: book the call, accredited-investor callout, minimal and high-contrast." },
+];
+
+/** The 4 natural-motion UGC video styles. One slot per video — never repeat a slot. */
+const VIDEO_STYLES: { slot: string; label: string; direction: string }[] = [
+  { slot: "podcast", label: "Podcast clip", direction: "Podcast-style two-shot: spokesperson mid-conversation on a mic, natural head movement and hand gestures, warm studio lighting, shallow depth of field, looks like a clipped long-form episode." },
+  { slot: "street_interview", label: "Street interview", direction: "Street interview: handheld camera, spokesperson answering on a busy city sidewalk, natural ambient movement of people behind, slight camera sway, candid documentary feel." },
+  { slot: "walk_and_talk", label: "Walk and talk", direction: "Walk-and-talk: spokesperson walking toward camera through a business district, camera tracking backward, natural gait, hair and clothing moving, continuous motion throughout." },
+  { slot: "broll", label: "B-roll narration", direction: "Cinematic b-roll: slow dolly and crane moves over the market/asset, no talking head, motion in every frame, narration-driven." },
+];
+
+/** Real remaining budget from the database, per client + kind. */
+async function remainingBudget(clientId: string, kind: "static" | "video") {
+  if (kind === "static") {
+    const { count } = await supa
+      .from("creatives")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .eq("source", "onboarding-build");
+    const used = Number(count || 0);
+    return { used, budget: ONBOARDING_STATIC_BUDGET, remaining: Math.max(0, ONBOARDING_STATIC_BUDGET - used) };
+  }
+  const { count } = await supa
+    .from("creative_video_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .in("status", ["queued", "processing", "pending", "running", "completed", "succeeded"]);
+  const used = Number(count || 0);
+  return { used, budget: ONBOARDING_VIDEO_BUDGET, remaining: Math.max(0, ONBOARDING_VIDEO_BUDGET - used) };
+}
+
+/** Which concept slots have already been produced for this client. */
+async function usedStaticSlots(clientId: string): Promise<Set<string>> {
+  const { data } = await supa
+    .from("creatives")
+    .select("title")
+    .eq("client_id", clientId)
+    .eq("source", "onboarding-build");
+  const used = new Set<string>();
+  for (const row of data || []) {
+    const m = /\[([a-z-]+)\]/.exec(String((row as any).title || ""));
+    if (m) used.add(m[1]);
+  }
+  return used;
+}
+
 const supa = createClient(SUPABASE_URL, SERVICE);
 
 function j(b: unknown, s = 200) {
@@ -73,6 +140,11 @@ OPERATING RULES:
  3. Reviewing assets: pull them with review_assets, form your own verdict, then ask_jeremy for his, then reconcile into a decision and log it.
  4. Video jobs are async: start them, then keep checking with check_video_job on later steps. It is fine for the mission to run for a long time.
  5. HARD GATE: never call generate_video for avatar videos until check_approval reports "approved" for the video-scripts approval item. If it is still pending, log progress and keep working other deliverables or wait for the next slice.
+ 5b. HARD PRODUCTION BUDGETS — these are enforced by the tools against the database, and calling past them is a failure, not initiative:
+     • ${ONBOARDING_STATIC_BUDGET} static creatives per client, TOTAL. Call generate_static_ads ONCE with count ${ONBOARDING_STATIC_BUDGET}. Every creative is auto-assigned its own concept slot, so you never need a second call.
+     • ${ONBOARDING_VIDEO_BUDGET} videos per client, TOTAL — 30 seconds each, one per natural-motion style: podcast, street_interview, walk_and_talk, broll.
+     • The moment a tool result says the budget is exhausted or done:true, that deliverable is COMPLETE. Move to the next one or finish_mission. NEVER re-run a generator to "improve" or "add more" output.
+ 5c. Every creative must be materially different from the others — different concept, different visual structure, different claim. Repetitive near-identical output is a failed deliverable.
  6. Compliance: this is regulated capital raising. Never write "guaranteed". Use "targeted returns" and include SEC/FINRA-style risk disclaimers on any offer-facing copy.
  7. When — and only when — the mission is complete, call finish_mission with a full markdown report including counts (assets reviewed, videos generated, copy variants, agents consulted) and the decisions made.
  8. If the mission is impossible, call finish_mission with status "failed" and explain precisely why.`;
@@ -88,10 +160,10 @@ const TOOLS = [
   { type: "function", function: { name: "review_assets", description: "Pull recent creatives, generated assets and video jobs for review.", parameters: { type: "object", properties: { client_id: { type: "string" }, limit: { type: "number" } } } } },
   { type: "function", function: { name: "save_asset", description: "Persist a finished written deliverable (offer summary, angles, ad copy, emails, reminders, VSL, video scripts, FAQ scripts) to the client asset library AND onto the AI Studio canvas so the team sees it.", parameters: { type: "object", properties: { client_id: { type: "string" }, asset_type: { type: "string", description: "offer_summary | angles | ad_copy | nurture_emails | appointment_reminders | vsl | video_scripts | faq_scripts | static_ad_brief" }, title: { type: "string" }, content_md: { type: "string" }, notes: { type: "string" } }, required: ["asset_type", "title", "content_md"] } } },
   { type: "function", function: { name: "create_client_avatar", description: "Create and assign an AI avatar to the client. Defaults to an attractive professional female around 30. Returns avatar_id + image_url for avatar video generation.", parameters: { type: "object", properties: { client_id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, gender: { type: "string" }, age_range: { type: "string" }, style: { type: "string" } } } } },
-  { type: "function", function: { name: "generate_static_ads", description: "Generate static ad creatives for the client with the Capital Raising style and put them on the canvas + creatives library.", parameters: { type: "object", properties: { client_id: { type: "string" }, count: { type: "number" }, aspect_ratio: { type: "string" }, offer_description: { type: "string" }, prompt: { type: "string" } } } } },
+  { type: "function", function: { name: "generate_static_ads", description: `Generate static ad creatives for the client and put them on the canvas + creatives library. HARD CAP: ${ONBOARDING_STATIC_BUDGET} statics per client, total, for the whole onboarding. Each creative is auto-assigned a distinct concept slot and aspect ratio, so call this ONCE with count ${ONBOARDING_STATIC_BUDGET}. If the tool reports the budget is exhausted, the statics are finished — never call it again.`, parameters: { type: "object", properties: { client_id: { type: "string" }, count: { type: "number", description: `How many to make now. Capped at the remaining budget (max ${ONBOARDING_STATIC_BUDGET} lifetime).` }, offer_description: { type: "string" }, prompt: { type: "string", description: "Creative direction shared by all statics. The per-concept direction is added automatically." } } } } },
   { type: "function", function: { name: "request_approval", description: "Send a deliverable to the agency approval queue for a human decision (creative review, video-script sign-off).", parameters: { type: "object", properties: { client_id: { type: "string" }, queue_type: { type: "string", description: "creative_review | video_scripts | onboarding_assets" }, title: { type: "string" }, summary: { type: "string" }, payload: { type: "object" }, priority: { type: "number" } }, required: ["queue_type", "title"] } } },
   { type: "function", function: { name: "check_approval", description: "Check the status of an approval queue item created with request_approval. Returns pending | approved | rejected.", parameters: { type: "object", properties: { approval_id: { type: "string" } }, required: ["approval_id"] } } },
-  { type: "function", function: { name: "generate_video", description: "Start a real video generation job from an image + prompt. Returns job_id to poll with check_video_job.", parameters: { type: "object", properties: { client_id: { type: "string" }, creative_id: { type: "string" }, image_url: { type: "string" }, prompt: { type: "string" }, duration: { type: "number" }, aspect_ratio: { type: "string" }, resolution: { type: "string" }, model: { type: "string" } }, required: ["image_url", "prompt"] } } },
+  { type: "function", function: { name: "generate_video", description: `Start a real 30-second natural-motion video ad. HARD CAP: ${ONBOARDING_VIDEO_BUDGET} videos per client for the whole onboarding, one per style (podcast, street_interview, walk_and_talk, broll). Returns job_id to poll with check_video_job. If the tool reports the budget is exhausted, the videos are finished — never call it again.`, parameters: { type: "object", properties: { client_id: { type: "string" }, creative_id: { type: "string" }, image_url: { type: "string" }, prompt: { type: "string", description: "The approved script/hook for this video. Motion + style direction is added automatically." }, style: { type: "string", description: "podcast | street_interview | walk_and_talk | broll" }, duration: { type: "number", description: "Seconds. Defaults to 30." }, aspect_ratio: { type: "string" }, resolution: { type: "string" }, model: { type: "string" } }, required: ["image_url", "prompt"] } } },
   { type: "function", function: { name: "check_video_job", description: "Poll a video generation job started with generate_video.", parameters: { type: "object", properties: { job_id: { type: "string" } }, required: ["job_id"] } } },
   { type: "function", function: { name: "record_decision", description: "Record a decision Jarvis (with Jeremy) made about an asset or strategy. Shows on the mission feed and in the final report.", parameters: { type: "object", properties: { subject: { type: "string" }, decision: { type: "string" }, rationale: { type: "string" }, jeremy_verdict: { type: "string" } }, required: ["subject", "decision"] } } },
   { type: "function", function: { name: "log_progress", description: "Post a progress note to the live mission feed.", parameters: { type: "object", properties: { note: { type: "string" } }, required: ["note"] } } },
@@ -325,18 +397,49 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
       case "generate_static_ads": {
         const cid = args.client_id || goal.client_id;
         if (!cid) return { error: "client_id required" };
-        const count = Math.max(1, Math.min(6, Number(args.count) || 3));
-        const ratio = args.aspect_ratio || "1:1";
-        const { data: styles } = await supa.from("ad_styles").select("*").ilike("name", "%capital%raising%").limit(1);
+        // HARD CAP against real rows. The model does not get to decide this.
+        const budget = await remainingBudget(cid, "static");
+        if (budget.remaining <= 0) {
+          return {
+            done: true,
+            generated: 0,
+            used: budget.used,
+            budget: budget.budget,
+            note: `STATIC BUDGET EXHAUSTED (${budget.used}/${budget.budget}). The static ads for this client are COMPLETE. Do NOT call generate_static_ads again — move on to the next deliverable or finish the mission.`,
+          };
+        }
+        const asked = Math.max(1, Math.min(ONBOARDING_STATIC_BUDGET, Number(args.count) || budget.remaining));
+        const count = Math.min(asked, budget.remaining);
+        // One distinct concept slot per creative, so no two statics look alike.
+        const taken = await usedStaticSlots(cid);
+        const queue = STATIC_CONCEPTS.filter((c) => !taken.has(c.slot)).slice(0, count);
+        if (!queue.length) {
+          return { done: true, generated: 0, note: "All 10 static concepts already produced. Do not call this tool again." };
+        }
+        const { data: styles } = await supa
+          .from("ad_styles")
+          .select("*")
+          .or("name.ilike.%capital%,name.ilike.%winning%")
+          .order("name")
+          .limit(1);
         const style = styles?.[0];
+        if (!style) {
+          return { error: "No ad style found (expected 'Capital Creative'). Refusing to generate style-less duplicate statics." };
+        }
         const { data: client } = await supa.from("clients").select("name, brand_colors, brand_fonts").eq("id", cid).maybeSingle();
         const made: any[] = []; const errors: string[] = [];
-        for (let i = 0; i < count; i++) {
+        for (const concept of queue) {
+          const ratio = concept.ratio;
+          const conceptPrompt = [
+            args.prompt || "",
+            `CONCEPT (${concept.slot}): ${concept.direction}`,
+            "This creative must be visually and structurally DISTINCT from the client's other statics.",
+          ].filter(Boolean).join("\n\n");
           const r = await fetch(`${SUPABASE_URL}/functions/v1/generate-static-ad`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
             body: JSON.stringify({
-              prompt: args.prompt || "",
+              prompt: conceptPrompt,
               stylePrompt: style?.prompt_template || "",
               styleName: style?.name || "Capital Raising",
               aspectRatio: ratio,
@@ -354,17 +457,28 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
           if (r.ok && jr?.imageUrl) {
             const cr = await supa.from("creatives").insert({
               client_id: cid,
-              title: `${client?.name || "Onboarding"} - Static ${ratio} #${i + 1}`,
+              title: `${client?.name || "Onboarding"} — [${concept.slot}] ${ratio}`,
               type: "image", file_url: jr.imageUrl, status: "draft",
               source: "onboarding-build", aspect_ratio: ratio,
             }).select("id").single();
-            await pushToCanvas(goal, cid, { image_url: jr.imageUrl, aspect_ratio: ratio, prompt: args.prompt || args.offer_description || "" }, "image");
-            made.push({ creative_id: cr.data?.id, image_url: jr.imageUrl });
+            await pushToCanvas(goal, cid, { image_url: jr.imageUrl, aspect_ratio: ratio, concept: concept.slot, prompt: conceptPrompt }, "image");
+            made.push({ creative_id: cr.data?.id, concept: concept.slot, aspect_ratio: ratio, image_url: jr.imageUrl });
           } else {
-            errors.push(jr?.error || `generate-static-ad ${r.status}`);
+            errors.push(`${concept.slot}: ${jr?.error || `generate-static-ad ${r.status}`}`);
           }
         }
-        return { generated: made.length, creatives: made, errors };
+        const after = await remainingBudget(cid, "static");
+        return {
+          generated: made.length,
+          creatives: made,
+          errors,
+          used: after.used,
+          budget: after.budget,
+          remaining: after.remaining,
+          note: after.remaining <= 0
+            ? `Static budget now exhausted (${after.used}/${after.budget}). Statics are COMPLETE — do not call generate_static_ads again.`
+            : `${after.remaining} static(s) of the 10-creative budget remain.`,
+        };
       }
       case "request_approval": {
         const cid = args.client_id || goal.client_id;
@@ -406,16 +520,49 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
         return { creatives: c.data || [], assets: a.data || [], video_jobs: v.data || [] };
       }
       case "generate_video": {
+        const vcid = args.client_id || goal.client_id || null;
+        // HARD CAP: onboarding produces at most 4 videos. Enforced on real job rows.
+        if (vcid) {
+          const vb = await remainingBudget(vcid, "video");
+          if (vb.remaining <= 0) {
+            return {
+              done: true,
+              used: vb.used,
+              budget: vb.budget,
+              note: `VIDEO BUDGET EXHAUSTED (${vb.used}/${vb.budget}). The videos for this client are COMPLETE. Do NOT call generate_video again — finish the mission.`,
+            };
+          }
+        }
+        // Natural-motion style is mandatory: pick the requested slot, else the
+        // next unused one, so the 4 videos are podcast / street / walk / b-roll.
+        const wanted = String(args.style || "").toLowerCase().replace(/[^a-z]/g, "_");
+        const usedJobs = vcid
+          ? (await supa.from("creative_video_jobs").select("prompt").eq("client_id", vcid)).data || []
+          : [];
+        const takenSlots = new Set(
+          usedJobs.map((r: any) => /\[style:([a-z_]+)\]/.exec(String(r.prompt || ""))?.[1]).filter(Boolean) as string[],
+        );
+        const style =
+          VIDEO_STYLES.find((s) => s.slot === wanted) ||
+          VIDEO_STYLES.find((s) => !takenSlots.has(s.slot)) ||
+          VIDEO_STYLES[0];
+        const motionPrompt = [
+          `[style:${style.slot}]`,
+          `${style.label}: ${style.direction}`,
+          String(args.prompt || ""),
+          "Continuous natural motion throughout — the subject and camera must never be static. Realistic, documentary-grade, not stiff or AI-looking.",
+        ].filter(Boolean).join("\n\n");
         const r = await fetch(`${SUPABASE_URL}/functions/v1/animate-creative`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
           body: JSON.stringify({
             action: "start",
             creativeId: args.creative_id || null,
-            clientId: args.client_id || goal.client_id || null,
+            clientId: vcid,
             imageUrl: args.image_url,
-            prompt: args.prompt,
-            duration: Math.max(1, Math.min(15, Number(args.duration) || 8)),
+            prompt: motionPrompt,
+            // Onboarding videos are 30s ads, assembled from the provider's max clip length.
+            duration: Math.max(1, Math.min(30, Number(args.duration) || 30)),
             aspectRatio: args.aspect_ratio || "9:16",
             // MiniMax H3 supports 720p and native 2K only.
             resolution: String(args.resolution || "").toLowerCase() === "720p" ? "720p" : "2k",
@@ -424,7 +571,14 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
         });
         const jr = await r.json().catch(() => ({}));
         if (!r.ok) return { error: jr?.error || `animate-creative ${r.status}` };
-        return { job_id: jr.jobId, model: jr.model, note: "Poll with check_video_job on a later step." };
+        const vbAfter = vcid ? await remainingBudget(vcid, "video") : null;
+        return {
+          job_id: jr.jobId,
+          model: jr.model,
+          style: style.slot,
+          remaining: vbAfter?.remaining ?? null,
+          note: `Style ${style.slot} started. Poll with check_video_job on a later step.${vbAfter && vbAfter.remaining <= 0 ? " Video budget is now exhausted — do not start more." : ""}`,
+        };
       }
       case "check_video_job": {
         const r = await fetch(`${SUPABASE_URL}/functions/v1/animate-creative`, {
