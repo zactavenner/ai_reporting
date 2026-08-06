@@ -1,0 +1,1 @@
+UPDATE public.jarvis_goals SET created_by = '4f375dad-5229-479f-997f-b4004a0bcdcc' WHERE id = '9a01faf6-c344-4ef9-8970-cf48f8c898ae' AND created_by IS NULL;
