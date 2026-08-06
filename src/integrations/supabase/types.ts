@@ -15388,6 +15388,30 @@ export type Database = {
         }
         Relationships: []
       }
+      reporting_operator_users: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          note: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          note?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          note?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       scraped_ads: {
         Row: {
           ad_count: number | null
