@@ -22,6 +22,7 @@ import {
   type MeetgeekClientConfig,
 } from '../_shared/meetgeekCalendarGate.ts';
 import { parseMeetgeekInsights } from '../_shared/meetgeekQuality.ts';
+import { authorizeOperator } from '../_shared/operatorAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,47 +49,17 @@ function getBaseUrl(region: string): string {
   return region === 'eu' ? 'https://api-eu.meetgeek.ai' : 'https://api-us.meetgeek.ai';
 }
 
-/** Agency roles allowed to read or configure client meeting/transcript data. */
-const ADMIN_ROLES = ['admin', 'owner'];
-
 /**
  * Internal (non-provider) actions require the service-role key (cron) or a
- * valid Supabase user JWT whose email maps to an AGENCY ADMIN in
- * `agency_members`. A plain signed-in session is NOT sufficient: HPA has no
- * verified client-to-user membership table, so client transcript data is
- * restricted to agency admins rather than pseudo-scoped per client.
- * The tables themselves stay service-role only.
+ * Supabase user JWT whose subject is explicitly allowlisted in
+ * `reporting_operator_users` (service-role only, no public policies).
+ *
+ * A plain signed-in session is NEVER sufficient: this project has no verified
+ * client-to-user membership mapping, so these endpoints are an agency-OPERATOR
+ * authorization boundary — not a client/tenant scope and not investor or lead
+ * authorization. Until an operator is provisioned, every read/config write is
+ * refused with 403 and a bootstrap message.
  */
-async function requireInternalAuth(req: Request, supabase: any): Promise<boolean> {
-  const authHeader = req.headers.get('Authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) return false;
-  const token = authHeader.slice(7).trim();
-  if (!token) return false;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-  if (serviceKey && token === serviceKey) return true;
-  try {
-    const authClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data, error } = await authClient.auth.getClaims(token);
-    const claims: any = data?.claims;
-    if (error || !claims?.sub) return false;
-    const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : '';
-    if (!email) return false;
-    // Role lookup uses the service client so it cannot be spoofed by the caller.
-    const { data: member } = await supabase
-      .from('agency_members')
-      .select('role')
-      .ilike('email', email)
-      .in('role', ADMIN_ROLES)
-      .maybeSingle();
-    return !!member;
-  } catch {
-    return false;
-  }
-}
 
 /** Server-side only: reads the client's mapped HighLevel credentials. */
 async function getMappedGhl(supabase: any, clientId: string): Promise<{ apiKey: string | null; locationId: string | null }> {
@@ -495,16 +466,19 @@ Deno.serve(async (req) => {
 
     const body = JSON.parse(rawBody);
 
-    // Every internal action is admin/tenant surface — require a real caller.
-    if (!(await requireInternalAuth(req, supabase))) {
-      return jsonResponse({ error: 'Forbidden: agency admin access required' }, 403);
+    // Every internal action is an agency-operator surface. Arbitrary client_id
+    // reads are only ever served to provisioned operators (or service role).
+    const auth = await authorizeOperator(req, supabase, createClient);
+    if (!auth.ok) {
+      return jsonResponse({ error: auth.error, code: auth.code }, auth.status);
     }
 
     const clientId = body.client_id || new URL(req.url).searchParams.get('client_id');
 
     // -----------------------------------------------------------------
-    // Client-scoped read endpoint for the UI. Meeting/transcript tables
-    // are service-role only, so all reads are funnelled through here.
+    // Operator read endpoint for the UI. Meeting/transcript tables are
+    // service-role only, so all reads funnel through here after the operator
+    // allowlist check above. This is not a per-client tenant scope.
     // -----------------------------------------------------------------
     if (body.action === 'mg_activity') {
       const leadId = body.lead_id ? String(body.lead_id) : null;

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { toast } from 'sonner';
 import { addBusinessDays } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -259,11 +260,7 @@ export function useSyncMeetings() {
 
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'sync' },
-      });
-
-      if (error) throw error;
+      const data: any = await invokeMeetgeek({ action: 'sync' });
       return data;
     },
     onSuccess: (data) => {

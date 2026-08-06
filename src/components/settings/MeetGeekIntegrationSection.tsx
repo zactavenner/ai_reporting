@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Video, RefreshCw, Loader2, Copy, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { MeetGeekCalendarSection } from './MeetGeekCalendarSection';
@@ -74,10 +75,7 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'sync', client_id: clientId },
-      });
-      if (error) throw error;
+      const data: any = await invokeMeetgeek({ action: 'sync', client_id: clientId });
       const synced = data?.synced || 0;
       const callsUpdated = data?.callsUpdated || 0;
       toast.success(`Synced ${synced} meetings, ${callsUpdated} call transcripts updated`);
@@ -95,10 +93,7 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
   const handleRemap = async () => {
     setRemapping(true);
     try {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'remap_clients', only_unmatched: true },
-      });
-      if (error) throw error;
+      const data: any = await invokeMeetgeek({ action: 'remap_clients', only_unmatched: true });
       toast.success(`Re-mapped ${data?.updated || 0} of ${data?.scanned || 0} meetings`);
       queryClient.invalidateQueries({ queryKey: ['meetings'] });
     } catch (e) {

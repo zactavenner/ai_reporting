@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { Badge } from '@/components/ui/badge';
 import {
   Video, CheckCircle2, AlertCircle, MinusCircle, ExternalLink, Clock, RefreshCw,
@@ -60,22 +60,27 @@ const crmMeta: Record<string, { label: string; icon: typeof CheckCircle2; classN
 };
 
 export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props) {
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ['meeting-call-activity', clientId, leadId, limit],
     enabled: !!(clientId || leadId),
     queryFn: async () => {
       // Meeting/transcript tables are service-role only. Reads go through the
-      // JWT-authenticated server endpoint, never straight at the table.
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'mg_activity', client_id: clientId ?? null, lead_id: leadId ?? null, limit },
-      });
-      if (error) throw error;
+      // operator-authorized server endpoint, never straight at the table.
+      const data = await invokeMeetgeek<any>({ action: 'mg_activity', client_id: clientId ?? null, lead_id: leadId ?? null, limit });
       return ((data?.activity || []) as unknown[]) as ActivityRow[];
     },
   });
 
   if (isLoading) {
     return <p className="text-xs text-muted-foreground">Loading call activity…</p>;
+  }
+
+  if (error) {
+    return (
+      <p className="text-xs text-destructive">
+        {(error as Error).message || 'Call activity is unavailable for your account.'}
+      </p>
+    );
   }
 
   if (rows.length === 0) {
