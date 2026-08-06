@@ -37,7 +37,7 @@ const SLICE_MS = 45_000;
  * near-identical statics for one client).
  */
 export const ONBOARDING_STATIC_BUDGET = 10;
-export const ONBOARDING_VIDEO_BUDGET = 4;
+export const ONBOARDING_VIDEO_BUDGET = 5;
 
 /** The 10 distinct static concepts. One slot per creative — never repeat a slot. */
 const STATIC_CONCEPTS: { slot: string; ratio: string; direction: string }[] = [
@@ -53,12 +53,13 @@ const STATIC_CONCEPTS: { slot: string; ratio: string; direction: string }[] = [
   { slot: "direct-cta", ratio: "9:16", direction: "Direct call-to-action: book the call, accredited-investor callout, minimal and high-contrast." },
 ];
 
-/** The 4 natural-motion UGC video styles. One slot per video — never repeat a slot. */
+/** The 5 natural-motion UGC video styles. One slot per video — never repeat a slot. */
 const VIDEO_STYLES: { slot: string; label: string; direction: string }[] = [
   { slot: "podcast", label: "Podcast clip", direction: "Podcast-style two-shot: spokesperson mid-conversation on a mic, natural head movement and hand gestures, warm studio lighting, shallow depth of field, looks like a clipped long-form episode." },
   { slot: "street_interview", label: "Street interview", direction: "Street interview: handheld camera, spokesperson answering on a busy city sidewalk, natural ambient movement of people behind, slight camera sway, candid documentary feel." },
   { slot: "walk_and_talk", label: "Walk and talk", direction: "Walk-and-talk: spokesperson walking toward camera through a business district, camera tracking backward, natural gait, hair and clothing moving, continuous motion throughout." },
   { slot: "broll", label: "B-roll narration", direction: "Cinematic b-roll: slow dolly and crane moves over the market/asset, no talking head, motion in every frame, narration-driven." },
+  { slot: "split_screen", label: "Split screen", direction: "Split screen: the 9:16 frame is divided into two stacked halves by a hard horizontal split. The spokesperson is a talking head filling ONE half (bottom by default, top on the second beat) and the other half carries supporting visual proof (asset b-roll, chart, screen recording) that is always moving. Perfect lip sync, audio from the speaker only, captions on the seam." },
 ];
 
 /** Real remaining budget from the database, per client + kind. */
