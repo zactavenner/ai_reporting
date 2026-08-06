@@ -22,6 +22,7 @@ import {
   type MeetgeekClientConfig,
 } from '../_shared/meetgeekCalendarGate.ts';
 import { parseMeetgeekInsights } from '../_shared/meetgeekQuality.ts';
+import { authorizeOperator } from '../_shared/operatorAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
