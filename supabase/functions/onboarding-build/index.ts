@@ -100,6 +100,38 @@ Deno.serve(async (req) => {
       offer = data?.[0] || null;
     }
 
+    // ---- GATE 1: the offer must be reviewed by a human before any automation.
+    if (!offer) {
+      return j({
+        error: "No offer on file for this client. Add and review the offer before starting the build.",
+        code: "offer_missing",
+      }, 409);
+    }
+    if (!offer.offer_reviewed_at) {
+      return j({
+        error: "This client's offer has not been reviewed yet. Review and confirm the offer details, then start the build.",
+        code: "offer_not_reviewed",
+        offer_id: offer.id,
+      }, 409);
+    }
+
+    // ---- GATE 2: never run two builds for the same client at once. Concurrent
+    // missions were a direct cause of runaway duplicate creative generation.
+    const { data: live } = await supa
+      .from("jarvis_goals")
+      .select("id, status")
+      .eq("client_id", clientId)
+      .ilike("title", "Onboarding build%")
+      .in("status", ["queued", "running"])
+      .limit(1);
+    if (live?.length && !body.force) {
+      return j({
+        error: "An onboarding build is already running for this client.",
+        code: "already_running",
+        goal_id: live[0].id,
+      }, 409);
+    }
+
     const r = await fetch(`${SUPABASE_URL}/functions/v1/jarvis-goal-worker`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
@@ -109,7 +141,8 @@ Deno.serve(async (req) => {
         goal: brief(client, offer),
         client_id: clientId,
         created_by: body.created_by || null,
-        max_iterations: 400,
+        // Budgets do the real limiting now; a tight ceiling stops runaway loops.
+        max_iterations: 120,
       }),
     });
     const jr = await r.json().catch(() => ({}));
