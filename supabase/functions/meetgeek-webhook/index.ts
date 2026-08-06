@@ -7,6 +7,7 @@ import {
   MEETGEEK_SIGNATURE_HEADER,
   normalizeEmail,
   buildMeetingNote,
+  hydrateMeetingFromProvider,
   type IngestDeps,
   type LeadRow,
   type NormalizedMeeting,
@@ -136,6 +137,23 @@ async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<{ ap
   const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
   if (!apiKey) return null;
   return { apiKey, baseUrl: getBaseUrl(apiKey.startsWith('eu-') ? 'eu' : 'us') };
+}
+
+/**
+ * Agency-level (private) MeetGeek credentials. Used for the pre-gate
+ * `GET /v1/meetings/{id}` hydration, where no client is known yet — so no
+ * client-scoped key may be consulted.
+ */
+async function resolveAgencyMeetgeekApi(supabase: any): Promise<{ apiKey: string; baseUrl: string } | null> {
+  const { data: agency } = await supabase
+    .from('agency_settings')
+    .select('meetgeek_api_key, meetgeek_region')
+    .limit(1)
+    .maybeSingle();
+  const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
+  if (!apiKey) return null;
+  const region = agency?.meetgeek_region || (apiKey.startsWith('eu-') ? 'eu' : 'us');
+  return { apiKey, baseUrl: getBaseUrl(region) };
 }
 
 async function mgGet(apiKey: string, baseUrl: string, path: string): Promise<any | null> {
