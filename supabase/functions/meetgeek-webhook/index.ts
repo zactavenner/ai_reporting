@@ -1165,8 +1165,12 @@ async function runMeetgeekTestEvent(
   if (!config) {
     return { ok: false, error: 'MeetGeek is not configured for this client yet. Save the configuration first.' };
   }
-  if (!config.mappingValid || !config.ghlCalendarId) {
-    return { ok: false, error: config.ghlCalendarId ? 'Mapping is invalid — re-save the configuration.' : 'Select a calendar first.' };
+  const mode = config.mode || 'selected_calendar';
+  if (!config.mappingValid) {
+    return { ok: false, error: 'Mapping is invalid — re-save the configuration.' };
+  }
+  if (mode === 'selected_calendar' && !config.ghlCalendarId) {
+    return { ok: false, error: 'Select a calendar first.' };
   }
 
   const now = new Date();
@@ -1193,8 +1197,8 @@ async function runMeetgeekTestEvent(
   // The appointment is synthetic but the gate is the real one.
   const appointment: CalendarAppointment = {
     eventId: `selftest-evt-${now.getTime()}`,
-    calendarId: mode === 'wrong_calendar' ? `${config.ghlCalendarId}-not-selected` : config.ghlCalendarId,
-    locationId: mode === 'wrong_client' ? `${config.ghlLocationId}-other` : config.ghlLocationId,
+    calendarId: testMode === 'wrong_calendar' ? `${config.ghlCalendarId || 'cal'}-not-selected` : config.ghlCalendarId,
+    locationId: testMode === 'wrong_client' ? `${config.ghlLocationId}-other` : config.ghlLocationId,
     contactId: null,
     attendeeEmail: null,
     title: 'MeetGeek configuration self-test',
