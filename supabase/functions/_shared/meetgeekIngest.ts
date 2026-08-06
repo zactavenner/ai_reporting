@@ -240,6 +240,21 @@ function normalizeParticipants(payload: Record<string, any>): MeetgeekParticipan
   return out;
 }
 
+/**
+ * Classifies MeetGeek's post-processing `message` field. The documented
+ * successful-analysis payload can be nothing more than
+ * `{ message: "File analyzed successfully", meeting_id: "..." }`.
+ */
+export function classifyMeetgeekMessage(message: unknown): 'analyzed' | 'failed' | null {
+  if (typeof message !== 'string') return null;
+  const text = message.trim().toLowerCase();
+  if (!text) return null;
+  if (/(fail|error|unsuccessful|could not|cannot|unable)/.test(text)) return 'failed';
+  if (/analy[sz]\w*/.test(text) && /(success|complete|done|finish)/.test(text)) return 'analyzed';
+  if (/^file analyzed successfully$/.test(text)) return 'analyzed';
+  return null;
+}
+
 /** Normalizes a MeetGeek webhook payload into our canonical meeting shape. */
 export function normalizeMeetgeekPayload(payload: Record<string, any>): NormalizedMeeting | null {
   const meeting = (payload?.meeting && typeof payload.meeting === 'object') ? payload.meeting : payload;
@@ -257,8 +272,14 @@ export function normalizeMeetgeekPayload(payload: Record<string, any>): Normaliz
     durationMinutes = Math.round(meeting.duration);
   }
 
-  const status = firstString(payload?.status, meeting?.status, payload?.event, payload?.event_type);
-  const isCompleted = !!endedAt || /complete|analyz|finish|end/i.test(status || '');
+  const messageKind = classifyMeetgeekMessage(payload?.message ?? meeting?.message);
+  const status = firstString(
+    payload?.status, meeting?.status, payload?.event, payload?.event_type,
+    messageKind === 'analyzed' ? 'analysis_completed' : messageKind === 'failed' ? 'analysis_failed' : null,
+  );
+  const analysisFailed = messageKind === 'failed';
+  const isCompleted = !analysisFailed
+    && (!!endedAt || messageKind === 'analyzed' || /complete|analyz|finish|end/i.test(status || ''));
 
   const summaryRaw = firstString(
     payload?.summary, meeting?.summary, payload?.summary_text, meeting?.summary_text,
@@ -286,6 +307,57 @@ export function normalizeMeetgeekPayload(payload: Record<string, any>): Normaliz
     // authenticated provider fetch fills this in after the calendar gate.
     insights: parseMeetgeekInsights(payload?.insights ?? payload?.kpis ?? null),
     transcriptText: null,
+    analysisFailed,
+    // Message-only / timing-free payloads carry no authority: the provider must
+    // be fetched before the calendar gate can evaluate anything.
+    hydrationRequired: !startedAt || !endedAt,
+  };
+}
+
+/**
+ * Merges an authenticated `GET /v1/meetings/{id}` response onto the canonical
+ * meeting. The provider response is the ONLY authority for timing, title,
+ * host, calendar event id, join link and participants — webhook-supplied
+ * values for those fields are discarded.
+ */
+export function hydrateMeetingFromProvider(
+  meeting: NormalizedMeeting,
+  provider: Record<string, any> | null | undefined,
+): NormalizedMeeting | null {
+  if (!provider || typeof provider !== 'object') return null;
+  const body = (provider.meeting && typeof provider.meeting === 'object') ? provider.meeting : provider;
+
+  const startedAt = toIso(firstString(body?.timestamp_start_utc, body?.start_time, body?.started_at));
+  const endedAt = toIso(firstString(body?.timestamp_end_utc, body?.end_time, body?.ended_at));
+  if (!startedAt) return null;
+
+  let durationMinutes: number | null = null;
+  if (startedAt && endedAt) {
+    durationMinutes = Math.max(0, Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000));
+  } else if (typeof body?.duration === 'number') {
+    durationMinutes = Math.round(body.duration);
+  }
+
+  const participants = normalizeParticipants(body);
+  const joinUrl = firstString(body?.meeting_url, body?.join_url, body?.source_url, body?.meetgeek_url);
+
+  return {
+    ...meeting,
+    // identity stays pinned to the verified webhook meeting id
+    meetingExternalId: meeting.meetingExternalId,
+    eventId: firstString(body?.event_id, body?.calendar_event_id, body?.external_event_id) ?? meeting.eventId,
+    title: firstString(body?.title, body?.name),
+    startedAt,
+    endedAt,
+    durationMinutes,
+    language: firstString(body?.language),
+    hostEmail: normalizeEmail(firstString(body?.host_email, body?.host?.email)),
+    participants,
+    sourceUrl: joinUrl || `https://app.meetgeek.ai/meetings/${meeting.meetingExternalId}`,
+    recordingUrl: firstString(body?.recording_url, body?.video_url) ?? meeting.recordingUrl,
+    transcriptUrl: firstString(body?.transcript_url) ?? meeting.transcriptUrl,
+    isCompleted: true,
+    hydrationRequired: false,
   };
 }
 
