@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target, Rocket } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder, modelLabel } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { H3RunManager } from "@/components/h3/H3RunManager";
+import { OnboardingDock } from "@/components/onboarding/OnboardingDock";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
@@ -1162,6 +1163,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Mobile-only view switcher: shows either Chat or Canvas at < lg width
   // so both panels don't stack into a giant scroll on phones.
   const [mobileView, setMobileView] = useState<"chat" | "canvas">("chat");
+  // Right-pane tab (controlled so the onboarding dock can jump back to the canvas).
+  const [studioTab, setStudioTab] = useState<string>("canvas");
   // Fullscreen mode for either pane — useful on phones/tablets.
   const [fullscreen, setFullscreen] = useState<"none" | "chat" | "canvas">("none");
   useEffect(() => {
@@ -2977,10 +2980,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
       {/* RIGHT — Canvas */}
       {showCanvas && (
       <Card className={`${showChat && mobileView !== "canvas" ? "hidden lg:flex" : "flex"} flex-col overflow-hidden min-h-0 ${canvasFsClass}`}>
-        <Tabs defaultValue="canvas" className="flex-1 flex flex-col min-h-0">
+        <Tabs value={studioTab} onValueChange={setStudioTab} className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
-            <TabsList className="self-start">
+            <TabsList className="self-start flex-wrap h-auto">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
+              <TabsTrigger value="onboarding"><Rocket className="h-4 w-4 mr-1" /> Onboarding</TabsTrigger>
               <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> Agent Training</TabsTrigger>
@@ -3137,6 +3141,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
 
           <TabsContent value="h3runs" className="flex-1 m-0 overflow-auto p-4">
             <H3RunManager clientId={clientId} />
+          </TabsContent>
+
+          <TabsContent value="onboarding" className="flex-1 m-0 overflow-hidden p-4 data-[state=active]:flex data-[state=inactive]:hidden">
+            <OnboardingDock
+              clientId={clientId}
+              clientName={clientName}
+              onOpenCanvas={() => setStudioTab("canvas")}
+            />
           </TabsContent>
 
         </Tabs>
