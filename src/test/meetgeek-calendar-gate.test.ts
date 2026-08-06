@@ -10,8 +10,9 @@ import {
 } from '../../supabase/functions/_shared/meetgeekCalendarGate';
 import { normalizeMeetgeekPayload, type NormalizedMeeting } from '../../supabase/functions/_shared/meetgeekIngest';
 import {
-  scoreMeetingQuality,
-  MEETGEEK_KPI_WEIGHTS,
+  scoreCapitalRaisingQA,
+  QA_CATEGORY_MAX,
+  QA_PASS_THRESHOLD,
   type MeetgeekMeetingInsights,
 } from '../../supabase/functions/_shared/meetgeekQuality';
 
@@ -202,7 +203,7 @@ const insights = (kpis: Record<string, number | null>, extra: Partial<MeetgeekMe
 });
 
 const allEight = {
-  engagement: 4,
+  engagement: 5,
   productivity: 3,
   agenda_follow_through: 5,
   clear_project_scope: 2,
@@ -212,66 +213,161 @@ const allEight = {
   speaker_distribution: 5,
 };
 
-describe('quality rubric (provider insights only)', () => {
-  it('weights all eight KPIs exactly', () => {
-    const q = scoreMeetingQuality({ insights: insights(allEight) });
-    const expected = Object.entries(allEight)
-      .reduce((s, [k, v]) => s + (MEETGEEK_KPI_WEIGHTS as any)[k] * ((v / 5) * 10), 0);
-    expect(q.rating).toBe(Math.round(expected * 10) / 10);
-    expect(q.availableWeight).toBe(1);
-    expect(q.rubric).toHaveLength(8);
-    expect(q.rubric!.every((r) => typeof r.weight === 'number' && r.value !== null)).toBe(true);
+const pad = (n: number) => 'Rep: understood, noted for the record. '.repeat(n);
+
+const CLEAN_TRANSCRIPT = [
+  'Rep: thanks for making time. What are you looking to accomplish with this allocation?',
+  'Prospect: I have capital available and I want exposure to a real estate fund.',
+  'Rep: what is your time horizon, and how much would you allocate?',
+  'Prospect: maybe a 500k check size over five years.',
+  'Rep: tell me about your portfolio mix today?',
+  'Prospect: mostly public equity.',
+  'Rep: the offering is a private placement with a preferred return; targeted returns are projected, not guaranteed, and there is risk of loss.',
+  'Rep: on liquidity, the hold period is five to seven years and distributions begin in year two.',
+  'Prospect: I am a little concerned about the lock-up.',
+  'Rep: that is fair. Here is how we handle it. Does that address your concern?',
+  'Prospect: yes, that clarifies it.',
+  'Rep: we will schedule the next call for Tuesday at 2pm and send over the PPM.',
+  pad(6),
+].join('\n');
+
+const ACTION_ITEMS = ['Jane: send the PPM by Friday', 'Rep: book follow-up call on 2026-02-10'];
+
+const OBJECTION_FREE_TRANSCRIPT = CLEAN_TRANSCRIPT
+  .replace('Prospect: I am a little concerned about the lock-up.', 'Prospect: the lock-up makes sense to me.')
+  .replace('Rep: that is fair. Here is how we handle it. Does that address your concern?', 'Rep: appreciate that.');
+
+describe('HNWI capital-raising operational QA scorecard', () => {
+  it('sums to a fixed 100-point scale', () => {
+    expect(Object.values(QA_CATEGORY_MAX).reduce((a, b) => a + b, 0)).toBe(100);
   });
 
-  it('keeps an all-zero meeting at exactly 0 and never forces a 1', () => {
-    const zeros = Object.fromEntries(Object.keys(allEight).map((k) => [k, 0]));
-    const q = scoreMeetingQuality({ insights: insights(zeros) });
-    expect(q.rating).toBe(0);
-    expect(q.rubric!.every((r) => r.score === 0)).toBe(true);
-  });
-
-  it('returns null when no insights are present', () => {
-    const q = scoreMeetingQuality({ insights: null });
-    expect(q.rating).toBeNull();
-    expect(q.rubric).toBeNull();
-    expect(q.summary).toBe('insufficient source data');
-  });
-
-  it('refuses to score when more than 30% of weight is missing', () => {
-    // engagement (20%) + task_ownership (20%) + productivity (15%) = 55% available.
-    const q = scoreMeetingQuality({
-      insights: insights({ engagement: 4, task_ownership: 4, productivity: 4 }),
+  it('passes a clean, fully evidenced capital-raising call', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: CLEAN_TRANSCRIPT,
+      summary: 'Discovery call on the fund offering; PPM to follow.',
+      actionItems: ACTION_ITEMS,
+      analytics: insights(allEight, { repTalkRatio: 0.55 }),
+      crm: { leadMatched: true, ghlContactId: 'ghl-1', noteWritten: true },
     });
-    expect(q.missingWeight).toBeGreaterThan(0.3);
-    expect(q.rating).toBeNull();
-    expect(q.summary).toBe('insufficient source data');
+    expect(qa.gateStatus).toBe('pass');
+    expect(qa.total).toBeGreaterThanOrEqual(QA_PASS_THRESHOLD);
+    expect(qa.redFlags).toHaveLength(0);
+    expect(qa.nextStep).toMatchObject({ committed: true });
+    expect(qa.evidenceTags).toContain('transcript');
+    expect(qa.pipelineOutcome).toBe('advanced_next_step_committed');
+    expect(qa.actionOwners[0]).toMatchObject({ owner: 'Jane', deadline: 'Friday' });
   });
 
-  it('scores from partial data when missing weight is within 30%', () => {
-    const partial = { ...allEight } as Record<string, number | null>;
-    delete partial.risk_awareness;      // 5%
-    delete partial.speaker_distribution; // 5%
-    delete partial.milestones_identified; // 10%
-    const q = scoreMeetingQuality({ insights: insights(partial) });
-    expect(q.missingWeight).toBeCloseTo(0.2, 5);
-    expect(q.rating).not.toBeNull();
+  it('hard-fails an explicit guarantee and zeroes the total', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: CLEAN_TRANSCRIPT.replace('targeted returns are projected, not guaranteed', 'returns are guaranteed and risk-free'),
+      summary: 'Call summary',
+      actionItems: ACTION_ITEMS,
+      analytics: insights(allEight),
+    });
+    expect(qa.gateStatus).toBe('fail');
+    expect(qa.total).toBe(0);
+    expect(qa.redFlags.some((f) => f.code === 'promissory_guarantee' && f.hardFail)).toBe(true);
+    expect(qa.categories.find((c) => c.key === 'non_promissory')!.points).toBe(0);
+    expect(qa.pipelineOutcome).toBe('blocked_hard_fail');
   });
 
-  it('summary reports the two lowest categories and action-owner coverage', () => {
-    const q = scoreMeetingQuality({ insights: insights(allEight) });
-    expect(q.summary).toContain('Risk awareness');
-    expect(q.summary).toContain('Clear project scope');
-    expect(q.summary).toContain('3/4 action items have an owner');
-    expect(q.summary).toContain('speaker distribution');
+  it('hard-fails an accreditation/suitability verification claim', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: `${CLEAN_TRANSCRIPT}\nRep: good news, we have verified your accreditation already.`,
+      summary: 'Call summary',
+      actionItems: ACTION_ITEMS,
+      analytics: insights(allEight),
+    });
+    expect(qa.gateStatus).toBe('fail');
+    expect(qa.redFlags.some((f) => f.code === 'accreditation_or_suitability_claim')).toBe(true);
   });
 
-  it('never infers quality from duration, summary length, artifacts or lead matching', async () => {
+  it('hard-fails a call with no committed next step', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: CLEAN_TRANSCRIPT.replace('Rep: we will schedule the next call for Tuesday at 2pm and send over the PPM.', 'Rep: alright, talk sometime.'),
+      summary: 'Call summary',
+      actionItems: ['Nothing agreed'],
+      analytics: insights(allEight),
+    });
+    expect(qa.gateStatus).toBe('fail');
+    expect(qa.redFlags.some((f) => f.code === 'no_committed_next_step')).toBe(true);
+  });
+
+  it('hard-fails zero discovery', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: `Rep: this offering is a private placement with a preferred return. We will schedule Tuesday at 2pm. ${pad(20)}`,
+      summary: 'Monologue pitch',
+      actionItems: ACTION_ITEMS,
+      analytics: insights(allEight),
+    });
+    expect(qa.gateStatus).toBe('fail');
+    expect(qa.redFlags.some((f) => f.code === 'zero_discovery')).toBe(true);
+  });
+
+  it('sends unresolved risk to manual review without a hard fail', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: OBJECTION_FREE_TRANSCRIPT
+        .replace('Rep: on liquidity, the hold period is five to seven years and distributions begin in year two.', 'Rep: anyway, moving on.'),
+      summary: 'Call summary',
+      actionItems: ACTION_ITEMS,
+      analytics: insights(allEight),
+    });
+    expect(qa.gateStatus).toBe('manual_review');
+    expect(qa.redFlags.some((f) => f.code === 'unresolved_risk')).toBe(true);
+    expect(qa.redFlags.every((f) => !f.hardFail)).toBe(true);
+  });
+
+  it('flags rep-dominated talk time for manual review', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: CLEAN_TRANSCRIPT,
+      summary: 'Call summary',
+      actionItems: ACTION_ITEMS,
+      analytics: insights(allEight, { repTalkRatio: 0.86 }),
+      crm: { noteWritten: true },
+    });
+    expect(qa.gateStatus).toBe('manual_review');
+    expect(qa.redFlags.some((f) => f.code === 'rep_dominated_talk_time')).toBe(true);
+  });
+
+  it('scores 0 with insufficient_evidence when no artifacts exist and never infers', () => {
+    const qa = scoreCapitalRaisingQA({ transcript: null, summary: null, actionItems: [], analytics: null });
+    expect(qa.total).toBe(0);
+    expect(qa.gateStatus).toBe('manual_review');
+    expect(qa.evidenceTags).toContain('insufficient_evidence');
+    expect(qa.redFlags.some((f) => f.code === 'missing_material_transcript')).toBe(true);
+    expect(qa.categories.every((c) => c.points === 0)).toBe(true);
+    expect(qa.categories.filter((c) => c.insufficientEvidence).length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('is deterministic for identical inputs', () => {
+    const args = { transcript: CLEAN_TRANSCRIPT, summary: 'Call summary', actionItems: ACTION_ITEMS, analytics: insights(allEight) };
+    expect(JSON.stringify(scoreCapitalRaisingQA(args))).toBe(JSON.stringify(scoreCapitalRaisingQA(args)));
+  });
+
+  it('reweights objection handling to N/A when no objection was raised', () => {
+    const qa = scoreCapitalRaisingQA({
+      transcript: OBJECTION_FREE_TRANSCRIPT,
+      summary: 'Call summary',
+      actionItems: ACTION_ITEMS,
+      analytics: insights(allEight),
+      crm: { noteWritten: true },
+    });
+    const objection = qa.categories.find((c) => c.key === 'objection_handling')!;
+    expect(objection.na).toBe(true);
+    expect(qa.naRedistribution).toMatchObject({ naKeys: ['objection_handling'], removedMax: 10, scoredMax: 90 });
+    expect(qa.total).toBeGreaterThanOrEqual(QA_PASS_THRESHOLD);
+  });
+
+  it('never scores from duration, recording presence or CRM matching', async () => {
     const { deps, calls } = makeDeps();
     const res = await run(deps);
-    // Rich meeting, matched lead, but no provider insights => no score at all.
-    expect(res.qualityRating).toBeNull();
-    expect(calls.activities[0].quality_rating).toBeNull();
-    expect(calls.activities[0].quality_summary).toBe('insufficient source data');
+    // Rich meeting, matched lead, but no transcript/analytics => nothing earned.
+    expect(res.qaTotal).toBe(0);
+    expect(calls.activities[0].qa_total).toBe(0);
+    expect(calls.activities[0].qa_gate_status).toBe('manual_review');
+    expect(calls.activities[0].qa_evidence_tags).toContain('insufficient_evidence');
   });
 
   it('scores only after the calendar-validated provider enrichment runs', async () => {
@@ -280,14 +376,17 @@ describe('quality rubric (provider insights only)', () => {
       findAppointments: async () => { order.push('gate'); return [appt()]; },
       enrichMeeting: async (_c, m) => {
         order.push('enrich');
-        return { ...m, insights: insights(allEight) };
+        return { ...m, insights: insights(allEight), transcriptText: CLEAN_TRANSCRIPT, actionItems: ACTION_ITEMS };
       },
     });
     const res = await run(deps);
     expect(order).toEqual(['gate', 'enrich']);
-    expect(res.qualityRating).toBeGreaterThan(0);
-    expect(calls.activities[0].quality_rating).toBe(res.qualityRating);
-    expect(Array.isArray(calls.activities[0].quality_rubric)).toBe(true);
+    expect(res.qaTotal).toBeGreaterThan(0);
+    expect(res.qaGateStatus).toBe('pass');
+    expect(calls.activities[0].qa_total).toBe(res.qaTotal);
+    expect(Array.isArray(calls.activities[0].qa_scores)).toBe(true);
+    expect(calls.activities[0].qa_scores).toHaveLength(8);
+    expect(calls.activities[0].qa_meetgeek_summary).toBeTruthy();
   });
 
   it('does not enrich or score a gate-rejected meeting', async () => {
