@@ -466,9 +466,11 @@ Deno.serve(async (req) => {
 
     const body = JSON.parse(rawBody);
 
-    // Every internal action is admin/tenant surface — require a real caller.
-    if (!(await requireInternalAuth(req, supabase))) {
-      return jsonResponse({ error: 'Forbidden: agency admin access required' }, 403);
+    // Every internal action is an agency-operator surface. Arbitrary client_id
+    // reads are only ever served to provisioned operators (or service role).
+    const auth = await authorizeOperator(req, supabase, createClient);
+    if (!auth.ok) {
+      return jsonResponse({ error: auth.error, code: auth.code }, auth.status);
     }
 
     const clientId = body.client_id || new URL(req.url).searchParams.get('client_id');
