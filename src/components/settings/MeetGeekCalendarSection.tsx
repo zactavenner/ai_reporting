@@ -76,7 +76,7 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
       else toast.error(data?.error || 'Configuration saved but the mapping is invalid');
       queryClient.invalidateQueries({ queryKey: ['meetgeek-client-config', clientId] });
     },
-    onError: () => toast.error('Failed to save MeetGeek calendar configuration'),
+    onError: (e: any) => toast.error(e?.message || 'Failed to save MeetGeek calendar configuration'),
   });
 
   const runTest = async (mode: 'match' | 'wrong_calendar') => {
