@@ -10698,6 +10698,328 @@ export type Database = {
           },
         ]
       }
+      h3_creative_events: {
+        Row: {
+          actor: string | null
+          created_at: string
+          creative_id: string
+          detail: Json
+          event_type: string
+          from_state: Database["public"]["Enums"]["h3_workflow_state"] | null
+          id: string
+          to_state: Database["public"]["Enums"]["h3_workflow_state"] | null
+        }
+        Insert: {
+          actor?: string | null
+          created_at?: string
+          creative_id: string
+          detail?: Json
+          event_type: string
+          from_state?: Database["public"]["Enums"]["h3_workflow_state"] | null
+          id?: string
+          to_state?: Database["public"]["Enums"]["h3_workflow_state"] | null
+        }
+        Update: {
+          actor?: string | null
+          created_at?: string
+          creative_id?: string
+          detail?: Json
+          event_type?: string
+          from_state?: Database["public"]["Enums"]["h3_workflow_state"] | null
+          id?: string
+          to_state?: Database["public"]["Enums"]["h3_workflow_state"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "h3_creative_events_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "h3_creatives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      h3_creatives: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          approved_script: string | null
+          approved_script_version: number | null
+          aspect_ratio: string
+          audio_expected: boolean
+          automated_qa: Json
+          campaign_ref: string | null
+          captions_embedded: boolean
+          client_id: string | null
+          concept: string
+          cost_amount: number | null
+          cost_currency: string | null
+          counsel_review_required: boolean
+          counsel_signoff_at: string | null
+          counsel_signoff_by: string | null
+          created_at: string
+          disclosures_embedded: boolean
+          duration_seconds: number
+          external_job_id: string | null
+          final_asset_url: string | null
+          final_resolution: string
+          first_frame_asset_url: string | null
+          id: string
+          internal_generation_id: string
+          manual_qa_status: string | null
+          meta_ad_id: string | null
+          model: string
+          polling_ref: string | null
+          prompt: string | null
+          provider: string
+          provider_error: string | null
+          provider_status: string
+          rejection_category:
+            | Database["public"]["Enums"]["h3_rejection_category"]
+            | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          run_id: string
+          source_asset_url: string | null
+          source_resolution: string
+          submitted_at: string | null
+          submitted_by: string | null
+          transcript: string | null
+          updated_at: string
+          workflow_state: Database["public"]["Enums"]["h3_workflow_state"]
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_script?: string | null
+          approved_script_version?: number | null
+          aspect_ratio?: string
+          audio_expected?: boolean
+          automated_qa?: Json
+          campaign_ref?: string | null
+          captions_embedded?: boolean
+          client_id?: string | null
+          concept: string
+          cost_amount?: number | null
+          cost_currency?: string | null
+          counsel_review_required?: boolean
+          counsel_signoff_at?: string | null
+          counsel_signoff_by?: string | null
+          created_at?: string
+          disclosures_embedded?: boolean
+          duration_seconds?: number
+          external_job_id?: string | null
+          final_asset_url?: string | null
+          final_resolution?: string
+          first_frame_asset_url?: string | null
+          id?: string
+          internal_generation_id?: string
+          manual_qa_status?: string | null
+          meta_ad_id?: string | null
+          model?: string
+          polling_ref?: string | null
+          prompt?: string | null
+          provider?: string
+          provider_error?: string | null
+          provider_status?: string
+          rejection_category?:
+            | Database["public"]["Enums"]["h3_rejection_category"]
+            | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id: string
+          source_asset_url?: string | null
+          source_resolution?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          transcript?: string | null
+          updated_at?: string
+          workflow_state?: Database["public"]["Enums"]["h3_workflow_state"]
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_script?: string | null
+          approved_script_version?: number | null
+          aspect_ratio?: string
+          audio_expected?: boolean
+          automated_qa?: Json
+          campaign_ref?: string | null
+          captions_embedded?: boolean
+          client_id?: string | null
+          concept?: string
+          cost_amount?: number | null
+          cost_currency?: string | null
+          counsel_review_required?: boolean
+          counsel_signoff_at?: string | null
+          counsel_signoff_by?: string | null
+          created_at?: string
+          disclosures_embedded?: boolean
+          duration_seconds?: number
+          external_job_id?: string | null
+          final_asset_url?: string | null
+          final_resolution?: string
+          first_frame_asset_url?: string | null
+          id?: string
+          internal_generation_id?: string
+          manual_qa_status?: string | null
+          meta_ad_id?: string | null
+          model?: string
+          polling_ref?: string | null
+          prompt?: string | null
+          provider?: string
+          provider_error?: string | null
+          provider_status?: string
+          rejection_category?:
+            | Database["public"]["Enums"]["h3_rejection_category"]
+            | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id?: string
+          source_asset_url?: string | null
+          source_resolution?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          transcript?: string | null
+          updated_at?: string
+          workflow_state?: Database["public"]["Enums"]["h3_workflow_state"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "h3_creatives_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "h3_creatives_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "h3_creatives_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "h3_creatives_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "h3_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      h3_runs: {
+        Row: {
+          campaign_ref: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          requires_counsel_review: boolean
+          updated_at: string
+        }
+        Insert: {
+          campaign_ref?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          requires_counsel_review?: boolean
+          updated_at?: string
+        }
+        Update: {
+          campaign_ref?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          requires_counsel_review?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "h3_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "h3_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "h3_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      h3_script_revisions: {
+        Row: {
+          approved: boolean
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          created_by: string | null
+          creative_id: string
+          id: string
+          script: string
+          version: number
+        }
+        Insert: {
+          approved?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          creative_id: string
+          id?: string
+          script: string
+          version: number
+        }
+        Update: {
+          approved?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          creative_id?: string
+          id?: string
+          script?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "h3_script_revisions_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "h3_creatives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hermes_task_type_routes: {
         Row: {
           agent_types: string[]
@@ -18574,6 +18896,27 @@ export type Database = {
         | "edited"
         | "dismissed"
       email_priority: "high" | "medium" | "low" | "none"
+      h3_rejection_category:
+        | "claim_violation"
+        | "off_script"
+        | "audio_issue"
+        | "caption_issue"
+        | "disclosure_missing"
+        | "avatar_continuity"
+        | "visual_artifact"
+        | "duration_mismatch"
+        | "resolution_mismatch"
+        | "other"
+      h3_workflow_state:
+        | "draft"
+        | "claim_review"
+        | "submitted"
+        | "rendering"
+        | "downloaded"
+        | "qa"
+        | "ready_for_review"
+        | "approved"
+        | "meta_ready"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -18721,6 +19064,29 @@ export const Constants = {
         "dismissed",
       ],
       email_priority: ["high", "medium", "low", "none"],
+      h3_rejection_category: [
+        "claim_violation",
+        "off_script",
+        "audio_issue",
+        "caption_issue",
+        "disclosure_missing",
+        "avatar_continuity",
+        "visual_artifact",
+        "duration_mismatch",
+        "resolution_mismatch",
+        "other",
+      ],
+      h3_workflow_state: [
+        "draft",
+        "claim_review",
+        "submitted",
+        "rendering",
+        "downloaded",
+        "qa",
+        "ready_for_review",
+        "approved",
+        "meta_ready",
+      ],
     },
   },
 } as const

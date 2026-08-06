@@ -18,6 +18,7 @@ import { useClient } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder, modelLabel } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
+import { H3RunManager } from "@/components/h3/H3RunManager";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
@@ -2983,6 +2984,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
               <TabsTrigger value="references"><Library className="h-4 w-4 mr-1" /> Agent Training</TabsTrigger>
+              <TabsTrigger value="h3runs"><Film className="h-4 w-4 mr-1" /> H3 Runs</TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-1 ml-auto">
             <Button
@@ -3131,6 +3133,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </div>
               <AIStudioReferenceLibrary clientId={clientId} activeIds={activeReferenceIds} onToggle={setActiveReferenceIds} activeVideoIds={activeVideoReferenceIds} onToggleVideo={setActiveVideoReferenceIds} />
             </div>
+          </TabsContent>
+
+          <TabsContent value="h3runs" className="flex-1 m-0 overflow-auto p-4">
+            <H3RunManager clientId={clientId} />
           </TabsContent>
 
         </Tabs>
