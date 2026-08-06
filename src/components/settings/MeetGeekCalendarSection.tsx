@@ -104,6 +104,11 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
 
   return (
     <div className="border-2 border-border p-4 space-y-4">
+      {configQuery.error ? (
+        <p className="text-xs text-destructive border border-destructive/40 bg-destructive/5 p-2 rounded">
+          {(configQuery.error as Error).message}
+        </p>
+      ) : null}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className="font-medium mb-1 flex items-center gap-2">
