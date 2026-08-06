@@ -4,7 +4,7 @@
 import {
   parseMeetgeekInsights,
   type MeetgeekMeetingInsights,
-  type MeetingQuality,
+  type QaScorecard,
 } from './meetgeekQuality.ts';
 
 export interface MeetgeekParticipant {
@@ -299,7 +299,7 @@ export const GHL_NOTE_MAX_CHARS = 4000;
  */
 export function buildMeetingNote(
   meeting: NormalizedMeeting,
-  quality?: MeetingQuality | null,
+  quality?: QaScorecard | null,
 ): string {
   const head: string[] = ['Meeting Intelligence (MeetGeek)'];
   if (meeting.title) head.push(`Title: ${meeting.title}`);
@@ -324,18 +324,28 @@ export function buildMeetingNote(
   const qualityHead: string[] = [];
   const qualityTail: string[] = [];
   if (quality) {
-    if (quality.rating === null) {
-      qualityHead.push('', 'Meeting quality: not scored (insufficient source data).');
-    } else {
-      qualityHead.push('', `Meeting quality: ${quality.rating}/10 (MeetGeek KPI composite).`);
-      const lowest = (quality.rubric || [])
-        .filter((r) => r.score !== null)
-        .sort((a, b) => (a.score as number) - (b.score as number))
-        .slice(0, 2)
-        .map((r) => `${r.label} ${r.score}/10`);
-      if (lowest.length) qualityHead.push(`Lowest categories: ${lowest.join(', ')}.`);
-      if (quality.summary) qualityTail.push('', quality.summary);
+    qualityHead.push(
+      '',
+      `Operational QA: ${quality.total}/100 — ${quality.gateStatus.replace('_', ' ')}.`,
+      'Sales-execution QA only. Not investor suitability, accreditation or compliance approval.',
+    );
+    const lowest = quality.categories
+      .filter((c) => !c.na && c.points < c.max)
+      .sort((a, b) => (a.points / a.max) - (b.points / b.max))
+      .slice(0, 3)
+      .map((c) => `${c.label} ${c.points}/${c.max}`);
+    if (lowest.length) qualityHead.push(`Lowest categories: ${lowest.join(', ')}.`);
+    const hard = quality.redFlags.filter((f) => f.hardFail).map((f) => f.code);
+    if (hard.length) qualityHead.push(`Hard fail: ${hard.join(', ')}.`);
+    const soft = quality.redFlags.filter((f) => !f.hardFail).map((f) => f.code);
+    if (soft.length) qualityHead.push(`Review flags: ${soft.join(', ')}.`);
+    if (quality.nextStep) {
+      qualityHead.push(quality.nextStep.committed
+        ? `Next step: ${String(quality.nextStep.detail || '').slice(0, 160)}`
+        : 'Next step: none committed.');
     }
+    if (quality.evidenceTags.length) qualityHead.push(`Evidence: ${quality.evidenceTags.join(', ')}.`);
+    if (quality.narrative) qualityTail.push('', quality.narrative);
   }
 
   const links: string[] = [];
