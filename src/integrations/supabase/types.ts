@@ -12642,9 +12642,17 @@ export type Database = {
           meetgeek_event_id: string | null
           meetgeek_meeting_id: string | null
           meeting_record_id: string | null
-          quality_rating: number | null
-          quality_rubric: Json | null
-          quality_summary: string | null
+          qa_action_owners: Json
+          qa_evidence_tags: Json
+          qa_gate_status: string | null
+          qa_meetgeek_summary: string | null
+          qa_na_redistribution: Json | null
+          qa_next_step: Json | null
+          qa_pipeline_outcome: string | null
+          qa_red_flags: Json
+          qa_scored_at: string | null
+          qa_scores: Json
+          qa_total: number | null
           recording_url: string | null
           source: string
           started_at: string | null
@@ -12677,9 +12685,17 @@ export type Database = {
           meetgeek_event_id?: string | null
           meetgeek_meeting_id?: string | null
           meeting_record_id?: string | null
-          quality_rating?: number | null
-          quality_rubric?: Json | null
-          quality_summary?: string | null
+          qa_action_owners?: Json
+          qa_evidence_tags?: Json
+          qa_gate_status?: string | null
+          qa_meetgeek_summary?: string | null
+          qa_na_redistribution?: Json | null
+          qa_next_step?: Json | null
+          qa_pipeline_outcome?: string | null
+          qa_red_flags?: Json
+          qa_scored_at?: string | null
+          qa_scores?: Json
+          qa_total?: number | null
           recording_url?: string | null
           source?: string
           started_at?: string | null
@@ -12712,9 +12728,17 @@ export type Database = {
           meetgeek_event_id?: string | null
           meetgeek_meeting_id?: string | null
           meeting_record_id?: string | null
-          quality_rating?: number | null
-          quality_rubric?: Json | null
-          quality_summary?: string | null
+          qa_action_owners?: Json
+          qa_evidence_tags?: Json
+          qa_gate_status?: string | null
+          qa_meetgeek_summary?: string | null
+          qa_na_redistribution?: Json | null
+          qa_next_step?: Json | null
+          qa_pipeline_outcome?: string | null
+          qa_red_flags?: Json
+          qa_scored_at?: string | null
+          qa_scores?: Json
+          qa_total?: number | null
           recording_url?: string | null
           source?: string
           started_at?: string | null
