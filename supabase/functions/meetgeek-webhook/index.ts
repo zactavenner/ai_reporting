@@ -323,6 +323,20 @@ function buildLifecycleDeps(supabase: any): LifecycleDeps {
 // ---------------------------------------------------------------------------
 function buildIngestDeps(supabase: any): IngestDeps {
   return {
+    // Pre-gate hydration: MeetGeek's completion webhook may only contain
+    // `{ message: "File analyzed successfully", meeting_id }`. We fetch the
+    // real meeting from the provider with the private agency key and treat
+    // that response as the sole authority for timing/title/host/attendees.
+    async hydrateFromProvider(meeting: NormalizedMeeting) {
+      const api = await resolveAgencyMeetgeekApi(supabase);
+      if (!api) return null;
+      const raw = await mgGet(
+        api.apiKey,
+        api.baseUrl,
+        `/v1/meetings/${encodeURIComponent(meeting.meetingExternalId)}`,
+      );
+      return hydrateMeetingFromProvider(meeting, raw);
+    },
     // Production path: per-client calendar gating + client-scoped call activity.
     async calendarGate(meeting: NormalizedMeeting) {
       const lifecycle = buildLifecycleDeps(supabase);
