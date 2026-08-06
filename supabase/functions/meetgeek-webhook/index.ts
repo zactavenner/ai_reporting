@@ -511,7 +511,7 @@ Deno.serve(async (req) => {
       const result = await ingestMeetgeekWebhook({
         rawBody,
         signatureHeader,
-        secret: Deno.env.get('MEETGEEK_WEBHOOK_SECRET') || '',
+        secret: await resolveWebhookSecret(supabase),
         deps: buildIngestDeps(supabase),
       });
       return jsonResponse(result, result.status);
@@ -577,7 +577,7 @@ Deno.serve(async (req) => {
       if (!clientId) {
         return jsonResponse({ error: 'client_id is required' }, 400);
       }
-      const secretConfigured = !!Deno.env.get('MEETGEEK_WEBHOOK_SECRET');
+      const secretConfigured = (await resolveWebhookSecret(supabase)).length > 0;
       const { apiKey, locationId } = await getMappedGhl(supabase, clientId);
 
       if (body.action === 'mg_list_calendars') {
