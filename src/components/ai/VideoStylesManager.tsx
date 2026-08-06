@@ -164,6 +164,22 @@ RULES:
 - Always name the price and the urgency lever (limited, today only, bonus expiring) at least once.
 - 12–15s. (0–1s) pattern interrupt. (1–4s) problem in one line + hook. (4–9s) the offer + price + what's inside. (9–13s) urgency + bonus. (13–15s) "Tap below to grab it" CTA pointing under the video.`,
   },
+  {
+    id: "split-screen",
+    name: "Split Screen",
+    builtIn: true,
+    builtinKey: "split-screen",
+    prompt: `STYLE: Vertical split-screen ad. The frame is divided into two stacked halves: the speaker occupies ONE half (top or bottom) as a talking head, and the other half shows supporting visual content (b-roll, screen recording, chart, asset footage, comparison shot).
+
+RULES:
+- Hard horizontal split across the full 9:16 frame. Speaker half fills its section edge to edge, framed chest-up, eyes to lens.
+- Alternate the speaker between the bottom half (default, feels native to social) and the top half at least once if the script has two beats.
+- Continuous motion in BOTH halves — the speaker gestures and shifts naturally, the other half is always moving (scrolling, panning, cutting).
+- Perfect lip sync. Audio is driven entirely by the speaker; the visual half stays silent.
+- Captions, if used, sit on the seam between the two halves.
+- 30s. (0–3s) speaker hook while the other half shows the pattern-interrupt visual. (3–20s) speaker explains while the visual half proves each point. (20–27s) strongest proof shot. (27–30s) speaker delivers the CTA to the form below.
+- If an avatar is attached, cast that person as the speaker and keep them identical in every shot.`,
+  },
 ];
 
 const CACHE_KEY = "ai-studio:video-styles:v2-cache";

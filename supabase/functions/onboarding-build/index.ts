@@ -61,14 +61,14 @@ DELIVERABLES (in this order, one save_asset call each):
 
 HARD OUTPUT LIMITS FOR THIS ONBOARDING (enforced by the tools):
  - Exactly 10 static creatives, all driven by THIS client's offer above — no generic fund filler.
- - Exactly 4 videos, 30 seconds each, natural and full of motion, one per style: podcast clip, street interview, walk-and-talk, cinematic b-roll.
+ - Exactly 5 videos, 30 seconds each, natural and full of motion, one per style: podcast clip, street interview, walk-and-talk, cinematic b-roll, split screen (speaker in one half of the frame, supporting visual in the other).
  - When a generator reports its budget is exhausted, that deliverable is done. Never re-run it.
 
 THEN:
 A. Consult Jeremy (ask_jeremy) on the angles, the ad copy and the video scripts BEFORE finalising them, and record_decision with his verdict each time.
 B. request_approval with queue_type "creative_review" for the static ads + avatar (list the creative ids / urls in the payload).
 C. request_approval with queue_type "video_scripts" for the 5 video ad scripts + 5 FAQ scripts.
-D. Poll check_approval. ONLY once the video_scripts approval is "approved" may you produce videos: pick the 4 strongest approved scripts and call generate_video once per style (podcast, street_interview, walk_and_talk, broll) with the avatar image, duration 30, 9:16 — then poll check_video_job.
+D. Poll check_approval. ONLY once the video_scripts approval is "approved" may you produce videos: pick the 5 strongest approved scripts and call generate_video once per style (podcast, street_interview, walk_and_talk, broll, split_screen) with the avatar image, duration 30, 9:16 — then poll check_video_job.
 E. If an approval is rejected, read the rejection reason, rewrite the affected deliverable, save it again and request approval once more.
 F. finish_mission with a markdown report: deliverables saved, creatives generated, Jeremy verdicts, approval states and videos produced.`;
 }
