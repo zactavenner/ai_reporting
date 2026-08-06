@@ -38,6 +38,17 @@ export interface NormalizedMeeting {
   insights?: MeetgeekMeetingInsights | null;
   /** Full transcript text fetched from the provider (never used for scoring). */
   transcriptText?: string | null;
+  /**
+   * True when the webhook told us analysis FAILED. Such payloads are recorded
+   * as ignored and never reach the calendar gate or any CRM write.
+   */
+  analysisFailed?: boolean;
+  /**
+   * True when the webhook carried no authoritative timing (e.g. MeetGeek's
+   * `{ message: "File analyzed successfully", meeting_id }` payload). The
+   * provider must be fetched before the calendar gate can run.
+   */
+  hydrationRequired?: boolean;
 }
 
 export interface LeadRow {
@@ -56,6 +67,13 @@ export interface LeadMatch {
 }
 
 export interface IngestDeps {
+  /**
+   * Authenticated `GET /v1/meetings/{meeting_id}` hydration using the private
+   * agency-level MeetGeek credentials. Runs AFTER signature verification and
+   * BEFORE the calendar gate. Returning null fails closed for payloads that
+   * carried no authoritative meeting data.
+   */
+  hydrateFromProvider?(meeting: NormalizedMeeting): Promise<NormalizedMeeting | null>;
   /**
    * Optional per-client calendar gate. When provided it is the sole authority for
    * which client a meeting belongs to and whether it may be ingested at all.
