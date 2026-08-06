@@ -19,6 +19,15 @@
 // - Idempotent: a pending provider job is left exactly as-is.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { authorizeOperator } from "../_shared/operatorAuth.ts";
+import {
+  extractContentUrl,
+  extractCostUsd,
+  extractProviderError,
+  isVideoContentType,
+  nextWorkflowState,
+  openRouterPollUrl as pollUrl,
+  type OpenRouterVideoJob,
+} from "../_shared/h3Provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,35 +37,6 @@ const corsHeaders = {
 const PROVIDER_LABEL = "OpenRouter";
 const NOT_CONFIGURED =
   "Connection required to resume polling — no server-side OpenRouter credential is configured. Add OPENROUTER_API_KEY in Project Settings → Secrets.";
-
-/** Poll endpoint for an already-submitted OpenRouter video job. Read-only. */
-const pollUrl = (jobId: string) =>
-  `https://openrouter.ai/api/v1/videos/${encodeURIComponent(jobId)}`;
-
-/**
- * OpenRouter returns authorized content URLs (401 without the server key), so
- * the stored URL is not usable from a browser — it is a server-side handle.
- */
-function extractContentUrl(payload: Record<string, any>): string | null {
-  const candidates = [
-    payload?.unsigned_urls,
-    payload?.signed_urls,
-    payload?.urls,
-    payload?.content,
-    payload?.output,
-  ];
-  for (const c of candidates) {
-    if (typeof c === "string" && /^https?:\/\//.test(c)) return c;
-    if (Array.isArray(c)) {
-      for (const item of c) {
-        if (typeof item === "string" && /^https?:\/\//.test(item)) return item;
-        const nested = item?.url ?? item?.video?.url;
-        if (typeof nested === "string" && /^https?:\/\//.test(nested)) return nested;
-      }
-    }
-  }
-  return null;
-}
 
 /**
  * "completed" from the provider is a claim, not an asset. Confirm the content
@@ -72,7 +52,7 @@ async function assetIsDownloadable(url: string, apiKey: string): Promise<{ ok: b
     const len = res.headers.get("content-length") ?? "";
     try { await res.body?.cancel(); } catch { /* already drained */ }
     if (!res.ok && res.status !== 206) return { ok: false, detail: `content HTTP ${res.status}` };
-    if (!/^(video|application\/octet-stream|binary)/i.test(type)) {
+    if (!isVideoContentType(type)) {
       return { ok: false, detail: `unexpected content-type "${type}"` };
     }
     return { ok: true, detail: `${type}${len ? ` (${len} bytes/range)` : ""}` };
