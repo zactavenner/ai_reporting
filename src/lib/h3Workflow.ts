@@ -119,8 +119,8 @@ const TERMS_SIGNALS =
   /(\$\s?\d|\bminimum\b|\bpreferred return\b|\breturn\b|\bdistribution\b|\bquarterly\b|\bpromote\b|\byield\b|\birr\b|\binvestors?\b)/i;
 
 const BLOCKED_WORDING: { pattern: RegExp; message: string }[] = [
-  { pattern: /\bfixed (returns?|income|yield|rate)\b/i, message: "'Fixed' return wording is blocked." },
-  { pattern: /\bfixed\b(?=[^.]{0,30}\breturn\b)/i, message: "'Fixed' return wording is blocked." },
+  // "fixed return", "fixed annual yield", "fixed 8% quarterly income", ...
+  { pattern: /\bfixed\b(?=[^.]{0,40}\b(returns?|income|yield|rate|distributions?)\b)/i, message: "'Fixed' return wording is blocked." },
   { pattern: /\bguarantee(d|s)?\b/i, message: "'Guaranteed' is blocked." },
   { pattern: /\brisk[- ]?free\b/i, message: "'Risk-free' is blocked." },
   { pattern: /\bno[- ]risk\b/i, message: "'No-risk' is blocked." },
@@ -135,7 +135,7 @@ const DC_COMPARATIVE: { pattern: RegExp; message: string }[] = [
   { pattern: /\bstrongest market\b/i, message: "'Strongest market' is a comparative claim — blocked." },
   { pattern: /\b(best|top|strongest|safest|hottest)\s+(market|city|metro|investment)\b/i, message: "Comparative market superlative — blocked." },
   { pattern: /\boutperform(s|ed|ing)?\b/i, message: "Performance comparison — blocked." },
-  { pattern: /\b(beats|better than)\s+(the\s+)?(market|s&p|nasdaq)\b/i, message: "Performance comparison — blocked." },
+  { pattern: /\b(beat(s|en)?|better than)\s+(the\s+)?(market|s&p|nasdaq|index)\b/i, message: "Performance comparison — blocked." },
 ];
 
 /**
