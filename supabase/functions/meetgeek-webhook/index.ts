@@ -1239,7 +1239,8 @@ async function runMeetgeekTestEvent(
 
   return {
     ok: true,
-    mode,
+    mode: testMode,
+    ingest_mode: mode,
     gate: rejected ? 'rejected' : 'allowed',
     reason: rejected ? GATE_REJECTION_MESSAGES[rejected] : null,
     activity: data,
