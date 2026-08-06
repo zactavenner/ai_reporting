@@ -167,6 +167,27 @@ async function mgGet(apiKey: string, baseUrl: string, path: string): Promise<any
 }
 
 /**
+ * Resolves the provider webhook signing secret for the raw-body HMAC check ONLY.
+ * Prefers the Deno env secret; falls back to `public.integration_secrets`
+ * (service-role only, RLS enabled, no grants/policies for anon/authenticated).
+ * The value is never logged, returned, or surfaced to any client.
+ */
+async function resolveWebhookSecret(supabase: any): Promise<string> {
+  const envSecret = Deno.env.get('MEETGEEK_WEBHOOK_SECRET');
+  if (envSecret && envSecret.length > 0) return envSecret;
+  try {
+    const { data } = await supabase
+      .from('integration_secrets')
+      .select('secret')
+      .eq('provider', 'meetgeek_webhook')
+      .maybeSingle();
+    return typeof data?.secret === 'string' ? data.secret : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Fetches the real insights KPIs, transcript and summary for a meeting whose
  * calendar mapping has already been validated. Quality scoring consumes ONLY
  * the insights KPI values.
@@ -490,7 +511,7 @@ Deno.serve(async (req) => {
       const result = await ingestMeetgeekWebhook({
         rawBody,
         signatureHeader,
-        secret: Deno.env.get('MEETGEEK_WEBHOOK_SECRET') || '',
+        secret: await resolveWebhookSecret(supabase),
         deps: buildIngestDeps(supabase),
       });
       return jsonResponse(result, result.status);
@@ -556,7 +577,7 @@ Deno.serve(async (req) => {
       if (!clientId) {
         return jsonResponse({ error: 'client_id is required' }, 400);
       }
-      const secretConfigured = !!Deno.env.get('MEETGEEK_WEBHOOK_SECRET');
+      const secretConfigured = (await resolveWebhookSecret(supabase)).length > 0;
       const { apiKey, locationId } = await getMappedGhl(supabase, clientId);
 
       if (body.action === 'mg_list_calendars') {

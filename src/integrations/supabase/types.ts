@@ -11805,6 +11805,27 @@ export type Database = {
           },
         ]
       }
+      integration_secrets: {
+        Row: {
+          created_at: string
+          provider: string
+          secret: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          provider: string
+          secret: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          provider?: string
+          secret?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       integration_status: {
         Row: {
           client_id: string | null
