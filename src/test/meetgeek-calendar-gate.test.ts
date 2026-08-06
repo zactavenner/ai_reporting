@@ -363,9 +363,15 @@ describe('HNWI capital-raising operational QA scorecard', () => {
   it('never scores from duration, recording presence or CRM matching', async () => {
     const { deps, calls } = makeDeps();
     const res = await run(deps);
-    // Rich meeting, matched lead, but no transcript/analytics => nothing earned.
-    expect(res.qaTotal).toBe(0);
-    expect(calls.activities[0].qa_total).toBe(0);
+    // Rich meeting, matched lead, but no transcript/analytics => transcript-derived
+    // categories earn nothing and the row cannot pass.
+    expect(res.qaTotal).toBeLessThan(QA_PASS_THRESHOLD);
+    expect(calls.activities[0].qa_total).toBe(res.qaTotal);
+    const byKey = Object.fromEntries((calls.activities[0].qa_scores as any[]).map((c) => [c.key, c]));
+    for (const key of ['discovery', 'next_step', 'engagement', 'objection_handling']) {
+      expect(byKey[key].points).toBe(0);
+      expect(byKey[key].insufficientEvidence || byKey[key].na).toBe(true);
+    }
     expect(calls.activities[0].qa_gate_status).toBe('manual_review');
     expect(calls.activities[0].qa_evidence_tags).toContain('insufficient_evidence');
   });
