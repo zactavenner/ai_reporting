@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -35,10 +36,7 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
   const configQuery = useQuery({
     queryKey: ['meetgeek-client-config', clientId],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'mg_get_config', client_id: clientId },
-      });
-      if (error) throw error;
+      const data: any = await invokeMeetgeek({ action: 'mg_get_config', client_id: clientId });
       return data as {
         config: Record<string, any> | null;
         location_mapped: boolean;
@@ -50,10 +48,7 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
   const calendarsQuery = useQuery({
     queryKey: ['meetgeek-ghl-calendars', clientId],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'mg_list_calendars', client_id: clientId },
-      });
-      if (error) throw error;
+      const data: any = await invokeMeetgeek({ action: 'mg_list_calendars', client_id: clientId });
       return data as { calendars: { id: string; name: string; isActive: boolean }[]; location_mapped: boolean; error?: string };
     },
   });
@@ -66,17 +61,14 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
 
   const save = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: {
+      const data: any = await invokeMeetgeek({
           action: 'mg_save_config',
           client_id: clientId,
           enabled: effectiveEnabled,
           ghl_calendar_id: effectiveCalendar,
           bot_join_policy: effectivePolicy,
           ingest_mode: effectiveMode,
-        },
-      });
-      if (error) throw error;
+        });
       return data as { success: boolean; error?: string };
     },
     onSuccess: (data) => {
@@ -90,10 +82,7 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
   const runTest = async (mode: 'match' | 'wrong_calendar') => {
     setTesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'mg_test_event', client_id: clientId, mode },
-      });
-      if (error) throw error;
+      const data: any = await invokeMeetgeek({ action: 'mg_test_event', client_id: clientId, mode });
       if (!data?.ok) {
         toast.error(data?.error || 'Test event failed');
       } else {

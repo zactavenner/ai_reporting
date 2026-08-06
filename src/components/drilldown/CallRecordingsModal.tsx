@@ -17,6 +17,7 @@ import {
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -35,10 +36,7 @@ export function CallRecordingsModal({ clientId, open, onOpenChange }: CallRecord
   const handleSyncTranscript = async (callId: string) => {
     setSyncingId(callId);
     try {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'sync_call_transcript', call_id: callId },
-      });
-      if (error) throw error;
+      const data: any = await invokeMeetgeek({ action: 'sync_call_transcript', call_id: callId });
       if (data?.success) {
         toast.success(data.hasTranscript ? 'Transcript synced!' : 'No matching meeting found');
         queryClient.invalidateQueries({ queryKey: ['call-recordings'] });
