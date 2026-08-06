@@ -102,7 +102,10 @@ const TOOLS = [
 async function orChat(body: Record<string, unknown>) {
   let lastErr = "";
   const pref = (body as any).model || (await preferredModel());
-  const chain = [...new Set([...(pref ? [pref as string] : []), ...MODEL_CHAIN])];
+  // UI/settings values may carry a legacy "openrouter/" prefix. OpenRouter
+  // rejects that as an invalid model ID, so strip it before sending.
+  const norm = (m: string) => m.trim().replace(/^openrouter\//, "");
+  const chain = [...new Set([...(pref ? [norm(pref as string)] : []), ...MODEL_CHAIN.map(norm)])];
   for (const model of chain) {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
