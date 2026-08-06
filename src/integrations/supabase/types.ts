@@ -18827,6 +18827,7 @@ export type Database = {
           thumbnail_url: string
         }[]
       }
+      is_reporting_operator: { Args: never; Returns: boolean }
       log_cron_run: {
         Args: {
           p_duration_ms?: number

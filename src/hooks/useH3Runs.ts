@@ -313,6 +313,40 @@ export function useH3ProviderConnection() {
   });
 }
 
+/**
+ * Agency-operator access state. H3 tables are RLS-restricted to JWT subjects
+ * allowlisted in reporting_operator_users, so the client cannot read that
+ * allowlist itself — the server answers instead. Surfaced honestly in the UI:
+ * a non-operator sees a 403, and an empty allowlist sees the bootstrap notice.
+ */
+export type H3Access = {
+  allowed: boolean;
+  code?: "missing_token" | "invalid_token" | "not_operator" | "no_operators_provisioned" | "unreachable";
+  status?: number;
+  error?: string;
+};
+
+export function useH3Access() {
+  return useQuery({
+    queryKey: ["h3-access"],
+    staleTime: 60_000,
+    retry: false,
+    queryFn: async (): Promise<H3Access> => {
+      const { data, error } = await supabase.functions.invoke("h3-provider-poll", {
+        body: { action: "access" },
+      });
+      if (error) {
+        return {
+          allowed: false,
+          code: "unreachable",
+          error: "Operator authorization endpoint unreachable — H3 access cannot be confirmed.",
+        };
+      }
+      return data as H3Access;
+    },
+  });
+}
+
 export function useH3Poll(runId?: string | null) {
   const qc = useQueryClient();
   return useMutation({
