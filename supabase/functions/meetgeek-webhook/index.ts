@@ -489,7 +489,7 @@ Deno.serve(async (req) => {
 
       let aq = supabase
         .from('meeting_call_activity')
-        .select('id, client_id, lead_id, status, title, attendee_email, agent_joined_at, started_at, ended_at, duration_minutes, recording_url, transcript_url, summary, action_items, crm_sync_status, crm_sync_error, error_message, quality_rating, quality_rubric, quality_summary, created_at')
+        .select('id, client_id, lead_id, status, title, attendee_email, agent_joined_at, started_at, ended_at, duration_minutes, recording_url, transcript_url, summary, action_items, crm_sync_status, crm_sync_error, error_message, qa_total, qa_gate_status, qa_scores, qa_evidence_tags, qa_na_redistribution, qa_red_flags, qa_next_step, qa_action_owners, qa_meetgeek_summary, qa_pipeline_outcome, qa_scored_at, created_at')
         .order('created_at', { ascending: false })
         .limit(limit);
       if (clientId) aq = aq.eq('client_id', clientId);

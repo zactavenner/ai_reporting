@@ -27,18 +27,20 @@ interface ActivityRow {
   crm_sync_status: string | null;
   crm_sync_error: string | null;
   error_message: string | null;
-  quality_rating: number | null;
-  quality_rubric: unknown;
-  quality_summary: string | null;
+  qa_total: number | null;
+  qa_gate_status: string | null;
+  qa_scores: unknown;
+  qa_red_flags: unknown;
+  qa_evidence_tags: unknown;
+  qa_pipeline_outcome: string | null;
   created_at: string;
 }
 
-function qualityTone(rating: number): string {
-  if (rating >= 8) return 'text-emerald-600 border-emerald-500/30';
-  if (rating >= 6) return 'text-primary border-primary/30';
-  if (rating >= 4) return 'text-amber-600 border-amber-500/30';
-  return 'text-destructive border-destructive/30';
-}
+const gateMeta: Record<string, { label: string; className: string }> = {
+  pass: { label: 'QA pass', className: 'text-emerald-600 border-emerald-500/30' },
+  manual_review: { label: 'Manual review', className: 'text-amber-600 border-amber-500/30' },
+  fail: { label: 'QA fail', className: 'text-destructive border-destructive/30' },
+};
 
 const statusMeta: Record<string, { label: string; className: string }> = {
   booked: { label: 'Booked', className: 'text-muted-foreground' },
@@ -113,13 +115,13 @@ export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props)
                 </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {typeof row.quality_rating === 'number' && (
+                {typeof row.qa_total === 'number' && row.qa_gate_status && (
                   <Badge
                     variant="outline"
-                    className={qualityTone(row.quality_rating)}
-                    title={row.quality_summary || undefined}
+                    className={gateMeta[row.qa_gate_status]?.className || 'text-muted-foreground'}
+                    title={`${gateMeta[row.qa_gate_status]?.label || row.qa_gate_status} · operational sales-execution QA only`}
                   >
-                    {row.quality_rating}/10
+                    {row.qa_total}/100 · {gateMeta[row.qa_gate_status]?.label || row.qa_gate_status}
                   </Badge>
                 )}
                 <Badge variant="outline" className={status.className}>{status.label}</Badge>
@@ -150,14 +152,37 @@ export function MeetingCallActivityList({ clientId, leadId, limit = 15 }: Props)
 
             {row.summary && <p className="text-xs text-muted-foreground line-clamp-3">{row.summary}</p>}
 
-            {Array.isArray(row.quality_rubric) && (row.quality_rubric as any[]).length > 0 && (
+            {Array.isArray(row.qa_scores) && (row.qa_scores as any[]).length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {(row.quality_rubric as { label: string; points: number; max: number }[]).map((r, i) => (
+                {(row.qa_scores as { label: string; points: number; max: number; na?: boolean; insufficientEvidence?: boolean }[]).map((r, i) => (
                   <span
                     key={i}
-                    className={`text-[10px] border px-1.5 py-0.5 ${r.points >= r.max ? 'text-emerald-600 border-emerald-500/30' : 'text-muted-foreground border-border'}`}
+                    className={`text-[10px] border px-1.5 py-0.5 ${
+                      r.na
+                        ? 'text-muted-foreground border-dashed border-border'
+                        : r.insufficientEvidence
+                          ? 'text-amber-600 border-amber-500/30'
+                          : r.points >= r.max
+                            ? 'text-emerald-600 border-emerald-500/30'
+                            : 'text-muted-foreground border-border'
+                    }`}
                   >
-                    {r.label} {r.points}/{r.max}
+                    {r.label} {r.na ? 'N/A' : `${r.points}/${r.max}`}
+                    {r.insufficientEvidence ? ' · no evidence' : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {Array.isArray(row.qa_red_flags) && (row.qa_red_flags as any[]).length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {(row.qa_red_flags as { code: string; hardFail?: boolean; detail?: string }[]).map((f, i) => (
+                  <span
+                    key={i}
+                    title={f.detail || undefined}
+                    className={`text-[10px] border px-1.5 py-0.5 ${f.hardFail ? 'text-destructive border-destructive/30' : 'text-amber-600 border-amber-500/30'}`}
+                  >
+                    {f.code.replace(/_/g, ' ')}
                   </span>
                 ))}
               </div>

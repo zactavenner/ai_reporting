@@ -4,7 +4,15 @@
 // every client/location value must come from the server-side config row.
 
 import { normalizeEmail, type NormalizedMeeting } from './meetgeekIngest.ts';
-import { scoreMeetingQuality, type MeetingQuality, type QualityRubricItem } from './meetgeekQuality.ts';
+import {
+  scoreCapitalRaisingQA,
+  type QaScorecard,
+  type QaCategoryScore,
+  type QaRedFlag,
+  type QaActionOwner,
+  type QaNextStep,
+  type QaNaRedistribution,
+} from './meetgeekQuality.ts';
 
 export type BotJoinPolicy = 'never' | 'selected_calendar_video_only' | 'all_video_on_calendar';
 
@@ -205,9 +213,17 @@ export interface ActivityRow {
   crm_sync_error: string | null;
   crm_attempts: number;
   error_message: string | null;
-  quality_rating: number | null;
-  quality_rubric: QualityRubricItem[] | null;
-  quality_summary: string | null;
+  qa_total: number | null;
+  qa_gate_status: 'pass' | 'fail' | 'manual_review' | null;
+  qa_scores: QaCategoryScore[];
+  qa_evidence_tags: string[];
+  qa_na_redistribution: QaNaRedistribution | null;
+  qa_red_flags: QaRedFlag[];
+  qa_next_step: QaNextStep | null;
+  qa_action_owners: QaActionOwner[];
+  qa_meetgeek_summary: string | null;
+  qa_pipeline_outcome: string | null;
+  qa_scored_at: string | null;
 }
 
 /** Builds the canonical activity row. Client/location come from config only. */
@@ -225,7 +241,7 @@ export function buildActivityRow(args: {
   crmAttempts?: number;
   errorMessage?: string | null;
   source?: string;
-  quality?: MeetingQuality | null;
+  quality?: QaScorecard | null;
 }): ActivityRow {
   const { config, stage, appointment, meeting } = args;
   return {
@@ -261,9 +277,17 @@ export function buildActivityRow(args: {
     crm_sync_error: args.crmError ?? null,
     crm_attempts: args.crmAttempts ?? 0,
     error_message: args.errorMessage ?? null,
-    quality_rating: args.quality?.rating ?? null,
-    quality_rubric: args.quality?.rubric ?? null,
-    quality_summary: args.quality?.summary ?? null,
+    qa_total: args.quality ? args.quality.total : null,
+    qa_gate_status: args.quality ? args.quality.gateStatus : null,
+    qa_scores: args.quality?.categories ?? [],
+    qa_evidence_tags: args.quality?.evidenceTags ?? [],
+    qa_na_redistribution: args.quality?.naRedistribution ?? null,
+    qa_red_flags: args.quality?.redFlags ?? [],
+    qa_next_step: args.quality?.nextStep ?? null,
+    qa_action_owners: args.quality?.actionOwners ?? [],
+    qa_meetgeek_summary: args.quality?.meetgeekSummary ?? null,
+    qa_pipeline_outcome: args.quality?.pipelineOutcome ?? null,
+    qa_scored_at: args.quality ? new Date().toISOString() : null,
   };
 }
 
@@ -315,7 +339,8 @@ export interface LifecycleResult {
   matched?: boolean;
   crmSyncStatus?: string;
   clientId?: string | null;
-  qualityRating?: number | null;
+  qaTotal?: number | null;
+  qaGateStatus?: 'pass' | 'fail' | 'manual_review' | null;
 }
 
 /**
@@ -327,7 +352,7 @@ export async function processCalendarMeeting(args: {
   noteBuilder: (
     meeting: NormalizedMeeting,
     appointment: CalendarAppointment | null,
-    quality: MeetingQuality | null,
+    quality: QaScorecard | null,
   ) => string;
   deps: LifecycleDeps;
 }): Promise<LifecycleResult> {
@@ -385,8 +410,16 @@ export async function processCalendarMeeting(args: {
   if (deps.enrichMeeting) {
     meeting = await deps.enrichMeeting(config, meeting);
   }
-  // Quality is derived exclusively from provider KPI insights.
-  const quality = scoreMeetingQuality({ insights: meeting.insights ?? null });
+  // Operational QA is derived exclusively from the ACTUAL provider artifacts:
+  // transcript, MeetGeek summary, action items and analytics. Nothing is inferred
+  // from duration, recording presence or CRM matching.
+  const quality = scoreCapitalRaisingQA({
+    transcript: meeting.transcriptText ?? null,
+    summary: meeting.summary ?? null,
+    actionItems: meeting.actionItems ?? [],
+    analytics: meeting.insights ?? null,
+    crm: { leadMatched: !!lead, ghlContactId: lead?.external_id ?? null, noteWritten: false },
+  });
 
   const baseRow = buildActivityRow({
     config,
@@ -461,6 +494,7 @@ export async function processCalendarMeeting(args: {
     matched: !!lead,
     crmSyncStatus: crmStatus,
     clientId: config.clientId,
-    qualityRating: quality.rating,
+    qaTotal: quality.total,
+    qaGateStatus: quality.gateStatus,
   };
 }
