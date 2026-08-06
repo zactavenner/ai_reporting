@@ -42,10 +42,7 @@ export function MeetingContextPanel({ leadId, isOpen, onToggle }: MeetingContext
     queryKey: ['lead-meeting-activity', leadId],
     enabled: !!leadId,
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
-        body: { action: 'mg_activity', lead_id: leadId, limit: 25 },
-      });
-      if (error) throw error;
+      const data = await invokeMeetgeek<any>({ action: 'mg_activity', lead_id: leadId, limit: 25 });
       return {
         meetings: ((data?.meetings || []) as unknown as MeetingContextRow[]).filter((r) => r.meeting_records),
         activityCount: Array.isArray(data?.activity) ? data.activity.length : 0,
