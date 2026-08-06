@@ -19,7 +19,17 @@ function j(b: unknown, s = 200) {
   return new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-function brief(client: any, offer: any) {
+type PromptRow = { key: string; section: string; label: string; prompt: string; sort_order: number; is_active: boolean };
+
+async function loadPrompts(): Promise<PromptRow[]> {
+  const { data } = await supa
+    .from("onboarding_prompts")
+    .select("key, section, label, prompt, sort_order, is_active")
+    .order("sort_order");
+  return ((data || []) as PromptRow[]).filter((r) => r.is_active !== false && String(r.prompt || "").trim());
+}
+
+function brief(client: any, offer: any, prompts: PromptRow[]) {
   const name = client?.name || offer?.fund_name || "the client";
   const facts = [
     ["Client", name],
@@ -42,35 +52,24 @@ function brief(client: any, offer: any) {
     .map(([k, v]) => `- ${k}: ${v}`)
     .join("\n");
 
-  return `Build the COMPLETE onboarding asset suite for ${name} end to end, working with Jeremy AI and the client's specialist agents. Save every deliverable with save_asset (library + AI Studio canvas) as you finish it.
+  const bySection = (s: string) => prompts.filter((p) => p.section === s);
+  const fill = (t: string) => t.replace(/\{\{client_name\}\}/g, name).replace(/\{\{offer_name\}\}/g, offer?.fund_name || name);
+
+  const header = bySection("brief").map((p) => fill(p.prompt)).join("\n\n");
+  const deliverables = bySection("deliverables")
+    .map((p, i) => `${i + 1}. ${fill(p.prompt)}`)
+    .join("\n");
+  const workflow = bySection("workflow").map((p) => fill(p.prompt)).join("\n\n");
+
+  return `${header}
 
 CLIENT FACTS ON FILE:
 ${facts || "- (sparse record — pull what you can from review_assets and the client's agents, never invent numbers)"}
 
 DELIVERABLES (in this order, one save_asset call each):
-1. offer_summary — summary of the offer, the location/market, the unique strategy and the credibility proof.
-2. angles — 5 distinct marketing angles, each with the audience, the core belief being shifted and why it wins.
-3. ad_copy — 5 ad copy variants, each with 3 headline options, primary text and CTA.
-4. nurture_emails — 10 nurture emails (subject + preview + body), sequenced with purpose per email.
-5. appointment_reminders — appointment reminder set: confirmation + 24h + 1h emails AND the matching SMS messages.
-6. vsl — a full VSL script with timestamps and the hook/story/offer/close structure.
-7. video_scripts — 5 video ad scripts (hook, body, CTA, on-screen text, shot notes), written for a female spokesperson around 30.
-8. faq_scripts — 5 FAQ video scripts answering the real objections of this investor profile.
-9. static_ad_brief — the creative direction for the statics, then call generate_static_ads ONCE with count 10. That is the entire static budget: 10 creatives, each on its own concept slot and aspect ratio. Do not call it a second time.
-10. create_client_avatar — create and assign the client avatar: attractive professional female, around 30, warm and credible on camera.
+${deliverables}
 
-HARD OUTPUT LIMITS FOR THIS ONBOARDING (enforced by the tools):
- - Exactly 10 static creatives, all driven by THIS client's offer above — no generic fund filler.
- - Exactly 5 videos, 30 seconds each, natural and full of motion, one per style: podcast clip, street interview, walk-and-talk, cinematic b-roll, split screen (speaker in one half of the frame, supporting visual in the other).
- - When a generator reports its budget is exhausted, that deliverable is done. Never re-run it.
-
-THEN:
-A. Consult Jeremy (ask_jeremy) on the angles, the ad copy and the video scripts BEFORE finalising them, and record_decision with his verdict each time.
-B. request_approval with queue_type "creative_review" for the static ads + avatar (list the creative ids / urls in the payload).
-C. request_approval with queue_type "video_scripts" for the 5 video ad scripts + 5 FAQ scripts.
-D. Poll check_approval. ONLY once the video_scripts approval is "approved" may you produce videos: pick the 5 strongest approved scripts and call generate_video once per style (podcast, street_interview, walk_and_talk, broll, split_screen) with the avatar image, duration 30, 9:16 — then poll check_video_job.
-E. If an approval is rejected, read the rejection reason, rewrite the affected deliverable, save it again and request approval once more.
-F. finish_mission with a markdown report: deliverables saved, creatives generated, Jeremy verdicts, approval states and videos produced.`;
+${workflow}`;
 }
 
 Deno.serve(async (req) => {
@@ -81,6 +80,7 @@ Deno.serve(async (req) => {
 
     const clientId = String(body.client_id || "");
     if (!clientId) return j({ error: "client_id required" }, 400);
+    const prompts = await loadPrompts();
 
     const { data: client } = await supa.from("clients").select("*").eq("id", clientId).maybeSingle();
     if (!client) return j({ error: "client not found" }, 404);
@@ -102,10 +102,18 @@ Deno.serve(async (req) => {
 
     // ---- GATE 1: the offer must be reviewed by a human before any automation.
     if (!offer) {
+      if (body.action === "preview") {
+        return j({ ok: true, prompt: brief(client, null, prompts), offer_id: null });
+      }
       return j({
         error: "No offer on file for this client. Add and review the offer before starting the build.",
         code: "offer_missing",
       }, 409);
+    }
+
+    // Read-only: return the exact prompt this client's build would run with.
+    if (body.action === "preview") {
+      return j({ ok: true, prompt: brief(client, offer, prompts), offer_id: offer.id });
     }
     if (!offer.offer_reviewed_at) {
       return j({
@@ -138,7 +146,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         action: "create",
         title: `Onboarding build — ${client.name}`,
-        goal: brief(client, offer),
+        goal: brief(client, offer, prompts),
         client_id: clientId,
         created_by: body.created_by || null,
         // Budgets do the real limiting now; a tight ceiling stops runaway loops.

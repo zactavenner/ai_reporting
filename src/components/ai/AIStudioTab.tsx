@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { AIStudioCanvas, type CanvasEntry, type CanvasItem, type CanvasPlaceholder, modelLabel } from "./AIStudioCanvas";
 import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { H3RunManager } from "@/components/h3/H3RunManager";
-import { OnboardingDock } from "@/components/onboarding/OnboardingDock";
+import { OnboardingPromptEditor } from "@/components/onboarding/OnboardingPromptEditor";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
@@ -3144,11 +3144,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           </TabsContent>
 
           <TabsContent value="onboarding" className="flex-1 m-0 overflow-hidden p-4 data-[state=active]:flex data-[state=inactive]:hidden">
-            <OnboardingDock
-              clientId={clientId}
-              clientName={clientName}
-              onOpenCanvas={() => setStudioTab("canvas")}
-            />
+            <OnboardingPromptEditor clientId={clientId} clientName={clientName} />
           </TabsContent>
 
         </Tabs>

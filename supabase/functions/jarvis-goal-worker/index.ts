@@ -63,6 +63,38 @@ const VIDEO_STYLES: { slot: string; label: string; direction: string }[] = [
 ];
 
 /** Real remaining budget from the database, per client + kind. */
+/**
+ * The onboarding prompts are operator-editable (public.onboarding_prompts).
+ * Overrides replace the direction/ratio for a static concept or video style slot.
+ */
+async function applyOnboardingPromptOverrides() {
+  const { data } = await supa
+    .from("onboarding_prompts")
+    .select("key, section, prompt, meta, is_active")
+    .in("section", ["statics", "videos"]);
+  for (const row of data || []) {
+    if (row.is_active === false) continue;
+    const slot = String((row.meta as any)?.slot || "");
+    const prompt = String(row.prompt || "").trim();
+    if (!slot || !prompt) continue;
+    if (row.section === "statics") {
+      const c = STATIC_CONCEPTS.find((x) => x.slot === slot);
+      if (c) {
+        c.direction = prompt;
+        const ratio = String((row.meta as any)?.ratio || "");
+        if (ratio) c.ratio = ratio;
+      }
+    } else {
+      const v = VIDEO_STYLES.find((x) => x.slot === slot);
+      if (v) {
+        v.direction = prompt;
+        const label = String((row.meta as any)?.label || "");
+        if (label) v.label = label;
+      }
+    }
+  }
+}
+
 async function remainingBudget(clientId: string, kind: "static" | "video") {
   if (kind === "static") {
     const { count } = await supa
@@ -763,6 +795,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const action = body.action || "tick";
+    await applyOnboardingPromptOverrides().catch((e) => console.error("prompt overrides", e));
 
     if (action === "create") {
       const goalText = String(body.goal || "").trim();
