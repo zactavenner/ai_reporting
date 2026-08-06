@@ -3134,6 +3134,10 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             </div>
           </TabsContent>
 
+          <TabsContent value="h3runs" className="flex-1 m-0 overflow-auto p-4">
+            <H3RunManager clientId={clientId} />
+          </TabsContent>
+
         </Tabs>
       </Card>
       )}
