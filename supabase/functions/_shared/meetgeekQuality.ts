@@ -184,7 +184,7 @@ export interface QaInput {
 // Deterministic language patterns
 // ---------------------------------------------------------------------------
 
-const PROMISSORY = /\b(guarantee[ds]?|guaranteeing|risk[-\s]?free|no\s+risk|can(?:no|')t\s+lose|cannot\s+lose|assured\s+returns?|we\s+promise|i\s+promise\s+you|locked[-\s]in\s+returns?)\b/i;
+const PROMISSORY = /(?<!\b(?:not|never|no|isn't|aren't|cannot|non-)\s?)\b(guarantee[ds]?|guaranteeing|risk[-\s]?free|no\s+risk|can(?:no|')t\s+lose|cannot\s+lose|assured\s+returns?|we\s+promise|i\s+promise\s+you|locked[-\s]in\s+returns?)\b/i;
 const ACCREDITATION_CLAIM = /\b(?:you(?:'re| are)\s+(?:already\s+)?(?:verified|confirmed)\s+accredited|we(?:'ve| have)\s+verified\s+your\s+accreditation|accreditation\s+(?:is\s+)?(?:verified|confirmed)|suitability\s+(?:is\s+)?(?:verified|confirmed|approved)|you(?:'re| are)\s+approved\s+as\s+an\s+accredited\s+investor)\b/i;
 const ADVICE = /\b(?:as\s+your\s+(?:financial|tax|legal)\s+(?:advisor|adviser|attorney)|you\s+should\s+(?:liquidate|sell\s+your|move\s+your\s+401|invest\s+your\s+retirement)|this\s+is\s+tax[-\s]free|i(?:'m| am)\s+advising\s+you\s+legally|my\s+legal\s+advice\s+is)\b/i;
 const FABRICATION = /\b(?:as\s+(?:stated|confirmed|quoted)\s+in\s+the\s+transcript|per\s+the\s+call\s+recording\s+transcript|the\s+transcript\s+shows)\b/i;
