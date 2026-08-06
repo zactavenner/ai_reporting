@@ -202,7 +202,7 @@ export interface ActivityRow {
   crm_attempts: number;
   error_message: string | null;
   quality_rating: number | null;
-  quality_rubric: { label: string; points: number; max: number }[] | null;
+  quality_rubric: QualityRubricItem[] | null;
   quality_summary: string | null;
 }
 
@@ -221,7 +221,7 @@ export function buildActivityRow(args: {
   crmAttempts?: number;
   errorMessage?: string | null;
   source?: string;
-  quality?: { rating: number; rubric: { label: string; points: number; max: number }[]; summary: string } | null;
+  quality?: MeetingQuality | null;
 }): ActivityRow {
   const { config, stage, appointment, meeting } = args;
   return {
@@ -292,6 +292,12 @@ export interface LifecycleDeps {
   upsertActivity(row: ActivityRow): Promise<{ id: string }>;
   patchActivity(id: string, patch: Record<string, unknown>): Promise<void>;
   matchLead(config: MeetgeekClientConfig, emails: string[]): Promise<{ id: string; external_id: string | null; email: string | null } | null>;
+  /**
+   * Authenticated provider fetch for a calendar-VALIDATED meeting: insights KPIs
+   * plus the real transcript/summary. Runs before quality scoring; never called
+   * for rejected meetings.
+   */
+  enrichMeeting?(config: MeetgeekClientConfig, meeting: NormalizedMeeting): Promise<NormalizedMeeting>;
   writeGhlNote(input: { config: MeetgeekClientConfig; contactId: string; note: string }): Promise<{ status: 'written' | 'skipped' | 'error'; error?: string }>;
   touchHealth(clientId: string, patch: Record<string, unknown>): Promise<void>;
 }
@@ -305,7 +311,7 @@ export interface LifecycleResult {
   matched?: boolean;
   crmSyncStatus?: string;
   clientId?: string | null;
-  qualityRating?: number;
+  qualityRating?: number | null;
 }
 
 /**
@@ -314,10 +320,15 @@ export interface LifecycleResult {
  */
 export async function processCalendarMeeting(args: {
   meeting: NormalizedMeeting;
-  noteBuilder: (meeting: NormalizedMeeting, appointment: CalendarAppointment | null) => string;
+  noteBuilder: (
+    meeting: NormalizedMeeting,
+    appointment: CalendarAppointment | null,
+    quality: MeetingQuality | null,
+  ) => string;
   deps: LifecycleDeps;
 }): Promise<LifecycleResult> {
-  const { meeting, deps, noteBuilder } = args;
+  const { deps, noteBuilder } = args;
+  let meeting = args.meeting;
 
   const config = await deps.getConfigForMeeting(meeting);
   if (!config) return { ok: false, status: 403, rejected: 'not_configured', clientId: null };
@@ -329,6 +340,14 @@ export async function processCalendarMeeting(args: {
 
   if (decision.allowed !== true) {
     const reason: GateRejection = decision.reason;
+    // Rejection logs carry hashed identifiers only — never raw calendar ids.
+    console.warn('[meetgeek] gate rejected', JSON.stringify({
+      reason,
+      client: config.clientId,
+      configured_calendar: hashIdForLog(config.ghlCalendarId),
+      seen_calendars: appointments.map((a) => hashIdForLog(a.calendarId)),
+      seen_locations: appointments.map((a) => hashIdForLog(a.locationId)),
+    }));
     const row = buildActivityRow({
       config,
       stage: 'rejected',
@@ -357,7 +376,13 @@ export async function processCalendarMeeting(args: {
   const lead = emails.length ? await deps.matchLead(config, emails) : null;
   const stage: ActivityStage = lead ? 'completed' : 'unmatched';
 
-  const quality = scoreMeetingQuality({ meeting, matched: !!lead });
+  // Provider insights + real transcript/summary are fetched only now, after the
+  // calendar mapping has been validated for this client.
+  if (deps.enrichMeeting) {
+    meeting = await deps.enrichMeeting(config, meeting);
+  }
+  // Quality is derived exclusively from provider KPI insights.
+  const quality = scoreMeetingQuality({ insights: meeting.insights ?? null });
 
   const baseRow = buildActivityRow({
     config,
@@ -394,7 +419,8 @@ export async function processCalendarMeeting(args: {
 
   const contactId = lead?.external_id || appointment.contactId || null;
   if (lead && contactId) {
-    const res = await deps.writeGhlNote({ config, contactId, note: noteBuilder(meeting, appointment) });
+    // Notes are written ONLY for an unambiguous, in-tenant, matched meeting.
+    const res = await deps.writeGhlNote({ config, contactId, note: noteBuilder(meeting, appointment, quality) });
     const next = nextCrmState({ status: res.status, attempts: attemptsSoFar, error: res.error });
     crmStatus = next.crm_sync_status;
     crmError = res.error ?? null;
