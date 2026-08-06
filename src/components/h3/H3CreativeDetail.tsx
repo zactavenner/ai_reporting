@@ -103,10 +103,11 @@ export function H3CreativeDetail({
         <p className="text-[11px] text-muted-foreground mt-1.5">{H3_STATE_HINTS[creative.workflow_state]}</p>
 
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-          <span>External job ID: <span className="font-mono text-foreground">{creative.external_job_id ?? "—"}</span></span>
+          <span>OpenRouter job ID: <span className="font-mono text-foreground">{creative.external_job_id ?? "—"}</span></span>
           <span>Internal generation ID: <span className="font-mono text-foreground">{creative.internal_generation_id.slice(0, 8)}</span></span>
-          <span>Polling ref: <span className="font-mono text-foreground">{creative.polling_ref ?? "—"}</span></span>
-          <span>Provider state: <span className="text-foreground">{creative.provider_status}</span></span>
+          <span className="break-all">Polling URL: <span className="font-mono text-foreground">{creative.polling_ref ?? "—"}</span></span>
+          <span>OpenRouter generation ID: <span className="font-mono text-foreground">{creative.provider_generation_id ?? "—"}</span></span>
+          <span>OpenRouter state: <span className="text-foreground">{creative.provider_status}</span></span>
           <span>Cost: <span className="text-foreground">{creative.cost_amount !== null ? `${creative.cost_amount} ${creative.cost_currency ?? ""}` : "not reported yet"}</span></span>
           <span>Meta ad ID: <span className="font-mono text-foreground">{creative.meta_ad_id ?? "null"}</span></span>
         </div>
@@ -121,14 +122,15 @@ export function H3CreativeDetail({
       {/* Provider-owned controls */}
       {isProviderOwned(creative.workflow_state) && (
         <Card className="p-3 space-y-2">
-          <div className="text-xs font-semibold">Provider status</div>
+          <div className="text-xs font-semibold">OpenRouter status</div>
           {!providerConnected ? (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-400">
               Connection required to resume polling. {connectionReason}
             </div>
           ) : (
             <p className="text-[11px] text-muted-foreground">
-              Polling uses the existing external job ID only. A pending job is never re-submitted.
+              Read-only GET against the existing OpenRouter job ID. A pending job is never
+              re-submitted, and Downloaded is only set once a source asset is verified present.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
