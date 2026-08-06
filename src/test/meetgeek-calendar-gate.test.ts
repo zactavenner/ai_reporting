@@ -9,7 +9,11 @@ import {
   type MeetgeekClientConfig,
 } from '../../supabase/functions/_shared/meetgeekCalendarGate';
 import { normalizeMeetgeekPayload, type NormalizedMeeting } from '../../supabase/functions/_shared/meetgeekIngest';
-import { scoreMeetingQuality } from '../../supabase/functions/_shared/meetgeekQuality';
+import {
+  scoreMeetingQuality,
+  MEETGEEK_KPI_WEIGHTS,
+  type MeetgeekMeetingInsights,
+} from '../../supabase/functions/_shared/meetgeekQuality';
 
 const config: MeetgeekClientConfig = {
   clientId: 'client-1',
@@ -161,44 +165,139 @@ describe('processCalendarMeeting', () => {
   });
 });
 
-describe('ingest modes and quality rubric', () => {
+describe('ingest modes', () => {
+  const cfg: MeetgeekClientConfig = { ...config, mode: 'all_mapped_calendars' };
+
   it('allows any calendar inside the mapped location in all_mapped_calendars mode', () => {
-    const cfg: MeetgeekClientConfig = { ...config, mode: 'all_mapped_calendars' };
     expect(evaluateCalendarGate({ config: cfg, appointments: [appt({ calendarId: 'cal-other' })] }))
       .toMatchObject({ allowed: true });
   });
 
   it('still rejects cross-location bookings in all_mapped_calendars mode', () => {
-    const cfg: MeetgeekClientConfig = { ...config, mode: 'all_mapped_calendars' };
     expect(evaluateCalendarGate({ config: cfg, appointments: [appt({ locationId: 'loc-other' })] }))
       .toMatchObject({ allowed: false, reason: 'cross_client_location' });
   });
 
-  it('does not require a selected calendar in all_mapped_calendars mode', () => {
-    const cfg: MeetgeekClientConfig = { ...config, mode: 'all_mapped_calendars', ghlCalendarId: null };
-    expect(evaluateCalendarGate({ config: cfg, appointments: [appt({ calendarId: 'cal-x' })] }))
-      .toMatchObject({ allowed: true });
+  it('rejects an appointment with a MISSING location in all_mapped_calendars mode', () => {
+    expect(evaluateCalendarGate({ config: cfg, appointments: [appt({ locationId: null })] }))
+      .toMatchObject({ allowed: false, reason: 'appointment_location_missing' });
   });
 
-  it('stores a deterministic quality rating on the activity row', async () => {
+  it('rejects an unknown calendar in selected_calendar mode with an explicit code', () => {
+    expect(evaluateCalendarGate({ config, appointments: [appt({ calendarId: null })] }))
+      .toMatchObject({ allowed: false, reason: 'unknown_calendar' });
+  });
+
+  it('does not require a selected calendar in all_mapped_calendars mode', () => {
+    expect(evaluateCalendarGate({ config: { ...cfg, ghlCalendarId: null }, appointments: [appt({ calendarId: 'cal-x' })] }))
+      .toMatchObject({ allowed: true });
+  });
+});
+
+const insights = (kpis: Record<string, number | null>, extra: Partial<MeetgeekMeetingInsights> = {}): MeetgeekMeetingInsights => ({
+  kpis: kpis as any,
+  actionItemsTotal: 4,
+  actionItemsWithOwner: 3,
+  ...extra,
+});
+
+const allEight = {
+  engagement: 4,
+  productivity: 3,
+  agenda_follow_through: 5,
+  clear_project_scope: 2,
+  risk_awareness: 1,
+  task_ownership: 4,
+  milestones_identified: 3,
+  speaker_distribution: 5,
+};
+
+describe('quality rubric (provider insights only)', () => {
+  it('weights all eight KPIs exactly', () => {
+    const q = scoreMeetingQuality({ insights: insights(allEight) });
+    const expected = Object.entries(allEight)
+      .reduce((s, [k, v]) => s + (MEETGEEK_KPI_WEIGHTS as any)[k] * ((v / 5) * 10), 0);
+    expect(q.rating).toBe(Math.round(expected * 10) / 10);
+    expect(q.availableWeight).toBe(1);
+    expect(q.rubric).toHaveLength(8);
+    expect(q.rubric!.every((r) => typeof r.weight === 'number' && r.value !== null)).toBe(true);
+  });
+
+  it('keeps an all-zero meeting at exactly 0 and never forces a 1', () => {
+    const zeros = Object.fromEntries(Object.keys(allEight).map((k) => [k, 0]));
+    const q = scoreMeetingQuality({ insights: insights(zeros) });
+    expect(q.rating).toBe(0);
+    expect(q.rubric!.every((r) => r.score === 0)).toBe(true);
+  });
+
+  it('returns null when no insights are present', () => {
+    const q = scoreMeetingQuality({ insights: null });
+    expect(q.rating).toBeNull();
+    expect(q.rubric).toBeNull();
+    expect(q.summary).toBe('insufficient source data');
+  });
+
+  it('refuses to score when more than 30% of weight is missing', () => {
+    // engagement (20%) + task_ownership (20%) + productivity (15%) = 55% available.
+    const q = scoreMeetingQuality({
+      insights: insights({ engagement: 4, task_ownership: 4, productivity: 4 }),
+    });
+    expect(q.missingWeight).toBeGreaterThan(0.3);
+    expect(q.rating).toBeNull();
+    expect(q.summary).toBe('insufficient source data');
+  });
+
+  it('scores from partial data when missing weight is within 30%', () => {
+    const partial = { ...allEight } as Record<string, number | null>;
+    delete partial.risk_awareness;      // 5%
+    delete partial.speaker_distribution; // 5%
+    delete partial.milestones_identified; // 10%
+    const q = scoreMeetingQuality({ insights: insights(partial) });
+    expect(q.missingWeight).toBeCloseTo(0.2, 5);
+    expect(q.rating).not.toBeNull();
+  });
+
+  it('summary reports the two lowest categories and action-owner coverage', () => {
+    const q = scoreMeetingQuality({ insights: insights(allEight) });
+    expect(q.summary).toContain('Risk awareness');
+    expect(q.summary).toContain('Clear project scope');
+    expect(q.summary).toContain('3/4 action items have an owner');
+    expect(q.summary).toContain('speaker distribution');
+  });
+
+  it('never infers quality from duration, summary length, artifacts or lead matching', async () => {
     const { deps, calls } = makeDeps();
     const res = await run(deps);
-    expect(res.qualityRating).toBeGreaterThanOrEqual(1);
+    // Rich meeting, matched lead, but no provider insights => no score at all.
+    expect(res.qualityRating).toBeNull();
+    expect(calls.activities[0].quality_rating).toBeNull();
+    expect(calls.activities[0].quality_summary).toBe('insufficient source data');
+  });
+
+  it('scores only after the calendar-validated provider enrichment runs', async () => {
+    const order: string[] = [];
+    const { deps, calls } = makeDeps({
+      findAppointments: async () => { order.push('gate'); return [appt()]; },
+      enrichMeeting: async (_c, m) => {
+        order.push('enrich');
+        return { ...m, insights: insights(allEight) };
+      },
+    });
+    const res = await run(deps);
+    expect(order).toEqual(['gate', 'enrich']);
+    expect(res.qualityRating).toBeGreaterThan(0);
     expect(calls.activities[0].quality_rating).toBe(res.qualityRating);
     expect(Array.isArray(calls.activities[0].quality_rubric)).toBe(true);
   });
 
-  it('rates a matched, artifact-rich meeting higher than a bare unmatched one', () => {
-    const rich = scoreMeetingQuality({
-      meeting: { ...meeting, durationMinutes: 32, summary: 'x'.repeat(700), actionItems: ['a', 'b', 'c'], recordingUrl: 'https://r', transcriptUrl: 'https://t' },
-      matched: true,
+  it('does not enrich or score a gate-rejected meeting', async () => {
+    let enriched = false;
+    const { deps } = makeDeps({
+      findAppointments: async () => [appt({ calendarId: 'cal-other' })],
+      enrichMeeting: async (_c, m) => { enriched = true; return m; },
     });
-    const bare = scoreMeetingQuality({
-      meeting: { ...meeting, durationMinutes: 1, summary: null, actionItems: [], recordingUrl: null, transcriptUrl: null, sourceUrl: null },
-      matched: false,
-    });
-    expect(rich.rating).toBeGreaterThan(bare.rating);
-    expect(bare.rating).toBeGreaterThanOrEqual(1);
-    expect(rich.rating).toBeLessThanOrEqual(10);
+    const res = await run(deps);
+    expect(res.ok).toBe(false);
+    expect(enriched).toBe(false);
   });
 });
