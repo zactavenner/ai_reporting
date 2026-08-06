@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildMeetingNote,
+  classifyMeetgeekMessage,
   computeDedupeKey,
+  hydrateMeetingFromProvider,
   ingestMeetgeekWebhook,
   matchLeadByEmail,
   normalizeEmail,
@@ -72,6 +74,134 @@ describe('normalizeMeetgeekPayload', () => {
   it('flags in-progress meetings as not completed', () => {
     const m = normalizeMeetgeekPayload({ meeting_id: 'x', status: 'recording' })!;
     expect(m.isCompleted).toBe(false);
+  });
+});
+
+describe('completion-message webhook (message-only payload)', () => {
+  const successBody = JSON.stringify({
+    message: 'File analyzed successfully',
+    meeting_id: 'mtg_msg_1',
+  });
+  const providerMeeting = {
+    meeting_id: 'mtg_msg_1',
+    event_id: 'cal_evt_77',
+    title: 'Provider Title — Capital Call',
+    timestamp_start_utc: '2026-03-02T15:00:00Z',
+    timestamp_end_utc: '2026-03-02T15:28:00Z',
+    host_email: 'Rep@Agency.com',
+    language: 'en',
+    meeting_url: 'https://zoom.us/j/999',
+    participants: [{ name: 'Jane Investor', email: 'JANE@acme.com' }],
+  };
+
+  it('recognizes the success message as completed and needing hydration', () => {
+    expect(classifyMeetgeekMessage('File analyzed successfully')).toBe('analyzed');
+    const m = normalizeMeetgeekPayload(JSON.parse(successBody))!;
+    expect(m.isCompleted).toBe(true);
+    expect(m.hydrationRequired).toBe(true);
+    expect(m.analysisFailed).toBe(false);
+    expect(m.startedAt).toBeNull();
+  });
+
+  it('hydrates from the provider before the calendar gate and gates on provider data only', async () => {
+    const seen: any[] = [];
+    const { deps, calls } = makeDeps({
+      hydrateFromProvider: async (m) => hydrateMeetingFromProvider(m, providerMeeting),
+      calendarGate: async (m) => {
+        seen.push(m);
+        return { ok: true, status: 200, clientId: 'gated-client', matched: true, crmSyncStatus: 'written', activityId: 'act-1' };
+      },
+    });
+    const res = await ingestMeetgeekWebhook({
+      rawBody: successBody, signatureHeader: await sign(successBody), secret: SECRET, deps,
+    });
+    expect(res.ok).toBe(true);
+    expect(seen).toHaveLength(1);
+    // gate saw hydrated provider values, not webhook values
+    expect(seen[0].startedAt).toBe('2026-03-02T15:00:00.000Z');
+    expect(seen[0].durationMinutes).toBe(28);
+    expect(seen[0].title).toBe('Provider Title — Capital Call');
+    expect(seen[0].eventId).toBe('cal_evt_77');
+    expect(seen[0].hostEmail).toBe('rep@agency.com');
+    expect(seen[0].participants.map((p: any) => p.email)).toEqual(['jane@acme.com']);
+    expect(seen[0].sourceUrl).toBe('https://zoom.us/j/999');
+    expect(calls.meetings[0].c).toBe('gated-client');
+  });
+
+  it('fails closed when provider hydration returns nothing', async () => {
+    const gate = { calls: 0 };
+    const { deps, calls } = makeDeps({
+      hydrateFromProvider: async () => null,
+      calendarGate: async () => { gate.calls++; return { ok: true, status: 200, clientId: 'c' }; },
+    });
+    const res = await ingestMeetgeekWebhook({
+      rawBody: successBody, signatureHeader: await sign(successBody), secret: SECRET, deps,
+    });
+    expect(res).toMatchObject({ ok: false, status: 422, reason: 'provider_hydration_failed' });
+    expect(gate.calls).toBe(0);
+    expect(calls.meetings).toHaveLength(0);
+    expect(calls.notes).toHaveLength(0);
+    expect(calls.updates.at(-1).status).toBe('rejected');
+  });
+
+  it('ignores a failed-analysis message with no CRM write', async () => {
+    const raw = JSON.stringify({ message: 'File analysis failed', meeting_id: 'mtg_bad' });
+    const hydrate = { calls: 0 };
+    const { deps, calls } = makeDeps({
+      hydrateFromProvider: async (m) => { hydrate.calls++; return m; },
+      calendarGate: async () => ({ ok: true, status: 200, clientId: 'c' }),
+    });
+    const res = await ingestMeetgeekWebhook({ rawBody: raw, signatureHeader: await sign(raw), secret: SECRET, deps });
+    expect(res).toMatchObject({ ok: true, status: 202, reason: 'analysis_failed' });
+    expect(hydrate.calls).toBe(0);
+    expect(calls.meetings).toHaveLength(0);
+    expect(calls.notes).toHaveLength(0);
+    expect(calls.updates.at(-1).status).toBe('ignored');
+  });
+
+  it('blocks an invalid signature before the provider fetch', async () => {
+    const hydrate = { calls: 0 };
+    const { deps, calls } = makeDeps({
+      hydrateFromProvider: async (m) => { hydrate.calls++; return m; },
+    });
+    const res = await ingestMeetgeekWebhook({
+      rawBody: successBody, signatureHeader: await sign(successBody, 'wrong-secret'), secret: SECRET, deps,
+    });
+    expect(res).toMatchObject({ ok: false, status: 401, reason: 'invalid_signature' });
+    expect(hydrate.calls).toBe(0);
+    expect(calls.events).toHaveLength(0);
+  });
+
+  it('refuses ingestion when no enabled client config passes the gate', async () => {
+    const { deps, calls } = makeDeps({
+      hydrateFromProvider: async (m) => hydrateMeetingFromProvider(m, providerMeeting),
+      calendarGate: async () => ({ ok: false, status: 403, rejected: 'not_configured', clientId: null }),
+    });
+    const res = await ingestMeetgeekWebhook({
+      rawBody: successBody, signatureHeader: await sign(successBody), secret: SECRET, deps,
+    });
+    expect(res).toMatchObject({ ok: false, status: 403, reason: 'not_configured' });
+    expect(calls.meetings).toHaveLength(0);
+    expect(calls.notes).toHaveLength(0);
+  });
+
+  it('ignores any client_id / tenant hint supplied in the webhook body', async () => {
+    const raw = JSON.stringify({
+      message: 'File analyzed successfully',
+      meeting_id: 'mtg_msg_1',
+      client_id: 'attacker-client',
+      title: 'Attacker Title',
+      timestamp_start_utc: '2020-01-01T00:00:00Z',
+    });
+    const { deps, calls } = makeDeps({
+      hydrateFromProvider: async (m) => hydrateMeetingFromProvider(m, providerMeeting),
+      calendarGate: async () => ({ ok: true, status: 200, clientId: 'gated-client', matched: true, activityId: 'a1' }),
+    });
+    const res = await ingestMeetgeekWebhook({ rawBody: raw, signatureHeader: await sign(raw), secret: SECRET, deps });
+    expect(res.clientId).toBe('gated-client');
+    expect(calls.meetings[0].c).toBe('gated-client');
+    expect(calls.meetings[0].m.title).toBe('Provider Title — Capital Call');
+    expect(calls.meetings[0].m.startedAt).toBe('2026-03-02T15:00:00.000Z');
   });
 });
 
