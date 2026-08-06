@@ -15113,6 +15113,54 @@ export type Database = {
           },
         ]
       }
+      onboarding_prompts: {
+        Row: {
+          created_at: string
+          default_prompt: string
+          description: string | null
+          id: string
+          is_active: boolean
+          key: string
+          label: string
+          meta: Json
+          prompt: string
+          section: string
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          default_prompt: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          label: string
+          meta?: Json
+          prompt: string
+          section: string
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          default_prompt?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          meta?: Json
+          prompt?: string
+          section?: string
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       onboarding_stage_progress: {
         Row: {
           client_id: string
