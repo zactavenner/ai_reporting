@@ -38,6 +38,17 @@ export interface NormalizedMeeting {
   insights?: MeetgeekMeetingInsights | null;
   /** Full transcript text fetched from the provider (never used for scoring). */
   transcriptText?: string | null;
+  /**
+   * True when the webhook told us analysis FAILED. Such payloads are recorded
+   * as ignored and never reach the calendar gate or any CRM write.
+   */
+  analysisFailed?: boolean;
+  /**
+   * True when the webhook carried no authoritative timing (e.g. MeetGeek's
+   * `{ message: "File analyzed successfully", meeting_id }` payload). The
+   * provider must be fetched before the calendar gate can run.
+   */
+  hydrationRequired?: boolean;
 }
 
 export interface LeadRow {
@@ -56,6 +67,13 @@ export interface LeadMatch {
 }
 
 export interface IngestDeps {
+  /**
+   * Authenticated `GET /v1/meetings/{meeting_id}` hydration using the private
+   * agency-level MeetGeek credentials. Runs AFTER signature verification and
+   * BEFORE the calendar gate. Returning null fails closed for payloads that
+   * carried no authoritative meeting data.
+   */
+  hydrateFromProvider?(meeting: NormalizedMeeting): Promise<NormalizedMeeting | null>;
   /**
    * Optional per-client calendar gate. When provided it is the sole authority for
    * which client a meeting belongs to and whether it may be ingested at all.
@@ -207,7 +225,8 @@ function normalizeActionItems(raw: unknown): string[] {
 }
 
 function normalizeParticipants(payload: Record<string, any>): MeetgeekParticipant[] {
-  const raw = payload.participants || payload.attendees || payload.meeting?.participants || [];
+  const raw = payload.participants || payload.attendees || payload.participant_emails
+    || payload.attendee_emails || payload.meeting?.participants || [];
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const out: MeetgeekParticipant[] = [];
@@ -220,6 +239,21 @@ function normalizeParticipants(payload: Record<string, any>): MeetgeekParticipan
     out.push({ name, email, role: typeof p === 'string' ? null : firstString(p?.role) });
   }
   return out;
+}
+
+/**
+ * Classifies MeetGeek's post-processing `message` field. The documented
+ * successful-analysis payload can be nothing more than
+ * `{ message: "File analyzed successfully", meeting_id: "..." }`.
+ */
+export function classifyMeetgeekMessage(message: unknown): 'analyzed' | 'failed' | null {
+  if (typeof message !== 'string') return null;
+  const text = message.trim().toLowerCase();
+  if (!text) return null;
+  if (/(fail|error|unsuccessful|could not|cannot|unable)/.test(text)) return 'failed';
+  if (/analy[sz]\w*/.test(text) && /(success|complete|done|finish)/.test(text)) return 'analyzed';
+  if (/^file analyzed successfully$/.test(text)) return 'analyzed';
+  return null;
 }
 
 /** Normalizes a MeetGeek webhook payload into our canonical meeting shape. */
@@ -239,8 +273,14 @@ export function normalizeMeetgeekPayload(payload: Record<string, any>): Normaliz
     durationMinutes = Math.round(meeting.duration);
   }
 
-  const status = firstString(payload?.status, meeting?.status, payload?.event, payload?.event_type);
-  const isCompleted = !!endedAt || /complete|analyz|finish|end/i.test(status || '');
+  const messageKind = classifyMeetgeekMessage(payload?.message ?? meeting?.message);
+  const status = firstString(
+    payload?.status, meeting?.status, payload?.event, payload?.event_type,
+    messageKind === 'analyzed' ? 'analysis_completed' : messageKind === 'failed' ? 'analysis_failed' : null,
+  );
+  const analysisFailed = messageKind === 'failed';
+  const isCompleted = !analysisFailed
+    && (!!endedAt || messageKind === 'analyzed' || /complete|analyz|finish|end/i.test(status || ''));
 
   const summaryRaw = firstString(
     payload?.summary, meeting?.summary, payload?.summary_text, meeting?.summary_text,
@@ -268,6 +308,57 @@ export function normalizeMeetgeekPayload(payload: Record<string, any>): Normaliz
     // authenticated provider fetch fills this in after the calendar gate.
     insights: parseMeetgeekInsights(payload?.insights ?? payload?.kpis ?? null),
     transcriptText: null,
+    analysisFailed,
+    // Message-only / timing-free payloads carry no authority: the provider must
+    // be fetched before the calendar gate can evaluate anything.
+    hydrationRequired: !startedAt || !endedAt,
+  };
+}
+
+/**
+ * Merges an authenticated `GET /v1/meetings/{id}` response onto the canonical
+ * meeting. The provider response is the ONLY authority for timing, title,
+ * host, calendar event id, join link and participants — webhook-supplied
+ * values for those fields are discarded.
+ */
+export function hydrateMeetingFromProvider(
+  meeting: NormalizedMeeting,
+  provider: Record<string, any> | null | undefined,
+): NormalizedMeeting | null {
+  if (!provider || typeof provider !== 'object') return null;
+  const body = (provider.meeting && typeof provider.meeting === 'object') ? provider.meeting : provider;
+
+  const startedAt = toIso(firstString(body?.timestamp_start_utc, body?.start_time, body?.started_at));
+  const endedAt = toIso(firstString(body?.timestamp_end_utc, body?.end_time, body?.ended_at));
+  if (!startedAt) return null;
+
+  let durationMinutes: number | null = null;
+  if (startedAt && endedAt) {
+    durationMinutes = Math.max(0, Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000));
+  } else if (typeof body?.duration === 'number') {
+    durationMinutes = Math.round(body.duration);
+  }
+
+  const participants = normalizeParticipants(body);
+  const joinUrl = firstString(body?.meeting_url, body?.join_url, body?.source_url, body?.meetgeek_url);
+
+  return {
+    ...meeting,
+    // identity stays pinned to the verified webhook meeting id
+    meetingExternalId: meeting.meetingExternalId,
+    eventId: firstString(body?.event_id, body?.calendar_event_id, body?.external_event_id) ?? meeting.eventId,
+    title: firstString(body?.title, body?.name),
+    startedAt,
+    endedAt,
+    durationMinutes,
+    language: firstString(body?.language),
+    hostEmail: normalizeEmail(firstString(body?.host_email, body?.host?.email)),
+    participants,
+    sourceUrl: joinUrl || `https://app.meetgeek.ai/meetings/${meeting.meetingExternalId}`,
+    recordingUrl: firstString(body?.recording_url, body?.video_url) ?? meeting.recordingUrl,
+    transcriptUrl: firstString(body?.transcript_url) ?? meeting.transcriptUrl,
+    isCompleted: true,
+    hydrationRequired: false,
   };
 }
 
@@ -409,7 +500,7 @@ export async function ingestMeetgeekWebhook(args: {
     return { ok: false, status: 400, reason: 'invalid_json' };
   }
 
-  const meeting = normalizeMeetgeekPayload(payload);
+  let meeting = normalizeMeetgeekPayload(payload);
   if (!meeting) {
     return { ok: false, status: 400, reason: 'missing_meeting_id' };
   }
@@ -431,9 +522,29 @@ export async function ingestMeetgeekWebhook(args: {
   });
 
   try {
+    if (meeting.analysisFailed) {
+      await deps.updateEvent(event.id, { status: 'ignored', errorMessage: 'analysis_failed' });
+      return { ok: true, status: 202, reason: 'analysis_failed' };
+    }
     if (!meeting.isCompleted) {
       await deps.updateEvent(event.id, { status: 'ignored', errorMessage: 'meeting_not_completed' });
       return { ok: true, status: 202, reason: 'meeting_not_completed' };
+    }
+
+    // Authoritative provider hydration BEFORE any client/calendar matching.
+    // The webhook is never trusted for tenant, calendar, timing or title.
+    if (deps.hydrateFromProvider) {
+      const hydrated = await deps.hydrateFromProvider(meeting);
+      if (hydrated) {
+        meeting = hydrated;
+      } else if (meeting.hydrationRequired) {
+        // Fail closed: nothing authoritative to gate on.
+        await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_failed' });
+        return { ok: false, status: 422, reason: 'provider_hydration_failed' };
+      }
+    } else if (meeting.hydrationRequired) {
+      await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_unavailable' });
+      return { ok: false, status: 422, reason: 'provider_hydration_unavailable' };
     }
 
     // Per-client calendar gate (production path). Rejects unconfigured,

@@ -7,6 +7,7 @@ import {
   MEETGEEK_SIGNATURE_HEADER,
   normalizeEmail,
   buildMeetingNote,
+  hydrateMeetingFromProvider,
   type IngestDeps,
   type LeadRow,
   type NormalizedMeeting,
@@ -136,6 +137,23 @@ async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<{ ap
   const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
   if (!apiKey) return null;
   return { apiKey, baseUrl: getBaseUrl(apiKey.startsWith('eu-') ? 'eu' : 'us') };
+}
+
+/**
+ * Agency-level (private) MeetGeek credentials. Used for the pre-gate
+ * `GET /v1/meetings/{id}` hydration, where no client is known yet — so no
+ * client-scoped key may be consulted.
+ */
+async function resolveAgencyMeetgeekApi(supabase: any): Promise<{ apiKey: string; baseUrl: string } | null> {
+  const { data: agency } = await supabase
+    .from('agency_settings')
+    .select('meetgeek_api_key')
+    .limit(1)
+    .maybeSingle();
+  const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
+  if (!apiKey) return null;
+  const region = (Deno.env.get('MEETGEEK_REGION') || (apiKey.startsWith('eu-') ? 'eu' : 'us')).toLowerCase();
+  return { apiKey, baseUrl: getBaseUrl(region) };
 }
 
 async function mgGet(apiKey: string, baseUrl: string, path: string): Promise<any | null> {
@@ -305,6 +323,20 @@ function buildLifecycleDeps(supabase: any): LifecycleDeps {
 // ---------------------------------------------------------------------------
 function buildIngestDeps(supabase: any): IngestDeps {
   return {
+    // Pre-gate hydration: MeetGeek's completion webhook may only contain
+    // `{ message: "File analyzed successfully", meeting_id }`. We fetch the
+    // real meeting from the provider with the private agency key and treat
+    // that response as the sole authority for timing/title/host/attendees.
+    async hydrateFromProvider(meeting: NormalizedMeeting) {
+      const api = await resolveAgencyMeetgeekApi(supabase);
+      if (!api) return null;
+      const raw = await mgGet(
+        api.apiKey,
+        api.baseUrl,
+        `/v1/meetings/${encodeURIComponent(meeting.meetingExternalId)}`,
+      );
+      return hydrateMeetingFromProvider(meeting, raw);
+    },
     // Production path: per-client calendar gating + client-scoped call activity.
     async calendarGate(meeting: NormalizedMeeting) {
       const lifecycle = buildLifecycleDeps(supabase);
