@@ -522,9 +522,29 @@ export async function ingestMeetgeekWebhook(args: {
   });
 
   try {
+    if (meeting.analysisFailed) {
+      await deps.updateEvent(event.id, { status: 'ignored', errorMessage: 'analysis_failed' });
+      return { ok: true, status: 202, reason: 'analysis_failed' };
+    }
     if (!meeting.isCompleted) {
       await deps.updateEvent(event.id, { status: 'ignored', errorMessage: 'meeting_not_completed' });
       return { ok: true, status: 202, reason: 'meeting_not_completed' };
+    }
+
+    // Authoritative provider hydration BEFORE any client/calendar matching.
+    // The webhook is never trusted for tenant, calendar, timing or title.
+    if (deps.hydrateFromProvider) {
+      const hydrated = await deps.hydrateFromProvider(meeting);
+      if (hydrated) {
+        meeting = hydrated;
+      } else if (meeting.hydrationRequired) {
+        // Fail closed: nothing authoritative to gate on.
+        await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_failed' });
+        return { ok: false, status: 422, reason: 'provider_hydration_failed' };
+      }
+    } else if (meeting.hydrationRequired) {
+      await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_unavailable' });
+      return { ok: false, status: 422, reason: 'provider_hydration_unavailable' };
     }
 
     // Per-client calendar gate (production path). Rejects unconfigured,
