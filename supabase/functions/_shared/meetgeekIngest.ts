@@ -1,6 +1,12 @@
 // Shared, dependency-injected MeetGeek ingestion core.
 // Pure logic lives here so it can be unit-tested outside the Deno runtime.
 
+import {
+  parseMeetgeekInsights,
+  type MeetgeekMeetingInsights,
+  type MeetingQuality,
+} from './meetgeekQuality.ts';
+
 export interface MeetgeekParticipant {
   name?: string | null;
   email?: string | null;
@@ -24,6 +30,14 @@ export interface NormalizedMeeting {
   transcriptUrl: string | null;
   recordingUrl: string | null;
   sourceUrl: string | null;
+  /**
+   * Provider KPI insights (`GET /v1/meetings/{id}/insights`). This is the ONLY
+   * input allowed to drive the quality score. Null until the authenticated
+   * provider fetch has run for a calendar-validated meeting.
+   */
+  insights?: MeetgeekMeetingInsights | null;
+  /** Full transcript text fetched from the provider (never used for scoring). */
+  transcriptText?: string | null;
 }
 
 export interface LeadRow {
