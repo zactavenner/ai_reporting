@@ -10773,6 +10773,7 @@ export type Database = {
           prompt: string | null
           provider: string
           provider_error: string | null
+          provider_generation_id: string | null
           provider_status: string
           rejection_category:
             | Database["public"]["Enums"]["h3_rejection_category"]
@@ -10822,6 +10823,7 @@ export type Database = {
           prompt?: string | null
           provider?: string
           provider_error?: string | null
+          provider_generation_id?: string | null
           provider_status?: string
           rejection_category?:
             | Database["public"]["Enums"]["h3_rejection_category"]
@@ -10871,6 +10873,7 @@ export type Database = {
           prompt?: string | null
           provider?: string
           provider_error?: string | null
+          provider_generation_id?: string | null
           provider_status?: string
           rejection_category?:
             | Database["public"]["Enums"]["h3_rejection_category"]
