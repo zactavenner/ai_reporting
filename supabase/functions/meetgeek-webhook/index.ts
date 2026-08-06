@@ -1159,7 +1159,7 @@ async function processMeeting(supabase: any, apiKey: string, baseUrl: string, me
 async function runMeetgeekTestEvent(
   supabase: any,
   clientId: string,
-  mode: 'match' | 'wrong_calendar' | 'wrong_client',
+  testMode: 'match' | 'wrong_calendar' | 'wrong_client',
 ): Promise<Record<string, unknown>> {
   const config = await loadMeetgeekConfig(supabase, clientId);
   if (!config) {
