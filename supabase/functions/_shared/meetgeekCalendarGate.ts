@@ -132,6 +132,10 @@ export function evaluateCalendarGate(args: {
     onSelected = inLocation.filter((a) => !!a.calendarId);
     if (onSelected.length === 0) return { allowed: false, reason: 'unknown_calendar' };
   } else {
+    // A booking without a calendar id can never be proven to be the selected one.
+    if (inLocation.some((a) => !a.calendarId)) {
+      return { allowed: false, reason: 'unknown_calendar' };
+    }
     onSelected = inLocation.filter((a) => a.calendarId === config.ghlCalendarId);
     if (onSelected.length === 0) return { allowed: false, reason: 'calendar_not_selected' };
   }
