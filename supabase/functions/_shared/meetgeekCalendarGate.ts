@@ -4,7 +4,7 @@
 // every client/location value must come from the server-side config row.
 
 import { normalizeEmail, type NormalizedMeeting } from './meetgeekIngest.ts';
-import { scoreMeetingQuality } from './meetgeekQuality.ts';
+import { scoreMeetingQuality, type MeetingQuality, type QualityRubricItem } from './meetgeekQuality.ts';
 
 export type BotJoinPolicy = 'never' | 'selected_calendar_video_only' | 'all_video_on_calendar';
 
@@ -48,6 +48,8 @@ export type GateRejection =
   | 'mapping_invalid'
   | 'no_calendar_selected'
   | 'calendar_not_selected'
+  | 'unknown_calendar'
+  | 'appointment_location_missing'
   | 'cross_client_location'
   | 'ambiguous_appointment'
   | 'appointment_not_found'
@@ -64,12 +66,30 @@ export const GATE_REJECTION_MESSAGES: Record<GateRejection, string> = {
   mapping_invalid: 'The HighLevel location mapping for this client is invalid — re-validate it in Settings.',
   no_calendar_selected: 'No HighLevel calendar has been selected for this client.',
   calendar_not_selected: 'The booking is not on the calendar selected for this client.',
+  unknown_calendar: 'The booking is on a calendar that is not part of this client’s mapped location.',
+  appointment_location_missing: 'The booking returned no HighLevel location, so tenant ownership cannot be proven.',
   cross_client_location: 'The booking belongs to a different HighLevel location than this client.',
   ambiguous_appointment: 'More than one calendar booking matched this meeting — refusing to guess.',
   appointment_not_found: 'No booking on the selected calendar matched this meeting.',
   not_video_meeting: 'The booking has no video conferencing link.',
   bot_join_disabled: 'The bot-join policy for this client is set to never join.',
 };
+
+/**
+ * Non-reversible short digest so rejection logs can be correlated without ever
+ * printing a raw HighLevel calendar/location identifier.
+ */
+export function hashIdForLog(value: string | null | undefined): string {
+  if (!value) return 'none';
+  let h1 = 0x811c9dc5;
+  let h2 = 0x1000193;
+  for (let i = 0; i < value.length; i++) {
+    h1 = (h1 ^ value.charCodeAt(i)) >>> 0;
+    h1 = Math.imul(h1, 0x01000193) >>> 0;
+    h2 = (h2 + Math.imul(value.charCodeAt(i) + i, 0x85ebca6b)) >>> 0;
+  }
+  return `cal_${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+}
 
 /**
  * Decides whether a MeetGeek meeting may be ingested for a client, based ONLY on
@@ -98,11 +118,23 @@ export function evaluateCalendarGate(args: {
   if (appointments.some((a) => a.locationId && a.locationId !== config.ghlLocationId)) {
     return { allowed: false, reason: 'cross_client_location' };
   }
+  // A missing location can NEVER be treated as "probably ours".
+  if (appointments.some((a) => !a.locationId)) {
+    return { allowed: false, reason: 'appointment_location_missing' };
+  }
 
-  const onSelected = mode === 'all_mapped_calendars'
-    ? appointments.filter((a) => a.locationId === config.ghlLocationId || !a.locationId)
-    : appointments.filter((a) => a.calendarId === config.ghlCalendarId);
-  if (onSelected.length === 0) return { allowed: false, reason: 'calendar_not_selected' };
+  const inLocation = appointments.filter((a) => a.locationId === config.ghlLocationId);
+  if (inLocation.length === 0) return { allowed: false, reason: 'cross_client_location' };
+
+  let onSelected: CalendarAppointment[];
+  if (mode === 'all_mapped_calendars') {
+    // Every appointment must carry a calendar id inside the mapped location.
+    onSelected = inLocation.filter((a) => !!a.calendarId);
+    if (onSelected.length === 0) return { allowed: false, reason: 'unknown_calendar' };
+  } else {
+    onSelected = inLocation.filter((a) => a.calendarId === config.ghlCalendarId);
+    if (onSelected.length === 0) return { allowed: false, reason: 'calendar_not_selected' };
+  }
 
   const unique = dedupeByEventId(onSelected);
   if (unique.length > 1) return { allowed: false, reason: 'ambiguous_appointment' };
