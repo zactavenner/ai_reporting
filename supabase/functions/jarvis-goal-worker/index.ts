@@ -515,16 +515,49 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
         return { creatives: c.data || [], assets: a.data || [], video_jobs: v.data || [] };
       }
       case "generate_video": {
+        const vcid = args.client_id || goal.client_id || null;
+        // HARD CAP: onboarding produces at most 4 videos. Enforced on real job rows.
+        if (vcid) {
+          const vb = await remainingBudget(vcid, "video");
+          if (vb.remaining <= 0) {
+            return {
+              done: true,
+              used: vb.used,
+              budget: vb.budget,
+              note: `VIDEO BUDGET EXHAUSTED (${vb.used}/${vb.budget}). The videos for this client are COMPLETE. Do NOT call generate_video again — finish the mission.`,
+            };
+          }
+        }
+        // Natural-motion style is mandatory: pick the requested slot, else the
+        // next unused one, so the 4 videos are podcast / street / walk / b-roll.
+        const wanted = String(args.style || "").toLowerCase().replace(/[^a-z]/g, "_");
+        const usedJobs = vcid
+          ? (await supa.from("creative_video_jobs").select("prompt").eq("client_id", vcid)).data || []
+          : [];
+        const takenSlots = new Set(
+          usedJobs.map((r: any) => /\[style:([a-z_]+)\]/.exec(String(r.prompt || ""))?.[1]).filter(Boolean) as string[],
+        );
+        const style =
+          VIDEO_STYLES.find((s) => s.slot === wanted) ||
+          VIDEO_STYLES.find((s) => !takenSlots.has(s.slot)) ||
+          VIDEO_STYLES[0];
+        const motionPrompt = [
+          `[style:${style.slot}]`,
+          `${style.label}: ${style.direction}`,
+          String(args.prompt || ""),
+          "Continuous natural motion throughout — the subject and camera must never be static. Realistic, documentary-grade, not stiff or AI-looking.",
+        ].filter(Boolean).join("\n\n");
         const r = await fetch(`${SUPABASE_URL}/functions/v1/animate-creative`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
           body: JSON.stringify({
             action: "start",
             creativeId: args.creative_id || null,
-            clientId: args.client_id || goal.client_id || null,
+            clientId: vcid,
             imageUrl: args.image_url,
-            prompt: args.prompt,
-            duration: Math.max(1, Math.min(15, Number(args.duration) || 8)),
+            prompt: motionPrompt,
+            // Onboarding videos are 30s ads, assembled from the provider's max clip length.
+            duration: Math.max(1, Math.min(30, Number(args.duration) || 30)),
             aspectRatio: args.aspect_ratio || "9:16",
             // MiniMax H3 supports 720p and native 2K only.
             resolution: String(args.resolution || "").toLowerCase() === "720p" ? "720p" : "2k",
@@ -533,7 +566,14 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
         });
         const jr = await r.json().catch(() => ({}));
         if (!r.ok) return { error: jr?.error || `animate-creative ${r.status}` };
-        return { job_id: jr.jobId, model: jr.model, note: "Poll with check_video_job on a later step." };
+        const vbAfter = vcid ? await remainingBudget(vcid, "video") : null;
+        return {
+          job_id: jr.jobId,
+          model: jr.model,
+          style: style.slot,
+          remaining: vbAfter?.remaining ?? null,
+          note: `Style ${style.slot} started. Poll with check_video_job on a later step.${vbAfter && vbAfter.remaining <= 0 ? " Video budget is now exhausted — do not start more." : ""}`,
+        };
       }
       case "check_video_job": {
         const r = await fetch(`${SUPABASE_URL}/functions/v1/animate-creative`, {
