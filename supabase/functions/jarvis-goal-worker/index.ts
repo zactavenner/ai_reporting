@@ -392,18 +392,49 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
       case "generate_static_ads": {
         const cid = args.client_id || goal.client_id;
         if (!cid) return { error: "client_id required" };
-        const count = Math.max(1, Math.min(6, Number(args.count) || 3));
-        const ratio = args.aspect_ratio || "1:1";
-        const { data: styles } = await supa.from("ad_styles").select("*").ilike("name", "%capital%raising%").limit(1);
+        // HARD CAP against real rows. The model does not get to decide this.
+        const budget = await remainingBudget(cid, "static");
+        if (budget.remaining <= 0) {
+          return {
+            done: true,
+            generated: 0,
+            used: budget.used,
+            budget: budget.budget,
+            note: `STATIC BUDGET EXHAUSTED (${budget.used}/${budget.budget}). The static ads for this client are COMPLETE. Do NOT call generate_static_ads again — move on to the next deliverable or finish the mission.`,
+          };
+        }
+        const asked = Math.max(1, Math.min(ONBOARDING_STATIC_BUDGET, Number(args.count) || budget.remaining));
+        const count = Math.min(asked, budget.remaining);
+        // One distinct concept slot per creative, so no two statics look alike.
+        const taken = await usedStaticSlots(cid);
+        const queue = STATIC_CONCEPTS.filter((c) => !taken.has(c.slot)).slice(0, count);
+        if (!queue.length) {
+          return { done: true, generated: 0, note: "All 10 static concepts already produced. Do not call this tool again." };
+        }
+        const { data: styles } = await supa
+          .from("ad_styles")
+          .select("*")
+          .or("name.ilike.%capital%,name.ilike.%winning%")
+          .order("name")
+          .limit(1);
         const style = styles?.[0];
+        if (!style) {
+          return { error: "No ad style found (expected 'Capital Creative'). Refusing to generate style-less duplicate statics." };
+        }
         const { data: client } = await supa.from("clients").select("name, brand_colors, brand_fonts").eq("id", cid).maybeSingle();
         const made: any[] = []; const errors: string[] = [];
-        for (let i = 0; i < count; i++) {
+        for (const concept of queue) {
+          const ratio = concept.ratio;
+          const conceptPrompt = [
+            args.prompt || "",
+            `CONCEPT (${concept.slot}): ${concept.direction}`,
+            "This creative must be visually and structurally DISTINCT from the client's other statics.",
+          ].filter(Boolean).join("\n\n");
           const r = await fetch(`${SUPABASE_URL}/functions/v1/generate-static-ad`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
             body: JSON.stringify({
-              prompt: args.prompt || "",
+              prompt: conceptPrompt,
               stylePrompt: style?.prompt_template || "",
               styleName: style?.name || "Capital Raising",
               aspectRatio: ratio,
@@ -421,17 +452,28 @@ async function execTool(name: string, args: any, goal: any): Promise<any> {
           if (r.ok && jr?.imageUrl) {
             const cr = await supa.from("creatives").insert({
               client_id: cid,
-              title: `${client?.name || "Onboarding"} - Static ${ratio} #${i + 1}`,
+              title: `${client?.name || "Onboarding"} — [${concept.slot}] ${ratio}`,
               type: "image", file_url: jr.imageUrl, status: "draft",
               source: "onboarding-build", aspect_ratio: ratio,
             }).select("id").single();
-            await pushToCanvas(goal, cid, { image_url: jr.imageUrl, aspect_ratio: ratio, prompt: args.prompt || args.offer_description || "" }, "image");
-            made.push({ creative_id: cr.data?.id, image_url: jr.imageUrl });
+            await pushToCanvas(goal, cid, { image_url: jr.imageUrl, aspect_ratio: ratio, concept: concept.slot, prompt: conceptPrompt }, "image");
+            made.push({ creative_id: cr.data?.id, concept: concept.slot, aspect_ratio: ratio, image_url: jr.imageUrl });
           } else {
-            errors.push(jr?.error || `generate-static-ad ${r.status}`);
+            errors.push(`${concept.slot}: ${jr?.error || `generate-static-ad ${r.status}`}`);
           }
         }
-        return { generated: made.length, creatives: made, errors };
+        const after = await remainingBudget(cid, "static");
+        return {
+          generated: made.length,
+          creatives: made,
+          errors,
+          used: after.used,
+          budget: after.budget,
+          remaining: after.remaining,
+          note: after.remaining <= 0
+            ? `Static budget now exhausted (${after.used}/${after.budget}). Statics are COMPLETE — do not call generate_static_ads again.`
+            : `${after.remaining} static(s) of the 10-creative budget remain.`,
+        };
       }
       case "request_approval": {
         const cid = args.client_id || goal.client_id;
