@@ -4,8 +4,16 @@
 // every client/location value must come from the server-side config row.
 
 import { normalizeEmail, type NormalizedMeeting } from './meetgeekIngest.ts';
+import { scoreMeetingQuality } from './meetgeekQuality.ts';
 
 export type BotJoinPolicy = 'never' | 'selected_calendar_video_only' | 'all_video_on_calendar';
+
+/**
+ * `selected_calendar` (default, safest): only the one chosen calendar may ingest.
+ * `all_mapped_calendars`: any calendar inside the client's mapped location may
+ * ingest — still never across locations/tenants.
+ */
+export type IngestMode = 'selected_calendar' | 'all_mapped_calendars';
 
 export interface MeetgeekClientConfig {
   clientId: string;
@@ -16,6 +24,7 @@ export interface MeetgeekClientConfig {
   ghlCalendarId: string | null;
   ghlCalendarName?: string | null;
   botJoinPolicy: BotJoinPolicy;
+  mode?: IngestMode;
   mappingValid: boolean;
   webhookSecretConfigured?: boolean;
 }
@@ -76,7 +85,10 @@ export function evaluateCalendarGate(args: {
   if (!config) return { allowed: false, reason: 'not_configured' };
   if (!config.enabled) return { allowed: false, reason: 'integration_disabled' };
   if (!config.mappingValid || !config.ghlLocationId) return { allowed: false, reason: 'mapping_invalid' };
-  if (!config.ghlCalendarId) return { allowed: false, reason: 'no_calendar_selected' };
+  const mode: IngestMode = config.mode || 'selected_calendar';
+  if (mode === 'selected_calendar' && !config.ghlCalendarId) {
+    return { allowed: false, reason: 'no_calendar_selected' };
+  }
 
   const appointments = args.appointments || [];
   if (appointments.length === 0) return { allowed: false, reason: 'appointment_not_found' };
@@ -87,7 +99,9 @@ export function evaluateCalendarGate(args: {
     return { allowed: false, reason: 'cross_client_location' };
   }
 
-  const onSelected = appointments.filter((a) => a.calendarId === config.ghlCalendarId);
+  const onSelected = mode === 'all_mapped_calendars'
+    ? appointments.filter((a) => a.locationId === config.ghlLocationId || !a.locationId)
+    : appointments.filter((a) => a.calendarId === config.ghlCalendarId);
   if (onSelected.length === 0) return { allowed: false, reason: 'calendar_not_selected' };
 
   const unique = dedupeByEventId(onSelected);
@@ -155,6 +169,9 @@ export interface ActivityRow {
   crm_sync_error: string | null;
   crm_attempts: number;
   error_message: string | null;
+  quality_rating: number | null;
+  quality_rubric: { label: string; points: number; max: number }[] | null;
+  quality_summary: string | null;
 }
 
 /** Builds the canonical activity row. Client/location come from config only. */
@@ -172,6 +189,7 @@ export function buildActivityRow(args: {
   crmAttempts?: number;
   errorMessage?: string | null;
   source?: string;
+  quality?: { rating: number; rubric: { label: string; points: number; max: number }[]; summary: string } | null;
 }): ActivityRow {
   const { config, stage, appointment, meeting } = args;
   return {
@@ -185,7 +203,7 @@ export function buildActivityRow(args: {
       meetgeekEventId: meeting?.eventId ?? null,
     }),
     ghl_location_id: config.ghlLocationId,
-    ghl_calendar_id: config.ghlCalendarId,
+    ghl_calendar_id: appointment?.calendarId ?? config.ghlCalendarId,
     ghl_event_id: appointment?.eventId ?? null,
     ghl_contact_id: appointment?.contactId ?? null,
     meetgeek_meeting_id: meeting?.meetingExternalId ?? null,
@@ -207,6 +225,9 @@ export function buildActivityRow(args: {
     crm_sync_error: args.crmError ?? null,
     crm_attempts: args.crmAttempts ?? 0,
     error_message: args.errorMessage ?? null,
+    quality_rating: args.quality?.rating ?? null,
+    quality_rubric: args.quality?.rubric ?? null,
+    quality_summary: args.quality?.summary ?? null,
   };
 }
 
@@ -252,6 +273,7 @@ export interface LifecycleResult {
   matched?: boolean;
   crmSyncStatus?: string;
   clientId?: string | null;
+  qualityRating?: number;
 }
 
 /**
@@ -303,6 +325,8 @@ export async function processCalendarMeeting(args: {
   const lead = emails.length ? await deps.matchLead(config, emails) : null;
   const stage: ActivityStage = lead ? 'completed' : 'unmatched';
 
+  const quality = scoreMeetingQuality({ meeting, matched: !!lead });
+
   const baseRow = buildActivityRow({
     config,
     stage,
@@ -312,6 +336,7 @@ export async function processCalendarMeeting(args: {
     attendeeEmail: lead?.email ?? appointmentEmail,
     agentJoinedAt: meeting.startedAt,
     crmStatus: 'pending',
+    quality,
   });
 
   const existing = await deps.findActivity(baseRow.source, baseRow.idempotency_key);
@@ -374,5 +399,6 @@ export async function processCalendarMeeting(args: {
     matched: !!lead,
     crmSyncStatus: crmStatus,
     clientId: config.clientId,
+    qualityRating: quality.rating,
   };
 }

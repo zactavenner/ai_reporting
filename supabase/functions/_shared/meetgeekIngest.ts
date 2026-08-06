@@ -56,8 +56,6 @@ export interface IngestDeps {
     crmSyncStatus?: string;
     activityId?: string;
     duplicate?: boolean;
-    /** No per-client MeetGeek config exists — fall back to legacy resolution. */
-    bypass?: boolean;
   }>;
   /** Returns true when an event with this dedupe key was already processed. */
   findProcessedEvent(dedupeKey: string): Promise<{ id: string; status: string } | null>;
@@ -346,13 +344,15 @@ export async function ingestMeetgeekWebhook(args: {
 
     // Per-client calendar gate (production path). Rejects unconfigured,
     // wrong-calendar, cross-client and ambiguous bookings before any CRM write.
+    // The calendar gate is the ONLY tenant authority. If it is wired in, an
+    // unconfigured / rejected meeting is never ingested (fail closed).
     let gatedClientId: string | null | undefined;
     let activityId: string | undefined;
     let gateOwnsCrm = false;
     if (deps.calendarGate) {
       const gate = await deps.calendarGate(meeting);
       activityId = gate.activityId;
-      if (!gate.ok && !gate.bypass) {
+      if (!gate.ok) {
         await deps.updateEvent(event.id, {
           status: 'rejected',
           errorMessage: gate.rejected || 'calendar_gate_rejected',
@@ -379,10 +379,8 @@ export async function ingestMeetgeekWebhook(args: {
           ghlNoteStatus: gate.crmSyncStatus,
         };
       }
-      if (!gate.bypass) {
-        gatedClientId = gate.clientId ?? null;
-        gateOwnsCrm = true;
-      }
+      gatedClientId = gate.clientId ?? null;
+      gateOwnsCrm = true;
     }
 
     const clientId = gatedClientId !== undefined

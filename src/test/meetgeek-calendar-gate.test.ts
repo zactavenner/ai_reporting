@@ -9,6 +9,7 @@ import {
   type MeetgeekClientConfig,
 } from '../../supabase/functions/_shared/meetgeekCalendarGate';
 import { normalizeMeetgeekPayload, type NormalizedMeeting } from '../../supabase/functions/_shared/meetgeekIngest';
+import { scoreMeetingQuality } from '../../supabase/functions/_shared/meetgeekQuality';
 
 const config: MeetgeekClientConfig = {
   clientId: 'client-1',
@@ -157,5 +158,47 @@ describe('processCalendarMeeting', () => {
     const key = buildActivityKey({ clientId: 'c1', stage: 'completed', meetgeekEventId: 'evt_1' });
     expect(key).toBe('c1:completed:evt_1');
     expect(buildActivityKey({ clientId: 'c1', stage: 'rejected', ghlEventId: 'g1' })).toBe('c1:rejected:g1');
+  });
+});
+
+describe('ingest modes and quality rubric', () => {
+  it('allows any calendar inside the mapped location in all_mapped_calendars mode', () => {
+    const cfg: MeetgeekClientConfig = { ...config, mode: 'all_mapped_calendars' };
+    expect(evaluateCalendarGate({ config: cfg, appointments: [appt({ calendarId: 'cal-other' })] }))
+      .toMatchObject({ allowed: true });
+  });
+
+  it('still rejects cross-location bookings in all_mapped_calendars mode', () => {
+    const cfg: MeetgeekClientConfig = { ...config, mode: 'all_mapped_calendars' };
+    expect(evaluateCalendarGate({ config: cfg, appointments: [appt({ locationId: 'loc-other' })] }))
+      .toMatchObject({ allowed: false, reason: 'cross_client_location' });
+  });
+
+  it('does not require a selected calendar in all_mapped_calendars mode', () => {
+    const cfg: MeetgeekClientConfig = { ...config, mode: 'all_mapped_calendars', ghlCalendarId: null };
+    expect(evaluateCalendarGate({ config: cfg, appointments: [appt({ calendarId: 'cal-x' })] }))
+      .toMatchObject({ allowed: true });
+  });
+
+  it('stores a deterministic quality rating on the activity row', async () => {
+    const { deps, calls } = makeDeps();
+    const res = await run(deps);
+    expect(res.qualityRating).toBeGreaterThanOrEqual(1);
+    expect(calls.activities[0].quality_rating).toBe(res.qualityRating);
+    expect(Array.isArray(calls.activities[0].quality_rubric)).toBe(true);
+  });
+
+  it('rates a matched, artifact-rich meeting higher than a bare unmatched one', () => {
+    const rich = scoreMeetingQuality({
+      meeting: { ...meeting, durationMinutes: 32, summary: 'x'.repeat(700), actionItems: ['a', 'b', 'c'], recordingUrl: 'https://r', transcriptUrl: 'https://t' },
+      matched: true,
+    });
+    const bare = scoreMeetingQuality({
+      meeting: { ...meeting, durationMinutes: 1, summary: null, actionItems: [], recordingUrl: null, transcriptUrl: null, sourceUrl: null },
+      matched: false,
+    });
+    expect(rich.rating).toBeGreaterThan(bare.rating);
+    expect(bare.rating).toBeGreaterThanOrEqual(1);
+    expect(rich.rating).toBeLessThanOrEqual(10);
   });
 });

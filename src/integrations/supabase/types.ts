@@ -5508,6 +5508,7 @@ export type Database = {
           ghl_calendar_name: string | null
           ghl_location_id: string | null
           id: string
+          ingest_mode: string
           last_bot_join_at: string | null
           last_completed_meeting_at: string | null
           last_crm_sync_at: string | null
@@ -5528,6 +5529,7 @@ export type Database = {
           ghl_calendar_name?: string | null
           ghl_location_id?: string | null
           id?: string
+          ingest_mode?: string
           last_bot_join_at?: string | null
           last_completed_meeting_at?: string | null
           last_crm_sync_at?: string | null
@@ -5548,6 +5550,7 @@ export type Database = {
           ghl_calendar_name?: string | null
           ghl_location_id?: string | null
           id?: string
+          ingest_mode?: string
           last_bot_join_at?: string | null
           last_completed_meeting_at?: string | null
           last_crm_sync_at?: string | null
@@ -12639,6 +12642,9 @@ export type Database = {
           meetgeek_event_id: string | null
           meetgeek_meeting_id: string | null
           meeting_record_id: string | null
+          quality_rating: number | null
+          quality_rubric: Json | null
+          quality_summary: string | null
           recording_url: string | null
           source: string
           started_at: string | null
@@ -12671,6 +12677,9 @@ export type Database = {
           meetgeek_event_id?: string | null
           meetgeek_meeting_id?: string | null
           meeting_record_id?: string | null
+          quality_rating?: number | null
+          quality_rubric?: Json | null
+          quality_summary?: string | null
           recording_url?: string | null
           source?: string
           started_at?: string | null
@@ -12703,6 +12712,9 @@ export type Database = {
           meetgeek_event_id?: string | null
           meetgeek_meeting_id?: string | null
           meeting_record_id?: string | null
+          quality_rating?: number | null
+          quality_rubric?: Json | null
+          quality_summary?: string | null
           recording_url?: string | null
           source?: string
           started_at?: string | null

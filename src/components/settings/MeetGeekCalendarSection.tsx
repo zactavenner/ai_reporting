@@ -29,6 +29,7 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
   const [calendarId, setCalendarId] = useState<string | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [policy, setPolicy] = useState<string | null>(null);
+  const [ingestMode, setIngestMode] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
   const configQuery = useQuery({
@@ -61,6 +62,7 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
   const effectiveCalendar = calendarId ?? config?.ghl_calendar_id ?? null;
   const effectiveEnabled = enabled ?? !!config?.enabled;
   const effectivePolicy = policy ?? config?.bot_join_policy ?? 'selected_calendar_video_only';
+  const effectiveMode = ingestMode ?? config?.ingest_mode ?? 'selected_calendar';
 
   const save = useMutation({
     mutationFn: async () => {
@@ -71,6 +73,7 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
           enabled: effectiveEnabled,
           ghl_calendar_id: effectiveCalendar,
           bot_join_policy: effectivePolicy,
+          ingest_mode: effectiveMode,
         },
       });
       if (error) throw error;
@@ -155,6 +158,17 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
         <p className="text-xs text-muted-foreground">
           Sourced live from this client’s mapped CRM location. Bookings on any other calendar are rejected.
         </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Ingestion scope</Label>
+        <Select value={effectiveMode} onValueChange={setIngestMode} disabled={!locationMapped}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="selected_calendar">Only the selected calendar (recommended)</SelectItem>
+            <SelectItem value="all_mapped_calendars">Any calendar in this client’s mapped location</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">

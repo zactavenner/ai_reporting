@@ -119,6 +119,30 @@ const GHL_HEADERS = (apiKey: string) => ({
   Accept: 'application/json',
 });
 
+/**
+ * Internal (non-provider) actions require either a valid Supabase user JWT or
+ * the service-role key (cron). Anonymous callers can never drive admin actions.
+ */
+async function requireInternalAuth(req: Request): Promise<boolean> {
+  const authHeader = req.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return false;
+  const token = authHeader.slice(7).trim();
+  if (!token) return false;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  if (serviceKey && token === serviceKey) return true;
+  try {
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data, error } = await authClient.auth.getClaims(token);
+    return !error && !!data?.claims?.sub;
+  } catch {
+    return false;
+  }
+}
+
 /** Server-side only: reads the client's mapped HighLevel credentials. */
 async function getMappedGhl(supabase: any, clientId: string): Promise<{ apiKey: string | null; locationId: string | null }> {
   const { data } = await supabase
@@ -168,6 +192,7 @@ async function loadMeetgeekConfig(supabase: any, clientId: string): Promise<Meet
     ghlCalendarId: data.ghl_calendar_id,
     ghlCalendarName: data.ghl_calendar_name,
     botJoinPolicy: data.bot_join_policy,
+    mode: data.ingest_mode === 'all_mapped_calendars' ? 'all_mapped_calendars' : 'selected_calendar',
     mappingValid: !!data.mapping_valid,
     webhookSecretConfigured: !!data.webhook_secret_configured,
   };
@@ -192,28 +217,30 @@ function buildLifecycleDeps(supabase: any): LifecycleDeps {
           .limit(50);
         for (const row of data || []) candidateIds.add(row.client_id as string);
       }
-      if (candidateIds.size === 0) {
-        const byTitle = await matchClientByTitle(supabase, meeting.title || '');
-        if (byTitle) candidateIds.add(byTitle);
-      }
+      // Deliberately NO title-based fallback here: a meeting title is
+      // attacker-controllable text and must never assign a tenant.
       // Only clients with an enabled MeetGeek config qualify; ambiguity is refused.
       const configs: MeetgeekClientConfig[] = [];
       for (const id of candidateIds) {
         const cfg = await loadMeetgeekConfig(supabase, id);
         if (cfg?.enabled) configs.push(cfg);
       }
-      if (configs.length !== 1) return configs.length > 1 ? null : null;
+      if (configs.length !== 1) return null;
       return configs[0];
     },
     async findAppointments(config, meeting) {
-      if (!config.ghlCalendarId || !config.ghlLocationId) return [];
+      const mode = config.mode || 'selected_calendar';
+      if (!config.ghlLocationId) return [];
+      if (mode === 'selected_calendar' && !config.ghlCalendarId) return [];
       const { apiKey, locationId } = await getMappedGhl(supabase, config.clientId);
       if (!apiKey || !locationId || locationId !== config.ghlLocationId) return [];
       const anchor = meeting.startedAt ? new Date(meeting.startedAt).getTime() : Date.now();
       const startTime = anchor - 60 * 60 * 1000;
       const endTime = anchor + 60 * 60 * 1000;
       const url = `${GHL_BASE}/calendars/events?locationId=${encodeURIComponent(locationId)}`
-        + `&calendarId=${encodeURIComponent(config.ghlCalendarId)}`
+        + (mode === 'selected_calendar' && config.ghlCalendarId
+          ? `&calendarId=${encodeURIComponent(config.ghlCalendarId)}`
+          : '')
         + `&startTime=${startTime}&endTime=${endTime}`;
       const res = await fetch(url, { headers: GHL_HEADERS(apiKey) });
       if (!res.ok) return [];
@@ -317,6 +344,11 @@ Deno.serve(async (req) => {
     const body = JSON.parse(rawBody);
     console.log('Received webhook/request:', JSON.stringify(body).slice(0, 500));
 
+    // Every internal action is admin surface — require a real caller identity.
+    if (!(await requireInternalAuth(req))) {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    }
+
     // Determine client_id from body or query
     const clientId = body.client_id || new URL(req.url).searchParams.get('client_id');
 
@@ -380,6 +412,9 @@ Deno.serve(async (req) => {
         const enabled = !!body.enabled;
         const policy = ['never', 'selected_calendar_video_only', 'all_video_on_calendar']
           .includes(body.bot_join_policy) ? body.bot_join_policy : 'selected_calendar_video_only';
+        const ingestMode = body.ingest_mode === 'all_mapped_calendars'
+          ? 'all_mapped_calendars'
+          : 'selected_calendar';
         const requestedCalendarId = body.ghl_calendar_id ? String(body.ghl_calendar_id) : null;
 
         let mappingValid = false;
@@ -388,8 +423,10 @@ Deno.serve(async (req) => {
 
         if (!apiKey || !locationId) {
           mappingError = 'No mapped HighLevel location/API key for this client.';
-        } else if (!requestedCalendarId) {
+        } else if (!requestedCalendarId && ingestMode === 'selected_calendar') {
           mappingError = 'Select a HighLevel calendar for MeetGeek to operate on.';
+        } else if (!requestedCalendarId && ingestMode === 'all_mapped_calendars') {
+          mappingValid = true;
         } else {
           const res = await fetch(
             `${GHL_BASE}/calendars/?locationId=${encodeURIComponent(locationId)}`,
@@ -419,6 +456,7 @@ Deno.serve(async (req) => {
             ghl_calendar_id: mappingValid ? requestedCalendarId : null,
             ghl_calendar_name: calendarName,
             bot_join_policy: policy,
+            ingest_mode: ingestMode,
             mapping_valid: mappingValid,
             mapping_error: mappingError,
             webhook_secret_configured: secretConfigured,
@@ -581,8 +619,9 @@ function buildIngestDeps(supabase: any): IngestDeps {
       const lifecycle = buildLifecycleDeps(supabase);
       const config = await lifecycle.getConfigForMeeting(meeting);
       if (!config) {
-        // No per-client MeetGeek configuration — keep legacy ingestion behaviour.
-        return { ok: true, status: 200, bypass: true };
+        // Fail closed: no unambiguous, enabled per-client configuration means we
+        // refuse to guess a tenant and refuse to ingest.
+        return { ok: false, status: 403, rejected: 'not_configured', clientId: null };
       }
       const result = await processCalendarMeeting({
         meeting,
@@ -1120,14 +1159,18 @@ async function processMeeting(supabase: any, apiKey: string, baseUrl: string, me
 async function runMeetgeekTestEvent(
   supabase: any,
   clientId: string,
-  mode: 'match' | 'wrong_calendar' | 'wrong_client',
+  testMode: 'match' | 'wrong_calendar' | 'wrong_client',
 ): Promise<Record<string, unknown>> {
   const config = await loadMeetgeekConfig(supabase, clientId);
   if (!config) {
     return { ok: false, error: 'MeetGeek is not configured for this client yet. Save the configuration first.' };
   }
-  if (!config.mappingValid || !config.ghlCalendarId) {
-    return { ok: false, error: config.ghlCalendarId ? 'Mapping is invalid — re-save the configuration.' : 'Select a calendar first.' };
+  const mode = config.mode || 'selected_calendar';
+  if (!config.mappingValid) {
+    return { ok: false, error: 'Mapping is invalid — re-save the configuration.' };
+  }
+  if (mode === 'selected_calendar' && !config.ghlCalendarId) {
+    return { ok: false, error: 'Select a calendar first.' };
   }
 
   const now = new Date();
@@ -1154,8 +1197,8 @@ async function runMeetgeekTestEvent(
   // The appointment is synthetic but the gate is the real one.
   const appointment: CalendarAppointment = {
     eventId: `selftest-evt-${now.getTime()}`,
-    calendarId: mode === 'wrong_calendar' ? `${config.ghlCalendarId}-not-selected` : config.ghlCalendarId,
-    locationId: mode === 'wrong_client' ? `${config.ghlLocationId}-other` : config.ghlLocationId,
+    calendarId: testMode === 'wrong_calendar' ? `${config.ghlCalendarId || 'cal'}-not-selected` : config.ghlCalendarId,
+    locationId: testMode === 'wrong_client' ? `${config.ghlLocationId}-other` : config.ghlLocationId,
     contactId: null,
     attendeeEmail: null,
     title: 'MeetGeek configuration self-test',
@@ -1196,7 +1239,8 @@ async function runMeetgeekTestEvent(
 
   return {
     ok: true,
-    mode,
+    mode: testMode,
+    ingest_mode: mode,
     gate: rejected ? 'rejected' : 'allowed',
     reason: rejected ? GATE_REJECTION_MESSAGES[rejected] : null,
     activity: data,
