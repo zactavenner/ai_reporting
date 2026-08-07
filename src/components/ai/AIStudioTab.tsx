@@ -276,7 +276,7 @@ function CompareGrid({ primary, isStreaming, compare, loading }: { primary: stri
   );
 }
 
-function ChatMessage({ message: m, isStreaming, clientId, clientName }: { message: Msg; isStreaming: boolean; clientId: string; clientName?: string }) {
+function ChatMessage({ message: m, isStreaming, clientId, clientName, onApproveVideo }: { message: Msg; isStreaming: boolean; clientId: string; clientName?: string; onApproveVideo?: (plan: any) => void }) {
   const artifacts = extractArtifacts(m.role === "assistant" ? (m.content || "") : "");
   const ts = formatChatTimestamp(m.createdAt);
   if (m.role === "user") {
@@ -302,6 +302,8 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
   const lq = lqTool?.result;
   // Web search citations
   const wsTools = (m.tools || []).filter((t: any) => t.name === "web_search" && t.result?.sources?.length);
+  // Video renders proposed in regular chat mode, waiting for explicit approval.
+  const pendingVideoTools = (m.tools || []).filter((t: any) => t.result?.pending_approval);
   // Inline images + videos produced this turn
   const inlineImages: ChatImage[] = [];
   const inlineVideos: ChatVideo[] = [];
@@ -355,6 +357,42 @@ function ChatMessage({ message: m, isStreaming, clientId, clientName }: { messag
               )}
             </div>
           ))}
+        </div>
+      )}
+      {pendingVideoTools.length > 0 && (
+        <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+            Approval required before rendering {pendingVideoTools.length === 1 ? "this video" : `these ${pendingVideoTools.length} videos`}
+          </div>
+          <div className="space-y-1.5">
+            {pendingVideoTools.map((t: any, i: number) => {
+              const p = t.result?.proposed || {};
+              return (
+                <div key={i} className="text-[11px] text-muted-foreground">
+                  <div className="flex flex-wrap gap-1.5 mb-1">
+                    {p.model && <Badge variant="secondary" className="text-[10px]">{modelLabel(p.model)}</Badge>}
+                    {p.duration && <Badge variant="outline" className="text-[10px]">{p.duration}s</Badge>}
+                    {p.resolution && <Badge variant="outline" className="text-[10px]">{p.resolution}</Badge>}
+                    {p.aspect_ratio && <Badge variant="outline" className="text-[10px]">{p.aspect_ratio}</Badge>}
+                    {p.image_url && <Badge variant="outline" className="text-[10px]">first frame</Badge>}
+                  </div>
+                  {p.prompt && <p className="line-clamp-3 font-mono">{p.prompt}</p>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2 pt-0.5">
+            <Button
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => onApproveVideo?.(pendingVideoTools.map((t: any) => t.result?.proposed))}
+              disabled={!onApproveVideo}
+            >
+              Approve &amp; render
+            </Button>
+            <span className="text-[10px] text-muted-foreground">Nothing has been generated yet — no credits spent.</span>
+          </div>
         </div>
       )}
       {lq && (
