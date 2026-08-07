@@ -14,6 +14,49 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+const DEFAULT_BOT_GUEST_EMAIL = 'theainotetaker@gmail.com';
+const NEEDS_CALENDAR_SELECTION = 'needs calendar selection';
+const BOOKING_HINTS = /(discovery|investor|intro|booking|consult|strategy|qualif|call)/i;
+
+/** Server-only CRM calendar read. Never returns credentials. */
+async function listGhlCalendars(apiKey: string, locationId: string) {
+  const attempts = [
+    { url: `https://services.leadconnectorhq.com/calendars/?locationId=${encodeURIComponent(locationId)}`, version: true },
+    { url: 'https://rest.gohighlevel.com/v1/calendars/services', version: false },
+  ];
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...(attempt.version ? { Version: '2021-07-28' } : {}),
+        },
+      });
+      if (!res.ok) continue;
+      const body: any = await res.json().catch(() => null);
+      const raw = body?.calendars || body?.services || [];
+      const cals = (Array.isArray(raw) ? raw : [])
+        .map((c: any) => ({ id: String(c?.id || ''), name: String(c?.name || ''), active: c?.isActive !== false }))
+        .filter((c: any) => c.id);
+      if (cals.length) return cals;
+    } catch {
+      // try the next transport
+    }
+  }
+  return [] as { id: string; name: string; active: boolean }[];
+}
+
+/** Pick the single primary booking calendar, or null when it is ambiguous. */
+function pickPrimaryCalendar(cals: { id: string; name: string; active: boolean }[]) {
+  const active = cals.filter((c) => c.active);
+  const pool = active.length ? active : cals;
+  if (pool.length === 1) return pool[0];
+  const hinted = pool.filter((c) => BOOKING_HINTS.test(c.name));
+  if (hinted.length === 1) return hinted[0];
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
