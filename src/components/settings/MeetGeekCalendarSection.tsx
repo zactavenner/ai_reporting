@@ -230,6 +230,15 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
         </div>
         <MeetingCallActivityList clientId={clientId} />
       </div>
+
+      <MeetGeekGuestCalendarPanel clientId={clientId} ghlCalendarId={effectiveCalendar} />
+    </div>
+  );
+}
+          <Badge variant="outline">Client-scoped</Badge>
+        </div>
+        <MeetingCallActivityList clientId={clientId} />
+      </div>
     </div>
   );
 }
