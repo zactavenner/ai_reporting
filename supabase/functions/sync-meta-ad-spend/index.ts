@@ -122,6 +122,48 @@ async function fetchMetaInsights(acct: AccountRow, date: string): Promise<Campai
   return rows;
 }
 
+// ---------- ad account health ----------
+// account_status: 1 ACTIVE, 2 DISABLED, 3 UNSETTLED, 7 PENDING_RISK_REVIEW,
+// 8 PENDING_SETTLEMENT, 9 IN_GRACE_PERIOD, 100 PENDING_CLOSURE, 101 CLOSED,
+// 201 ANY_ACTIVE, 202 ANY_CLOSED. Anything other than 1/9 cannot deliver, so a
+// "0 rows" sync is expected — we must surface WHY instead of blaming the token.
+type AccountHealth = { status: number; disable_reason: number | null; ok: boolean; label: string };
+const ACCOUNT_STATUS_LABEL: Record<number, string> = {
+  1: 'active', 2: 'disabled', 3: 'unsettled', 7: 'pending risk review',
+  8: 'pending settlement', 9: 'in grace period', 100: 'pending closure', 101: 'closed',
+};
+const DISABLE_REASON_LABEL: Record<number, string> = {
+  0: 'none', 1: 'ads integrity policy', 2: 'ads-ip review', 3: 'risk payment',
+  4: 'gray account shut down', 5: 'ads afc review', 6: 'business integrity rar',
+  7: 'permanent close', 8: 'unused reseller account', 9: 'unused account',
+};
+async function fetchAccountHealth(acct: AccountRow, cache: Map<string, AccountHealth>): Promise<AccountHealth | null> {
+  const hit = cache.get(acct.ad_account_id);
+  if (hit) return hit;
+  try {
+    const url = new URL(`https://graph.facebook.com/v21.0/${acct.ad_account_id}`);
+    url.searchParams.set('fields', 'account_status,disable_reason');
+    url.searchParams.set('access_token', acct.token);
+    const res = await fetch(url.toString());
+    if (!res.ok) return null;
+    const b = await res.json();
+    const status = Number(b.account_status ?? 0);
+    const disable_reason = b.disable_reason == null ? null : Number(b.disable_reason);
+    const health: AccountHealth = {
+      status,
+      disable_reason,
+      ok: status === 1 || status === 9,
+      label: `${ACCOUNT_STATUS_LABEL[status] ?? `status ${status}`}${
+        disable_reason ? ` (${DISABLE_REASON_LABEL[disable_reason] ?? `reason ${disable_reason}`})` : ''
+      }`,
+    };
+    cache.set(acct.ad_account_id, health);
+    return health;
+  } catch {
+    return null;
+  }
+}
+
 async function upsertDaily(sb: any, acct: AccountRow, date: string, rows: CampaignRow[]): Promise<number> {
   if (!rows.length) return 0;
   const payload = rows.map((r) => ({
