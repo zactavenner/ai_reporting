@@ -13629,6 +13629,7 @@ export type Database = {
           status: string | null
           summary: string | null
           title: string | null
+          transcript_text: string | null
           transcript_url: string | null
           updated_at: string
         }
@@ -13651,6 +13652,7 @@ export type Database = {
           status?: string | null
           summary?: string | null
           title?: string | null
+          transcript_text?: string | null
           transcript_url?: string | null
           updated_at?: string
         }
@@ -13673,6 +13675,7 @@ export type Database = {
           status?: string | null
           summary?: string | null
           title?: string | null
+          transcript_text?: string | null
           transcript_url?: string | null
           updated_at?: string
         }
@@ -19335,6 +19338,31 @@ export type Database = {
           sheet_status: string
           status: string
           sync_date: string
+        }[]
+      }
+      get_lead_call_transcripts: {
+        Args: { p_client_id?: string; p_lead_id?: string; p_limit?: number }
+        Returns: {
+          action_items: Json
+          client_id: string
+          duration_minutes: number
+          lead_email: string
+          lead_id: string
+          lead_name: string
+          match_confidence: number
+          match_method: string
+          meeting_record_id: string
+          qa_gate_status: string
+          qa_next_step: Json
+          qa_pipeline_outcome: string
+          qa_red_flags: Json
+          qa_scores: Json
+          qa_total: number
+          recording_url: string
+          started_at: string
+          summary: string
+          title: string
+          transcript: string
         }[]
       }
       get_sync_queue_stats: {

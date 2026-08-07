@@ -21,6 +21,7 @@ const COMPOSITE_RPCS = new Set([
   "get_sync_queue_stats",
   "agent_cost_mtd",
   "find_unenriched_leads",
+  "get_lead_call_transcripts",
 ]);
 
 type Filters = Record<string, any>;
