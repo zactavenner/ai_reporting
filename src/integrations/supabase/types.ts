@@ -1700,6 +1700,83 @@ export type Database = {
           },
         ]
       }
+      agent_task_runs: {
+        Row: {
+          agent_id: string
+          client_id: string | null
+          connectors_used: Json
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          id: string
+          input_tokens: number
+          model: string | null
+          output_md: string | null
+          output_tokens: number
+          prompt: string | null
+          status: string
+        }
+        Insert: {
+          agent_id: string
+          client_id?: string | null
+          connectors_used?: Json
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_tokens?: number
+          model?: string | null
+          output_md?: string | null
+          output_tokens?: number
+          prompt?: string | null
+          status?: string
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string | null
+          connectors_used?: Json
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_tokens?: number
+          model?: string | null
+          output_md?: string | null
+          output_tokens?: number
+          prompt?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_task_runs_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agency_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_task_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agent_task_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_task_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       agent_tasks: {
         Row: {
           assigned_to_agent: string

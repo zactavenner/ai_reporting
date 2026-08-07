@@ -7,7 +7,6 @@ const sb = supabase as any;
 export type AgentConnectorKind =
   | "supabase_table"
   | "supabase_composite"
-  | "hermes"
   | "webhook"
   | "storage";
 
@@ -45,7 +44,6 @@ export type ConnectorTestResult = {
 export const CONNECTOR_KINDS: { value: AgentConnectorKind; label: string; hint: string }[] = [
   { value: "supabase_table", label: "Database table", hint: "Query a table directly (e.g. daily_metrics)" },
   { value: "supabase_composite", label: "Composite action", hint: "Aggregate function (e.g. get_top_performers)" },
-  { value: "hermes", label: "Hermes action", hint: "Read action on the Hermes orchestrator" },
   { value: "webhook", label: "Webhook feed", hint: "Recent webhook_logs rows for a source" },
   { value: "storage", label: "Storage bucket", hint: "List files in a bucket (e.g. creatives)" },
 ];
@@ -62,7 +60,6 @@ export const CONNECTOR_TARGET_SUGGESTIONS: Record<AgentConnectorKind, string[]> 
     "get_client_spend_freshness", "get_sync_queue_stats", "agent_cost_mtd",
     "find_unenriched_leads",
   ],
-  hermes: ["ping", "list_clients", "list_tasks", "get_task", "list_agents"],
   webhook: ["ghl", "meta", "stripe"],
   storage: ["creatives", "task-files", "gpt-files", "live-ads", "agent-files"],
 };
