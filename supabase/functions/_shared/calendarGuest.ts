@@ -310,6 +310,11 @@ function toBase64(buf: ArrayBuffer): string {
 /**
  * Verifies an HMAC-SHA256 signature over the RAW request body. Accepts hex or
  * base64, with or without a `sha256=` prefix. Fails closed on any missing input.
+ *
+ * NOTE: native GHL "Workflow → Webhook" actions cannot compute an HMAC over
+ * their own serialized body, so this path is only usable for callers that can
+ * sign (our own tooling, replay harnesses, custom senders). The native workflow
+ * uses the shared-secret header path below.
  */
 export async function verifyWebhookSignature(args: {
   rawBody: string;
@@ -337,3 +342,101 @@ export const CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/userinfo.email',
 ].join(' ');
+
+/* ------------------------------------------------------------------ *
+ * Shared-secret header auth (native GHL Workflow Webhook action)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Explicit header carrying a high-entropy, server-held, per-integration secret.
+ * A native GHL workflow can send a static custom header but cannot sign a body,
+ * so this is the operable fail-closed alternative. Requests with no header, an
+ * empty header, or a non-matching value are rejected — nothing unsigned or
+ * unauthenticated is ever accepted.
+ */
+export const SHARED_SECRET_HEADER = 'x-hpa-webhook-token';
+
+/** Minimum accepted secret length (~192 bits of base64/hex entropy). */
+export const SHARED_SECRET_MIN_LENGTH = 32;
+
+export type WebhookAuthResult =
+  | { ok: true; method: 'shared_secret' | 'ghl_marketplace' | 'hmac' }
+  | {
+      ok: false;
+      reason:
+        | 'missing_credential'
+        | 'secret_not_configured'
+        | 'secret_too_weak'
+        | 'credential_mismatch';
+    };
+
+/**
+ * Constant-time shared-secret check. Fails closed when the header is absent,
+ * when no secret is configured, and when the configured secret is too weak to
+ * be treated as an authenticator.
+ */
+export function verifySharedSecretHeader(args: {
+  header: string | null | undefined;
+  secret: string | null | undefined;
+}): WebhookAuthResult {
+  const provided = (args.header || '').trim();
+  const secret = (args.secret || '').trim();
+  if (!secret) return { ok: false, reason: 'secret_not_configured' };
+  if (secret.length < SHARED_SECRET_MIN_LENGTH) return { ok: false, reason: 'secret_too_weak' };
+  if (!provided) return { ok: false, reason: 'missing_credential' };
+  // Compare digests so the comparison is constant time for any input length.
+  return safeEqual(provided, secret) && provided.length === secret.length
+    ? { ok: true, method: 'shared_secret' }
+    : { ok: false, reason: 'credential_mismatch' };
+}
+
+/**
+ * Official GHL Marketplace webhook signature (Ed25519 over the raw body, sent
+ * as `x-wh-signature` / `x-ghl-signature`, base64). Verified against GHL's
+ * public key when one is configured; absent a key this path simply does not
+ * authenticate, and the shared-secret path remains required.
+ */
+export const GHL_MARKETPLACE_SIGNATURE_HEADERS = ['x-wh-signature', 'x-ghl-signature'];
+
+function base64ToBytes(b64: string): Uint8Array | null {
+  try {
+    const bin = atob(b64.replace(/\s+/g, ''));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyGhlMarketplaceSignature(args: {
+  rawBody: string;
+  header: string | null | undefined;
+  publicKeyPem: string | null | undefined;
+}): Promise<boolean> {
+  const header = (args.header || '').trim();
+  const pem = (args.publicKeyPem || '').trim();
+  if (!header || !pem) return false;
+  const sig = base64ToBytes(header);
+  const spki = base64ToBytes(
+    pem.replace(/-----BEGIN [^-]+-----|-----END [^-]+-----/g, '').replace(/\s+/g, ''),
+  );
+  if (!sig || !spki) return false;
+  for (const algo of [{ name: 'Ed25519' }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }] as const) {
+    try {
+      const key = await crypto.subtle.importKey('spki', spki as unknown as ArrayBuffer, algo as any, false, [
+        'verify',
+      ]);
+      const ok = await crypto.subtle.verify(
+        algo.name === 'Ed25519' ? { name: 'Ed25519' } : { name: 'RSASSA-PKCS1-v1_5' },
+        key,
+        sig as unknown as ArrayBuffer,
+        new TextEncoder().encode(args.rawBody),
+      );
+      if (ok) return true;
+    } catch {
+      /* try the next algorithm */
+    }
+  }
+  return false;
+}

@@ -65,6 +65,7 @@ export function MeetGeekGuestCalendarPanel({ clientId, ghlCalendarId }: Props) {
         config: Record<string, any> | null;
         location_mapped: boolean;
         webhook_secret_configured: boolean;
+        crm_key_present?: boolean;
         jobs: Record<string, any>[];
       }>({ action: 'gc_get_guest_config', client_id: clientId }),
   });
@@ -216,11 +217,28 @@ export function MeetGeekGuestCalendarPanel({ clientId, ghlCalendarId }: Props) {
           {guest.data?.webhook_secret_configured
             ? <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
             : <ShieldAlert className="h-3.5 w-3.5 text-destructive" />}
-          <span>{guest.data?.webhook_secret_configured ? 'Webhook signing secret configured' : 'Webhook signing secret missing'}</span>
+          <span>
+            {guest.data?.webhook_secret_configured
+              ? 'Webhook shared secret configured'
+              : 'Webhook shared secret missing or too short (needs 32+ characters)'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {guest.data?.crm_key_present
+            ? <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            : <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />}
+          <span>{guest.data?.crm_key_present ? 'CRM key mapped for appointment reads' : 'No CRM key mapped for this client'}</span>
         </div>
         <div className="text-muted-foreground">Last guest invite: {ts(cfg?.last_invite_at)}</div>
         <div className="text-muted-foreground">Last validated: {ts(cfg?.last_validated_at)}</div>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        The GHL workflow webhook action must send the header{' '}
+        <code className="font-mono">x-hpa-webhook-token</code> with the server-held shared secret. The secret value is
+        never displayed here — configure it in Project Settings → Secrets as{' '}
+        <code className="font-mono">GHL_APPOINTMENT_WEBHOOK_SECRET</code>. Unauthenticated requests are always rejected.
+      </p>
 
       {(cfg?.validation_error || cfg?.last_error) && (
         <p className="text-xs text-destructive">{cfg?.validation_error || cfg?.last_error}</p>

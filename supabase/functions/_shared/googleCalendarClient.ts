@@ -89,6 +89,27 @@ export async function findEventCandidates(args: {
   return { tagged, windowEvents };
 }
 
+/**
+ * Reads a single organizer event. Required before patching: a PATCH must carry
+ * the event's REAL attendee list, otherwise Google replaces attendees with
+ * whatever we send and existing guests are removed.
+ */
+export async function getEvent(args: {
+  token: string;
+  calendarId: string;
+  eventId: string;
+}): Promise<GoogleEventLite | null> {
+  try {
+    return (await calFetch(
+      args.token,
+      `/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.eventId)}`,
+    )) as GoogleEventLite;
+  } catch (e) {
+    if (/google_calendar_40[34]/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
 /** Adds the notetaker as a guest. Ownership fields are never sent. */
 export async function patchAttendee(args: {
   token: string;
@@ -108,7 +129,8 @@ export async function patchAttendee(args: {
   return (await calFetch(
     args.token,
     `/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.event.id)}`,
-    { method: 'PATCH', body: JSON.stringify(patch), query: { sendUpdates: 'none', conferenceDataVersion: '1' } },
+    // sendUpdates=all so the notetaker actually receives its guest invitation.
+    { method: 'PATCH', body: JSON.stringify(patch), query: { sendUpdates: 'all', conferenceDataVersion: '1' } },
   )) as GoogleEventLite;
 }
 

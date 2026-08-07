@@ -36,6 +36,11 @@ Gmail OAuth flow and its scopes are untouched.
 
 ## Outbound GHL Workflow (exact setup)
 
+A native GHL Workflow "Webhook" action **cannot** compute an HMAC over its own
+serialized JSON body, so signature-based auth is not operable for it. The native
+path therefore authenticates with a high-entropy server-held shared secret in an
+explicit header, compared in constant time. Nothing unauthenticated is accepted.
+
 1. **Sub-account:** Nationwide only.
 2. **Automation → Workflows → Create Workflow → Start from Scratch.** Name:
    `MeetGeek guest invite — <calendar name>`.
@@ -47,15 +52,39 @@ Gmail OAuth flow and its scopes are untouched.
    - URL: `https://<project-ref>.supabase.co/functions/v1/ghl-appointment-webhook`
    - Headers:
      - `Content-Type: application/json`
-     - `x-hpa-signature: sha256=<HMAC-SHA256 hex of the exact raw body, keyed with GHL_APPOINTMENT_WEBHOOK_SECRET>`
+     - `x-hpa-webhook-token: <the value of GHL_APPOINTMENT_WEBHOOK_SECRET>`
    - Body (JSON): must include `appointmentId`, `calendarId`, `locationId`.
 5. Publish the workflow, but leave the client **disabled** in Settings until the
    checklist passes.
 
-Unsigned, wrongly signed, unmapped, disabled, mismatched-location or
+### Accepted credentials (at least one is required)
+
+| Order | Mechanism | Header | When |
+| --- | --- | --- | --- |
+| 1 | Official GHL Marketplace signature (Ed25519 over raw body) | `x-wh-signature` / `x-ghl-signature` | Only when `GHL_MARKETPLACE_PUBLIC_KEY` is configured — for Marketplace-app webhooks |
+| 2 | HMAC-SHA256 over the raw body | `x-hpa-signature` | Senders that can sign (our tooling, replay harnesses) |
+| 3 | Shared secret, constant-time compared | `x-hpa-webhook-token` | The native GHL workflow action |
+
+The shared secret must be ≥32 characters of high-entropy random (e.g.
+`openssl rand -hex 32`). It resolves from the `GHL_APPOINTMENT_WEBHOOK_SECRET`
+environment secret, else from the service-role-only
+`integration_secrets` row `provider='ghl_appointment_webhook'`. The admin status
+indicator uses the **same resolver**, so it is accurate for either storage. The
+value is never logged, returned, rendered, or committed — only "configured:
+yes/no" is ever exposed.
+
+Unauthenticated, wrongly signed, unmapped, disabled, mismatched-location or
 mismatched-calendar calls are rejected (401 / `202 rejected`) and logged to the
 job table with a reason. Never paste the secret anywhere except the workflow
 header field and Project Settings → Secrets.
+
+### Appointment read
+
+The webhook never trusts payload location/calendar values. It reads the
+appointment server-side using the established Reporting mapping —
+`clients.ghl_api_key` + `clients.ghl_location_id` (the same
+`getMappedGhl` helper `meetgeek-webhook` uses) — and requires the mapped
+location to equal the configured location before the read is even attempted.
 
 ### Event linkage requirement
 
@@ -69,9 +98,31 @@ therefore:
 3. otherwise parks the job as `needs_event_link` — it never creates a second
    event, so duplicates are impossible.
 
+When the payload DOES carry a Google event id, the webhook performs a real
+`GET` of that organizer event first and patches its **full existing attendee
+list plus the bot**. It never synthesizes `{id, attendees: []}`, because that
+would remove the organizer's real guests. If the event cannot be read, the job
+parks as `needs_event_link`. The patch uses `sendUpdates=all` so the notetaker
+actually receives its guest invitation, and `assertOwnerPreserved` blocks any
+organizer/creator/owner/`assignedUserId`/`calendarId` field from being sent.
+
 For full automation, the mapped GHL calendar must book into the connected
 organizer's Google Calendar (so step 2 resolves to one event), or GHL must send
 the Google event id.
+
+## Operator authorization
+
+Every admin/read path (`meetgeek-guest-admin`, OAuth start) requires a Supabase
+JWT whose subject exists in `public.reporting_operator_users`
+(service-role-only allowlist, checked by `authorizeOperator`). This boundary is
+not weakened anywhere in this feature.
+
+**Documented gate:** there is no self-service operator bootstrap, and adding one
+from the browser would weaken the boundary. Until the first row is inserted into
+`public.reporting_operator_users` via a service-role path, every operator call
+returns `403 no_operators_provisioned` with an explanatory message, and the
+admin UI cannot be used. Provisioning the first operator is an explicit
+administrator action outside the app.
 
 ## Evidence checklist (all required before enabling Nationwide)
 

@@ -10,6 +10,11 @@ import {
   redactConnection,
   resolveEventLink,
   verifyWebhookSignature,
+  verifySharedSecretHeader,
+  verifyGhlMarketplaceSignature,
+  SHARED_SECRET_HEADER,
+  SHARED_SECRET_MIN_LENGTH,
+  GHL_MARKETPLACE_SIGNATURE_HEADERS,
   type GhlAppointmentLite,
   type GuestConfig,
   type GoogleEventLite,
@@ -50,6 +55,54 @@ async function sign(body: string, secret: string) {
 describe('webhook signature verification (fail closed)', () => {
   const body = JSON.stringify({ appointmentId: 'appt-1' });
 
+  describe('shared-secret header (native GHL workflow path)', () => {
+    const secret = 'k'.repeat(48);
+
+    it('accepts only an exact match of a high-entropy server-held secret', () => {
+      expect(verifySharedSecretHeader({ header: secret, secret })).toEqual({ ok: true, method: 'shared_secret' });
+      expect(verifySharedSecretHeader({ header: ` ${secret} `, secret })).toMatchObject({ ok: true });
+    });
+
+    it('rejects missing, empty, wrong and prefix-truncated credentials', () => {
+      expect(verifySharedSecretHeader({ header: null, secret })).toMatchObject({ ok: false, reason: 'missing_credential' });
+      expect(verifySharedSecretHeader({ header: '   ', secret })).toMatchObject({ ok: false, reason: 'missing_credential' });
+      expect(verifySharedSecretHeader({ header: 'x'.repeat(48), secret })).toMatchObject({
+        ok: false,
+        reason: 'credential_mismatch',
+      });
+      expect(verifySharedSecretHeader({ header: secret.slice(0, 47), secret })).toMatchObject({ ok: false });
+      expect(verifySharedSecretHeader({ header: secret + 'x', secret })).toMatchObject({ ok: false });
+    });
+
+    it('fails closed when no secret is configured or the secret is too weak', () => {
+      expect(verifySharedSecretHeader({ header: 'anything', secret: null })).toMatchObject({
+        ok: false,
+        reason: 'secret_not_configured',
+      });
+      expect(verifySharedSecretHeader({ header: 'anything', secret: '' })).toMatchObject({
+        ok: false,
+        reason: 'secret_not_configured',
+      });
+      const weak = 'a'.repeat(SHARED_SECRET_MIN_LENGTH - 1);
+      expect(verifySharedSecretHeader({ header: weak, secret: weak })).toMatchObject({
+        ok: false,
+        reason: 'secret_too_weak',
+      });
+    });
+  });
+
+  it('marketplace signature verification fails closed without a key or signature', async () => {
+    expect(
+      await verifyGhlMarketplaceSignature({ rawBody: body, header: 'abc', publicKeyPem: null }),
+    ).toBe(false);
+    expect(
+      await verifyGhlMarketplaceSignature({ rawBody: body, header: null, publicKeyPem: 'ZmFrZQ==' }),
+    ).toBe(false);
+    expect(
+      await verifyGhlMarketplaceSignature({ rawBody: body, header: 'not-base64!!', publicKeyPem: 'not-base64!!' }),
+    ).toBe(false);
+  });
+
   it('accepts a valid hex signature', async () => {
     const header = await sign(body, 's3cret');
     expect(await verifyWebhookSignature({ rawBody: body, header, secret: 's3cret' })).toBe(true);
@@ -67,6 +120,11 @@ describe('webhook signature verification (fail closed)', () => {
 });
 
 describe('mapping gate', () => {
+  it('exposes an explicit shared-secret header name and marketplace headers', () => {
+    expect(SHARED_SECRET_HEADER).toBe('x-hpa-webhook-token');
+    expect(GHL_MARKETPLACE_SIGNATURE_HEADERS).toContain('x-wh-signature');
+  });
+
   it('allows a fully mapped, enabled, matching appointment', () => {
     const decision = evaluateGuestGate({ config, appointment });
     expect(decision.allowed).toBe(true);
@@ -105,6 +163,26 @@ describe('mapping gate', () => {
 });
 
 describe('idempotency and event linkage', () => {
+  it('never fabricates an empty attendee list for a known Google event', () => {
+    // buildAttendeePatch is only ever fed a REAL event; a synthesized
+    // {id, attendees: []} event would silently delete existing guests.
+    const real: GoogleEventLite = {
+      id: 'ev-real',
+      attendees: [{ email: 'organizer@client.com', organizer: true }, { email: 'investor@example.com' }],
+    };
+    const patch = buildAttendeePatch({ event: real, botGuestEmail: 'bot@meetgeek.ai', appointmentId: 'a', clientId: 'c' });
+    expect(patch.attendees).toHaveLength(3);
+    const fabricated = buildAttendeePatch({
+      event: { id: 'ev-real', attendees: [] },
+      botGuestEmail: 'bot@meetgeek.ai',
+      appointmentId: 'a',
+      clientId: 'c',
+    });
+    // Proof of the hazard the webhook must avoid: patching from a fake event
+    // drops every real guest, so the webhook GETs the event instead.
+    expect(fabricated.attendees).toHaveLength(1);
+  });
+
   it('produces a stable key regardless of email casing', () => {
     const a = buildInviteIdempotencyKey({ clientId: 'c', appointmentId: 'a', botGuestEmail: 'Bot@X.com' });
     const b = buildInviteIdempotencyKey({ clientId: 'c', appointmentId: 'a', botGuestEmail: 'bot@x.com' });
@@ -173,6 +251,12 @@ describe('owner preservation', () => {
 });
 
 describe('no token exposure', () => {
+  it('never leaks the shared secret through the verifier result', () => {
+    const secret = 'A'.repeat(40);
+    const result = verifySharedSecretHeader({ header: 'wrong', secret });
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
   it('redacts every credential field from connection metadata', () => {
     const redacted = redactConnection({
       id: 'conn-1',
