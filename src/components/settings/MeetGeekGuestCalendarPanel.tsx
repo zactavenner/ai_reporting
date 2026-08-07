@@ -28,7 +28,10 @@ interface RedactedConnection {
 }
 
 async function invokeGuestAdmin<T = any>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('meetgeek-guest-admin', { body });
+  const { data, error } = await supabase.functions.invoke('meetgeek-guest-admin', {
+    body,
+    headers: dashboardAuthHeaders(),
+  });
   if (error) {
     let message = error.message;
     try {
