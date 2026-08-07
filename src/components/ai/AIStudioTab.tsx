@@ -1802,6 +1802,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         activeReferenceIds,
         activeVideoReferenceIds,
         agentMode: selectedAgentId !== "off",
+        // Regular chat mode gates video renders behind an explicit approval
+        // click; this flag is only true on the approved re-run.
+        videoApproved: !!opts?.videoApproved,
         agentToolPolicy: agentToolPolicyFor(
           (clientAgents as any[]).find(a => a.id === selectedAgentId) || null,
           selectedAgentId === "master",
