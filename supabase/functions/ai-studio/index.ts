@@ -4569,6 +4569,36 @@ Deno.serve(async (req) => {
 
             // Pre-emit canvas placeholder for image tools so UI shows skeleton
             let canvasPlaceholderId: string | null = null;
+            // APPROVAL GATE (regular chat mode): video renders cost real money,
+            // so in plain Chat mode (no agent selected) the model may PROPOSE a
+            // render but never start one. We short-circuit the tool call and
+            // return a pending_approval payload the UI turns into an
+            // "Approve & render" card. Agent mode is unaffected.
+            if (videoNeedsApproval && (VIDEO_TOOL_NAMES.has(name) || name === "image_to_reel")) {
+              const pendingModel = normalizeVideoModel(args.model) || selectedVideoModel || uniqueSelectedVideoModels[0] || null;
+              const pendingRes = pendingModel ? clampResForModel(pendingModel) : (requestedRes || "720p");
+              send({ type: "tool_start", id: tc.id, name, args });
+              const pendingResult = {
+                pending_approval: true,
+                approval_reason: "Chat mode requires approval before any video is rendered.",
+                proposed: {
+                  tool: name,
+                  model: pendingModel,
+                  resolution: pendingRes,
+                  duration: 15,
+                  aspect_ratio: args.aspect_ratio || "9:16",
+                  prompt: String(args.prompt || args.brief || args.motion_prompt || ""),
+                  image_url: args.image_url || videoFrames?.firstFrameUrl || null,
+                  last_frame_url: args.last_frame_url || videoFrames?.lastFrameUrl || null,
+                  scripts_count: Array.isArray(args.scripts) ? args.scripts.length : undefined,
+                },
+                message: "Not rendered. Awaiting the user's approval — they must click “Approve & render” in chat.",
+              };
+              send({ type: "tool_end", id: tc.id, name, args, result: pendingResult });
+              finalToolEvents.push({ name, args, result: pendingResult });
+              toolMessages[tcIdx] = { call_id: tc.id, content: JSON.stringify(pendingResult) };
+              return;
+            }
             if (name === "generate_static_ad") {
               canvasPlaceholderId = crypto.randomUUID();
               send({
