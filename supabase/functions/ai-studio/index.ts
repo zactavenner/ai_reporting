@@ -1685,10 +1685,30 @@ async function generateSeedanceVideo(opts: {
       frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
     }
     if (frames.length) body.frame_images = frames;
-    // Identity/ingredient reference is additive on H3 — it can be sent alongside keyframes
-    // so the same avatar/product persists across sequential 15s clips.
+    // MUTUALLY EXCLUSIVE (provider-enforced): MiniMax Hailuo hard-rejects any request
+    // carrying BOTH frame_images and input_references:
+    //   400 "MiniMax Hailuo video generations do not support frame_images and
+    //        input_references in the same request"
+    // First frame WINS — in the avatar/script flow the avatar image is passed as the
+    // first frame, so identity continuity is already carried there and the ingredient
+    // reference is redundant. Drop it (and log the drop) instead of failing the render.
     if (providerIngredientUrl && providerIngredientUrl !== providerImageUrl) {
-      body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+      if (frames.length) {
+        await recordVideoModelDecision(supa, "h3.input_references_dropped_frames_present", {
+          conversation_id: opts.conversationId,
+          client_id: opts.clientId,
+          user_id: opts.userId,
+          chosen_model: model,
+          reason: "MiniMax Hailuo rejects frame_images + input_references in the same request; first frame wins",
+          first_frame_url: providerImageUrl || null,
+          last_frame_url: providerLastFrameUrl || null,
+          dropped_input_reference_url: providerIngredientUrl,
+          frame_count: frames.length,
+        });
+        console.warn(`[h3] dropping input_references (frame_images present) ingredient=${providerIngredientUrl}`);
+      } else {
+        body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+      }
     }
   } else if (isHappyHorse) {
     // HappyHorse 1.1 on OpenRouter — /api/v1/videos schema (verified via ZodError response):
