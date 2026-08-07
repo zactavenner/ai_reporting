@@ -1463,6 +1463,9 @@ async function generateSeedanceVideo(opts: {
     try {
       await supa.from("ai_studio_canvas_items")
         .update({
+          // Clear the orphan deadline: this row now has a terminal status, so the
+          // sweeper must never treat it as a stuck placeholder again.
+          placeholder_until: null,
           payload: {
             status: "failed",
             error: errMsg.slice(0, 500),
