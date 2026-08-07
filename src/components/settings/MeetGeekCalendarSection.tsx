@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CalendarCheck, Loader2, RefreshCw, ShieldCheck, ShieldAlert, FlaskConical } from 'lucide-react';
 import { MeetingCallActivityList } from '@/components/meetings/MeetingCallActivityList';
+import { MeetGeekGuestCalendarPanel } from '@/components/settings/MeetGeekGuestCalendarPanel';
 
 interface Props {
   clientId: string;
