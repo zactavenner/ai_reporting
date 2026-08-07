@@ -13425,7 +13425,19 @@ export type Database = {
           guest_config_id: string | null
           id: string
           idempotency_key: string
+          invite_cancel_count: number
+          invite_last_sent_at: string | null
+          invite_message_id: string | null
+          invite_method: string | null
+          invite_mode: string
+          invite_provider: string | null
+          invite_send_count: number
+          invite_sequence: number
+          invite_uid: string | null
+          invite_update_count: number
+          meeting_url: string | null
           rejection_reason: string | null
+          schedule_signature: string | null
           scheduled_end: string | null
           scheduled_start: string | null
           status: string
@@ -13447,7 +13459,19 @@ export type Database = {
           guest_config_id?: string | null
           id?: string
           idempotency_key: string
+          invite_cancel_count?: number
+          invite_last_sent_at?: string | null
+          invite_message_id?: string | null
+          invite_method?: string | null
+          invite_mode?: string
+          invite_provider?: string | null
+          invite_send_count?: number
+          invite_sequence?: number
+          invite_uid?: string | null
+          invite_update_count?: number
+          meeting_url?: string | null
           rejection_reason?: string | null
+          schedule_signature?: string | null
           scheduled_end?: string | null
           scheduled_start?: string | null
           status?: string
@@ -13469,7 +13493,19 @@ export type Database = {
           guest_config_id?: string | null
           id?: string
           idempotency_key?: string
+          invite_cancel_count?: number
+          invite_last_sent_at?: string | null
+          invite_message_id?: string | null
+          invite_method?: string | null
+          invite_mode?: string
+          invite_provider?: string | null
+          invite_send_count?: number
+          invite_sequence?: number
+          invite_uid?: string | null
+          invite_update_count?: number
+          meeting_url?: string | null
           rejection_reason?: string | null
+          schedule_signature?: string | null
           scheduled_end?: string | null
           scheduled_start?: string | null
           status?: string

@@ -11,6 +11,7 @@ import {
 import { SHARED_SECRET_HEADER } from '../_shared/calendarGuest.ts';
 import { getMappedGhl } from '../_shared/ghlMapping.ts';
 import { runGuestInvitePolling } from '../_shared/guestPoller.ts';
+import { resolveInviteSender } from '../_shared/shadowInviteSender.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -253,6 +254,7 @@ Deno.serve(async (req) => {
         const apply = action === 'gc_bulk_rollout';
         const botEmail = normalizeEmail(body?.bot_guest_email) || DEFAULT_BOT_GUEST_EMAIL;
         const secretOk = await ghlAppointmentWebhookSecretConfigured(supabase);
+        const senderInfo = await resolveInviteSender(supabase);
 
         const { data: connections } = await supabase
           .from('google_calendar_connections')
@@ -312,9 +314,11 @@ Deno.serve(async (req) => {
           if (!client?.ghl_location_id) blockers.push('no CRM location mapped');
           if (!client?.ghl_api_key) blockers.push('no CRM API key stored');
           if (!calendarId) blockers.push(NEEDS_CALENDAR_SELECTION);
-          if (!defaultConnection) blockers.push('no organizer Google Calendar connection');
-          else if (apply && !connectionOk) blockers.push('organizer calendar connection failed verification');
           if (!botEmail) blockers.push('no notetaker guest email');
+          // Google Calendar OAuth is NOT a prerequisite any more: invites are
+          // emailed as .ics shadow invites to the notetaker mailbox.
+          // Sender config is a GLOBAL prerequisite, not a per-client blocker:
+          // jobs park as pending and send as soon as a sender exists.
           // Webhook secret intentionally NOT a blocker: polling is the primary
           // detection path.
 
@@ -369,6 +373,14 @@ Deno.serve(async (req) => {
           applied: apply,
           bot_guest_email: botEmail,
           prerequisites: {
+            invite_mode: 'shadow_email',
+            email_sender_configured: senderInfo.configured,
+            email_sender_provider: senderInfo.provider,
+            email_sender_from: senderInfo.from_email,
+            email_sender_detail: senderInfo.detail,
+            gmail_setting_note:
+              'One-time manual step in the notetaker mailbox: Gmail → Settings → General → Event settings → "Add invitations to my calendar" → From everyone.',
+            google_calendar_required: false,
             calendar_connection: !!defaultConnection,
             calendar_connection_verified: apply ? connectionOk : null,
             webhook_secret_configured: secretOk,

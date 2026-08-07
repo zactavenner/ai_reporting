@@ -25,8 +25,34 @@ import {
   type GuestConfig,
 } from './calendarGuest.ts';
 import { findEventCandidates, getAccessToken, getEvent, listEvents, patchAttendee } from './googleCalendarClient.ts';
+import {
+  buildShadowInviteIcs,
+  buildShadowInviteUid,
+  scheduleSignature,
+} from './icsInvite.ts';
+import { resolveInviteSender, sendShadowInvite } from './shadowInviteSender.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
+
+/**
+ * Detection mode.
+ *   shadow_email  — DEFAULT. Zero-OAuth: email an .ics invite to the notetaker.
+ *   google_guest  — Dormant legacy path: patch the organizer's Google event.
+ *                   Kept available, never required.
+ */
+export type InviteMode = 'shadow_email' | 'google_guest';
+
+const VIDEO_LINK_RE =
+  /(https?:\/\/[^\s<>"']*(?:zoom\.us\/j\/|zoom\.us\/my\/|meet\.google\.com\/|teams\.microsoft\.com\/|whereby\.com\/|meet\.jit\.si\/|us\d{2}web\.zoom\.us\/)[^\s<>"']*)/i;
+
+/** Pull the first video meeting link out of any GHL appointment text field. */
+export function extractVideoLink(...fields: (string | null | undefined)[]): string | null {
+  for (const field of fields) {
+    const match = String(field || '').match(VIDEO_LINK_RE);
+    if (match) return match[1].replace(/[.,;)]+$/, '');
+  }
+  return null;
+}
 
 export interface PollClientResult {
   client_id: string;
@@ -36,12 +62,20 @@ export interface PollClientResult {
   jobs_already_present: number;
   invited: number;
   pending_awaiting_connection: number;
+  /** Shadow-invite counters. */
+  invites_sent: number;
+  invites_updated: number;
+  invites_cancelled: number;
+  pending_awaiting_sender: number;
+  needs_meeting_link: number;
   rejected: number;
   errors: string[];
 }
 
 export interface PollResult {
   horizon_days: number;
+  mode: InviteMode;
+  sender: { configured: boolean; provider: string | null; from_email: string | null; detail: string };
   clients: PollClientResult[];
   google_scan: {
     connections: number;
@@ -51,7 +85,15 @@ export interface PollResult {
     skipped_duplicate: number;
     errors: string[];
   };
-  totals: { appointments_found: number; jobs_enqueued: number; invited: number; pending: number };
+  totals: {
+    appointments_found: number;
+    jobs_enqueued: number;
+    invited: number;
+    pending: number;
+    invites_sent: number;
+    invites_updated: number;
+    invites_cancelled: number;
+  };
 }
 
 function toConfig(row: any): GuestConfig {
@@ -67,13 +109,15 @@ function toConfig(row: any): GuestConfig {
   };
 }
 
-/** Upcoming events on one GHL calendar. Read-only. */
+export type PolledAppointment = GhlAppointmentLite & { cancelled: boolean };
+
+/** Upcoming events on one GHL calendar. Read-only. Cancellations included. */
 async function fetchUpcomingGhlAppointments(args: {
   apiKey: string;
   locationId: string;
   calendarId: string;
   horizonDays: number;
-}): Promise<GhlAppointmentLite[]> {
+}): Promise<PolledAppointment[]> {
   // A small backward window catches bookings made moments ago for a slot that
   // has technically just started.
   const startTime = Date.now() - 60 * 60 * 1000;
@@ -89,7 +133,7 @@ async function fetchUpcomingGhlAppointments(args: {
   const events: any[] = data?.events || data?.appointments || [];
   const cancelled = /cancel/i;
   return events
-    .filter((e) => e?.id && !cancelled.test(String(e.appointmentStatus || e.status || '')))
+    .filter((e) => e?.id)
     .map((e) => ({
       appointmentId: String(e.id),
       calendarId: String(e.calendarId || args.calendarId),
@@ -98,8 +142,142 @@ async function fetchUpcomingGhlAppointments(args: {
       startTime: e.startTime ?? null,
       endTime: e.endTime ?? null,
       externalGoogleEventId: e.googleEventId || e.externalId || null,
-      meetingUrl: e.address || e.meetingUrl || null,
+      meetingUrl:
+        extractVideoLink(e.address, e.meetingUrl, e.meetingLocation, e.notes, e.description) ||
+        e.meetingUrl ||
+        null,
+      cancelled: cancelled.test(String(e.appointmentStatus || e.status || '')),
     }));
+}
+
+/**
+ * Zero-OAuth shadow invite: email a standard iCalendar REQUEST/CANCEL for the
+ * appointment's exact window to the notetaker mailbox. Gmail auto-adds it, so
+ * MeetGeek joins without anyone touching the organizer's calendar.
+ */
+async function runShadowInvite(args: {
+  supabase: any;
+  config: GuestConfig;
+  appointment: PolledAppointment;
+  botGuestEmail: string;
+  job: any;
+}): Promise<'sent' | 'updated' | 'cancelled' | 'noop' | 'awaiting_sender' | 'needs_meeting_link' | 'error'> {
+  const { supabase, config, appointment, botGuestEmail, job } = args;
+  const finish = (patch: Record<string, unknown>) =>
+    supabase.from('meetgeek_guest_invite_jobs').update(patch).eq('id', job.id);
+
+  const link = extractVideoLink(appointment.meetingUrl);
+  const isCancel = appointment.cancelled;
+  const alreadySent = (job.invite_send_count || 0) > 0;
+
+  if (isCancel && !alreadySent) {
+    await finish({ status: 'cancelled', error_code: null, error_message: 'Appointment cancelled before any invite was sent.' });
+    return 'noop';
+  }
+  if (!isCancel && !link) {
+    await finish({
+      status: 'pending',
+      error_code: 'no_meeting_link',
+      error_message: 'Appointment has no video meeting link yet — will retry on the next poll.',
+    });
+    return 'needs_meeting_link';
+  }
+  if (!appointment.startTime || !appointment.endTime) {
+    await finish({ status: 'pending', error_code: 'no_time_window', error_message: 'Appointment is missing a start/end time.' });
+    return 'needs_meeting_link';
+  }
+
+  const signature = scheduleSignature(appointment.startTime, appointment.endTime, link);
+  if (!isCancel && alreadySent && job.schedule_signature === signature) {
+    // Nothing changed since the last invite — stay idempotent.
+    if (job.status !== 'invited') await finish({ status: 'invited' });
+    return 'noop';
+  }
+  if (isCancel && String(job.status) === 'cancelled') return 'noop';
+
+  const uid = job.invite_uid || buildShadowInviteUid({ clientId: config.clientId, appointmentId: appointment.appointmentId });
+  const method = isCancel ? 'CANCEL' : 'REQUEST';
+  // SEQUENCE must increase on every change so calendars accept the update.
+  const sequence = alreadySent ? (job.invite_sequence || 0) + 1 : job.invite_sequence || 0;
+  const sender = await resolveInviteSender(supabase);
+  if (!sender.configured || !sender.from_email) {
+    await finish({
+      status: 'pending',
+      error_code: 'no_email_sender',
+      error_message: sender.detail,
+      invite_uid: uid,
+      invite_mode: 'shadow_email',
+      meeting_url: link,
+    });
+    return 'awaiting_sender';
+  }
+
+  const title = appointment.title || 'Client call';
+  const ics = buildShadowInviteIcs({
+    uid,
+    method,
+    sequence,
+    start: appointment.startTime,
+    end: appointment.endTime,
+    summary: isCancel ? `CANCELLED — ${title}` : title,
+    description: `Auto-scheduled notetaker coverage (HPA Reporting).`,
+    meetingUrl: link,
+    organizerEmail: sender.from_email,
+    organizerName: 'HPA Reporting',
+    attendeeEmail: botGuestEmail,
+  });
+
+  const result = await sendShadowInvite({
+    supabase,
+    to: botGuestEmail,
+    subject: `${isCancel ? 'Cancelled' : alreadySent ? 'Updated' : 'Invitation'}: ${title}`,
+    bodyText: [
+      isCancel ? 'This meeting was cancelled — please drop it from the calendar.' : 'Notetaker coverage for an upcoming client meeting.',
+      link ? `Join link: ${link}` : '',
+      `Starts: ${new Date(appointment.startTime).toISOString()}`,
+    ].filter(Boolean).join('\n\n'),
+    ics,
+    method,
+  });
+
+  if (!result.ok) {
+    await finish({
+      status: result.configured ? 'error' : 'pending',
+      error_code: result.configured ? 'invite_email_failed' : 'no_email_sender',
+      error_message: result.error || 'invite email failed',
+      invite_uid: uid,
+      invite_mode: 'shadow_email',
+      meeting_url: link,
+    });
+    return result.configured ? 'error' : 'awaiting_sender';
+  }
+
+  // The mail provider accepted the invite ⇒ the job is done for this state.
+  await finish({
+    status: isCancel ? 'cancelled' : 'invited',
+    invite_mode: 'shadow_email',
+    invite_uid: uid,
+    invite_sequence: sequence,
+    invite_method: method,
+    invite_provider: result.provider,
+    invite_message_id: result.message_id,
+    invite_last_sent_at: new Date().toISOString(),
+    invite_send_count: isCancel ? job.invite_send_count || 0 : (job.invite_send_count || 0) + 1,
+    invite_update_count: !isCancel && alreadySent ? (job.invite_update_count || 0) + 1 : job.invite_update_count || 0,
+    invite_cancel_count: isCancel ? (job.invite_cancel_count || 0) + 1 : job.invite_cancel_count || 0,
+    schedule_signature: signature,
+    meeting_url: link,
+    completed_at: new Date().toISOString(),
+    error_code: null,
+    error_message: null,
+  });
+  await supabase
+    .from('client_meetgeek_guest_configs')
+    .update({ last_invite_at: new Date().toISOString(), last_error: null })
+    .eq('id', config.id);
+
+  if (isCancel) return 'cancelled';
+  return alreadySent ? 'updated' : 'sent';
 }
 
 /**
@@ -192,9 +370,13 @@ export async function runGuestInvitePolling(args: {
   scanGoogle?: boolean;
   /** Operator-only: poll a single client even while it is still disabled. */
   force?: boolean;
+  /** Defaults to the zero-OAuth shadow-invite path. */
+  mode?: InviteMode;
 }): Promise<PollResult> {
   const { supabase } = args;
   const horizonDays = args.horizonDays ?? 14;
+  const mode: InviteMode = args.mode === 'google_guest' ? 'google_guest' : 'shadow_email';
+  const sender = await resolveInviteSender(supabase);
 
   let configQuery = supabase
     .from('client_meetgeek_guest_configs')
@@ -227,6 +409,11 @@ export async function runGuestInvitePolling(args: {
       jobs_already_present: 0,
       invited: 0,
       pending_awaiting_connection: 0,
+      invites_sent: 0,
+      invites_updated: 0,
+      invites_cancelled: 0,
+      pending_awaiting_sender: 0,
+      needs_meeting_link: 0,
       rejected: 0,
       errors: [],
     };
@@ -244,7 +431,7 @@ export async function runGuestInvitePolling(args: {
       continue;
     }
 
-    let appointments: GhlAppointmentLite[] = [];
+    let appointments: PolledAppointment[] = [];
     try {
       appointments = await fetchUpcomingGhlAppointments({
         apiKey: client.ghl_api_key,
@@ -273,13 +460,25 @@ export async function runGuestInvitePolling(args: {
 
       const { data: existing } = await supabase
         .from('meetgeek_guest_invite_jobs')
-        .select('id, status, attempts')
+        .select(
+          'id, status, attempts, invite_uid, invite_sequence, invite_send_count, invite_update_count, invite_cancel_count, schedule_signature',
+        )
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
 
-      // Dedupe across webhook + poller: anything already invited or rejected is
-      // left untouched.
-      if (existing && TERMINAL.has(String(existing.status))) {
+      // Dedupe across webhook + poller. In shadow mode an already-invited job is
+      // still revisited so reschedules and cancellations stay in sync; only the
+      // signature check decides whether anything is actually re-sent.
+      const revisit =
+        mode === 'shadow_email' &&
+        (appointment.cancelled ||
+          scheduleSignature(appointment.startTime, appointment.endTime, extractVideoLink(appointment.meetingUrl)) !==
+            (existing?.schedule_signature || ''));
+      if (existing && TERMINAL.has(String(existing.status)) && !revisit) {
+        result.jobs_already_present += 1;
+        continue;
+      }
+      if (existing && String(existing.status) === 'cancelled' && appointment.cancelled) {
         result.jobs_already_present += 1;
         continue;
       }
@@ -304,7 +503,8 @@ export async function runGuestInvitePolling(args: {
         continue;
       }
 
-      const hasConnection = !!row.calendar_connection_id;
+      const shadow = mode === 'shadow_email';
+      const hasConnection = !shadow && !!row.calendar_connection_id;
       const { data: job } = await supabase
         .from('meetgeek_guest_invite_jobs')
         .upsert(
@@ -317,28 +517,54 @@ export async function runGuestInvitePolling(args: {
             ghl_location_id: config.ghlLocationId,
             google_calendar_id: hasConnection ? config.organizerCalendarId : null,
             bot_guest_email: gate.botGuestEmail,
-            // Without a Google connection the job parks as `pending` and is
-            // picked up by a later poll once the calendar is connected.
-            status: hasConnection ? 'processing' : 'pending',
-            attempts: hasConnection ? (existing?.attempts || 0) + 1 : existing?.attempts || 0,
+            invite_mode: shadow ? 'shadow_email' : 'google_guest',
+            // Shadow mode always processes immediately; the legacy Google path
+            // parks as `pending` until a connection exists.
+            status: shadow || hasConnection ? 'processing' : 'pending',
+            attempts: shadow || hasConnection ? (existing?.attempts || 0) + 1 : existing?.attempts || 0,
             scheduled_start: appointment.startTime,
             scheduled_end: appointment.endTime,
+            meeting_url: extractVideoLink(appointment.meetingUrl),
             rejection_reason: null,
-            error_message: hasConnection ? null : 'Waiting for the organizer Google Calendar connection.',
+            error_message: shadow || hasConnection ? null : 'Waiting for the organizer Google Calendar connection.',
           },
           { onConflict: 'idempotency_key' },
         )
-        .select('id')
+        .select(
+          'id, status, invite_uid, invite_sequence, invite_send_count, invite_update_count, invite_cancel_count, schedule_signature',
+        )
         .maybeSingle();
 
       if (!existing) result.jobs_enqueued += 1;
       else result.jobs_already_present += 1;
 
+      if (!job?.id) continue;
+
+      if (shadow) {
+        const outcome = await runShadowInvite({
+          supabase,
+          config,
+          appointment,
+          botGuestEmail: gate.botGuestEmail,
+          job: { ...(existing || {}), ...job },
+        });
+        if (outcome === 'sent') {
+          result.invites_sent += 1;
+          result.invited += 1;
+        } else if (outcome === 'updated') {
+          result.invites_updated += 1;
+          result.invited += 1;
+        } else if (outcome === 'cancelled') result.invites_cancelled += 1;
+        else if (outcome === 'awaiting_sender') result.pending_awaiting_sender += 1;
+        else if (outcome === 'needs_meeting_link') result.needs_meeting_link += 1;
+        else if (outcome === 'error') result.errors.push(`${appointment.appointmentId}: invite email failed`);
+        continue;
+      }
+
       if (!hasConnection) {
         result.pending_awaiting_connection += 1;
         continue;
       }
-      if (!job?.id) continue;
       const outcome = await runInvite({
         supabase,
         config,
@@ -368,7 +594,8 @@ export async function runGuestInvitePolling(args: {
     errors: [] as string[],
   };
 
-  if (args.scanGoogle !== false) {
+  // Dormant legacy path: only runs when explicitly requested in google mode.
+  if (mode === 'google_guest' && args.scanGoogle !== false) {
     const byConnection = new Map<string, any[]>();
     for (const row of configRows || []) {
       if (!row.calendar_connection_id) continue;
@@ -489,13 +716,23 @@ export async function runGuestInvitePolling(args: {
 
   return {
     horizon_days: horizonDays,
+    mode,
+    sender: {
+      configured: sender.configured,
+      provider: sender.provider,
+      from_email: sender.from_email,
+      detail: sender.detail,
+    },
     clients,
     google_scan: google,
     totals: {
       appointments_found: clients.reduce((s, c) => s + c.ghl_appointments_found, 0),
       jobs_enqueued: clients.reduce((s, c) => s + c.jobs_enqueued, 0),
       invited: clients.reduce((s, c) => s + c.invited, 0) + google.invited,
-      pending: clients.reduce((s, c) => s + c.pending_awaiting_connection, 0),
+      pending: clients.reduce((s, c) => s + c.pending_awaiting_connection + c.pending_awaiting_sender, 0),
+      invites_sent: clients.reduce((s, c) => s + c.invites_sent, 0),
+      invites_updated: clients.reduce((s, c) => s + c.invites_updated, 0),
+      invites_cancelled: clients.reduce((s, c) => s + c.invites_cancelled, 0),
     },
   };
 }
