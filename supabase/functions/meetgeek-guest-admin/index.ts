@@ -115,8 +115,18 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Operator-triggered run of the polling ingest (same code path as cron).
+      case 'gc_run_poll': {
+        const result = await runGuestInvitePolling({
+          supabase,
+          clientId,
+          horizonDays: Number(body?.horizon_days) > 0 ? Number(body.horizon_days) : 14,
+          scanGoogle: body?.scan_google !== false,
+        });
+        return json({ ok: true, ...result });
+      }
+
       case 'gc_list_connections': {
-        // Operator-triggered run of the polling ingest (same code path as cron).
         const { data } = await supabase
           .from('google_calendar_connections')
           .select('id, organizer_email, display_name, status, scope, refresh_token, access_token_expires_at, last_verified_at, last_error, created_at')
