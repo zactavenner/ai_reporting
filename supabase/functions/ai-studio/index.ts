@@ -2025,6 +2025,21 @@ async function generateSeedanceVideo(opts: {
   const jobId: string = sj.id || crypto.randomUUID();
   console.log(`[openrouter:/videos][queued] model=${body.model} provider_model=${extractProviderModel(sj) || "-"} job_id=${jobId} polling_url=${pollingUrl ? "yes" : "no"} response=${JSON.stringify(sj).slice(0, 400)}`);
   if (!pollingUrl) throw new Error(`${modelLabel} returned no polling_url: ${JSON.stringify(sj).slice(0, 300)}`);
+  // Persist the provider handle on the pending canvas row so a later sweep can
+  // RESCUE the render (re-poll OpenRouter) instead of blindly failing it when the
+  // background EdgeRuntime.waitUntil worker is recycled mid-poll.
+  if (pendingCanvasItemId) {
+    try {
+      const { data: cur } = await supa.from("ai_studio_canvas_items")
+        .select("payload").eq("id", pendingCanvasItemId).single();
+      const curPayload: any = cur?.payload || {};
+      if (curPayload.status === "processing") {
+        await supa.from("ai_studio_canvas_items").update({
+          payload: { ...curPayload, provider_job_id: jobId, polling_url: pollingUrl },
+        }).eq("id", pendingCanvasItemId);
+      }
+    } catch (e) { console.warn("pending canvas provider handle update failed (non-fatal)", e); }
+  }
   const queuedProviderModel = extractProviderModel(sj);
   let downstreamModelSeen = queuedProviderModel || String(body.model || model);
   const queuedDownstreamOverride = !!queuedProviderModel && queuedProviderModel !== body.model;
@@ -3988,6 +4003,46 @@ Deno.serve(async (req) => {
       try { req.signal.addEventListener("abort", () => { disconnected = true; }); } catch {}
 
       send({ type: "conversation", conversationId });
+      // PROVIDER RESCUE: before any sweep declares a render dead, re-poll the
+      // provider with the handle persisted at submit time. OpenRouter keeps the
+      // job long after our background worker was recycled, so a finished video
+      // must never be reported as a failure.
+      const rescueCanvasRow = async (rowId: string, p: any): Promise<"completed" | "in_flight" | "dead"> => {
+        const pollingUrl: string | undefined = p?.polling_url;
+        if (!pollingUrl || !OPENROUTER_API_KEY) return "dead";
+        try {
+          const r = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+          if (!r.ok) return "dead";
+          const pj = await r.json();
+          const status = String(pj?.status || "").toLowerCase();
+          if (status === "completed") {
+            const urls: string[] = pj.unsigned_urls || pj.signed_urls || pj.urls
+              || (pj.video?.url ? [pj.video.url] : []);
+            const videoUrl = urls.find((u) => typeof u === "string" && /^https?:\/\//.test(u));
+            if (!videoUrl) return "dead";
+            await supa.from("ai_studio_canvas_items").update({
+              placeholder_until: null,
+              payload: {
+                ...p,
+                status: "completed",
+                video_url: videoUrl,
+                completed_at: new Date().toISOString(),
+                rescued_from_stale_poll: true,
+              },
+            }).eq("id", rowId);
+            return "completed";
+          }
+          if (status === "failed" || status === "cancelled") return "dead";
+          // Still pending/in_progress at the provider — extend the deadline.
+          await supa.from("ai_studio_canvas_items").update({
+            placeholder_until: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+          }).eq("id", rowId);
+          return "in_flight";
+        } catch (e) {
+          console.warn("canvas rescue poll failed (non-fatal)", e);
+          return "dead";
+        }
+      };
       // STALE PROCESSING SWEEP: any prior "processing" canvas video card for
       // this user that's been queued for longer than the worst-case
       // HappyHorse poll budget (25 min) is definitely dead — either the
@@ -4013,6 +4068,8 @@ Deno.serve(async (req) => {
         for (const row of stale || []) {
           const p: any = row.payload || {};
           if (p?.status !== "processing" || p?.video_url) continue;
+          const rescued = await rescueCanvasRow(row.id, p);
+          if (rescued !== "dead") continue;
           await supa.from("ai_studio_canvas_items").update({
             placeholder_until: null,
             payload: {
@@ -4043,6 +4100,8 @@ Deno.serve(async (req) => {
         for (const row of expired || []) {
           const p: any = row.payload || {};
           if (p?.status !== "processing" || p?.video_url) continue;
+          const rescued = await rescueCanvasRow(row.id, p);
+          if (rescued !== "dead") continue;
           await supa.from("ai_studio_canvas_items").update({
             placeholder_until: null,
             payload: {
