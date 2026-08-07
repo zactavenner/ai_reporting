@@ -109,13 +109,15 @@ function toConfig(row: any): GuestConfig {
   };
 }
 
-/** Upcoming events on one GHL calendar. Read-only. */
+export type PolledAppointment = GhlAppointmentLite & { cancelled: boolean };
+
+/** Upcoming events on one GHL calendar. Read-only. Cancellations included. */
 async function fetchUpcomingGhlAppointments(args: {
   apiKey: string;
   locationId: string;
   calendarId: string;
   horizonDays: number;
-}): Promise<GhlAppointmentLite[]> {
+}): Promise<PolledAppointment[]> {
   // A small backward window catches bookings made moments ago for a slot that
   // has technically just started.
   const startTime = Date.now() - 60 * 60 * 1000;
@@ -131,7 +133,7 @@ async function fetchUpcomingGhlAppointments(args: {
   const events: any[] = data?.events || data?.appointments || [];
   const cancelled = /cancel/i;
   return events
-    .filter((e) => e?.id && !cancelled.test(String(e.appointmentStatus || e.status || '')))
+    .filter((e) => e?.id)
     .map((e) => ({
       appointmentId: String(e.id),
       calendarId: String(e.calendarId || args.calendarId),
@@ -140,8 +142,142 @@ async function fetchUpcomingGhlAppointments(args: {
       startTime: e.startTime ?? null,
       endTime: e.endTime ?? null,
       externalGoogleEventId: e.googleEventId || e.externalId || null,
-      meetingUrl: e.address || e.meetingUrl || null,
+      meetingUrl:
+        extractVideoLink(e.address, e.meetingUrl, e.meetingLocation, e.notes, e.description) ||
+        e.meetingUrl ||
+        null,
+      cancelled: cancelled.test(String(e.appointmentStatus || e.status || '')),
     }));
+}
+
+/**
+ * Zero-OAuth shadow invite: email a standard iCalendar REQUEST/CANCEL for the
+ * appointment's exact window to the notetaker mailbox. Gmail auto-adds it, so
+ * MeetGeek joins without anyone touching the organizer's calendar.
+ */
+async function runShadowInvite(args: {
+  supabase: any;
+  config: GuestConfig;
+  appointment: PolledAppointment;
+  botGuestEmail: string;
+  job: any;
+}): Promise<'sent' | 'updated' | 'cancelled' | 'noop' | 'awaiting_sender' | 'needs_meeting_link' | 'error'> {
+  const { supabase, config, appointment, botGuestEmail, job } = args;
+  const finish = (patch: Record<string, unknown>) =>
+    supabase.from('meetgeek_guest_invite_jobs').update(patch).eq('id', job.id);
+
+  const link = extractVideoLink(appointment.meetingUrl);
+  const isCancel = appointment.cancelled;
+  const alreadySent = (job.invite_send_count || 0) > 0;
+
+  if (isCancel && !alreadySent) {
+    await finish({ status: 'cancelled', error_code: null, error_message: 'Appointment cancelled before any invite was sent.' });
+    return 'noop';
+  }
+  if (!isCancel && !link) {
+    await finish({
+      status: 'pending',
+      error_code: 'no_meeting_link',
+      error_message: 'Appointment has no video meeting link yet — will retry on the next poll.',
+    });
+    return 'needs_meeting_link';
+  }
+  if (!appointment.startTime || !appointment.endTime) {
+    await finish({ status: 'pending', error_code: 'no_time_window', error_message: 'Appointment is missing a start/end time.' });
+    return 'needs_meeting_link';
+  }
+
+  const signature = scheduleSignature(appointment.startTime, appointment.endTime, link);
+  if (!isCancel && alreadySent && job.schedule_signature === signature) {
+    // Nothing changed since the last invite — stay idempotent.
+    if (job.status !== 'invited') await finish({ status: 'invited' });
+    return 'noop';
+  }
+  if (isCancel && String(job.status) === 'cancelled') return 'noop';
+
+  const uid = job.invite_uid || buildShadowInviteUid({ clientId: config.clientId, appointmentId: appointment.appointmentId });
+  const method = isCancel ? 'CANCEL' : 'REQUEST';
+  // SEQUENCE must increase on every change so calendars accept the update.
+  const sequence = alreadySent ? (job.invite_sequence || 0) + 1 : job.invite_sequence || 0;
+  const sender = await resolveInviteSender(supabase);
+  if (!sender.configured || !sender.from_email) {
+    await finish({
+      status: 'pending',
+      error_code: 'no_email_sender',
+      error_message: sender.detail,
+      invite_uid: uid,
+      invite_mode: 'shadow_email',
+      meeting_url: link,
+    });
+    return 'awaiting_sender';
+  }
+
+  const title = appointment.title || 'Client call';
+  const ics = buildShadowInviteIcs({
+    uid,
+    method,
+    sequence,
+    start: appointment.startTime,
+    end: appointment.endTime,
+    summary: isCancel ? `CANCELLED — ${title}` : title,
+    description: `Auto-scheduled notetaker coverage (HPA Reporting).`,
+    meetingUrl: link,
+    organizerEmail: sender.from_email,
+    organizerName: 'HPA Reporting',
+    attendeeEmail: botGuestEmail,
+  });
+
+  const result = await sendShadowInvite({
+    supabase,
+    to: botGuestEmail,
+    subject: `${isCancel ? 'Cancelled' : alreadySent ? 'Updated' : 'Invitation'}: ${title}`,
+    bodyText: [
+      isCancel ? 'This meeting was cancelled — please drop it from the calendar.' : 'Notetaker coverage for an upcoming client meeting.',
+      link ? `Join link: ${link}` : '',
+      `Starts: ${new Date(appointment.startTime).toISOString()}`,
+    ].filter(Boolean).join('\n\n'),
+    ics,
+    method,
+  });
+
+  if (!result.ok) {
+    await finish({
+      status: result.configured ? 'error' : 'pending',
+      error_code: result.configured ? 'invite_email_failed' : 'no_email_sender',
+      error_message: result.error || 'invite email failed',
+      invite_uid: uid,
+      invite_mode: 'shadow_email',
+      meeting_url: link,
+    });
+    return result.configured ? 'error' : 'awaiting_sender';
+  }
+
+  // The mail provider accepted the invite ⇒ the job is done for this state.
+  await finish({
+    status: isCancel ? 'cancelled' : 'invited',
+    invite_mode: 'shadow_email',
+    invite_uid: uid,
+    invite_sequence: sequence,
+    invite_method: method,
+    invite_provider: result.provider,
+    invite_message_id: result.message_id,
+    invite_last_sent_at: new Date().toISOString(),
+    invite_send_count: isCancel ? job.invite_send_count || 0 : (job.invite_send_count || 0) + 1,
+    invite_update_count: !isCancel && alreadySent ? (job.invite_update_count || 0) + 1 : job.invite_update_count || 0,
+    invite_cancel_count: isCancel ? (job.invite_cancel_count || 0) + 1 : job.invite_cancel_count || 0,
+    schedule_signature: signature,
+    meeting_url: link,
+    completed_at: new Date().toISOString(),
+    error_code: null,
+    error_message: null,
+  });
+  await supabase
+    .from('client_meetgeek_guest_configs')
+    .update({ last_invite_at: new Date().toISOString(), last_error: null })
+    .eq('id', config.id);
+
+  if (isCancel) return 'cancelled';
+  return alreadySent ? 'updated' : 'sent';
 }
 
 /**
