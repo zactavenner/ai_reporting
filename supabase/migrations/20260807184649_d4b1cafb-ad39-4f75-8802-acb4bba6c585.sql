@@ -1,0 +1,2 @@
+ALTER TABLE public.ad_spend_sync_runs DROP CONSTRAINT IF EXISTS ad_spend_sync_runs_status_check;
+ALTER TABLE public.ad_spend_sync_runs ADD CONSTRAINT ad_spend_sync_runs_status_check CHECK (status = ANY (ARRAY['success','error','partial','running','blocked']));

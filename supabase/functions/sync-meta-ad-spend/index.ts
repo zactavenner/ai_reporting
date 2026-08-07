@@ -122,6 +122,48 @@ async function fetchMetaInsights(acct: AccountRow, date: string): Promise<Campai
   return rows;
 }
 
+// ---------- ad account health ----------
+// account_status: 1 ACTIVE, 2 DISABLED, 3 UNSETTLED, 7 PENDING_RISK_REVIEW,
+// 8 PENDING_SETTLEMENT, 9 IN_GRACE_PERIOD, 100 PENDING_CLOSURE, 101 CLOSED,
+// 201 ANY_ACTIVE, 202 ANY_CLOSED. Anything other than 1/9 cannot deliver, so a
+// "0 rows" sync is expected — we must surface WHY instead of blaming the token.
+type AccountHealth = { status: number; disable_reason: number | null; ok: boolean; label: string };
+const ACCOUNT_STATUS_LABEL: Record<number, string> = {
+  1: 'active', 2: 'disabled', 3: 'unsettled', 7: 'pending risk review',
+  8: 'pending settlement', 9: 'in grace period', 100: 'pending closure', 101: 'closed',
+};
+const DISABLE_REASON_LABEL: Record<number, string> = {
+  0: 'none', 1: 'ads integrity policy', 2: 'ads-ip review', 3: 'risk payment',
+  4: 'gray account shut down', 5: 'ads afc review', 6: 'business integrity rar',
+  7: 'permanent close', 8: 'unused reseller account', 9: 'unused account',
+};
+async function fetchAccountHealth(acct: AccountRow, cache: Map<string, AccountHealth>): Promise<AccountHealth | null> {
+  const hit = cache.get(acct.ad_account_id);
+  if (hit) return hit;
+  try {
+    const url = new URL(`https://graph.facebook.com/v21.0/${acct.ad_account_id}`);
+    url.searchParams.set('fields', 'account_status,disable_reason');
+    url.searchParams.set('access_token', acct.token);
+    const res = await fetch(url.toString());
+    if (!res.ok) return null;
+    const b = await res.json();
+    const status = Number(b.account_status ?? 0);
+    const disable_reason = b.disable_reason == null ? null : Number(b.disable_reason);
+    const health: AccountHealth = {
+      status,
+      disable_reason,
+      ok: status === 1 || status === 9,
+      label: `${ACCOUNT_STATUS_LABEL[status] ?? `status ${status}`}${
+        disable_reason ? ` (${DISABLE_REASON_LABEL[disable_reason] ?? `reason ${disable_reason}`})` : ''
+      }`,
+    };
+    cache.set(acct.ad_account_id, health);
+    return health;
+  } catch {
+    return null;
+  }
+}
+
 async function upsertDaily(sb: any, acct: AccountRow, date: string, rows: CampaignRow[]): Promise<number> {
   if (!rows.length) return 0;
   const payload = rows.map((r) => ({
@@ -301,6 +343,7 @@ Deno.serve(async (req) => {
     }
     const readySheets = new Set<string>();
     const sheetIndexCache = new Map<string, SheetIndex>();
+    const healthCache = new Map<string, AccountHealth>();
 
     const accounts = await loadAccounts(sb, body.client_id);
     const summary = {
@@ -329,6 +372,17 @@ Deno.serve(async (req) => {
             status: 'error', error_message: lastErr, finished_at: new Date().toISOString(),
           }).eq('id', runId);
           continue;
+        }
+
+        // A clean fetch that returns nothing is ambiguous: either the account
+        // genuinely didn't deliver, or Meta has it disabled/unsettled. Resolve
+        // that here so the run row states the real reason.
+        let blockedReason: string | null = null;
+        if (!rows.length) {
+          const health = await fetchAccountHealth(acct, healthCache);
+          if (health && !health.ok) {
+            blockedReason = `Meta ad account ${acct.ad_account_id} is ${health.label} — no delivery, so no spend to report. Resolve in Meta Business Manager.`;
+          }
         }
 
         let written = 0;
@@ -365,7 +419,9 @@ Deno.serve(async (req) => {
         summary.ok++;
         summary.total_rows += written;
         await sb.from('ad_spend_sync_runs').update({
-          status: overall, rows_written: written,
+          status: blockedReason ? 'blocked' : overall,
+          rows_written: written,
+          error_message: blockedReason,
           sheet_status: sheetStatus, sheet_error: sheetErr,
           finished_at: new Date().toISOString(),
         }).eq('id', runId);
@@ -402,6 +458,14 @@ Deno.serve(async (req) => {
           recovered: recovered > 0,
         });
         if (recovered === 0) {
+          const reasons: string[] = [];
+          for (const acct of clientAccts) {
+            const health = await fetchAccountHealth(acct, healthCache);
+            if (health && !health.ok) reasons.push(`${acct.ad_account_id}: ${health.label}`);
+          }
+          const detail = reasons.length
+            ? `Meta ad account not delivering — ${reasons.join('; ')}. Resolve in Meta Business Manager; no spend exists to backfill.`
+            : `No ad_spend_daily rows for ${yday} after retry — check Meta token / ad account access.`;
           await sb.from('data_discrepancies').insert({
             client_id: cid,
             discrepancy_type: 'ad_spend_missing',
@@ -410,9 +474,9 @@ Deno.serve(async (req) => {
             api_count: 0,
             db_count: 0,
             difference: 0,
-            severity: 'high',
+            severity: reasons.length ? 'critical' : 'high',
             status: 'open',
-            resolution_notes: `No ad_spend_daily rows for ${yday} after retry — check Meta token / ad account access.`,
+            resolution_notes: detail,
           });
         }
       }
