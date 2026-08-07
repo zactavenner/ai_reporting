@@ -4,12 +4,16 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import { normalizeEmail, redactConnection } from '../_shared/calendarGuest.ts';
 import { verifyConnection } from '../_shared/googleCalendarClient.ts';
-import { ghlAppointmentWebhookSecretConfigured } from '../_shared/webhookSecret.ts';
+import {
+  ghlAppointmentWebhookSecretConfigured,
+  revealStoredGhlAppointmentWebhookSecret,
+} from '../_shared/webhookSecret.ts';
+import { SHARED_SECRET_HEADER } from '../_shared/calendarGuest.ts';
 import { getMappedGhl } from '../_shared/ghlMapping.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-dashboard-token',
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -61,20 +65,52 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const auth = await authorizeOperator(req, supabase, createClient);
-  if (!auth.ok) return json({ error: auth.error, code: auth.code }, auth.status);
-
   let body: any = {};
   try {
     body = await req.json();
   } catch {
     return json({ error: 'JSON body required' }, 400);
   }
+
+  const auth = await authorizeOperator(req, supabase, createClient, body);
+  if (!auth.ok) return json({ error: auth.error, code: auth.code }, auth.status);
+
   const action = String(body?.action || '');
   const clientId = body?.client_id ? String(body.client_id) : null;
 
   try {
     switch (action) {
+      // Operator-only: the exact values needed to wire each GHL location's
+      // "Customer Booked Appointment" workflow webhook action.
+      case 'gc_webhook_setup': {
+        const secret = await revealStoredGhlAppointmentWebhookSecret(supabase);
+        const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/ghl-appointment-webhook`;
+        const { data: locations } = await supabase
+          .from('clients')
+          .select('id, name, status, ghl_location_id')
+          .not('ghl_location_id', 'is', null)
+          .order('name');
+        return json({
+          webhook_url: webhookUrl,
+          secret_header: SHARED_SECRET_HEADER,
+          secret,
+          secret_configured: await ghlAppointmentWebhookSecretConfigured(supabase),
+          instructions: [
+            'In the client’s GHL location, open Automation → Workflows → Create Workflow (Start from Scratch).',
+            'Add trigger: "Customer Booked Appointment" (optionally filter to the booking calendar).',
+            'Add action: "Webhook" → Method POST → URL = the webhook URL below.',
+            `Under Headers add: ${SHARED_SECRET_HEADER} = the shared secret below.`,
+            'Leave the body as the default appointment payload, then Save and Publish the workflow.',
+          ],
+          locations: (locations || []).map((c: any) => ({
+            client_id: c.id,
+            client_name: c.name,
+            client_status: c.status,
+            ghl_location_id: c.ghl_location_id,
+          })),
+        });
+      }
+
       case 'gc_list_connections': {
         const { data } = await supabase
           .from('google_calendar_connections')

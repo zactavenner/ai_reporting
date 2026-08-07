@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Loader2, Rocket, ShieldAlert, ShieldCheck, CalendarSearch } from 'lucide-react';
+import { Loader2, Rocket, ShieldAlert, ShieldCheck, CalendarSearch, Copy, Eye, EyeOff, Webhook } from 'lucide-react';
 
 const BOT_GUEST_EMAIL = 'theainotetaker@gmail.com';
 
@@ -33,8 +34,20 @@ interface RolloutPayload {
   clients: RolloutClient[];
 }
 
+interface WebhookSetup {
+  webhook_url: string;
+  secret_header: string;
+  secret: string | null;
+  secret_configured: boolean;
+  instructions: string[];
+  locations: { client_id: string; client_name: string; client_status: string | null; ghl_location_id: string }[];
+}
+
 async function invokeAdmin<T = any>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('meetgeek-guest-admin', { body });
+  const { data, error } = await supabase.functions.invoke('meetgeek-guest-admin', {
+    body,
+    headers: dashboardAuthHeaders(),
+  });
   if (error) {
     let message = error.message;
     try {
@@ -63,11 +76,26 @@ function Check({ ok, label }: { ok: boolean; label: string }) {
 export function MeetGeekRolloutPanel() {
   const queryClient = useQueryClient();
   const [result, setResult] = useState<RolloutPayload | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
 
   const status = useQuery({
     queryKey: ['gc-rollout-status'],
     queryFn: () => invokeAdmin<RolloutPayload>({ action: 'gc_rollout_status', bot_guest_email: BOT_GUEST_EMAIL }),
   });
+
+  const setup = useQuery({
+    queryKey: ['gc-webhook-setup'],
+    queryFn: () => invokeAdmin<WebhookSetup>({ action: 'gc_webhook_setup' }),
+  });
+
+  const copy = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error('Copy failed — select the value manually');
+    }
+  };
 
   const rollout = useMutation({
     mutationFn: () => invokeAdmin<RolloutPayload>({ action: 'gc_bulk_rollout', bot_guest_email: BOT_GUEST_EMAIL }),
@@ -109,6 +137,59 @@ export function MeetGeekRolloutPanel() {
         <p className="text-xs text-destructive border border-destructive/40 bg-destructive/5 p-2 rounded">
           {(status.error as Error).message}
         </p>
+      ) : null}
+
+      {setup.data ? (
+        <div className="border border-border/70 p-3 space-y-2">
+          <Label className="text-xs flex items-center gap-2">
+            <Webhook className="h-3.5 w-3.5" />
+            GHL appointment webhook — paste into each location
+          </Label>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-24 shrink-0 text-muted-foreground">URL</span>
+              <code className="font-mono truncate flex-1">{setup.data.webhook_url}</code>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copy(setup.data!.webhook_url, 'Webhook URL')}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-24 shrink-0 text-muted-foreground">Header</span>
+              <code className="font-mono truncate flex-1">{setup.data.secret_header}</code>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copy(setup.data!.secret_header, 'Header name')}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-24 shrink-0 text-muted-foreground">Secret</span>
+              <code className="font-mono truncate flex-1">
+                {setup.data.secret
+                  ? showSecret
+                    ? setup.data.secret
+                    : `${setup.data.secret.slice(0, 4)}${'•'.repeat(24)}${setup.data.secret.slice(-4)}`
+                  : 'stored as an environment secret (not readable here)'}
+              </code>
+              {setup.data.secret ? (
+                <>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setShowSecret((v) => !v)}>
+                    {showSecret ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copy(setup.data!.secret!, 'Shared secret')}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <ol className="list-decimal pl-5 space-y-0.5 text-[11px] text-muted-foreground">
+            {setup.data.instructions.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <p className="text-[11px] text-muted-foreground">
+            {setup.data.locations.length} client locations are mapped and ready for this workflow.
+          </p>
+        </div>
       ) : null}
 
       <div className="space-y-1">

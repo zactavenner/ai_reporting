@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 
 /**
  * Calls the MeetGeek bridge and surfaces the server's authorization message.
@@ -6,7 +7,10 @@ import { supabase } from '@/integrations/supabase/client';
  * can mean "not an operator" or "no operators provisioned yet" (bootstrap).
  */
 export async function invokeMeetgeek<T = any>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('meetgeek-webhook', { body });
+  const { data, error } = await supabase.functions.invoke('meetgeek-webhook', {
+    body,
+    headers: dashboardAuthHeaders(),
+  });
   if (error) {
     let message = error.message;
     try {
