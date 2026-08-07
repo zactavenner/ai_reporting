@@ -317,7 +317,8 @@ Deno.serve(async (req) => {
           if (!botEmail) blockers.push('no notetaker guest email');
           // Google Calendar OAuth is NOT a prerequisite any more: invites are
           // emailed as .ics shadow invites to the notetaker mailbox.
-          if (!senderInfo.configured) blockers.push('no email sender configured');
+          // Sender config is a GLOBAL prerequisite, not a per-client blocker:
+          // jobs park as pending and send as soon as a sender exists.
           // Webhook secret intentionally NOT a blocker: polling is the primary
           // detection path.
 
