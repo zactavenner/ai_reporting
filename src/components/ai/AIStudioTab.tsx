@@ -105,15 +105,15 @@ export const SEEDANCE_VIDEO_MODEL = "bytedance/seedance-2.0";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
-  // MiniMax H3 renders at 720p (cheaper/faster) or native 2K.
-  "minimax/hailuo-3":            ["720p", "2k"],
+  // MiniMax H3 on OpenRouter supports native 2K only (720p is rejected upstream).
+  "minimax/hailuo-3":            ["2k"],
   // Seedance is locked to 720p in Reporting 5.0.
   "bytedance/seedance-2.0":      ["720p"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
-  "minimax/hailuo-3": { "720p": 0.06, "2k": 0.13 },
+  "minimax/hailuo-3": { "2k": 0.13 },
   "bytedance/seedance-2.0": { "720p": 0.0538 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
