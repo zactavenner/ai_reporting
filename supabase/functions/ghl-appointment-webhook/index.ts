@@ -29,6 +29,7 @@ import {
   verifySharedSecretHeader,
 } from '../_shared/calendarGuest.ts';
 import { findEventCandidates, getAccessToken, getEvent, patchAttendee } from '../_shared/googleCalendarClient.ts';
+import { runGuestInvitePolling } from '../_shared/guestPoller.ts';
 import { getMappedGhl } from '../_shared/ghlMapping.ts';
 import { resolveGhlAppointmentWebhookSecret } from '../_shared/webhookSecret.ts';
 
@@ -174,7 +175,12 @@ Deno.serve(async (req) => {
   const mappingUsable = !!apiKey && !!mappedLocationId && mappedLocationId === config.ghlLocationId;
   const appointment = mappingUsable ? await fetchAppointment(apiKey!, appointmentId) : null;
 
-  const gate = evaluateGuestGate({ config, appointment });
+  // The shadow-invite path needs no Google connection, so the gate is evaluated
+  // with a placeholder; the dormant Google path still uses the real value.
+  const gate = evaluateGuestGate({
+    config: { ...config, calendarConnectionId: config.calendarConnectionId || 'pending' },
+    appointment,
+  });
   const idempotencyKey = buildInviteIdempotencyKey({
     clientId: config.clientId,
     appointmentId,
