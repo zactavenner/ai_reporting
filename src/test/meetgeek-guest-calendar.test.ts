@@ -203,6 +203,12 @@ describe('owner preservation', () => {
 });
 
 describe('no token exposure', () => {
+  it('never leaks the shared secret through the verifier result', () => {
+    const secret = 'A'.repeat(40);
+    const result = verifySharedSecretHeader({ header: 'wrong', secret });
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
   it('redacts every credential field from connection metadata', () => {
     const redacted = redactConnection({
       id: 'conn-1',
