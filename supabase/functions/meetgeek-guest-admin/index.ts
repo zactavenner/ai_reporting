@@ -217,9 +217,9 @@ Deno.serve(async (req) => {
         if (!connectionId) blockers.push('no organizer calendar connection');
         else if (!connectionOk) blockers.push('organizer calendar connection failed verification');
         if (!botEmail) blockers.push('no notetaker guest email');
-        if (!(await ghlAppointmentWebhookSecretConfigured(supabase))) {
-          blockers.push('webhook shared secret not configured (or shorter than 32 characters)');
-        }
+        // The GHL workflow webhook is optional (real-time boost only) — the
+        // 10-minute poller detects bookings without it, so a missing shared
+        // secret never blocks activation.
 
         const enabled = wantEnabled && blockers.length === 0;
         const { error } = await supabase.from('client_meetgeek_guest_configs').upsert(
@@ -314,7 +314,8 @@ Deno.serve(async (req) => {
           if (!defaultConnection) blockers.push('no organizer Google Calendar connection');
           else if (apply && !connectionOk) blockers.push('organizer calendar connection failed verification');
           if (!botEmail) blockers.push('no notetaker guest email');
-          if (!secretOk) blockers.push('webhook shared secret not configured (32+ characters)');
+          // Webhook secret intentionally NOT a blocker: polling is the primary
+          // detection path.
 
           const enabled = blockers.length === 0;
 
@@ -370,6 +371,8 @@ Deno.serve(async (req) => {
             calendar_connection: !!defaultConnection,
             calendar_connection_verified: apply ? connectionOk : null,
             webhook_secret_configured: secretOk,
+            webhook_optional: true,
+            polling_enabled: true,
             connections: (connections || []).map(redactConnection),
           },
           summary: {
