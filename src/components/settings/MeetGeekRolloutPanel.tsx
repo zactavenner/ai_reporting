@@ -140,7 +140,9 @@ export function MeetGeekRolloutPanel() {
     mutationFn: () => invokeAdmin<PollResult>({ action: 'gc_run_poll' }),
     onSuccess: (data) => {
       toast.success(
-        `Polled ${data.totals.appointments_found} upcoming appointments — ${data.totals.jobs_enqueued} new invite jobs, ${data.totals.invited} invited, ${data.totals.pending} pending`,
+        `Polled ${data.totals.appointments_found} upcoming appointments — ${data.totals.jobs_enqueued} new jobs, ` +
+          `${data.totals.invites_sent ?? 0} invites emailed, ${data.totals.invites_updated ?? 0} updated, ` +
+          `${data.totals.invites_cancelled ?? 0} cancelled, ${data.totals.pending} pending`,
       );
       queryClient.invalidateQueries({ queryKey: ['gc-rollout-status'] });
     },
@@ -149,7 +151,7 @@ export function MeetGeekRolloutPanel() {
 
   const view = result || status.data || null;
   const prereq = view?.prerequisites;
-  const prereqOk = !!prereq?.calendar_connection;
+  const prereqOk = prereq?.email_sender_configured !== false;
 
   return (
     <div className="border-2 border-border p-4 space-y-4">
@@ -165,8 +167,9 @@ export function MeetGeekRolloutPanel() {
             where it can be determined.
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Bookings are detected by a poller that runs every 10 minutes (CRM calendar + connected Google calendar), so
-            no per-location GHL workflow is required.
+            Bookings are detected by a poller that runs every 10 minutes and the notetaker is invited by email with a
+            standard calendar invite — no Google Calendar connection and no per-location GHL workflow are required.
+            Reschedules re-send an updated invite and cancellations withdraw it automatically.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -247,11 +250,19 @@ export function MeetGeekRolloutPanel() {
       <div className="space-y-1">
         <Label className="text-xs">Setup prerequisites</Label>
         <Check
-          ok={!!prereq?.calendar_connection}
+          ok={!!prereq?.email_sender_configured}
           label={
-            prereq?.calendar_connection
-              ? 'Organizer Google Calendar connected'
-              : 'Connect the organizer Google Calendar (per-client panel → Connect calendar)'
+            prereq?.email_sender_configured
+              ? `Invite sender configured — ${prereq?.email_sender_provider} (${prereq?.email_sender_from})`
+              : prereq?.email_sender_detail || 'Configure an email sender for the calendar invites'
+          }
+        />
+        <Check
+          ok={false}
+          optional
+          label={
+            prereq?.gmail_setting_note ||
+            'One-time manual step in the notetaker mailbox: Gmail → Settings → General → Event settings → “Add invitations to my calendar” → From everyone.'
           }
         />
         <Check ok optional={false} label="Polling ingest active (every 10 minutes, CRM + Google calendar)" />
@@ -264,10 +275,19 @@ export function MeetGeekRolloutPanel() {
               : 'Optional: no webhook shared secret — polling still covers every booking'
           }
         />
+        <Check
+          ok={!!prereq?.calendar_connection}
+          optional
+          label={
+            prereq?.calendar_connection
+              ? 'Optional: organizer Google Calendar connected (legacy guest-patch path)'
+              : 'Optional: no Google Calendar connection needed — the email invite path is used'
+          }
+        />
         {!prereqOk && (
           <p className="text-xs text-muted-foreground">
-            Only the organizer Google Calendar connection is required. The rollout still runs and enables everything it
-            can — clients stay disabled until that connection exists.
+            Invites are queued and will send automatically as soon as an email sender is configured. Everything else is
+            already automated.
           </p>
         )}
       </div>
