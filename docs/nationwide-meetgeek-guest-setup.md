@@ -107,6 +107,8 @@ actually receives its guest invitation, and `assertOwnerPreserved` blocks any
 organizer/creator/owner/`assignedUserId`/`calendarId` field from being sent.
 
 For full automation, the mapped GHL calendar must book into the connected
+organizer's Google Calendar (so step 2 resolves to one event), or GHL must send
+the Google event id.
 
 ## Operator authorization
 
@@ -121,8 +123,6 @@ from the browser would weaken the boundary. Until the first row is inserted into
 returns `403 no_operators_provisioned` with an explanatory message, and the
 admin UI cannot be used. Provisioning the first operator is an explicit
 administrator action outside the app.
-organizer's Google Calendar (so step 2 resolves to one event), or GHL must send
-the Google event id.
 
 ## Evidence checklist (all required before enabling Nationwide)
 
