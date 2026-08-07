@@ -1682,9 +1682,9 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             const isSeedanceLock = videoModel === SEEDANCE_VIDEO_MODEL;
             const lockedModel = isSeedanceLock ? SEEDANCE_VIDEO_MODEL : ONLY_VIDEO_MODEL;
-            const lockedRes = isSeedanceLock ? "720p" : videoResolution;
+            const lockedRes = isSeedanceLock ? "720p" : "2k";
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${lockedModel}" (only MiniMax H3 "${ONLY_VIDEO_MODEL}" and Seedance "${SEEDANCE_VIDEO_MODEL}" are approved — Grok, HappyHorse, Kling and Veo are retired and must never be requested), resolution="${lockedRes}" (H3 supports "720p" and "2k"; Seedance is 720p only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${lockedModel}" (only MiniMax H3 "${ONLY_VIDEO_MODEL}" and Seedance "${SEEDANCE_VIDEO_MODEL}" are approved — Grok, HappyHorse, Kling and Veo are retired and must never be requested), resolution="${lockedRes}" (H3 is native 2K only; Seedance is 720p only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
