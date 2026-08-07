@@ -1351,9 +1351,10 @@ async function generateSeedanceVideo(opts: {
     effectiveResolution = "720p";
   }
   else if (isHailuo) {
-    // MiniMax H3 supports 720p and native 2K. Everything else (480p/1080p/4k)
-    // is rejected by the provider, so coerce to the nearest supported value.
-    effectiveResolution = effectiveResolution === "720p" ? "720p" : "2k";
+    // MiniMax H3 on OpenRouter accepts 720p and native 2K — both were verified
+    // submitting and completing in production. 720p renders are the faster of
+    // the two; anything else (480p/1080p/4k) is coerced to 720p.
+    if (effectiveResolution !== "2k") effectiveResolution = "720p";
   }
   // Seedance 2.0 Fast supports only 480p and 720p per spec.
   else if (isSeedanceFast && effectiveResolution !== "480p" && effectiveResolution !== "720p") effectiveResolution = "720p";

@@ -97,7 +97,7 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 // Two approved video models: MiniMax H3 (720p / native 2K) and Seedance (720p only).
 // Grok, HappyHorse, Veo and Kling stay retired across every AI Studio surface.
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
-  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
+  { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p (fastest) or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
   { value: "bytedance/seedance-2.0",      label: "Seedance",        hint: "Seedance 2.0 — 720p only, up to 15s, text-to-video + first/last frame keyframing + reference images, native audio", maxSeconds: 15, pricePerSecond: 0.0938 },
 ];
 export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
@@ -105,7 +105,7 @@ export const SEEDANCE_VIDEO_MODEL = "bytedance/seedance-2.0";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
-  // MiniMax H3 renders at 720p (cheaper/faster) or native 2K.
+  // MiniMax H3 on OpenRouter accepts 720p and native 2K (both verified end-to-end).
   "minimax/hailuo-3":            ["720p", "2k"],
   // Seedance is locked to 720p in Reporting 5.0.
   "bytedance/seedance-2.0":      ["720p"],
@@ -113,7 +113,7 @@ const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
-  "minimax/hailuo-3": { "720p": 0.06, "2k": 0.13 },
+  "minimax/hailuo-3": { "720p": 0.0578, "2k": 0.13 },
   "bytedance/seedance-2.0": { "720p": 0.0538 },
 };
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
@@ -1682,9 +1682,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             const isSeedanceLock = videoModel === SEEDANCE_VIDEO_MODEL;
             const lockedModel = isSeedanceLock ? SEEDANCE_VIDEO_MODEL : ONLY_VIDEO_MODEL;
-            const lockedRes = isSeedanceLock ? "720p" : videoResolution;
+            // Respect the composer's resolution pick for H3 (720p or 2K);
+            // Seedance stays clamped to 720p.
+            const lockedRes = isSeedanceLock ? "720p" : (videoResolution === "2k" ? "2k" : "720p");
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${lockedModel}" (only MiniMax H3 "${ONLY_VIDEO_MODEL}" and Seedance "${SEEDANCE_VIDEO_MODEL}" are approved — Grok, HappyHorse, Kling and Veo are retired and must never be requested), resolution="${lockedRes}" (H3 supports "720p" and "2k"; Seedance is 720p only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${lockedModel}" (only MiniMax H3 "${ONLY_VIDEO_MODEL}" and Seedance "${SEEDANCE_VIDEO_MODEL}" are approved — Grok, HappyHorse, Kling and Veo are retired and must never be requested), resolution="${lockedRes}" (H3 supports 720p or native 2K; Seedance is 720p only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
