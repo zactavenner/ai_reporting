@@ -12,6 +12,8 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+const INTERNAL_PASSWORD = 'HPA1234$';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -23,9 +25,13 @@ Deno.serve(async (req) => {
     body = {};
   }
 
-  // Cron uses the service-role bearer; operators use the dashboard session token.
-  const auth = await authorizeOperator(req, supabase, createClient, body);
-  if (!auth.ok) return json({ error: auth.error, code: auth.code }, auth.status);
+  // Trusted internal caller (pg_cron) uses the internal password in the body;
+  // operators use the dashboard session token / service-role bearer.
+  const internal = body?.password === INTERNAL_PASSWORD;
+  if (!internal) {
+    const auth = await authorizeOperator(req, supabase, createClient, body);
+    if (!auth.ok) return json({ error: auth.error, code: auth.code }, auth.status);
+  }
 
   try {
     const result = await runGuestInvitePolling({
