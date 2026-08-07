@@ -134,7 +134,9 @@ Deno.serve(async (req) => {
       if (!m.schedule_cron || !isDue(m.schedule_cron as string, m.last_run_at as string | null)) continue;
       const startedAt = Date.now();
       try {
-        const r = await fetch(`${SUPABASE_URL}/functions/v1/jarvis-chat`, {
+        // Lovable is the orchestrator: run the agent's own pipeline (memory +
+        // connectors + OpenRouter) instead of routing through a chat surface.
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/agent-task-run`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -142,16 +144,10 @@ Deno.serve(async (req) => {
             apikey: SERVICE_KEY,
           },
           body: JSON.stringify({
-            team_member_id: "scheduler",
-            message: `[Scheduled run: ${m.name}]\n\n${m.schedule_prompt || "Run your standard cadence and report back."}`,
-            source: "scheduler",
-            agent_slug: m.slug,
+            agent_id: m.id,
+            prompt: m.schedule_prompt || "Run your standard cadence and report back.",
           }),
         });
-        await supa
-          .from("agency_agents")
-          .update({ last_run_at: new Date().toISOString() })
-          .eq("id", m.id);
         await supa.rpc("log_cron_run", {
           p_job_name: `agency-agent:${m.slug}`,
           p_status: r.ok ? "success" : "failed",

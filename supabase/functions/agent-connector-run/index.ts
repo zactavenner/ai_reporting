@@ -9,7 +9,6 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const HERMES_URL = "https://jgwwmtuvjlmzapwqiabu.functions.supabase.co/hermes-orchestrator";
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
@@ -22,10 +21,6 @@ const COMPOSITE_RPCS = new Set([
   "get_sync_queue_stats",
   "agent_cost_mtd",
   "find_unenriched_leads",
-]);
-
-const HERMES_ACTIONS = new Set([
-  "ping", "list_clients", "list_tasks", "get_task", "list_agents",
 ]);
 
 type Filters = Record<string, any>;
@@ -80,18 +75,6 @@ async function runConnector(c: any, clientId: string | null) {
     const { data, error } = await sb.rpc(c.target, args);
     if (error) throw new Error(error.message);
     return Array.isArray(data) ? data.slice(0, limit) : data;
-  }
-
-  if (c.kind === "hermes") {
-    if (!HERMES_ACTIONS.has(c.target)) throw new Error(`Hermes read action "${c.target}" is not allowed here`);
-    const res = await fetch(HERMES_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer hpa1234" },
-      body: JSON.stringify({ action: c.target, client_id: clientId, ...filters }),
-    });
-    const text = await res.text();
-    if (!res.ok) throw new Error(`Hermes ${res.status}: ${text.slice(0, 200)}`);
-    try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
   }
 
   if (c.kind === "storage") {
