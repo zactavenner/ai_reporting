@@ -343,6 +343,7 @@ Deno.serve(async (req) => {
     }
     const readySheets = new Set<string>();
     const sheetIndexCache = new Map<string, SheetIndex>();
+    const healthCache = new Map<string, AccountHealth>();
 
     const accounts = await loadAccounts(sb, body.client_id);
     const summary = {
@@ -371,6 +372,17 @@ Deno.serve(async (req) => {
             status: 'error', error_message: lastErr, finished_at: new Date().toISOString(),
           }).eq('id', runId);
           continue;
+        }
+
+        // A clean fetch that returns nothing is ambiguous: either the account
+        // genuinely didn't deliver, or Meta has it disabled/unsettled. Resolve
+        // that here so the run row states the real reason.
+        let blockedReason: string | null = null;
+        if (!rows.length) {
+          const health = await fetchAccountHealth(acct, healthCache);
+          if (health && !health.ok) {
+            blockedReason = `Meta ad account ${acct.ad_account_id} is ${health.label} — no delivery, so no spend to report. Resolve in Meta Business Manager.`;
+          }
         }
 
         let written = 0;
@@ -407,7 +419,9 @@ Deno.serve(async (req) => {
         summary.ok++;
         summary.total_rows += written;
         await sb.from('ad_spend_sync_runs').update({
-          status: overall, rows_written: written,
+          status: blockedReason ? 'blocked' : overall,
+          rows_written: written,
+          error_message: blockedReason,
           sheet_status: sheetStatus, sheet_error: sheetErr,
           finished_at: new Date().toISOString(),
         }).eq('id', runId);
@@ -444,6 +458,14 @@ Deno.serve(async (req) => {
           recovered: recovered > 0,
         });
         if (recovered === 0) {
+          const reasons: string[] = [];
+          for (const acct of clientAccts) {
+            const health = await fetchAccountHealth(acct, healthCache);
+            if (health && !health.ok) reasons.push(`${acct.ad_account_id}: ${health.label}`);
+          }
+          const detail = reasons.length
+            ? `Meta ad account not delivering — ${reasons.join('; ')}. Resolve in Meta Business Manager; no spend exists to backfill.`
+            : `No ad_spend_daily rows for ${yday} after retry — check Meta token / ad account access.`;
           await sb.from('data_discrepancies').insert({
             client_id: cid,
             discrepancy_type: 'ad_spend_missing',
@@ -452,9 +474,9 @@ Deno.serve(async (req) => {
             api_count: 0,
             db_count: 0,
             difference: 0,
-            severity: 'high',
+            severity: reasons.length ? 'critical' : 'high',
             status: 'open',
-            resolution_notes: `No ad_spend_daily rows for ${yday} after retry — check Meta token / ad account access.`,
+            resolution_notes: detail,
           });
         }
       }
