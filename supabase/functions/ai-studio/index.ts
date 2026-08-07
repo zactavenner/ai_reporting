@@ -3355,6 +3355,11 @@ Deno.serve(async (req) => {
   const _hasImageSel = Array.isArray(imageModels) && imageModels.length > 0;
   const _hasVideoSel = !!videoModel || (Array.isArray(videoModels) && videoModels.length > 0);
   const PURE_CHAT_MODE = !agentMode && !_hasImageSel && !_hasVideoSel;
+  // VIDEO APPROVAL GATE: in regular Chat mode (no agent selected) the model may
+  // plan a video but must never start a render until the user explicitly
+  // approves it. The client re-sends the turn with videoApproved=true when the
+  // user clicks "Approve & render".
+  const videoNeedsApproval = !agentMode && !(body as any)?.videoApproved;
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim())
     ? chatModel.trim()
     : (PURE_CHAT_MODE ? "google/gemini-2.5-flash" : DEFAULT_CHAT_MODEL);
@@ -4366,9 +4371,19 @@ Deno.serve(async (req) => {
             }
             if (n === "image_to_reel") return hasImage && videoAuthorized;
             if (IMAGE_TOOL_NAMES.has(n)) return hasImage;
-            if (VIDEO_TOOL_NAMES.has(n)) return videoAuthorized;
+            // In regular chat mode the video tools stay visible so the model can
+            // PROPOSE a render — the dispatcher intercepts the call and returns a
+            // pending_approval payload instead of spending credits.
+            if (VIDEO_TOOL_NAMES.has(n)) return videoAuthorized || (hasVideo && videoNeedsApproval);
             return true;
           });
+
+          if (videoNeedsApproval && hasVideo && step === 0) {
+            convo.splice(1, 0, {
+              role: "system",
+              content: "VIDEO APPROVAL REQUIRED (regular chat mode): you may call a video tool at most ONCE per turn to register the render plan, and it will NOT render — it returns pending_approval. Never call it repeatedly or try to work around it. After it returns, tell the user in one short line what will be rendered (model, clips, duration, resolution) and that they must click “Approve & render” in chat to spend the credits. Do not claim a video is generating or completed.",
+            });
+          }
 
           // Run one LLM streaming pass. Returns { stepText, toolCallsAcc }.
           // Internal helper so we can retry with a fallback model when the
@@ -4569,6 +4584,36 @@ Deno.serve(async (req) => {
 
             // Pre-emit canvas placeholder for image tools so UI shows skeleton
             let canvasPlaceholderId: string | null = null;
+            // APPROVAL GATE (regular chat mode): video renders cost real money,
+            // so in plain Chat mode (no agent selected) the model may PROPOSE a
+            // render but never start one. We short-circuit the tool call and
+            // return a pending_approval payload the UI turns into an
+            // "Approve & render" card. Agent mode is unaffected.
+            if (videoNeedsApproval && (VIDEO_TOOL_NAMES.has(name) || name === "image_to_reel")) {
+              const pendingModel = normalizeVideoModel(args.model) || selectedVideoModel || uniqueSelectedVideoModels[0] || null;
+              const pendingRes = pendingModel ? clampResForModel(pendingModel) : (requestedRes || "720p");
+              send({ type: "tool_start", id: tc.id, name, args });
+              const pendingResult = {
+                pending_approval: true,
+                approval_reason: "Chat mode requires approval before any video is rendered.",
+                proposed: {
+                  tool: name,
+                  model: pendingModel,
+                  resolution: pendingRes,
+                  duration: 15,
+                  aspect_ratio: args.aspect_ratio || "9:16",
+                  prompt: String(args.prompt || args.brief || args.motion_prompt || ""),
+                  image_url: args.image_url || videoFrames?.firstFrameUrl || null,
+                  last_frame_url: args.last_frame_url || videoFrames?.lastFrameUrl || null,
+                  scripts_count: Array.isArray(args.scripts) ? args.scripts.length : undefined,
+                },
+                message: "Not rendered. Awaiting the user's approval — they must click “Approve & render” in chat.",
+              };
+              send({ type: "tool_end", id: tc.id, name, args, result: pendingResult });
+              finalToolEvents.push({ name, args, result: pendingResult });
+              toolMessages[tcIdx] = { call_id: tc.id, content: JSON.stringify(pendingResult) };
+              return;
+            }
             if (name === "generate_static_ad") {
               canvasPlaceholderId = crypto.randomUUID();
               send({
