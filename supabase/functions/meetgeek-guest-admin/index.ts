@@ -4,6 +4,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import { normalizeEmail, redactConnection } from '../_shared/calendarGuest.ts';
 import { verifyConnection } from '../_shared/googleCalendarClient.ts';
+import { ghlAppointmentWebhookSecretConfigured } from '../_shared/webhookSecret.ts';
+import { getMappedGhl } from '../_shared/ghlMapping.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,11 +66,7 @@ Deno.serve(async (req) => {
           .select('*')
           .eq('client_id', clientId)
           .maybeSingle();
-        const { data: mapping } = await supabase
-          .from('client_settings')
-          .select('ghl_location_id')
-          .eq('client_id', clientId)
-          .maybeSingle();
+        const mapping = await getMappedGhl(supabase, clientId);
         const { data: jobs } = await supabase
           .from('meetgeek_guest_invite_jobs')
           .select('id, ghl_appointment_id, google_event_id, status, attempts, rejection_reason, error_message, scheduled_start, created_at, completed_at')
@@ -93,20 +91,17 @@ Deno.serve(async (req) => {
                 last_error: config.last_error,
               }
             : null,
-          location_mapped: !!mapping?.ghl_location_id,
-          webhook_secret_configured: !!Deno.env.get('GHL_APPOINTMENT_WEBHOOK_SECRET'),
+          location_mapped: !!mapping.locationId,
+          crm_key_present: !!mapping.apiKey,
+          webhook_secret_configured: await ghlAppointmentWebhookSecretConfigured(supabase),
           jobs: jobs || [],
         });
       }
 
       case 'gc_save_guest_config': {
         if (!clientId) return json({ error: 'client_id required' }, 400);
-        const { data: mapping } = await supabase
-          .from('client_settings')
-          .select('ghl_location_id')
-          .eq('client_id', clientId)
-          .maybeSingle();
-        const locationId = mapping?.ghl_location_id || null;
+        const mapping = await getMappedGhl(supabase, clientId);
+        const locationId = mapping.locationId;
 
         const connectionId = body?.calendar_connection_id ? String(body.calendar_connection_id) : null;
         const botEmail = normalizeEmail(body?.bot_guest_email);
@@ -123,11 +118,14 @@ Deno.serve(async (req) => {
         // Fail-closed: enabling requires a full, verified mapping.
         const blockers: string[] = [];
         if (!locationId) blockers.push('no CRM location mapped');
+        if (!mapping.apiKey) blockers.push('no CRM API key stored for this client');
         if (!ghlCalendarId) blockers.push('no CRM calendar selected');
         if (!connectionId) blockers.push('no organizer calendar connection');
         else if (!connectionOk) blockers.push('organizer calendar connection failed verification');
         if (!botEmail) blockers.push('no notetaker guest email');
-        if (!Deno.env.get('GHL_APPOINTMENT_WEBHOOK_SECRET')) blockers.push('webhook signing secret not configured');
+        if (!(await ghlAppointmentWebhookSecretConfigured(supabase))) {
+          blockers.push('webhook shared secret not configured (or shorter than 32 characters)');
+        }
 
         const enabled = wantEnabled && blockers.length === 0;
         const { error } = await supabase.from('client_meetgeek_guest_configs').upsert(
