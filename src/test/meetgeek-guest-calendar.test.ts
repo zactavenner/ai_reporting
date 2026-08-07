@@ -115,6 +115,26 @@ describe('mapping gate', () => {
 });
 
 describe('idempotency and event linkage', () => {
+  it('never fabricates an empty attendee list for a known Google event', () => {
+    // buildAttendeePatch is only ever fed a REAL event; a synthesized
+    // {id, attendees: []} event would silently delete existing guests.
+    const real: GoogleEventLite = {
+      id: 'ev-real',
+      attendees: [{ email: 'organizer@client.com', organizer: true }, { email: 'investor@example.com' }],
+    };
+    const patch = buildAttendeePatch({ event: real, botGuestEmail: 'bot@meetgeek.ai', appointmentId: 'a', clientId: 'c' });
+    expect(patch.attendees).toHaveLength(3);
+    const fabricated = buildAttendeePatch({
+      event: { id: 'ev-real', attendees: [] },
+      botGuestEmail: 'bot@meetgeek.ai',
+      appointmentId: 'a',
+      clientId: 'c',
+    });
+    // Proof of the hazard the webhook must avoid: patching from a fake event
+    // drops every real guest, so the webhook GETs the event instead.
+    expect(fabricated.attendees).toHaveLength(1);
+  });
+
   it('produces a stable key regardless of email casing', () => {
     const a = buildInviteIdempotencyKey({ clientId: 'c', appointmentId: 'a', botGuestEmail: 'Bot@X.com' });
     const b = buildInviteIdempotencyKey({ clientId: 'c', appointmentId: 'a', botGuestEmail: 'bot@x.com' });
