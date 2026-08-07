@@ -5498,6 +5498,92 @@ export type Database = {
           },
         ]
       }
+      client_meetgeek_guest_configs: {
+        Row: {
+          bot_guest_email: string | null
+          calendar_connection_id: string | null
+          client_id: string
+          created_at: string
+          enabled: boolean
+          ghl_calendar_id: string | null
+          ghl_location_id: string | null
+          id: string
+          last_error: string | null
+          last_error_at: string | null
+          last_invite_at: string | null
+          last_validated_at: string | null
+          organizer_calendar_id: string
+          updated_at: string
+          validation_error: string | null
+          validation_status: string
+        }
+        Insert: {
+          bot_guest_email?: string | null
+          calendar_connection_id?: string | null
+          client_id: string
+          created_at?: string
+          enabled?: boolean
+          ghl_calendar_id?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_invite_at?: string | null
+          last_validated_at?: string | null
+          organizer_calendar_id?: string
+          updated_at?: string
+          validation_error?: string | null
+          validation_status?: string
+        }
+        Update: {
+          bot_guest_email?: string | null
+          calendar_connection_id?: string | null
+          client_id?: string
+          created_at?: string
+          enabled?: boolean
+          ghl_calendar_id?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_invite_at?: string | null
+          last_validated_at?: string | null
+          organizer_calendar_id?: string
+          updated_at?: string
+          validation_error?: string | null
+          validation_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_meetgeek_guest_configs_calendar_connection_id_fkey"
+            columns: ["calendar_connection_id"]
+            isOneToOne: false
+            referencedRelation: "google_calendar_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_meetgeek_guest_configs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_meetgeek_guest_configs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_meetgeek_guest_configs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       client_meetgeek_settings: {
         Row: {
           bot_join_policy: string
@@ -10624,6 +10710,60 @@ export type Database = {
           },
         ]
       }
+      google_calendar_connections: {
+        Row: {
+          access_token: string | null
+          access_token_expires_at: string | null
+          created_at: string
+          display_name: string | null
+          google_account_id: string | null
+          id: string
+          last_error: string | null
+          last_error_at: string | null
+          last_refreshed_at: string | null
+          last_verified_at: string | null
+          organizer_email: string
+          refresh_token: string
+          scope: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          google_account_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_refreshed_at?: string | null
+          last_verified_at?: string | null
+          organizer_email: string
+          refresh_token: string
+          scope?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          google_account_id?: string | null
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_refreshed_at?: string | null
+          last_verified_at?: string | null
+          organizer_email?: string
+          refresh_token?: string
+          scope?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gpt_files: {
         Row: {
           character_count: number | null
@@ -12970,6 +13110,104 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meetgeek_guest_invite_jobs: {
+        Row: {
+          attempts: number
+          bot_guest_email: string | null
+          client_id: string | null
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          ghl_appointment_id: string | null
+          ghl_calendar_id: string | null
+          ghl_location_id: string | null
+          google_calendar_id: string | null
+          google_event_id: string | null
+          guest_config_id: string | null
+          id: string
+          idempotency_key: string
+          rejection_reason: string | null
+          scheduled_end: string | null
+          scheduled_start: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          bot_guest_email?: string | null
+          client_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          ghl_appointment_id?: string | null
+          ghl_calendar_id?: string | null
+          ghl_location_id?: string | null
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          guest_config_id?: string | null
+          id?: string
+          idempotency_key: string
+          rejection_reason?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          bot_guest_email?: string | null
+          client_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          ghl_appointment_id?: string | null
+          ghl_calendar_id?: string | null
+          ghl_location_id?: string | null
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          guest_config_id?: string | null
+          id?: string
+          idempotency_key?: string
+          rejection_reason?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetgeek_guest_invite_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meetgeek_guest_invite_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetgeek_guest_invite_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meetgeek_guest_invite_jobs_guest_config_id_fkey"
+            columns: ["guest_config_id"]
+            isOneToOne: false
+            referencedRelation: "client_meetgeek_guest_configs"
+            referencedColumns: ["id"]
           },
         ]
       }
