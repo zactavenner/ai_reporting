@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
       }
 
       case 'gc_list_connections': {
-        // (unchanged)
+        // Operator-triggered run of the polling ingest (same code path as cron).
         const { data } = await supabase
           .from('google_calendar_connections')
           .select('id, organizer_email, display_name, status, scope, refresh_token, access_token_expires_at, last_verified_at, last_error, created_at')
