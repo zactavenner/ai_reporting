@@ -8,20 +8,45 @@
  */
 export const GHL_APPOINTMENT_WEBHOOK_PROVIDER = 'ghl_appointment_webhook';
 
-export async function resolveGhlAppointmentWebhookSecret(supabase: any): Promise<string | null> {
-  const env = (Deno.env.get('GHL_APPOINTMENT_WEBHOOK_SECRET') || '').trim();
+export const GHL_APPOINTMENT_WEBHOOK_ENV = 'GHL_APPOINTMENT_WEBHOOK_SECRET';
+
+function readEnvSecret(): string {
+  try {
+    // Deno in production; absent under vitest.
+    const env = (globalThis as any).Deno?.env;
+    return (env?.get?.(GHL_APPOINTMENT_WEBHOOK_ENV) || '').trim();
+  } catch {
+    // Env permission denied — fall through to the private table.
+    return '';
+  }
+}
+
+export async function resolveGhlAppointmentWebhookSecret(
+  supabase: any,
+  envOverride?: string | null,
+): Promise<string | null> {
+  const env = (envOverride === undefined ? readEnvSecret() : (envOverride || '')).trim();
   if (env) return env;
-  const { data } = await supabase
-    .from('integration_secrets')
-    .select('secret')
-    .eq('provider', GHL_APPOINTMENT_WEBHOOK_PROVIDER)
-    .maybeSingle();
-  const stored = (data?.secret || '').trim();
-  return stored || null;
+  try {
+    const { data, error } = await supabase
+      .from('integration_secrets')
+      .select('secret')
+      .eq('provider', GHL_APPOINTMENT_WEBHOOK_PROVIDER)
+      .maybeSingle();
+    if (error) return null;
+    const stored = (data?.secret || '').trim();
+    return stored || null;
+  } catch {
+    // Never surface storage details; absence means fail closed upstream.
+    return null;
+  }
 }
 
 /** Status only — never the value. Uses the SAME resolver as verification. */
-export async function ghlAppointmentWebhookSecretConfigured(supabase: any): Promise<boolean> {
-  const secret = await resolveGhlAppointmentWebhookSecret(supabase);
+export async function ghlAppointmentWebhookSecretConfigured(
+  supabase: any,
+  envOverride?: string | null,
+): Promise<boolean> {
+  const secret = await resolveGhlAppointmentWebhookSecret(supabase, envOverride);
   return !!secret && secret.length >= 32;
 }
