@@ -11,6 +11,7 @@ import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { MeetGeekCalendarSection } from './MeetGeekCalendarSection';
+import { MeetGeekRolloutPanel } from './MeetGeekRolloutPanel';
 
 interface MeetGeekIntegrationSectionProps {
   clientId: string;
@@ -228,6 +229,7 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
             </Button>
           </div>
 
+          <MeetGeekRolloutPanel />
           <MeetGeekCalendarSection clientId={clientId} />
         </div>
       )}

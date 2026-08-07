@@ -153,6 +153,12 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
         <p className="text-xs text-muted-foreground">
           Sourced live from this client’s mapped CRM location. Bookings on any other calendar are rejected.
         </p>
+        {!effectiveCalendar && (
+          <p className="text-xs text-amber-600 border border-amber-500/40 bg-amber-500/5 p-2 rounded">
+            Needs calendar selection — the primary booking calendar could not be determined automatically. Pick one above
+            to activate the notetaker for this client.
+          </p>
+        )}
       </div>
 
       <div className="space-y-2">

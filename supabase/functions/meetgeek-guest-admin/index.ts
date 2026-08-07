@@ -14,6 +14,49 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+const DEFAULT_BOT_GUEST_EMAIL = 'theainotetaker@gmail.com';
+const NEEDS_CALENDAR_SELECTION = 'needs calendar selection';
+const BOOKING_HINTS = /(discovery|investor|intro|booking|consult|strategy|qualif|call)/i;
+
+/** Server-only CRM calendar read. Never returns credentials. */
+async function listGhlCalendars(apiKey: string, locationId: string) {
+  const attempts = [
+    { url: `https://services.leadconnectorhq.com/calendars/?locationId=${encodeURIComponent(locationId)}`, version: true },
+    { url: 'https://rest.gohighlevel.com/v1/calendars/services', version: false },
+  ];
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...(attempt.version ? { Version: '2021-07-28' } : {}),
+        },
+      });
+      if (!res.ok) continue;
+      const body: any = await res.json().catch(() => null);
+      const raw = body?.calendars || body?.services || [];
+      const cals = (Array.isArray(raw) ? raw : [])
+        .map((c: any) => ({ id: String(c?.id || ''), name: String(c?.name || ''), active: c?.isActive !== false }))
+        .filter((c: any) => c.id);
+      if (cals.length) return cals;
+    } catch {
+      // try the next transport
+    }
+  }
+  return [] as { id: string; name: string; active: boolean }[];
+}
+
+/** Pick the single primary booking calendar, or null when it is ambiguous. */
+function pickPrimaryCalendar(cals: { id: string; name: string; active: boolean }[]) {
+  const active = cals.filter((c) => c.active);
+  const pool = active.length ? active : cals;
+  if (pool.length === 1) return pool[0];
+  const hinted = pool.filter((c) => BOOKING_HINTS.test(c.name));
+  if (hinted.length === 1) return hinted[0];
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -149,6 +192,142 @@ Deno.serve(async (req) => {
           enabled,
           blockers,
           note: wantEnabled && !enabled ? 'Saved but kept disabled until every blocker is cleared.' : undefined,
+        });
+      }
+
+      // ---- Agency-wide notetaker rollout ----
+      case 'gc_rollout_status':
+      case 'gc_bulk_rollout': {
+        const apply = action === 'gc_bulk_rollout';
+        const botEmail = normalizeEmail(body?.bot_guest_email) || DEFAULT_BOT_GUEST_EMAIL;
+        const secretOk = await ghlAppointmentWebhookSecretConfigured(supabase);
+
+        const { data: connections } = await supabase
+          .from('google_calendar_connections')
+          .select('id, organizer_email, status, refresh_token')
+          .order('created_at', { ascending: false });
+        const usable = (connections || []).filter((c: any) => !!c.refresh_token);
+        const requestedConnection = body?.calendar_connection_id ? String(body.calendar_connection_id) : null;
+        const defaultConnection =
+          requestedConnection || (usable.length === 1 ? String(usable[0].id) : null);
+        let connectionOk = false;
+        if (apply && defaultConnection) {
+          const result = await verifyConnection(supabase, defaultConnection);
+          connectionOk = result.ok;
+        }
+
+        const { data: settingsRows } = await supabase
+          .from('client_meetgeek_settings')
+          .select('client_id, ghl_calendar_id, ghl_calendar_name, mapping_error, bot_join_policy, enabled');
+        const clientIds = (settingsRows || []).map((r: any) => r.client_id);
+        const { data: clientRows } = await supabase
+          .from('clients')
+          .select('id, name, status, ghl_api_key, ghl_location_id')
+          .in('id', clientIds.length ? clientIds : ['00000000-0000-0000-0000-000000000000']);
+        const { data: guestRows } = await supabase
+          .from('client_meetgeek_guest_configs')
+          .select('client_id, enabled, bot_guest_email, ghl_calendar_id, calendar_connection_id, validation_status, validation_error');
+
+        const clientById = new Map((clientRows || []).map((c: any) => [c.id, c]));
+        const guestByClient = new Map((guestRows || []).map((g: any) => [g.client_id, g]));
+
+        const results: any[] = [];
+        for (const row of settingsRows || []) {
+          const client = clientById.get(row.client_id);
+          const name = client?.name || 'Unknown client';
+          let calendarId: string | null = row.ghl_calendar_id || null;
+          let calendarName: string | null = row.ghl_calendar_name || null;
+          let detection: 'existing' | 'auto_mapped' | 'ambiguous' | 'unavailable' | 'skipped' =
+            calendarId ? 'existing' : 'skipped';
+
+          // Auto-detect the primary booking calendar when it is still missing.
+          if (apply && !calendarId && client?.ghl_api_key && client?.ghl_location_id) {
+            const cals = await listGhlCalendars(client.ghl_api_key, client.ghl_location_id);
+            if (!cals.length) detection = 'unavailable';
+            else {
+              const primary = pickPrimaryCalendar(cals);
+              if (primary) {
+                calendarId = primary.id;
+                calendarName = primary.name;
+                detection = 'auto_mapped';
+              } else {
+                detection = 'ambiguous';
+              }
+            }
+          }
+
+          const blockers: string[] = [];
+          if (!client?.ghl_location_id) blockers.push('no CRM location mapped');
+          if (!client?.ghl_api_key) blockers.push('no CRM API key stored');
+          if (!calendarId) blockers.push(NEEDS_CALENDAR_SELECTION);
+          if (!defaultConnection) blockers.push('no organizer Google Calendar connection');
+          else if (apply && !connectionOk) blockers.push('organizer calendar connection failed verification');
+          if (!botEmail) blockers.push('no notetaker guest email');
+          if (!secretOk) blockers.push('webhook shared secret not configured (32+ characters)');
+
+          const enabled = blockers.length === 0;
+
+          if (apply) {
+            await supabase
+              .from('client_meetgeek_settings')
+              .update({
+                bot_join_policy: 'all_video_on_calendar',
+                ghl_calendar_id: calendarId,
+                ghl_calendar_name: calendarName,
+                ingest_mode: calendarId ? 'selected_calendar' : 'all_mapped_calendars',
+                mapping_error: calendarId ? null : NEEDS_CALENDAR_SELECTION,
+                enabled: enabled ? true : row.enabled,
+              })
+              .eq('client_id', row.client_id);
+
+            await supabase.from('client_meetgeek_guest_configs').upsert(
+              {
+                client_id: row.client_id,
+                ghl_location_id: client?.ghl_location_id || null,
+                ghl_calendar_id: calendarId,
+                calendar_connection_id: defaultConnection,
+                organizer_calendar_id: 'primary',
+                bot_guest_email: botEmail,
+                enabled,
+                validation_status: enabled ? 'validated' : 'blocked',
+                validation_error: blockers.length ? blockers.join('; ') : null,
+                last_validated_at: new Date().toISOString(),
+              },
+              { onConflict: 'client_id' },
+            );
+          }
+
+          const existing = guestByClient.get(row.client_id);
+          results.push({
+            client_id: row.client_id,
+            client_name: name,
+            client_status: client?.status || null,
+            calendar_mapped: !!calendarId,
+            calendar_name: calendarName,
+            detection,
+            bot_guest_email: apply ? botEmail : existing?.bot_guest_email || null,
+            enabled: apply ? enabled : !!existing?.enabled,
+            blockers,
+          });
+        }
+
+        const active = results.filter((r) => r.enabled).length;
+        return json({
+          applied: apply,
+          bot_guest_email: botEmail,
+          prerequisites: {
+            calendar_connection: !!defaultConnection,
+            calendar_connection_verified: apply ? connectionOk : null,
+            webhook_secret_configured: secretOk,
+            connections: (connections || []).map(redactConnection),
+          },
+          summary: {
+            total: results.length,
+            active,
+            needs_attention: results.length - active,
+            needs_calendar_selection: results.filter((r) => !r.calendar_mapped).length,
+          },
+          clients: results.sort((a, b) => Number(a.enabled) - Number(b.enabled) || a.client_name.localeCompare(b.client_name)),
         });
       }
 
