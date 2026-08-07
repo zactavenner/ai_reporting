@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Loader2, Rocket, ShieldAlert, ShieldCheck, CalendarSearch, Copy, Eye, EyeOff, Webhook } from 'lucide-react';
+import { Loader2, Rocket, ShieldAlert, ShieldCheck, CalendarSearch, Copy, Eye, EyeOff, Webhook, RefreshCw, Info } from 'lucide-react';
 
 const BOT_GUEST_EMAIL = 'theainotetaker@gmail.com';
 
@@ -29,6 +29,8 @@ interface RolloutPayload {
     calendar_connection: boolean;
     calendar_connection_verified: boolean | null;
     webhook_secret_configured: boolean;
+    webhook_optional?: boolean;
+    polling_enabled?: boolean;
   };
   summary: { total: number; active: number; needs_attention: number; needs_calendar_selection: number };
   clients: RolloutClient[];
@@ -39,8 +41,15 @@ interface WebhookSetup {
   secret_header: string;
   secret: string | null;
   secret_configured: boolean;
+  optional?: boolean;
+  optional_note?: string;
   instructions: string[];
   locations: { client_id: string; client_name: string; client_status: string | null; ghl_location_id: string }[];
+}
+
+interface PollResult {
+  totals: { appointments_found: number; jobs_enqueued: number; invited: number; pending: number };
+  google_scan: { connections: number; events_scanned: number; invited: number };
 }
 
 async function invokeAdmin<T = any>(body: Record<string, unknown>): Promise<T> {
@@ -60,15 +69,17 @@ async function invokeAdmin<T = any>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-function Check({ ok, label }: { ok: boolean; label: string }) {
+function Check({ ok, label, optional }: { ok: boolean; label: string; optional?: boolean }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      {ok ? (
+      {optional ? (
+        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+      ) : ok ? (
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
       ) : (
         <ShieldAlert className="h-3.5 w-3.5 text-destructive" />
       )}
-      <span className={ok ? '' : 'text-destructive'}>{label}</span>
+      <span className={optional ? 'text-muted-foreground' : ok ? '' : 'text-destructive'}>{label}</span>
     </div>
   );
 }
@@ -109,9 +120,20 @@ export function MeetGeekRolloutPanel() {
     onError: (e: any) => toast.error(e?.message || 'Rollout failed'),
   });
 
+  const poll = useMutation({
+    mutationFn: () => invokeAdmin<PollResult>({ action: 'gc_run_poll' }),
+    onSuccess: (data) => {
+      toast.success(
+        `Polled ${data.totals.appointments_found} upcoming appointments — ${data.totals.jobs_enqueued} new invite jobs, ${data.totals.invited} invited, ${data.totals.pending} pending`,
+      );
+      queryClient.invalidateQueries({ queryKey: ['gc-rollout-status'] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Poll failed'),
+  });
+
   const view = result || status.data || null;
   const prereq = view?.prerequisites;
-  const prereqOk = !!prereq?.calendar_connection && !!prereq?.webhook_secret_configured;
+  const prereqOk = !!prereq?.calendar_connection;
 
   return (
     <div className="border-2 border-border p-4 space-y-4">
@@ -126,11 +148,21 @@ export function MeetGeekRolloutPanel() {
             meeting, keeps the join policy on all video calls, and auto-maps each client’s primary booking calendar
             where it can be determined.
           </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Bookings are detected by a poller that runs every 10 minutes (CRM calendar + connected Google calendar), so
+            no per-location GHL workflow is required.
+          </p>
         </div>
-        <Button onClick={() => rollout.mutate()} disabled={rollout.isPending}>
-          {rollout.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Rocket className="h-4 w-4 mr-2" />}
-          Roll out to all clients
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => poll.mutate()} disabled={poll.isPending}>
+            {poll.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Run poller now
+          </Button>
+          <Button onClick={() => rollout.mutate()} disabled={rollout.isPending}>
+            {rollout.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Rocket className="h-4 w-4 mr-2" />}
+            Roll out to all clients
+          </Button>
+        </div>
       </div>
 
       {status.error ? (
@@ -143,8 +175,12 @@ export function MeetGeekRolloutPanel() {
         <div className="border border-border/70 p-3 space-y-2">
           <Label className="text-xs flex items-center gap-2">
             <Webhook className="h-3.5 w-3.5" />
-            GHL appointment webhook — paste into each location
+            GHL appointment webhook — optional real-time boost
           </Label>
+          <p className="text-[11px] text-muted-foreground">
+            {setup.data.optional_note ||
+              'Optional. Polling already catches every booking within 10 minutes; installing this workflow only makes the invite instant.'}
+          </p>
           <div className="space-y-1.5 text-xs">
             <div className="flex items-center gap-2">
               <span className="w-24 shrink-0 text-muted-foreground">URL</span>
@@ -202,17 +238,20 @@ export function MeetGeekRolloutPanel() {
               : 'Connect the organizer Google Calendar (per-client panel → Connect calendar)'
           }
         />
+        <Check ok optional={false} label="Polling ingest active (every 10 minutes, CRM + Google calendar)" />
         <Check
           ok={!!prereq?.webhook_secret_configured}
+          optional
           label={
             prereq?.webhook_secret_configured
-              ? 'Appointment webhook shared secret configured'
-              : 'Missing GHL_APPOINTMENT_WEBHOOK_SECRET (32+ chars) — add it in Project Settings → Secrets'
+              ? 'Optional: appointment webhook shared secret configured (real-time boost)'
+              : 'Optional: no webhook shared secret — polling still covers every booking'
           }
         />
         {!prereqOk && (
           <p className="text-xs text-muted-foreground">
-            The rollout still runs and enables everything it can — clients stay disabled until each blocker clears.
+            Only the organizer Google Calendar connection is required. The rollout still runs and enables everything it
+            can — clients stay disabled until that connection exists.
           </p>
         )}
       </div>
