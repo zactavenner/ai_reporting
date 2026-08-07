@@ -118,6 +118,12 @@ const navStructure = [
     href: '/data-health',
   },
   {
+    title: 'Agent Infrastructure',
+    value: 'agent-infrastructure',
+    icon: Cpu,
+    href: '/agent-infrastructure',
+  },
+  {
     title: 'Tasks',
     value: 'tasks',
     icon: ClipboardCheck,

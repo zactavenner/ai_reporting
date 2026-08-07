@@ -50,6 +50,7 @@ const OAuthConsent = lazyRetry(() => import("./pages/OAuthConsent"));
 const HuddlePage = lazyRetry(() => import("./pages/HuddlePage"));
 const SetterPage = lazyRetry(() => import("./pages/SetterPage"));
 const DataHealthPage = lazyRetry(() => import("./pages/DataHealthPage"));
+const AgentInfraPage = lazyRetry(() => import("./pages/AgentInfraPage"));
 
 function PageLoader() {
   return (
@@ -104,6 +105,7 @@ const App = () => (
             <Route path="/huddle" element={<PasswordGate><HuddlePage /></PasswordGate>} />
             <Route path="/setter" element={<PasswordGate><SetterPage /></PasswordGate>} />
             <Route path="/data-health" element={<PasswordGate><DataHealthPage /></PasswordGate>} />
+            <Route path="/agent-infrastructure" element={<PasswordGate><AgentInfraPage /></PasswordGate>} />
 
             {/* Public routes - no password required */}
             <Route path="/public/:token" element={<PublicReport />} />
