@@ -1949,6 +1949,28 @@ async function generateSeedanceVideo(opts: {
     },
     body: JSON.stringify(body),
   });
+  // FINAL GUARANTEE (applies to every H3 caller: single render, generate_script_batch
+  // per-clip dispatch, image_to_reel). No code path may send frame_images AND
+  // input_references to minimax/hailuo-3 — the provider hard-rejects it with a 400.
+  if (isHailuo && Array.isArray((body as any).frame_images) && (body as any).frame_images.length
+      && Array.isArray((body as any).input_references) && (body as any).input_references.length) {
+    const droppedRefs = ((body as any).input_references as any[])
+      .map((r) => r?.image_url?.url || r?.url || null).filter(Boolean);
+    delete (body as any).input_references;
+    await recordVideoModelDecision(supa, "h3.input_references_dropped_frames_present", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      chosen_model: model,
+      phase: "pre_submit_guard",
+      reason: "MiniMax Hailuo rejects frame_images + input_references in the same request; first frame wins",
+      first_frame_url: providerImageUrl || null,
+      last_frame_url: providerLastFrameUrl || null,
+      dropped_input_reference_urls: droppedRefs,
+      frame_count: ((body as any).frame_images as any[]).length,
+    });
+    console.warn(`[h3][pre-submit-guard] stripped input_references: ${droppedRefs.join(",")}`);
+  }
   let submit = await postVideo();
   // Provider-side prompt length limits vary (H3 = 7000 chars). If the submit is
   // rejected purely for prompt length, retry once with a harder cap instead of
