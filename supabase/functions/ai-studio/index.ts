@@ -4003,6 +4003,46 @@ Deno.serve(async (req) => {
       try { req.signal.addEventListener("abort", () => { disconnected = true; }); } catch {}
 
       send({ type: "conversation", conversationId });
+      // PROVIDER RESCUE: before any sweep declares a render dead, re-poll the
+      // provider with the handle persisted at submit time. OpenRouter keeps the
+      // job long after our background worker was recycled, so a finished video
+      // must never be reported as a failure.
+      const rescueCanvasRow = async (rowId: string, p: any): Promise<"completed" | "in_flight" | "dead"> => {
+        const pollingUrl: string | undefined = p?.polling_url;
+        if (!pollingUrl || !OPENROUTER_API_KEY) return "dead";
+        try {
+          const r = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+          if (!r.ok) return "dead";
+          const pj = await r.json();
+          const status = String(pj?.status || "").toLowerCase();
+          if (status === "completed") {
+            const urls: string[] = pj.unsigned_urls || pj.signed_urls || pj.urls
+              || (pj.video?.url ? [pj.video.url] : []);
+            const videoUrl = urls.find((u) => typeof u === "string" && /^https?:\/\//.test(u));
+            if (!videoUrl) return "dead";
+            await supa.from("ai_studio_canvas_items").update({
+              placeholder_until: null,
+              payload: {
+                ...p,
+                status: "completed",
+                video_url: videoUrl,
+                completed_at: new Date().toISOString(),
+                rescued_from_stale_poll: true,
+              },
+            }).eq("id", rowId);
+            return "completed";
+          }
+          if (status === "failed" || status === "cancelled") return "dead";
+          // Still pending/in_progress at the provider — extend the deadline.
+          await supa.from("ai_studio_canvas_items").update({
+            placeholder_until: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+          }).eq("id", rowId);
+          return "in_flight";
+        } catch (e) {
+          console.warn("canvas rescue poll failed (non-fatal)", e);
+          return "dead";
+        }
+      };
       // STALE PROCESSING SWEEP: any prior "processing" canvas video card for
       // this user that's been queued for longer than the worst-case
       // HappyHorse poll budget (25 min) is definitely dead — either the
@@ -4028,6 +4068,8 @@ Deno.serve(async (req) => {
         for (const row of stale || []) {
           const p: any = row.payload || {};
           if (p?.status !== "processing" || p?.video_url) continue;
+          const rescued = await rescueCanvasRow(row.id, p);
+          if (rescued !== "dead") continue;
           await supa.from("ai_studio_canvas_items").update({
             placeholder_until: null,
             payload: {
@@ -4058,6 +4100,8 @@ Deno.serve(async (req) => {
         for (const row of expired || []) {
           const p: any = row.payload || {};
           if (p?.status !== "processing" || p?.video_url) continue;
+          const rescued = await rescueCanvasRow(row.id, p);
+          if (rescued !== "dead") continue;
           await supa.from("ai_studio_canvas_items").update({
             placeholder_until: null,
             payload: {
