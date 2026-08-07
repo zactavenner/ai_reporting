@@ -190,6 +190,8 @@ export async function runGuestInvitePolling(args: {
   clientId?: string | null;
   horizonDays?: number;
   scanGoogle?: boolean;
+  /** Operator-only: poll a single client even while it is still disabled. */
+  force?: boolean;
 }): Promise<PollResult> {
   const { supabase } = args;
   const horizonDays = args.horizonDays ?? 14;
@@ -229,8 +231,9 @@ export async function runGuestInvitePolling(args: {
       errors: [],
     };
 
-    // Poll only clients the operator has switched on in either surface.
-    const active = row.enabled || settings?.enabled;
+    // Poll only clients the operator has switched on in either surface, unless
+    // a single client is force-polled from the admin panel.
+    const active = row.enabled || settings?.enabled || (args.force && args.clientId === row.client_id);
     if (!active) continue;
 
     const calendarId = row.ghl_calendar_id || settings?.ghl_calendar_id || null;
