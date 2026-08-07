@@ -201,6 +201,32 @@ Deno.serve(async (req) => {
   }
 
   // Idempotency: a completed job for this appointment short-circuits.
+  // Default path: zero-OAuth shadow invite. The same polling code handles
+  // enqueue, send, reschedule (SEQUENCE bump) and cancellation, so the webhook
+  // is purely a real-time trigger for the client that just booked.
+  if ((Deno.env.get('GUEST_INVITE_MODE') || 'shadow_email') !== 'google_guest') {
+    const poll = await runGuestInvitePolling({
+      supabase,
+      clientId: config.clientId,
+      horizonDays: 60,
+      scanGoogle: false,
+      force: true,
+    });
+    const row = poll.clients[0];
+    return json(
+      {
+        ok: true,
+        mode: poll.mode,
+        sender_configured: poll.sender.configured,
+        invites_sent: row?.invites_sent ?? 0,
+        invites_updated: row?.invites_updated ?? 0,
+        invites_cancelled: row?.invites_cancelled ?? 0,
+        pending_awaiting_sender: row?.pending_awaiting_sender ?? 0,
+      },
+      200,
+    );
+  }
+
   const { data: existing } = await supabase
     .from('meetgeek_guest_invite_jobs')
     .select('id, status, attempts, google_event_id')
