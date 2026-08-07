@@ -3355,6 +3355,11 @@ Deno.serve(async (req) => {
   const _hasImageSel = Array.isArray(imageModels) && imageModels.length > 0;
   const _hasVideoSel = !!videoModel || (Array.isArray(videoModels) && videoModels.length > 0);
   const PURE_CHAT_MODE = !agentMode && !_hasImageSel && !_hasVideoSel;
+  // VIDEO APPROVAL GATE: in regular Chat mode (no agent selected) the model may
+  // plan a video but must never start a render until the user explicitly
+  // approves it. The client re-sends the turn with videoApproved=true when the
+  // user clicks "Approve & render".
+  const videoNeedsApproval = !agentMode && !(body as any)?.videoApproved;
   const CHAT_MODEL = (typeof chatModel === "string" && chatModel.trim())
     ? chatModel.trim()
     : (PURE_CHAT_MODE ? "google/gemini-2.5-flash" : DEFAULT_CHAT_MODEL);
