@@ -55,6 +55,54 @@ async function sign(body: string, secret: string) {
 describe('webhook signature verification (fail closed)', () => {
   const body = JSON.stringify({ appointmentId: 'appt-1' });
 
+  describe('shared-secret header (native GHL workflow path)', () => {
+    const secret = 'k'.repeat(48);
+
+    it('accepts only an exact match of a high-entropy server-held secret', () => {
+      expect(verifySharedSecretHeader({ header: secret, secret })).toEqual({ ok: true, method: 'shared_secret' });
+      expect(verifySharedSecretHeader({ header: ` ${secret} `, secret })).toMatchObject({ ok: true });
+    });
+
+    it('rejects missing, empty, wrong and prefix-truncated credentials', () => {
+      expect(verifySharedSecretHeader({ header: null, secret })).toMatchObject({ ok: false, reason: 'missing_credential' });
+      expect(verifySharedSecretHeader({ header: '   ', secret })).toMatchObject({ ok: false, reason: 'missing_credential' });
+      expect(verifySharedSecretHeader({ header: 'x'.repeat(48), secret })).toMatchObject({
+        ok: false,
+        reason: 'credential_mismatch',
+      });
+      expect(verifySharedSecretHeader({ header: secret.slice(0, 47), secret })).toMatchObject({ ok: false });
+      expect(verifySharedSecretHeader({ header: secret + 'x', secret })).toMatchObject({ ok: false });
+    });
+
+    it('fails closed when no secret is configured or the secret is too weak', () => {
+      expect(verifySharedSecretHeader({ header: 'anything', secret: null })).toMatchObject({
+        ok: false,
+        reason: 'secret_not_configured',
+      });
+      expect(verifySharedSecretHeader({ header: 'anything', secret: '' })).toMatchObject({
+        ok: false,
+        reason: 'secret_not_configured',
+      });
+      const weak = 'a'.repeat(SHARED_SECRET_MIN_LENGTH - 1);
+      expect(verifySharedSecretHeader({ header: weak, secret: weak })).toMatchObject({
+        ok: false,
+        reason: 'secret_too_weak',
+      });
+    });
+  });
+
+  it('marketplace signature verification fails closed without a key or signature', async () => {
+    expect(
+      await verifyGhlMarketplaceSignature({ rawBody: body, header: 'abc', publicKeyPem: null }),
+    ).toBe(false);
+    expect(
+      await verifyGhlMarketplaceSignature({ rawBody: body, header: null, publicKeyPem: 'ZmFrZQ==' }),
+    ).toBe(false);
+    expect(
+      await verifyGhlMarketplaceSignature({ rawBody: body, header: 'not-base64!!', publicKeyPem: 'not-base64!!' }),
+    ).toBe(false);
+  });
+
   it('accepts a valid hex signature', async () => {
     const header = await sign(body, 's3cret');
     expect(await verifyWebhookSignature({ rawBody: body, header, secret: 's3cret' })).toBe(true);
