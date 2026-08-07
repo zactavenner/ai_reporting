@@ -2308,6 +2308,23 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   isStreaming={!!m.streaming && m.role === "assistant"}
                   clientId={clientId}
                   clientName={clientName}
+                  onApproveVideo={(plans) => {
+                    const list = (Array.isArray(plans) ? plans : [plans]).filter(Boolean);
+                    const lines = list.map((p: any, idx: number) => [
+                      `Clip ${idx + 1}:`,
+                      p?.model ? `model="${p.model}"` : "",
+                      p?.resolution ? `resolution="${p.resolution}"` : "",
+                      p?.duration ? `duration=${p.duration}` : "",
+                      p?.aspect_ratio ? `aspect_ratio="${p.aspect_ratio}"` : "",
+                      p?.image_url ? `image_url="${p.image_url}"` : "",
+                      p?.last_frame_url ? `last_frame_url="${p.last_frame_url}"` : "",
+                      p?.prompt ? `\nprompt: ${p.prompt}` : "",
+                    ].filter(Boolean).join(" "));
+                    send(
+                      `APPROVED — render the video(s) now exactly as proposed. Emit ${list.length} generate_seedance_video tool_call${list.length === 1 ? "" : "s"} in this same turn with these exact settings and no changes:\n\n${lines.join("\n\n")}`,
+                      { videoApproved: true },
+                    );
+                  }}
                 />
               );
             })}
