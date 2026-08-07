@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
       clientId: body?.client_id ? String(body.client_id) : null,
       horizonDays: Number(body?.horizon_days) > 0 ? Number(body.horizon_days) : 14,
       scanGoogle: body?.scan_google !== false,
+      force: !!body?.force,
     });
     return json({ ok: true, ...result });
   } catch (e) {
