@@ -4371,9 +4371,19 @@ Deno.serve(async (req) => {
             }
             if (n === "image_to_reel") return hasImage && videoAuthorized;
             if (IMAGE_TOOL_NAMES.has(n)) return hasImage;
-            if (VIDEO_TOOL_NAMES.has(n)) return videoAuthorized;
+            // In regular chat mode the video tools stay visible so the model can
+            // PROPOSE a render — the dispatcher intercepts the call and returns a
+            // pending_approval payload instead of spending credits.
+            if (VIDEO_TOOL_NAMES.has(n)) return videoAuthorized || (hasVideo && videoNeedsApproval);
             return true;
           });
+
+          if (videoNeedsApproval && hasVideo && step === 0) {
+            convo.splice(1, 0, {
+              role: "system",
+              content: "VIDEO APPROVAL REQUIRED (regular chat mode): you may call a video tool at most ONCE per turn to register the render plan, and it will NOT render — it returns pending_approval. Never call it repeatedly or try to work around it. After it returns, tell the user in one short line what will be rendered (model, clips, duration, resolution) and that they must click “Approve & render” in chat to spend the credits. Do not claim a video is generating or completed.",
+            });
+          }
 
           // Run one LLM streaming pass. Returns { stepText, toolCallsAcc }.
           // Internal helper so we can retry with a fallback model when the
