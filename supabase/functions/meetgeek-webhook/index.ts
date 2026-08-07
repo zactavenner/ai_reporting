@@ -522,7 +522,7 @@ Deno.serve(async (req) => {
 
     // Every internal action is an agency-operator surface. Arbitrary client_id
     // reads are only ever served to provisioned operators (or service role).
-    const auth = await authorizeOperator(req, supabase, createClient);
+    const auth = await authorizeOperator(req, supabase, createClient, body);
     if (!auth.ok) {
       return jsonResponse({ error: auth.error, code: auth.code }, auth.status);
     }

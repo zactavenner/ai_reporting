@@ -50,3 +50,24 @@ export async function ghlAppointmentWebhookSecretConfigured(
   const secret = await resolveGhlAppointmentWebhookSecret(supabase, envOverride);
   return !!secret && secret.length >= 32;
 }
+
+/**
+ * Operator-only reveal of the STORED secret so it can be pasted into each GHL
+ * location's workflow webhook action. Env-only secrets are never readable here,
+ * which is intentional: only the value the agency itself provisioned in
+ * `integration_secrets` can be echoed back to a provisioned operator.
+ */
+export async function revealStoredGhlAppointmentWebhookSecret(supabase: any): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('integration_secrets')
+      .select('secret')
+      .eq('provider', GHL_APPOINTMENT_WEBHOOK_PROVIDER)
+      .maybeSingle();
+    if (error) return null;
+    const stored = (data?.secret || '').trim();
+    return stored || null;
+  } catch {
+    return null;
+  }
+}
