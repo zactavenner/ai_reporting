@@ -25,8 +25,34 @@ import {
   type GuestConfig,
 } from './calendarGuest.ts';
 import { findEventCandidates, getAccessToken, getEvent, listEvents, patchAttendee } from './googleCalendarClient.ts';
+import {
+  buildShadowInviteIcs,
+  buildShadowInviteUid,
+  scheduleSignature,
+} from './icsInvite.ts';
+import { resolveInviteSender, sendShadowInvite } from './shadowInviteSender.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
+
+/**
+ * Detection mode.
+ *   shadow_email  — DEFAULT. Zero-OAuth: email an .ics invite to the notetaker.
+ *   google_guest  — Dormant legacy path: patch the organizer's Google event.
+ *                   Kept available, never required.
+ */
+export type InviteMode = 'shadow_email' | 'google_guest';
+
+const VIDEO_LINK_RE =
+  /(https?:\/\/[^\s<>"']*(?:zoom\.us\/j\/|zoom\.us\/my\/|meet\.google\.com\/|teams\.microsoft\.com\/|whereby\.com\/|meet\.jit\.si\/|us\d{2}web\.zoom\.us\/)[^\s<>"']*)/i;
+
+/** Pull the first video meeting link out of any GHL appointment text field. */
+export function extractVideoLink(...fields: (string | null | undefined)[]): string | null {
+  for (const field of fields) {
+    const match = String(field || '').match(VIDEO_LINK_RE);
+    if (match) return match[1].replace(/[.,;)]+$/, '');
+  }
+  return null;
+}
 
 export interface PollClientResult {
   client_id: string;
@@ -36,12 +62,20 @@ export interface PollClientResult {
   jobs_already_present: number;
   invited: number;
   pending_awaiting_connection: number;
+  /** Shadow-invite counters. */
+  invites_sent: number;
+  invites_updated: number;
+  invites_cancelled: number;
+  pending_awaiting_sender: number;
+  needs_meeting_link: number;
   rejected: number;
   errors: string[];
 }
 
 export interface PollResult {
   horizon_days: number;
+  mode: InviteMode;
+  sender: { configured: boolean; provider: string | null; from_email: string | null; detail: string };
   clients: PollClientResult[];
   google_scan: {
     connections: number;
@@ -51,7 +85,15 @@ export interface PollResult {
     skipped_duplicate: number;
     errors: string[];
   };
-  totals: { appointments_found: number; jobs_enqueued: number; invited: number; pending: number };
+  totals: {
+    appointments_found: number;
+    jobs_enqueued: number;
+    invited: number;
+    pending: number;
+    invites_sent: number;
+    invites_updated: number;
+    invites_cancelled: number;
+  };
 }
 
 function toConfig(row: any): GuestConfig {
