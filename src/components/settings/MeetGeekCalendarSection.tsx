@@ -235,10 +235,3 @@ export function MeetGeekCalendarSection({ clientId }: Props) {
     </div>
   );
 }
-          <Badge variant="outline">Client-scoped</Badge>
-        </div>
-        <MeetingCallActivityList clientId={clientId} />
-      </div>
-    </div>
-  );
-}
