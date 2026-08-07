@@ -1249,6 +1249,92 @@ export type Database = {
           },
         ]
       }
+      agent_connectors: {
+        Row: {
+          agent_id: string
+          client_id: string | null
+          created_at: string
+          filters: Json
+          id: string
+          is_active: boolean
+          kind: string
+          label: string
+          last_error: string | null
+          last_row_count: number | null
+          last_status: string | null
+          last_tested_at: string | null
+          refresh_interval_minutes: number
+          row_limit: number
+          target: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          client_id?: string | null
+          created_at?: string
+          filters?: Json
+          id?: string
+          is_active?: boolean
+          kind: string
+          label: string
+          last_error?: string | null
+          last_row_count?: number | null
+          last_status?: string | null
+          last_tested_at?: string | null
+          refresh_interval_minutes?: number
+          row_limit?: number
+          target: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string | null
+          created_at?: string
+          filters?: Json
+          id?: string
+          is_active?: boolean
+          kind?: string
+          label?: string
+          last_error?: string | null
+          last_row_count?: number | null
+          last_status?: string | null
+          last_tested_at?: string | null
+          refresh_interval_minutes?: number
+          row_limit?: number
+          target?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_connectors_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agency_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_connectors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agent_connectors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_connectors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       agent_escalations: {
         Row: {
           agent_name: string
