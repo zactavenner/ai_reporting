@@ -1463,6 +1463,9 @@ async function generateSeedanceVideo(opts: {
     try {
       await supa.from("ai_studio_canvas_items")
         .update({
+          // Clear the orphan deadline: this row now has a terminal status, so the
+          // sweeper must never treat it as a stuck placeholder again.
+          placeholder_until: null,
           payload: {
             status: "failed",
             error: errMsg.slice(0, 500),
@@ -1685,10 +1688,30 @@ async function generateSeedanceVideo(opts: {
       frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
     }
     if (frames.length) body.frame_images = frames;
-    // Identity/ingredient reference is additive on H3 — it can be sent alongside keyframes
-    // so the same avatar/product persists across sequential 15s clips.
+    // MUTUALLY EXCLUSIVE (provider-enforced): MiniMax Hailuo hard-rejects any request
+    // carrying BOTH frame_images and input_references:
+    //   400 "MiniMax Hailuo video generations do not support frame_images and
+    //        input_references in the same request"
+    // First frame WINS — in the avatar/script flow the avatar image is passed as the
+    // first frame, so identity continuity is already carried there and the ingredient
+    // reference is redundant. Drop it (and log the drop) instead of failing the render.
     if (providerIngredientUrl && providerIngredientUrl !== providerImageUrl) {
-      body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+      if (frames.length) {
+        await recordVideoModelDecision(supa, "h3.input_references_dropped_frames_present", {
+          conversation_id: opts.conversationId,
+          client_id: opts.clientId,
+          user_id: opts.userId,
+          chosen_model: model,
+          reason: "MiniMax Hailuo rejects frame_images + input_references in the same request; first frame wins",
+          first_frame_url: providerImageUrl || null,
+          last_frame_url: providerLastFrameUrl || null,
+          dropped_input_reference_url: providerIngredientUrl,
+          frame_count: frames.length,
+        });
+        console.warn(`[h3] dropping input_references (frame_images present) ingredient=${providerIngredientUrl}`);
+      } else {
+        body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+      }
     }
   } else if (isHappyHorse) {
     // HappyHorse 1.1 on OpenRouter — /api/v1/videos schema (verified via ZodError response):
@@ -1929,6 +1952,28 @@ async function generateSeedanceVideo(opts: {
     },
     body: JSON.stringify(body),
   });
+  // FINAL GUARANTEE (applies to every H3 caller: single render, generate_script_batch
+  // per-clip dispatch, image_to_reel). No code path may send frame_images AND
+  // input_references to minimax/hailuo-3 — the provider hard-rejects it with a 400.
+  if (isHailuo && Array.isArray((body as any).frame_images) && (body as any).frame_images.length
+      && Array.isArray((body as any).input_references) && (body as any).input_references.length) {
+    const droppedRefs = ((body as any).input_references as any[])
+      .map((r) => r?.image_url?.url || r?.url || null).filter(Boolean);
+    delete (body as any).input_references;
+    await recordVideoModelDecision(supa, "h3.input_references_dropped_frames_present", {
+      conversation_id: opts.conversationId,
+      client_id: opts.clientId,
+      user_id: opts.userId,
+      chosen_model: model,
+      phase: "pre_submit_guard",
+      reason: "MiniMax Hailuo rejects frame_images + input_references in the same request; first frame wins",
+      first_frame_url: providerImageUrl || null,
+      last_frame_url: providerLastFrameUrl || null,
+      dropped_input_reference_urls: droppedRefs,
+      frame_count: ((body as any).frame_images as any[]).length,
+    });
+    console.warn(`[h3][pre-submit-guard] stripped input_references: ${droppedRefs.join(",")}`);
+  }
   let submit = await postVideo();
   // Provider-side prompt length limits vary (H3 = 7000 chars). If the submit is
   // rejected purely for prompt length, retry once with a harder cap instead of
@@ -2739,7 +2784,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_script_batch",
-      description: "MULTI-SCRIPT BATCH (preferred when the user pastes 2+ video scripts in one message, e.g. '1. Script A ... 2. Script B ...'): take an array of scripts and render each as a fully-cut video. Per script the server auto-splits the voiceover into clips that fit the model's per-clip cap (Seedance 15s, Veo 8s), reuses the same avatar image_url across every clip in that script for identity lock, and runs all scripts × clips in parallel. Avatar scripts auto-route to Veo unless force_model=true. Returns one grouped canvas card per script. Use this INSTEAD of emitting N individual generate_seedance_video calls when the user gave you a numbered list of scripts.",
+      description: "MULTI-SCRIPT BATCH (preferred when the user pastes 2+ video scripts in one message, e.g. '1. Script A ... 2. Script B ...'): take an array of scripts and render each as a fully-cut video. MiniMax H3 (minimax/hailuo-3) is the default renderer with a 15s per-clip cap, so per script the server auto-splits the voiceover into 15s H3 clips, reuses the same avatar image_url as the FIRST FRAME of every clip in that script for identity lock, and runs all scripts × clips in parallel. Returns one grouped canvas card per script. Use this INSTEAD of emitting N individual generate_seedance_video calls when the user gave you a numbered list of scripts.",
       parameters: {
         type: "object",
         properties: {
@@ -3001,7 +3046,7 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   "  • Storyboarding tools (plan_storyboard / generate_scene_image / generate_scene_video) are DISABLED. Even if the user types the word 'storyboard', go straight to generate_seedance_video and let the server split clips. No keyframe-review gate, no scene-by-scene image step.",
   "- SEEDANCE / HAPPYHORSE / KLING / VEO (single-clip video):",
   "  • Use generate_seedance_video for any standalone 15-second clip. The `model` argument MUST match the UI-selected model (passed in VIDEO MODEL PREFERENCE).",
-  "- MULTI-SCRIPT BATCH (CRITICAL): If the user pastes 2+ video scripts in one message (numbered list '1. ... 2. ...', or visibly distinct script blocks with their own Avatar/Environment headers, or a 'Batch scripts' payload with a JSON `scripts` array), call generate_script_batch ONCE with the full scripts array — do NOT emit N separate generate_seedance_video calls. The server auto-splits each script into per-clip segments, locks the avatar across clips, and renders all scripts × clips in parallel. Avatar scripts auto-route to Veo unless the user said 'use Seedance anyway'.",
+  "- MULTI-SCRIPT BATCH (CRITICAL): If the user pastes 2+ video scripts in one message (numbered list '1. ... 2. ...', or visibly distinct script blocks with their own Avatar/Environment headers, or a 'Batch scripts' payload with a JSON `scripts` array), call generate_script_batch ONCE with the full scripts array — do NOT emit N separate generate_seedance_video calls. The server auto-splits each script into 15s MiniMax H3 (minimax/hailuo-3) clips, locks the avatar identity via the first frame of every clip, and renders all scripts × clips in parallel. H3 is the default renderer; only use Seedance 2.0 when the user explicitly asks for it.",
   "  • Text-to-video: just pass `prompt` (+ aspect_ratio, duration, resolution).",
   "  • Image-to-video: pass `image_url` (a canvas keyframe / static ad URL) — Seedance preserves character, style, and brand from the reference. Optionally pass `last_frame_url` for precise motion endpoints.",
   "  • Always use duration=15, resolution = the UI-selected resolution, and the UI-selected video format (9:16 Reel or 16:9 Video).",
@@ -3084,8 +3129,8 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ctx.avatar.elevenlabs_voice_id ? `- voice_id: ${ctx.avatar.elevenlabs_voice_id}` : "",
         "RULES:",
         "- For ANY video the user asks for (single-clip or multi-clip), pass image_url = the avatar image_url to generate_seedance_video so the avatar is preserved across frames. The user does NOT need to re-state the avatar in their message.",
-        "- AVATAR MODEL ROUTING (CRITICAL): Seedance's content filter can reject photoreal AI avatars as 'real people', so the server may auto-route Seedance avatar clips to an avatar-safe model. HappyHorse 1.1 is avatar-safe and must stay HappyHorse when selected. Only set force_model=true if the user EXPLICITLY says to override safety routing.",
-        "- If the script is longer than the model's per-clip max (Veo 8s, Seedance 15s), split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url so the avatar's face and outfit stay consistent across segments. Example: 30s avatar VSL → 4 generate_seedance_video calls of 8s each, all with model='google/veo-3.1-fast' and the same image_url.",
+        "- AVATAR MODEL ROUTING (CRITICAL): MiniMax H3 (minimax/hailuo-3) is the default renderer for avatar clips and is avatar-safe. Avatar identity is carried by the FIRST FRAME (image_url) — never pass an ingredient_url alongside a first frame on H3, the provider rejects both together and the server will drop the ingredient. Seedance 2.0 is the only alternative and its content filter can reject photoreal avatars, so the server may auto-route Seedance avatar clips to H3. Only set force_model=true if the user EXPLICITLY says to override safety routing.",
+        "- The per-clip max is 15s on H3. If the script is longer, split it into multiple generate_seedance_video calls in the SAME assistant turn (parallel). EVERY clip MUST reuse the same avatar image_url as its first frame so the avatar's face and outfit stay consistent across segments. Example: 45s avatar VSL → 3 generate_seedance_video calls of 15s each, all with model='minimax/hailuo-3' and the same image_url.",
         "- In the video prompt, briefly describe the avatar performing the scripted action (e.g. 'Sarah, 28, casual blazer, smiling to camera, holding phone vertically — speaks the hook directly into the lens'). Don't change the avatar's identity, ethnicity, or core look.",
         "- The user can override the avatar for a specific request by saying 'no avatar' or supplying a different image — respect that.",
       ].filter(Boolean).join("\n")
@@ -3969,6 +4014,7 @@ Deno.serve(async (req) => {
           const p: any = row.payload || {};
           if (p?.status !== "processing" || p?.video_url) continue;
           await supa.from("ai_studio_canvas_items").update({
+            placeholder_until: null,
             payload: {
               ...p,
               status: "failed",
@@ -3979,6 +4025,37 @@ Deno.serve(async (req) => {
           }).eq("id", row.id);
         }
       } catch (e) { console.warn("stale processing sweep failed (non-fatal)", e); }
+      // EXPIRED-PLACEHOLDER SWEEP: the 60-minute created_at rule above misses rows
+      // whose own placeholder_until deadline has already passed (the poll budget is
+      // baked into that timestamp at insert time). If the background
+      // EdgeRuntime.waitUntil worker was killed mid-poll, nothing else clears these —
+      // reap_orphaned_canvas_placeholders() only handles kind='pending'. Fail them so
+      // H3 cards never sit in "processing" forever.
+      try {
+        const { data: expired } = await supa
+          .from("ai_studio_canvas_items")
+          .select("id, payload")
+          .eq("user_id", userId)
+          .eq("kind", "scene_video")
+          .not("placeholder_until", "is", null)
+          .lt("placeholder_until", new Date().toISOString())
+          .limit(50);
+        for (const row of expired || []) {
+          const p: any = row.payload || {};
+          if (p?.status !== "processing" || p?.video_url) continue;
+          await supa.from("ai_studio_canvas_items").update({
+            placeholder_until: null,
+            payload: {
+              ...p,
+              status: "failed",
+              error: `${p.requested_model || p.model || "Video"} render exceeded its poll deadline (background worker did not report back). Re-submit to retry.`,
+              failed_at: new Date().toISOString(),
+              stale_cleanup: true,
+              placeholder_expired: true,
+            },
+          }).eq("id", row.id);
+        }
+      } catch (e) { console.warn("expired placeholder sweep failed (non-fatal)", e); }
       // Tell the client roughly how much context is being shipped so it can
       // render a usage meter. ~4 chars ≈ 1 token (rough heuristic).
       const ctxChars = convo.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
