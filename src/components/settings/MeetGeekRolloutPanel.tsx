@@ -26,6 +26,13 @@ interface RolloutPayload {
   applied: boolean;
   bot_guest_email: string;
   prerequisites: {
+    invite_mode?: string;
+    email_sender_configured?: boolean;
+    email_sender_provider?: string | null;
+    email_sender_from?: string | null;
+    email_sender_detail?: string;
+    gmail_setting_note?: string;
+    google_calendar_required?: boolean;
     calendar_connection: boolean;
     calendar_connection_verified: boolean | null;
     webhook_secret_configured: boolean;
@@ -48,7 +55,16 @@ interface WebhookSetup {
 }
 
 interface PollResult {
-  totals: { appointments_found: number; jobs_enqueued: number; invited: number; pending: number };
+  totals: {
+    appointments_found: number;
+    jobs_enqueued: number;
+    invited: number;
+    pending: number;
+    invites_sent?: number;
+    invites_updated?: number;
+    invites_cancelled?: number;
+  };
+  sender?: { configured: boolean; provider: string | null; from_email: string | null; detail: string };
   google_scan: { connections: number; events_scanned: number; invited: number };
 }
 
