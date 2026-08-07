@@ -4014,6 +4014,7 @@ Deno.serve(async (req) => {
           const p: any = row.payload || {};
           if (p?.status !== "processing" || p?.video_url) continue;
           await supa.from("ai_studio_canvas_items").update({
+            placeholder_until: null,
             payload: {
               ...p,
               status: "failed",
@@ -4024,6 +4025,37 @@ Deno.serve(async (req) => {
           }).eq("id", row.id);
         }
       } catch (e) { console.warn("stale processing sweep failed (non-fatal)", e); }
+      // EXPIRED-PLACEHOLDER SWEEP: the 60-minute created_at rule above misses rows
+      // whose own placeholder_until deadline has already passed (the poll budget is
+      // baked into that timestamp at insert time). If the background
+      // EdgeRuntime.waitUntil worker was killed mid-poll, nothing else clears these —
+      // reap_orphaned_canvas_placeholders() only handles kind='pending'. Fail them so
+      // H3 cards never sit in "processing" forever.
+      try {
+        const { data: expired } = await supa
+          .from("ai_studio_canvas_items")
+          .select("id, payload")
+          .eq("user_id", userId)
+          .eq("kind", "scene_video")
+          .not("placeholder_until", "is", null)
+          .lt("placeholder_until", new Date().toISOString())
+          .limit(50);
+        for (const row of expired || []) {
+          const p: any = row.payload || {};
+          if (p?.status !== "processing" || p?.video_url) continue;
+          await supa.from("ai_studio_canvas_items").update({
+            placeholder_until: null,
+            payload: {
+              ...p,
+              status: "failed",
+              error: `${p.requested_model || p.model || "Video"} render exceeded its poll deadline (background worker did not report back). Re-submit to retry.`,
+              failed_at: new Date().toISOString(),
+              stale_cleanup: true,
+              placeholder_expired: true,
+            },
+          }).eq("id", row.id);
+        }
+      } catch (e) { console.warn("expired placeholder sweep failed (non-fatal)", e); }
       // Tell the client roughly how much context is being shipped so it can
       // render a usage meter. ~4 chars ≈ 1 token (rough heuristic).
       const ctxChars = convo.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
