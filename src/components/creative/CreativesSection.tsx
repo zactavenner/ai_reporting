@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreativeApproval } from './CreativeApproval';
+import { DriveSyncCard } from './DriveSyncCard';
 import { Upload, Image, Video, Target, ExternalLink, Pencil, Save, X } from 'lucide-react';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { useClientSettings, useUpdateClientSettings } from '@/hooks/useClientSettings';
@@ -90,6 +91,9 @@ export function CreativesSection({ clientId, clientName, isPublicView = false }:
         </TabsList>
 
         <TabsContent value="approval" className="mt-4">
+          <div className="mb-4">
+            <DriveSyncCard clientId={clientId} />
+          </div>
           <CreativeApproval 
             clientId={clientId} 
             clientName={clientName} 
