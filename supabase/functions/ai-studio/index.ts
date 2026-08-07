@@ -2025,6 +2025,21 @@ async function generateSeedanceVideo(opts: {
   const jobId: string = sj.id || crypto.randomUUID();
   console.log(`[openrouter:/videos][queued] model=${body.model} provider_model=${extractProviderModel(sj) || "-"} job_id=${jobId} polling_url=${pollingUrl ? "yes" : "no"} response=${JSON.stringify(sj).slice(0, 400)}`);
   if (!pollingUrl) throw new Error(`${modelLabel} returned no polling_url: ${JSON.stringify(sj).slice(0, 300)}`);
+  // Persist the provider handle on the pending canvas row so a later sweep can
+  // RESCUE the render (re-poll OpenRouter) instead of blindly failing it when the
+  // background EdgeRuntime.waitUntil worker is recycled mid-poll.
+  if (pendingCanvasItemId) {
+    try {
+      const { data: cur } = await supa.from("ai_studio_canvas_items")
+        .select("payload").eq("id", pendingCanvasItemId).single();
+      const curPayload: any = cur?.payload || {};
+      if (curPayload.status === "processing") {
+        await supa.from("ai_studio_canvas_items").update({
+          payload: { ...curPayload, provider_job_id: jobId, polling_url: pollingUrl },
+        }).eq("id", pendingCanvasItemId);
+      }
+    } catch (e) { console.warn("pending canvas provider handle update failed (non-fatal)", e); }
+  }
   const queuedProviderModel = extractProviderModel(sj);
   let downstreamModelSeen = queuedProviderModel || String(body.model || model);
   const queuedDownstreamOverride = !!queuedProviderModel && queuedProviderModel !== body.model;
