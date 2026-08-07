@@ -1627,7 +1627,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     return { inTok, outTok, cost, model: chatModel };
   })();
 
-  async function send(text: string) {
+  async function send(text: string, opts?: { videoApproved?: boolean }) {
     if (!text.trim()) return;
     if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
