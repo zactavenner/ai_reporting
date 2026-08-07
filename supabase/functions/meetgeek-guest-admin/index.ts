@@ -10,6 +10,7 @@ import {
 } from '../_shared/webhookSecret.ts';
 import { SHARED_SECRET_HEADER } from '../_shared/calendarGuest.ts';
 import { getMappedGhl } from '../_shared/ghlMapping.ts';
+import { runGuestInvitePolling } from '../_shared/guestPoller.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -95,6 +96,9 @@ Deno.serve(async (req) => {
           secret_header: SHARED_SECRET_HEADER,
           secret,
           secret_configured: await ghlAppointmentWebhookSecretConfigured(supabase),
+          optional: true,
+          optional_note:
+            'Optional real-time boost. Bookings are already detected by the 10-minute poller, so the workflow only makes invites instant.',
           instructions: [
             'In the client’s GHL location, open Automation → Workflows → Create Workflow (Start from Scratch).',
             'Add trigger: "Customer Booked Appointment" (optionally filter to the booking calendar).',
