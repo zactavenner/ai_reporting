@@ -10,6 +10,11 @@ import {
   redactConnection,
   resolveEventLink,
   verifyWebhookSignature,
+  verifySharedSecretHeader,
+  verifyGhlMarketplaceSignature,
+  SHARED_SECRET_HEADER,
+  SHARED_SECRET_MIN_LENGTH,
+  GHL_MARKETPLACE_SIGNATURE_HEADERS,
   type GhlAppointmentLite,
   type GuestConfig,
   type GoogleEventLite,
@@ -67,6 +72,11 @@ describe('webhook signature verification (fail closed)', () => {
 });
 
 describe('mapping gate', () => {
+  it('exposes an explicit shared-secret header name and marketplace headers', () => {
+    expect(SHARED_SECRET_HEADER).toBe('x-hpa-webhook-token');
+    expect(GHL_MARKETPLACE_SIGNATURE_HEADERS).toContain('x-wh-signature');
+  });
+
   it('allows a fully mapped, enabled, matching appointment', () => {
     const decision = evaluateGuestGate({ config, appointment });
     expect(decision.allowed).toBe(true);
