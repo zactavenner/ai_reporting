@@ -279,6 +279,12 @@ export function useUpdateCreativeStatus() {
       }
       // Auto-add approved creatives to this client's AI Studio reference library
       if (variables.status === 'approved') {
+        // Push the approved asset into the client's Google Drive folder (if configured)
+        supabase.functions
+          .invoke('sync-creatives-to-drive', {
+            body: { creative_id: variables.id, client_id: variables.clientId },
+          })
+          .catch((e) => console.warn('Drive sync failed:', e));
         (async () => {
           try {
             const { data: c } = await supabase
