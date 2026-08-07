@@ -442,6 +442,7 @@ function buildIngestDeps(supabase: any): IngestDeps {
           summary: meeting.summary,
           action_items: meeting.actionItems as any,
           transcript_url: meeting.transcriptUrl,
+          transcript_text: meeting.transcriptText,
           recording_url: meeting.recordingUrl,
           source_url: meeting.sourceUrl,
         }, { onConflict: 'provider,meeting_external_id' })
