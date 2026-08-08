@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Meeting, MeetingHighlight } from '@/hooks/useMeetings';
 import { MeetingDetailModal } from './MeetingDetailModal';
 import { Client } from '@/hooks/useClients';
+import { MeetingAttributionPanel } from './MeetingAttributionPanel';
 
 interface ClientMeetingsSectionProps {
   meetings: Meeting[];
@@ -18,20 +19,27 @@ interface ClientMeetingsSectionProps {
 export function ClientMeetingsSection({ meetings, client, isPublicView = false }: ClientMeetingsSectionProps) {
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
 
+  // Attribution (contact, sales agent, calendar, CRM link) is operator-only.
+  const attribution = !isPublicView ? <MeetingAttributionPanel clientId={client?.id} limit={15} /> : null;
+
   if (meetings.length === 0) {
     return (
+      <div className="space-y-4">
+        {attribution}
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center justify-center py-8">
           <Video className="h-10 w-10 text-muted-foreground opacity-50 mb-3" />
           <p className="text-muted-foreground text-sm">No meetings recorded yet</p>
         </CardContent>
       </Card>
+      </div>
     );
   }
 
   return (
     <>
       <div className="space-y-4">
+        {attribution}
         {meetings.slice(0, 5).map((meeting) => (
           <Card key={meeting.id} className="hover:border-primary/50 transition-colors">
             <CardHeader className="pb-2">

@@ -17,6 +17,7 @@ import {
 import { Meeting, MeetingHighlight, useAssignMeetingToClient } from '@/hooks/useMeetings';
 import { Client } from '@/hooks/useClients';
 import { MeetingDetailModal } from './MeetingDetailModal';
+import { MeetingAttributionPanel } from './MeetingAttributionPanel';
 
 interface MeetingsTabProps {
   meetings: Meeting[];
@@ -90,7 +91,18 @@ export function MeetingsTab({ meetings, clients }: MeetingsTabProps) {
             <Lightbulb className="h-4 w-4" />
             Highlights ({allHighlights.length})
           </TabsTrigger>
+          <TabsTrigger value="attribution" className="gap-2">
+            <Users className="h-4 w-4" />
+            Attribution
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="attribution" className="space-y-4">
+          <MeetingAttributionPanel
+            clientId={clientFilter === 'all' ? null : clientFilter}
+            limit={50}
+          />
+        </TabsContent>
 
         <TabsContent value="meetings" className="space-y-4">
           {filteredMeetings.length === 0 ? (

@@ -24,6 +24,8 @@ import {
 } from '../_shared/meetgeekCalendarGate.ts';
 import { parseMeetgeekInsights } from '../_shared/meetgeekQuality.ts';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
+import { attributeMeetingRecord, attributeRecentMeetings } from '../_shared/meetingAttribution.ts';
+import { ghlAppointmentUrl } from '../_shared/ghlAttribution.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,7 +113,13 @@ async function loadMeetgeekConfig(supabase: any, clientId: string): Promise<Meet
     ghlCalendarId: data.ghl_calendar_id,
     ghlCalendarName: data.ghl_calendar_name,
     botJoinPolicy: data.bot_join_policy,
-    mode: data.ingest_mode === 'all_mapped_calendars' ? 'all_mapped_calendars' : 'selected_calendar',
+    // 'all_active_calendars' (agency-wide rollout) covers every active booking
+    // calendar in the mapped location, which is the same gate rule as
+    // 'all_mapped_calendars'.
+    mode:
+      data.ingest_mode === 'all_mapped_calendars' || data.ingest_mode === 'all_active_calendars'
+        ? 'all_mapped_calendars'
+        : 'selected_calendar',
     mappingValid: !!data.mapping_valid,
     webhookSecretConfigured: !!data.webhook_secret_configured,
   };
@@ -515,7 +523,17 @@ Deno.serve(async (req) => {
         secret: await resolveWebhookSecret(supabase),
         deps: buildIngestDeps(supabase),
       });
-      return jsonResponse(result, result.status);
+      // Attribution: link the recorded meeting back to the notetaker invite job
+      // (client → contact → appointment/calendar/location → sales agent).
+      let attribution: unknown = null;
+      if (result.ok && (result as any).meetingRecordId) {
+        try {
+          attribution = await attributeMeetingRecord(supabase, String((result as any).meetingRecordId));
+        } catch (e) {
+          console.error('attribution failed', String((e as Error).message).slice(0, 200));
+        }
+      }
+      return jsonResponse({ ...result, attribution }, result.status);
     }
 
     const body = JSON.parse(rawBody);
@@ -558,7 +576,9 @@ Deno.serve(async (req) => {
           .select(`id, match_confidence, ghl_note_status, ghl_note_error,
             meeting_records:meeting_record_id (
               id, title, started_at, duration_minutes, summary, action_items,
-              recording_url, transcript_url, source_url
+              recording_url, transcript_url, source_url,
+              contact_name, contact_email, sales_agent_name, ghl_calendar_name,
+              ghl_appointment_id, ghl_location_id, attribution_method
             )`)
           .eq('lead_id', leadId)
           .order('created_at', { ascending: false })
@@ -568,6 +588,49 @@ Deno.serve(async (req) => {
       }
 
       return jsonResponse({ activity: activity || [], meetings });
+    }
+
+    // -----------------------------------------------------------------
+    // Attribution surfaces: recorded meetings with full lineage, plus the
+    // per-sales-agent rollup. Operator-gated like every other read here.
+    // -----------------------------------------------------------------
+    if (body.action === 'mg_attributed_meetings') {
+      const limit = Math.min(Math.max(Number(body.limit) || 25, 1), 200);
+      let q = supabase
+        .from('meeting_records')
+        .select(
+          'id, client_id, title, started_at, ended_at, duration_minutes, summary, recording_url, transcript_url, source_url, ' +
+            'contact_name, contact_email, ghl_contact_id, sales_agent_name, sales_agent_id, ghl_calendar_name, ' +
+            'ghl_appointment_id, ghl_location_id, attribution_method, attributed_at',
+        )
+        .order('started_at', { ascending: false })
+        .limit(limit);
+      if (clientId) q = q.eq('client_id', clientId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return jsonResponse({
+        meetings: (data || []).map((m: any) => ({
+          ...m,
+          ghl_appointment_url: ghlAppointmentUrl(m.ghl_location_id, m.ghl_appointment_id),
+        })),
+      });
+    }
+
+    if (body.action === 'mg_agent_rollup') {
+      let q = supabase
+        .from('v_meeting_agent_rollup')
+        .select('client_id, sales_agent_name, sales_agent_id, meetings_recorded, meetings_last_30d, meetings_last_7d, avg_duration_minutes, last_meeting_at')
+        .order('meetings_recorded', { ascending: false })
+        .limit(200);
+      if (clientId) q = q.eq('client_id', clientId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return jsonResponse({ agents: data || [] });
+    }
+
+    if (body.action === 'mg_attribute_sweep') {
+      const res = await attributeRecentMeetings(supabase, Number(body.limit) || 100);
+      return jsonResponse({ ok: true, ...res });
     }
 
     // -----------------------------------------------------------------

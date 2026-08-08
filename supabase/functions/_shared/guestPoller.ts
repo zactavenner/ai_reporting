@@ -31,6 +31,14 @@ import {
   scheduleSignature,
 } from './icsInvite.ts';
 import { resolveInviteSender, sendShadowInvite } from './shadowInviteSender.ts';
+import {
+  buildAttributedSummary,
+  listLocationCalendars,
+  newAttributionCache,
+  resolveAppointmentAttribution,
+  type AppointmentAttribution,
+  type AttributionCache,
+} from './ghlAttribution.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
@@ -69,6 +77,8 @@ export interface PollClientResult {
   pending_awaiting_sender: number;
   needs_meeting_link: number;
   rejected: number;
+  /** Every active booking calendar in the location that was polled. */
+  calendars_polled: { id: string; name: string; appointments: number }[];
   errors: string[];
 }
 
@@ -109,14 +119,21 @@ function toConfig(row: any): GuestConfig {
   };
 }
 
-export type PolledAppointment = GhlAppointmentLite & { cancelled: boolean };
+export type PolledAppointment = GhlAppointmentLite & {
+  cancelled: boolean;
+  calendarName?: string | null;
+  /** Full CRM attribution captured at detection time. */
+  attribution?: AppointmentAttribution;
+};
 
 /** Upcoming events on one GHL calendar. Read-only. Cancellations included. */
 async function fetchUpcomingGhlAppointments(args: {
   apiKey: string;
   locationId: string;
   calendarId: string;
+  calendarName?: string | null;
   horizonDays: number;
+  cache?: AttributionCache;
 }): Promise<PolledAppointment[]> {
   // A small backward window catches bookings made moments ago for a slot that
   // has technically just started.
@@ -132,9 +149,13 @@ async function fetchUpcomingGhlAppointments(args: {
   const data = await res.json().catch(() => null);
   const events: any[] = data?.events || data?.appointments || [];
   const cancelled = /cancel/i;
-  return events
-    .filter((e) => e?.id)
-    .map((e) => ({
+  const cache = args.cache || newAttributionCache();
+  const mapped: PolledAppointment[] = [];
+  for (const e of events.filter((ev) => ev?.id)) {
+    // Attribution is captured at detection time so a later reschedule or a
+    // recorded meeting can always be traced to contact + sales agent.
+    const attribution = await resolveAppointmentAttribution({ apiKey: args.apiKey, event: e, cache });
+    mapped.push({
       appointmentId: String(e.id),
       calendarId: String(e.calendarId || args.calendarId),
       locationId: String(e.locationId || args.locationId),
@@ -147,7 +168,11 @@ async function fetchUpcomingGhlAppointments(args: {
         e.meetingUrl ||
         null,
       cancelled: cancelled.test(String(e.appointmentStatus || e.status || '')),
-    }));
+      calendarName: args.calendarName || null,
+      attribution,
+    });
+  }
+  return mapped;
 }
 
 /**
@@ -161,8 +186,9 @@ async function runShadowInvite(args: {
   appointment: PolledAppointment;
   botGuestEmail: string;
   job: any;
+  clientName: string | null;
 }): Promise<'sent' | 'updated' | 'cancelled' | 'noop' | 'awaiting_sender' | 'needs_meeting_link' | 'error'> {
-  const { supabase, config, appointment, botGuestEmail, job } = args;
+  const { supabase, config, appointment, botGuestEmail, job, clientName } = args;
   const finish = (patch: Record<string, unknown>) =>
     supabase.from('meetgeek_guest_invite_jobs').update(patch).eq('id', job.id);
 
@@ -212,7 +238,13 @@ async function runShadowInvite(args: {
     return 'awaiting_sender';
   }
 
-  const title = appointment.title || 'Client call';
+  // Structured title so the MeetGeek meeting itself carries attribution.
+  const title = buildAttributedSummary({
+    clientName,
+    calendarName: appointment.calendarName || null,
+    contactName: appointment.attribution?.contactName || null,
+    fallbackTitle: appointment.title || null,
+  });
   const ics = buildShadowInviteIcs({
     uid,
     method,
@@ -220,7 +252,12 @@ async function runShadowInvite(args: {
     start: appointment.startTime,
     end: appointment.endTime,
     summary: isCancel ? `CANCELLED — ${title}` : title,
-    description: `Auto-scheduled notetaker coverage (HPA Reporting).`,
+    description: [
+      'Auto-scheduled notetaker coverage (HPA Reporting).',
+      appointment.attribution?.contactName ? `Contact: ${appointment.attribution.contactName}` : '',
+      appointment.attribution?.assignedUserName ? `Sales agent: ${appointment.attribution.assignedUserName}` : '',
+      `Ref: ${uid}`,
+    ].filter(Boolean).join('\n'),
     meetingUrl: link,
     organizerEmail: sender.from_email,
     organizerName: 'HPA Reporting',
@@ -262,6 +299,7 @@ async function runShadowInvite(args: {
     invite_provider: result.provider,
     invite_message_id: result.message_id,
     invite_last_sent_at: new Date().toISOString(),
+    invite_summary: title,
     invite_send_count: isCancel ? job.invite_send_count || 0 : (job.invite_send_count || 0) + 1,
     invite_update_count: !isCancel && alreadySent ? (job.invite_update_count || 0) + 1 : job.invite_update_count || 0,
     invite_cancel_count: isCancel ? (job.invite_cancel_count || 0) + 1 : job.invite_cancel_count || 0,
@@ -415,6 +453,7 @@ export async function runGuestInvitePolling(args: {
       pending_awaiting_sender: 0,
       needs_meeting_link: 0,
       rejected: 0,
+      calendars_polled: [],
       errors: [],
     };
 
@@ -423,33 +462,64 @@ export async function runGuestInvitePolling(args: {
     const active = row.enabled || settings?.enabled || (args.force && args.clientId === row.client_id);
     if (!active) continue;
 
-    const calendarId = row.ghl_calendar_id || settings?.ghl_calendar_id || null;
-    const config = toConfig({ ...row, ghl_calendar_id: calendarId, enabled: true });
-    if (!client?.ghl_api_key || !client?.ghl_location_id || !calendarId) {
-      result.errors.push('missing CRM credentials or mapped calendar');
+    const mappedCalendarId = row.ghl_calendar_id || settings?.ghl_calendar_id || null;
+    const config = toConfig({ ...row, ghl_calendar_id: mappedCalendarId, enabled: true });
+    if (!client?.ghl_api_key || !client?.ghl_location_id) {
+      result.errors.push('missing CRM credentials (GHL location id + API key)');
       clients.push(result);
       continue;
     }
 
-    let appointments: PolledAppointment[] = [];
-    try {
-      appointments = await fetchUpcomingGhlAppointments({
-        apiKey: client.ghl_api_key,
-        locationId: client.ghl_location_id,
-        calendarId,
-        horizonDays,
-      });
-    } catch (e) {
-      result.errors.push(String((e as Error).message).slice(0, 200));
+    // ALL active booking calendars in the location are covered, not just the
+    // mapped primary. The mapped calendar is always included as a fallback so a
+    // failed calendar listing never silently drops coverage.
+    const locationCalendars = await listLocationCalendars(client.ghl_api_key, client.ghl_location_id);
+    const targets = locationCalendars.filter((c) => c.isActive);
+    if (mappedCalendarId && !targets.some((c) => c.id === mappedCalendarId)) {
+      targets.push({ id: mappedCalendarId, name: 'Mapped calendar', isActive: true });
+    }
+    if (!targets.length) {
+      result.errors.push('no active booking calendars found in the CRM location');
       clients.push(result);
       continue;
+    }
+    // Keep the settings row in sync so the UI can show what is covered.
+    await supabase
+      .from('client_meetgeek_settings')
+      .update({ booking_calendars: targets as any })
+      .eq('client_id', config.clientId);
+
+    const cache = newAttributionCache();
+    let appointments: PolledAppointment[] = [];
+    for (const cal of targets) {
+      try {
+        const batch = await fetchUpcomingGhlAppointments({
+          apiKey: client.ghl_api_key,
+          locationId: client.ghl_location_id,
+          calendarId: cal.id,
+          calendarName: cal.name,
+          horizonDays,
+          cache,
+        });
+        result.calendars_polled.push({ id: cal.id, name: cal.name, appointments: batch.length });
+        appointments = appointments.concat(batch);
+      } catch (e) {
+        result.errors.push(`${cal.name}: ${String((e as Error).message).slice(0, 160)}`);
+      }
     }
     result.ghl_appointments_found = appointments.length;
 
     const botEmail = normalizeEmail(config.botGuestEmail);
     for (const appointment of appointments) {
+      // Every active calendar in the location is in scope, and each was already
+      // validated as belonging to this client's location, so the gate is run
+      // against the appointment's own calendar rather than a single primary.
       const gate = evaluateGuestGate({
-        config: { ...config, calendarConnectionId: config.calendarConnectionId || 'pending' },
+        config: {
+          ...config,
+          ghlCalendarId: appointment.calendarId || config.ghlCalendarId,
+          calendarConnectionId: config.calendarConnectionId || 'pending',
+        },
         appointment,
       });
       const idempotencyKey = buildInviteIdempotencyKey({
@@ -490,7 +560,8 @@ export async function runGuestInvitePolling(args: {
             client_id: config.clientId,
             guest_config_id: config.id,
             ghl_appointment_id: appointment.appointmentId,
-            ghl_calendar_id: calendarId,
+            ghl_calendar_id: appointment.calendarId,
+            ghl_calendar_name: appointment.calendarName || null,
             ghl_location_id: config.ghlLocationId,
             bot_guest_email: config.botGuestEmail,
             status: 'rejected',
@@ -513,8 +584,18 @@ export async function runGuestInvitePolling(args: {
             client_id: config.clientId,
             guest_config_id: config.id,
             ghl_appointment_id: appointment.appointmentId,
-            ghl_calendar_id: calendarId,
+            ghl_calendar_id: appointment.calendarId,
+            ghl_calendar_name: appointment.calendarName || null,
             ghl_location_id: config.ghlLocationId,
+            // Attribution: contact + assigned sales agent, captured on every
+            // upsert so reschedules keep (never duplicate) the attribution.
+            ghl_contact_id: appointment.attribution?.contactId || null,
+            contact_name: appointment.attribution?.contactName || null,
+            contact_email: appointment.attribution?.contactEmail || null,
+            contact_phone: appointment.attribution?.contactPhone || null,
+            assigned_user_id: appointment.attribution?.assignedUserId || null,
+            assigned_user_name: appointment.attribution?.assignedUserName || null,
+            assigned_user_email: appointment.attribution?.assignedUserEmail || null,
             google_calendar_id: hasConnection ? config.organizerCalendarId : null,
             bot_guest_email: gate.botGuestEmail,
             invite_mode: shadow ? 'shadow_email' : 'google_guest',
@@ -547,6 +628,7 @@ export async function runGuestInvitePolling(args: {
           appointment,
           botGuestEmail: gate.botGuestEmail,
           job: { ...(existing || {}), ...job },
+          clientName: client?.name || null,
         });
         if (outcome === 'sent') {
           result.invites_sent += 1;
