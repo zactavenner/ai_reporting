@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, Video, CheckCircle2, AlertCircle, MinusCircle, ExternalLink } from 'lucide-react';
+import { ChevronDown, Video, CheckCircle2, AlertCircle, MinusCircle, ExternalLink, User, UserCheck, CalendarDays } from 'lucide-react';
 import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 import { MeetingCallActivityList } from '@/components/meetings/MeetingCallActivityList';
 
@@ -26,7 +26,19 @@ interface MeetingContextRow {
     recording_url: string | null;
     transcript_url: string | null;
     source_url: string | null;
+    contact_name: string | null;
+    contact_email: string | null;
+    sales_agent_name: string | null;
+    ghl_calendar_name: string | null;
+    ghl_appointment_id: string | null;
+    ghl_location_id: string | null;
   } | null;
+}
+
+/** CRM deep link so a recorded meeting always traces back to its appointment. */
+function appointmentUrl(locationId: string | null, appointmentId: string | null): string | null {
+  if (!locationId || !appointmentId || appointmentId.startsWith('gcal:')) return null;
+  return `https://app.gohighlevel.com/v2/location/${locationId}/calendars/view/appointment/${appointmentId}`;
 }
 
 const noteStatusMeta: Record<string, { label: string; icon: typeof CheckCircle2; className: string }> = {
@@ -90,6 +102,33 @@ export function MeetingContextPanel({ leadId, isOpen, onToggle }: MeetingContext
               {m.summary && (
                 <p className="text-xs text-foreground/80 line-clamp-4 whitespace-pre-wrap">{m.summary}</p>
               )}
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <User className="h-3 w-3" />
+                  {m.contact_name || m.contact_email || 'Unknown contact'}
+                </span>
+                <span className="flex items-center gap-1">
+                  <UserCheck className="h-3 w-3" />
+                  {m.sales_agent_name || 'Unassigned agent'}
+                </span>
+                {m.ghl_calendar_name && (
+                  <span className="flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    {m.ghl_calendar_name}
+                  </span>
+                )}
+                {appointmentUrl(m.ghl_location_id, m.ghl_appointment_id) && (
+                  <a
+                    href={appointmentUrl(m.ghl_location_id, m.ghl_appointment_id)!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    CRM appointment <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
 
               {items.length > 0 && (
                 <ul className="space-y-1">

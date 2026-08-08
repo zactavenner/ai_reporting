@@ -16,6 +16,8 @@ interface RolloutClient {
   client_status: string | null;
   calendar_mapped: boolean;
   calendar_name: string | null;
+  calendars_covered?: number;
+  booking_calendars?: { id: string; name: string }[];
   detection: string;
   bot_guest_email: string | null;
   enabled: boolean;
@@ -299,7 +301,7 @@ export function MeetGeekRolloutPanel() {
               { label: 'Clients', value: view.summary.total },
               { label: 'Fully active', value: view.summary.active },
               { label: 'Needs attention', value: view.summary.needs_attention },
-              { label: 'Needs calendar', value: view.summary.needs_calendar_selection },
+              { label: 'No calendars found', value: view.summary.needs_calendar_selection },
             ].map((s) => (
               <div key={s.label} className="border border-border p-2">
                 <div className="text-lg font-semibold">{s.value}</div>
@@ -317,7 +319,10 @@ export function MeetGeekRolloutPanel() {
                     <div className="text-destructive">{c.blockers.join(' · ')}</div>
                   ) : (
                     <div className="text-muted-foreground truncate">
-                      {c.calendar_name || 'Mapped calendar'} · {c.bot_guest_email}
+                      {c.calendars_covered
+                        ? `${c.calendars_covered} booking calendar${c.calendars_covered === 1 ? '' : 's'} covered`
+                        : c.calendar_name || 'Mapped calendar'}{' '}
+                      · {c.bot_guest_email}
                     </div>
                   )}
                 </div>

@@ -5807,6 +5807,7 @@ export type Database = {
       }
       client_meetgeek_settings: {
         Row: {
+          booking_calendars: Json
           bot_join_policy: string
           client_id: string
           created_at: string
@@ -5828,6 +5829,7 @@ export type Database = {
           webhook_secret_configured: boolean
         }
         Insert: {
+          booking_calendars?: Json
           bot_join_policy?: string
           client_id: string
           created_at?: string
@@ -5849,6 +5851,7 @@ export type Database = {
           webhook_secret_configured?: boolean
         }
         Update: {
+          booking_calendars?: Json
           bot_join_policy?: string
           client_id?: string
           created_at?: string
@@ -13410,15 +13413,23 @@ export type Database = {
       }
       meetgeek_guest_invite_jobs: {
         Row: {
+          assigned_user_email: string | null
+          assigned_user_id: string | null
+          assigned_user_name: string | null
           attempts: number
           bot_guest_email: string | null
           client_id: string | null
           completed_at: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
           created_at: string
           error_code: string | null
           error_message: string | null
           ghl_appointment_id: string | null
           ghl_calendar_id: string | null
+          ghl_calendar_name: string | null
+          ghl_contact_id: string | null
           ghl_location_id: string | null
           google_calendar_id: string | null
           google_event_id: string | null
@@ -13433,8 +13444,12 @@ export type Database = {
           invite_provider: string | null
           invite_send_count: number
           invite_sequence: number
+          invite_summary: string | null
           invite_uid: string | null
           invite_update_count: number
+          match_method: string | null
+          matched_at: string | null
+          meeting_record_id: string | null
           meeting_url: string | null
           rejection_reason: string | null
           schedule_signature: string | null
@@ -13444,15 +13459,23 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_user_email?: string | null
+          assigned_user_id?: string | null
+          assigned_user_name?: string | null
           attempts?: number
           bot_guest_email?: string | null
           client_id?: string | null
           completed_at?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
           created_at?: string
           error_code?: string | null
           error_message?: string | null
           ghl_appointment_id?: string | null
           ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_contact_id?: string | null
           ghl_location_id?: string | null
           google_calendar_id?: string | null
           google_event_id?: string | null
@@ -13467,8 +13490,12 @@ export type Database = {
           invite_provider?: string | null
           invite_send_count?: number
           invite_sequence?: number
+          invite_summary?: string | null
           invite_uid?: string | null
           invite_update_count?: number
+          match_method?: string | null
+          matched_at?: string | null
+          meeting_record_id?: string | null
           meeting_url?: string | null
           rejection_reason?: string | null
           schedule_signature?: string | null
@@ -13478,15 +13505,23 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_user_email?: string | null
+          assigned_user_id?: string | null
+          assigned_user_name?: string | null
           attempts?: number
           bot_guest_email?: string | null
           client_id?: string | null
           completed_at?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
           created_at?: string
           error_code?: string | null
           error_message?: string | null
           ghl_appointment_id?: string | null
           ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_contact_id?: string | null
           ghl_location_id?: string | null
           google_calendar_id?: string | null
           google_event_id?: string | null
@@ -13501,8 +13536,12 @@ export type Database = {
           invite_provider?: string | null
           invite_send_count?: number
           invite_sequence?: number
+          invite_summary?: string | null
           invite_uid?: string | null
           invite_update_count?: number
+          match_method?: string | null
+          matched_at?: string | null
+          meeting_record_id?: string | null
           meeting_url?: string | null
           rejection_reason?: string | null
           schedule_signature?: string | null
@@ -13538,6 +13577,13 @@ export type Database = {
             columns: ["guest_config_id"]
             isOneToOne: false
             referencedRelation: "client_meetgeek_guest_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetgeek_guest_invite_jobs_meeting_record_id_fkey"
+            columns: ["meeting_record_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_records"
             referencedColumns: ["id"]
           },
         ]
@@ -13780,10 +13826,20 @@ export type Database = {
       meeting_records: {
         Row: {
           action_items: Json
+          attributed_at: string | null
+          attribution_method: string | null
           client_id: string | null
+          contact_email: string | null
+          contact_name: string | null
           created_at: string
           duration_minutes: number | null
           ended_at: string | null
+          ghl_appointment_id: string | null
+          ghl_calendar_id: string | null
+          ghl_calendar_name: string | null
+          ghl_contact_id: string | null
+          ghl_location_id: string | null
+          guest_invite_job_id: string | null
           host_email: string | null
           id: string
           language: string | null
@@ -13792,6 +13848,8 @@ export type Database = {
           provider: string
           raw: Json
           recording_url: string | null
+          sales_agent_id: string | null
+          sales_agent_name: string | null
           source_url: string | null
           started_at: string | null
           status: string | null
@@ -13803,10 +13861,20 @@ export type Database = {
         }
         Insert: {
           action_items?: Json
+          attributed_at?: string | null
+          attribution_method?: string | null
           client_id?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
           created_at?: string
           duration_minutes?: number | null
           ended_at?: string | null
+          ghl_appointment_id?: string | null
+          ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_contact_id?: string | null
+          ghl_location_id?: string | null
+          guest_invite_job_id?: string | null
           host_email?: string | null
           id?: string
           language?: string | null
@@ -13815,6 +13883,8 @@ export type Database = {
           provider?: string
           raw?: Json
           recording_url?: string | null
+          sales_agent_id?: string | null
+          sales_agent_name?: string | null
           source_url?: string | null
           started_at?: string | null
           status?: string | null
@@ -13826,10 +13896,20 @@ export type Database = {
         }
         Update: {
           action_items?: Json
+          attributed_at?: string | null
+          attribution_method?: string | null
           client_id?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
           created_at?: string
           duration_minutes?: number | null
           ended_at?: string | null
+          ghl_appointment_id?: string | null
+          ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_contact_id?: string | null
+          ghl_location_id?: string | null
+          guest_invite_job_id?: string | null
           host_email?: string | null
           id?: string
           language?: string | null
@@ -13838,6 +13918,8 @@ export type Database = {
           provider?: string
           raw?: Json
           recording_url?: string | null
+          sales_agent_id?: string | null
+          sales_agent_name?: string | null
           source_url?: string | null
           started_at?: string | null
           status?: string | null
@@ -13868,6 +13950,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_client_enrichment_coverage"
             referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meeting_records_guest_invite_job_id_fkey"
+            columns: ["guest_invite_job_id"]
+            isOneToOne: false
+            referencedRelation: "meetgeek_guest_invite_jobs"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -19451,6 +19540,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agency_members"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_meeting_agent_rollup: {
+        Row: {
+          avg_duration_minutes: number | null
+          client_id: string | null
+          last_meeting_at: string | null
+          meetings_last_30d: number | null
+          meetings_last_7d: number | null
+          meetings_recorded: number | null
+          sales_agent_id: string | null
+          sales_agent_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meeting_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
           },
         ]
       }
