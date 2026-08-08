@@ -45,13 +45,20 @@ export function EmailInboxesSettings() {
     setConnecting(true);
     try {
       const redirectUri = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/gmail-oauth-callback`;
+      const returnUrl = window.location.href;
       const { data, error } = await supabase.functions.invoke('gmail-oauth-start', {
-        body: { redirect_uri: redirectUri },
+        body: { redirect_uri: redirectUri, state: returnUrl },
       });
       if (error) throw error;
       const url = (data as any)?.auth_url;
       if (!url) throw new Error('No auth URL returned');
-      window.open(url, 'gmail-oauth', 'width=520,height=720');
+      // OAuth must happen at the top level; popups are blocked in the Lovable preview iframe.
+      const top = window.top;
+      if (top && top !== window.self) {
+        top.location.href = url;
+      } else {
+        window.location.href = url;
+      }
     } catch (e: any) {
       toast.error(e.message || 'Failed to start OAuth');
     } finally {

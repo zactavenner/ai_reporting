@@ -7,11 +7,14 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
+  const state = url.searchParams.get("state");
   const projectRef = Deno.env.get("SUPABASE_URL")?.replace(/^https?:\/\//, "").split(".")[0];
   const defaultRedirect = projectRef
     ? `https://${projectRef}.supabase.co/functions/v1/gmail-oauth-callback`
     : `${url.origin.replace(/^http:/, "https:")}/functions/v1/gmail-oauth-callback`;
   const redirectUri = url.searchParams.get("redirect_uri") || defaultRedirect;
+  // Return URL is passed through OAuth state; fall back to the published URL if absent.
+  const returnUrl = state || "https://aireporting.lovable.app";
 
   if (error) return html(`<h1>Connection cancelled</h1><p>${error}</p>`);
   if (!code) return html(`<h1>Missing code</h1>`);
@@ -43,7 +46,8 @@ Deno.serve(async (req) => {
   if (!tok.refresh_token) {
     return html(`<h1>No refresh token returned</h1>
       <p>This usually happens when the same Google account has already been authorized.
-      Revoke access at <a href="https://myaccount.google.com/permissions">Google permissions</a> and reconnect.</p>`);
+      Revoke access at <a href="https://myaccount.google.com/permissions">Google permissions</a> and reconnect.</p>
+      <p><a href="${returnUrl}">Back to app</a></p>`);
   }
 
   const supabase = createClient(
@@ -63,18 +67,18 @@ Deno.serve(async (req) => {
   }, { onConflict: "email" });
   if (upErr) return html(`<h1>DB error</h1><pre>${upErr.message}</pre>`);
 
-  return html(`<!doctype html><meta charset="utf-8">
-    <style>body{font-family:-apple-system,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;background:#0a0a0a;color:#fafafa;margin:0}
-    .card{padding:48px;border:1px solid #262626;border-radius:16px;text-align:center;max-width:420px}
-    h1{margin:0 0 12px;font-weight:600;font-size:22px}
-    p{color:#a3a3a3;margin:0 0 24px}
-    button{background:#fafafa;color:#0a0a0a;border:0;border-radius:8px;padding:10px 18px;font-weight:500;cursor:pointer}</style>
-    <div class="card">
-      <h1>${prof.email} connected</h1>
-      <p>You can close this window. The inbox will start syncing within 3 minutes.</p>
-      <button onclick="window.close()">Close</button>
-    </div>
-    <script>setTimeout(()=>{try{window.opener?.postMessage({type:'gmail_connected',email:'${prof.email}'},'*')}catch{}}, 100)</script>`);
+  // Redirect back to the app so the OAuth flow works in the Lovable preview iframe.
+  return new Response(
+    `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=${returnUrl}">
+    <title>Connected ${prof.email}</title>
+    <body style="font-family:-apple-system,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;background:#0a0a0a;color:#fafafa;margin:0">
+    <div style="padding:48px;border:1px solid #262626;border-radius:16px;text-align:center;max-width:420px">
+      <h1 style="margin:0 0 12px;font-weight:600;font-size:22px">${prof.email} connected</h1>
+      <p style="color:#a3a3a3;margin:0 0 24px">Redirecting back to the app…</p>
+      <a href="${returnUrl}" style="color:#fafafa">Click here if you are not redirected.</a>
+    </div></body>`,
+    { headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
 });
 
 function html(body: string) {
