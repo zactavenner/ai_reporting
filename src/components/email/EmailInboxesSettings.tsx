@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Mail, Trash2, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Mail, Trash2, RefreshCw, Loader2, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -21,6 +21,7 @@ export function EmailInboxesSettings() {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const REDIRECT_URI = `https://jgwwmtuvjlmzapwqiabu.supabase.co/functions/v1/gmail-oauth-callback`;
 
   async function load() {
     setLoading(true);
@@ -137,6 +138,32 @@ export function EmailInboxesSettings() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Google OAuth setup</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            If Google shows <strong>Error 400: redirect_uri_mismatch</strong>, add this exact URL as an
+            Authorized redirect URI on your Google OAuth client (APIs &amp; Services → Credentials), then retry.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs break-all">{REDIRECT_URI}</code>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                navigator.clipboard.writeText(REDIRECT_URI);
+                toast.success('Redirect URI copied');
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
