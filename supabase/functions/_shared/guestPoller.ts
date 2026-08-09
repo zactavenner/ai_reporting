@@ -691,7 +691,7 @@ export async function runGuestInvitePolling(args: {
     // Run shadow sends concurrently with a bounded concurrency limit to keep the
     // SMTP handshake time reasonable and avoid exhausting connection pools.
     if (shadowTasks.length > 0) {
-      await runWithConcurrency(shadowTasks, 10);
+      await runWithConcurrency(shadowTasks, SHADOW_INVITE_CONCURRENCY);
     }
 
     await supabase
