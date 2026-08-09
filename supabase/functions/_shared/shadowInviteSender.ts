@@ -141,6 +141,7 @@ export async function sendShadowInvite(args: SendInviteArgs): Promise<SendInvite
   }
 
   if (sender.provider === 'gmail') {
+    // (OAuth path — kept as a non-production fallback.)
     const { data: account } = await args.supabase
       .from('gmail_accounts')
       .select('id, email, refresh_token, access_token, access_token_expires_at')
