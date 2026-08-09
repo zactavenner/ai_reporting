@@ -41,6 +41,29 @@ import {
 } from './ghlAttribution.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
+const SHADOW_INVITE_CONCURRENCY = 5;
+
+/**
+ * Run async tasks with a bounded concurrency. Returns an array of results
+ * in the same order as the input tasks.
+ */
+async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let index = 0;
+
+  async function worker() {
+    while (index < tasks.length) {
+      const current = index++;
+      results[current] = await tasks[current]();
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+
 
 /**
  * Detection mode.
@@ -510,6 +533,7 @@ export async function runGuestInvitePolling(args: {
     result.ghl_appointments_found = appointments.length;
 
     const botEmail = normalizeEmail(config.botGuestEmail);
+    const shadowTasks: (() => Promise<void>)[] = [];
     for (const appointment of appointments) {
       // Every active calendar in the location is in scope, and each was already
       // validated as belonging to this client's location, so the gate is run
@@ -622,24 +646,30 @@ export async function runGuestInvitePolling(args: {
       if (!job?.id) continue;
 
       if (shadow) {
-        const outcome = await runShadowInvite({
-          supabase,
-          config,
-          appointment,
-          botGuestEmail: gate.botGuestEmail,
-          job: { ...(existing || {}), ...job },
-          clientName: client?.name || null,
-        });
-        if (outcome === 'sent') {
-          result.invites_sent += 1;
-          result.invited += 1;
-        } else if (outcome === 'updated') {
-          result.invites_updated += 1;
-          result.invited += 1;
-        } else if (outcome === 'cancelled') result.invites_cancelled += 1;
-        else if (outcome === 'awaiting_sender') result.pending_awaiting_sender += 1;
-        else if (outcome === 'needs_meeting_link') result.needs_meeting_link += 1;
-        else if (outcome === 'error') result.errors.push(`${appointment.appointmentId}: invite email failed`);
+        // Queue the send for concurrent execution; the actual SMTP handshakes are
+        // the bottleneck, so this keeps the overall runtime under the edge-fn
+        // timeout while still capping parallel connections below.
+        shadowTasks.push(() =>
+          runShadowInvite({
+            supabase,
+            config,
+            appointment,
+            botGuestEmail: gate.botGuestEmail,
+            job: { ...(existing || {}), ...job },
+            clientName: client?.name || null,
+          }).then((outcome) => {
+            if (outcome === 'sent') {
+              result.invites_sent += 1;
+              result.invited += 1;
+            } else if (outcome === 'updated') {
+              result.invites_updated += 1;
+              result.invited += 1;
+            } else if (outcome === 'cancelled') result.invites_cancelled += 1;
+            else if (outcome === 'awaiting_sender') result.pending_awaiting_sender += 1;
+            else if (outcome === 'needs_meeting_link') result.needs_meeting_link += 1;
+            else if (outcome === 'error') result.errors.push(`${appointment.appointmentId}: invite email failed`);
+          })
+        );
         continue;
       }
 
@@ -656,6 +686,12 @@ export async function runGuestInvitePolling(args: {
       });
       if (outcome === 'invited') result.invited += 1;
       else result.errors.push(`${appointment.appointmentId}: ${outcome}`);
+    }
+
+    // Run shadow sends concurrently with a bounded concurrency limit to keep the
+    // SMTP handshake time reasonable and avoid exhausting connection pools.
+    if (shadowTasks.length > 0) {
+      await runWithConcurrency(shadowTasks, SHADOW_INVITE_CONCURRENCY);
     }
 
     await supabase
