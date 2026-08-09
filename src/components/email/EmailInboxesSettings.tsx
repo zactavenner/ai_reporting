@@ -145,6 +145,12 @@ export function EmailInboxesSettings() {
         <CardHeader>
           <CardTitle className="text-base">Google OAuth setup</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
+            <strong>Not recommended for automated sending.</strong> If this Google project's consent screen is in
+            Testing mode, refresh tokens for restricted Gmail scopes expire every 7 days, so the connection dies weekly
+            without warning. For shadow-invite / notetaker sending use Resend or SMTP secrets instead — this connection
+            is an optional convenience only.
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
             If Google shows <strong>Error 400: redirect_uri_mismatch</strong>, add this exact URL as an
             Authorized redirect URI on your Google OAuth client (APIs &amp; Services → Credentials), then retry.
           </p>
