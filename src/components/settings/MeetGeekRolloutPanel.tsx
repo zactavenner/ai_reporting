@@ -287,11 +287,43 @@ export function MeetGeekRolloutPanel() {
           }
         />
         {!prereqOk && (
-          <p className="text-xs text-muted-foreground">
-            Invites are queued and will send automatically as soon as an email sender is configured. Everything else is
-            already automated.
-          </p>
+          <div className="border border-border p-3 space-y-2 text-[11px] text-muted-foreground">
+            <p className="text-xs font-medium text-foreground">
+              Add ONE of these in Project Settings → Secrets — invites send automatically within 10 minutes after that.
+            </p>
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">Option A — Resend (recommended)</p>
+              <p>
+                Add <code>RESEND_API_KEY</code> and <code>SHADOW_INVITE_FROM</code>. The from-address must be on a domain
+                verified in Resend (e.g. <code>notetaker@highperformanceads.com</code> — verify{' '}
+                <code>highperformanceads.com</code> in Resend → Domains). Never expires.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">Option B — Plain SMTP (no OAuth, no domain verification)</p>
+              <p>
+                Add <code>SMTP_HOST</code> = <code>smtp.gmail.com</code>, <code>SMTP_PORT</code> = <code>587</code>,{' '}
+                <code>SMTP_USER</code> = <code>theainotetaker@gmail.com</code>, <code>SMTP_PASSWORD</code> = a Google
+                app password for that mailbox (Google Account → Security → App passwords). Optionally{' '}
+                <code>SHADOW_INVITE_FROM</code> to override the from-address. App passwords do not expire.
+              </p>
+            </div>
+            <p>
+              Everything else is already automated — queued invites stay queued and flush on the next poll, nothing is
+              lost.
+            </p>
+          </div>
         )}
+        <p className="text-[11px] text-muted-foreground">
+          Reminder: invites only auto-land on the notetaker's calendar after the one-time Gmail setting in{' '}
+          <strong>theainotetaker@gmail.com</strong> → Settings → General → Event settings →{' '}
+          <em>Add invitations to my calendar</em> → <strong>From everyone</strong>.
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          Note on the Gmail OAuth connect option: if the Google consent screen is in Testing mode, refresh tokens expire
+          every 7 days and sending dies silently. Use Resend or SMTP for production sending; treat Gmail OAuth as a
+          non-blocking fallback only.
+        </p>
       </div>
 
       {view ? (
