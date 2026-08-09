@@ -173,11 +173,51 @@ export async function sendShadowInvite(args: SendInviteArgs): Promise<SendInvite
     }
   }
 
+  if (sender.provider === 'smtp') {
+    const smtp = smtpConfig();
+    if (!smtp) {
+      return { ok: false, provider: 'smtp', message_id: null, from_email: null, configured: false, error: 'smtp_not_configured' };
+    }
+    let client: SMTPClient | null = null;
+    try {
+      client = new SMTPClient({
+        connection: {
+          hostname: smtp.host,
+          port: smtp.port,
+          tls: smtp.port === 465,
+          auth: { username: smtp.user, password: smtp.password },
+        },
+      });
+      const messageId = `<${crypto.randomUUID()}@hpa-reporting>`;
+      await client.send({
+        from: `${FALLBACK_FROM_NAME} <${smtp.from}>`,
+        to: args.to,
+        subject: args.subject,
+        content: args.bodyText,
+        headers: { 'Message-ID': messageId },
+        attachments: [
+          {
+            filename: 'invite.ics',
+            encoding: 'base64',
+            content: b64(new TextEncoder().encode(args.ics)),
+            contentType: `text/calendar; charset=utf-8; method=${args.method}`,
+          } as any,
+        ],
+      });
+      return { ok: true, provider: 'smtp', message_id: messageId, from_email: smtp.from, configured: true };
+    } catch (e) {
+      return {
+        ok: false, provider: 'smtp', message_id: null, from_email: smtp.from, configured: true,
+        error: String((e as Error).message).slice(0, 300),
+      };
+    } finally {
+      try { await client?.close(); } catch { /* ignore */ }
+    }
+  }
+
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      // Resend path
-      // eslint-disable-next-line
       headers: { Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: `${FALLBACK_FROM_NAME} <${sender.from_email}>`,
