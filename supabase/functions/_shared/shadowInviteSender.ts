@@ -100,9 +100,9 @@ async function sendRawSmtp(args: {
     // Attach timeout via reader/writer with the AbortSignal is complex; instead
     // wrap the connection with a TransformStream so we can use standard streams.
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-    const pipe = conn.readable.pipeTo(writable);
-    const reader = readable.getReader();
-    const writer = conn.writable.getWriter();
+    let pipe: Promise<void> = conn.readable.pipeTo(writable);
+    let reader = readable.getReader();
+    let writer = conn.writable.getWriter();
 
     try {
       await smtpReadResponse(reader, '220');
@@ -119,13 +119,9 @@ async function sendRawSmtp(args: {
         await pipe.catch(() => {});
         conn = await Deno.startTls(conn, { hostname: args.host });
         const after = new TransformStream<Uint8Array, Uint8Array>();
-        const afterPipe = conn.readable.pipeTo(after.writable);
-        const afterReader = after.readable.getReader();
-        const afterWriter = conn.writable.getWriter();
-        reader = afterReader;
-        writer = afterWriter;
-        // Keep reference so cleanup can wait
-        (pipe as any) = afterPipe;
+        pipe = conn.readable.pipeTo(after.writable);
+        reader = after.readable.getReader();
+        writer = conn.writable.getWriter();
 
         await smtpWriteLine(writer, `EHLO hpa-reporting`);
         await smtpReadResponse(reader, '250');
