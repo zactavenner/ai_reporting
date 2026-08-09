@@ -12,7 +12,167 @@
  * pending, so no invite is silently lost.
  */
 import { getValidAccessToken, type GmailAccountRow } from './gmail.ts';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+
+// Raw SMTP client — replaces denomailer because its STARTTLS path is unstable
+// under Deno Deploy. Supports both plain-TLS (465) and STARTTLS (587).
+const SMTP_TIMEOUT_MS = 30_000;
+
+function encodeBase64(s: string): string {
+  return btoa(s);
+}
+
+function encodeBase64Bytes(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function encodeText(s: string): Uint8Array {
+  return new TextEncoder().encode(s);
+}
+
+function decodeText(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes);
+}
+
+async function smtpReadLine(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<string> {
+  let buffer = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error('SMTP connection closed unexpectedly');
+    buffer += decodeText(value);
+    const idx = buffer.indexOf('\r\n');
+    if (idx !== -1) {
+      const line = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      return line;
+    }
+  }
+}
+
+async function smtpReadResponse(reader: ReadableStreamDefaultReader<Uint8Array>, expectedPrefix: string): Promise<string> {
+  let last = '';
+  while (true) {
+    const line = await smtpReadLine(reader);
+    last = line;
+    if (line.length < 3) continue;
+    const code = line.slice(0, 3);
+    const separator = line[3];
+    if (code !== expectedPrefix) {
+      throw new Error(`SMTP command failed: ${line}`);
+    }
+    if (separator === ' ') return last;
+    // separator === '-' means more lines follow
+  }
+}
+
+async function smtpWriteLine(writer: WritableStreamDefaultWriter<Uint8Array>, line: string) {
+  await writer.write(encodeText(line + '\r\n'));
+}
+
+async function sendRawSmtp(args: {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+  to: string;
+  subject: string;
+  bodyText: string;
+  ics: string;
+  method: 'REQUEST' | 'CANCEL';
+}): Promise<{ ok: true; messageId: string } | { ok: false; error: string }> {
+  const timeout = AbortSignal.timeout(SMTP_TIMEOUT_MS);
+  let conn: Deno.Conn | null = null;
+
+  try {
+    if (timeout.aborted) throw new Error('SMTP connect timeout');
+
+    const isStartTls = args.port === 587;
+    const useTls = args.port === 465 || isStartTls;
+
+    if (useTls && !isStartTls) {
+      conn = await Deno.connectTls({ hostname: args.host, port: args.port });
+    } else {
+      conn = await Deno.connect({ hostname: args.host, port: args.port });
+    }
+
+    // Attach timeout via reader/writer with the AbortSignal is complex; instead
+    // wrap the connection with a TransformStream so we can use standard streams.
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const pipe = conn.readable.pipeTo(writable);
+    const reader = readable.getReader();
+    const writer = conn.writable.getWriter();
+
+    try {
+      await smtpReadResponse(reader, '220');
+
+      await smtpWriteLine(writer, `EHLO hpa-reporting`);
+      await smtpReadResponse(reader, '250');
+
+      if (isStartTls) {
+        await smtpWriteLine(writer, 'STARTTLS');
+        await smtpReadResponse(reader, '220');
+        // Upgrade the connection
+        await writer.release();
+        await reader.cancel();
+        await pipe.catch(() => {});
+        conn = await Deno.startTls(conn, { hostname: args.host });
+        const after = new TransformStream<Uint8Array, Uint8Array>();
+        const afterPipe = conn.readable.pipeTo(after.writable);
+        const afterReader = after.readable.getReader();
+        const afterWriter = conn.writable.getWriter();
+        reader = afterReader;
+        writer = afterWriter;
+        // Keep reference so cleanup can wait
+        (pipe as any) = afterPipe;
+
+        await smtpWriteLine(writer, `EHLO hpa-reporting`);
+        await smtpReadResponse(reader, '250');
+      }
+
+      await smtpWriteLine(writer, 'AUTH LOGIN');
+      await smtpReadResponse(reader, '334');
+      await smtpWriteLine(writer, encodeBase64(args.user));
+      await smtpReadResponse(reader, '334');
+      await smtpWriteLine(writer, encodeBase64(args.password));
+      await smtpReadResponse(reader, '235');
+
+      await smtpWriteLine(writer, `MAIL FROM:<${args.from}>`);
+      await smtpReadResponse(reader, '250');
+      await smtpWriteLine(writer, `RCPT TO:<${args.to}>`);
+      await smtpReadResponse(reader, '250');
+      await smtpWriteLine(writer, 'DATA');
+      await smtpReadResponse(reader, '354');
+
+      const messageId = `<${crypto.randomUUID()}@hpa-reporting>`;
+      const mime = buildMime({
+        from: args.from,
+        to: args.to,
+        subject: args.subject,
+        bodyText: args.bodyText,
+        ics: args.ics,
+        method: args.method,
+      }).replace(/\n/g, '\r\n');
+
+      await smtpWriteLine(writer, `${mime}\r\n.`);
+      await smtpReadResponse(reader, '250');
+      await smtpWriteLine(writer, 'QUIT');
+      await smtpReadResponse(reader, '221');
+
+      return { ok: true, messageId };
+    } finally {
+      try { writer.release(); } catch { /* ignore */ }
+      try { reader.cancel(); } catch { /* ignore */ }
+      try { await (pipe as any).catch(() => {}); } catch { /* ignore */ }
+    }
+  } catch (e) {
+    return { ok: false, error: String((e as Error).message).slice(0, 300) };
+  } finally {
+    try { conn?.close(); } catch { /* ignore */ }
+  }
+}
+
 
 export interface SenderInfo {
   configured: boolean;
