@@ -41,6 +41,7 @@ import {
 } from './ghlAttribution.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
+const SHADOW_INVITE_CONCURRENCY = 5;
 
 /**
  * Run async tasks with a bounded concurrency. Returns an array of results
@@ -61,6 +62,7 @@ async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: n
   await Promise.all(workers);
   return results;
 }
+
 
 
 /**
