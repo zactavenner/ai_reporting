@@ -2,24 +2,54 @@
  * Sends the shadow-invite email (an .ics METHOD:REQUEST / METHOD:CANCEL) to the
  * MeetGeek notetaker mailbox. Pluggable sender, resolved fail-closed:
  *
- *   1. A connected Gmail account (gmail.send scope) — zero extra secrets.
- *   2. RESEND_API_KEY + SHADOW_INVITE_FROM.
+ *   1. RESEND_API_KEY (+ SHADOW_INVITE_FROM on a Resend-verified domain).
+ *   2. Plain SMTP: SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASSWORD
+ *      (e.g. smtp.gmail.com:587 with a Gmail app password — never expires).
+ *   3. A connected Gmail account (gmail.send OAuth) — non-production fallback:
+ *      consent screens in Testing mode expire refresh tokens every 7 days.
  *
  * When neither is configured nothing is sent and the caller parks the job as
  * pending, so no invite is silently lost.
  */
 import { getValidAccessToken, type GmailAccountRow } from './gmail.ts';
+import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
 export interface SenderInfo {
   configured: boolean;
-  provider: 'gmail' | 'resend' | null;
+  provider: 'gmail' | 'resend' | 'smtp' | null;
   from_email: string | null;
   detail: string;
 }
 
 const FALLBACK_FROM_NAME = 'HPA Reporting';
 
+function smtpConfig() {
+  const host = Deno.env.get('SMTP_HOST');
+  const user = Deno.env.get('SMTP_USER');
+  const password = Deno.env.get('SMTP_PASSWORD');
+  if (!host || !user || !password) return null;
+  const port = Number(Deno.env.get('SMTP_PORT') || '587');
+  const from = Deno.env.get('SHADOW_INVITE_FROM') || user;
+  return { host, port, user, password, from };
+}
+
 export async function resolveInviteSender(supabase: any): Promise<SenderInfo> {
+  const resendKey = Deno.env.get('RESEND_API_KEY');
+  const resendFrom = Deno.env.get('SHADOW_INVITE_FROM');
+  if (resendKey && resendFrom) {
+    return { configured: true, provider: 'resend', from_email: resendFrom, detail: `Resend sender ${resendFrom}` };
+  }
+
+  const smtp = smtpConfig();
+  if (smtp) {
+    return {
+      configured: true,
+      provider: 'smtp',
+      from_email: smtp.from,
+      detail: `SMTP sender ${smtp.from} via ${smtp.host}:${smtp.port}`,
+    };
+  }
+
   const { data: accounts } = await supabase
     .from('gmail_accounts')
     .select('id, email, refresh_token')
@@ -28,21 +58,21 @@ export async function resolveInviteSender(supabase: any): Promise<SenderInfo> {
     .limit(1);
   const gmail = (accounts || [])[0];
   if (gmail?.email) {
-    return { configured: true, provider: 'gmail', from_email: gmail.email, detail: `Connected Gmail account ${gmail.email}` };
+    return {
+      configured: true,
+      provider: 'gmail',
+      from_email: gmail.email,
+      detail: `Connected Gmail account ${gmail.email} (OAuth — token may expire weekly in Testing mode)`,
+    };
   }
 
-  const resendKey = Deno.env.get('RESEND_API_KEY');
-  const from = Deno.env.get('SHADOW_INVITE_FROM');
-  if (resendKey && from) {
-    return { configured: true, provider: 'resend', from_email: from, detail: `Resend sender ${from}` };
-  }
   return {
     configured: false,
     provider: null,
     from_email: null,
     detail: resendKey
-      ? 'RESEND_API_KEY is set but SHADOW_INVITE_FROM (a verified sender address) is missing.'
-      : 'No email sender configured. Connect a Gmail account, or add RESEND_API_KEY + SHADOW_INVITE_FROM.',
+      ? 'RESEND_API_KEY is set but SHADOW_INVITE_FROM (an address on a Resend-verified domain) is missing.'
+      : 'No email sender configured. Add RESEND_API_KEY + SHADOW_INVITE_FROM, or SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD (e.g. smtp.gmail.com:587 with a Gmail app password) in Project Settings → Secrets.',
   };
 }
 
@@ -69,7 +99,7 @@ export interface SendInviteArgs {
 
 export interface SendInviteResult {
   ok: boolean;
-  provider: 'gmail' | 'resend' | null;
+  provider: 'gmail' | 'resend' | 'smtp' | null;
   message_id: string | null;
   from_email: string | null;
   /** false ⇒ no sender configured; the job must stay pending. */
