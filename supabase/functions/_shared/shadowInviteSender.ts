@@ -82,27 +82,18 @@ async function sendRawSmtp(args: {
   ics: string;
   method: 'REQUEST' | 'CANCEL';
 }): Promise<{ ok: true; messageId: string } | { ok: false; error: string }> {
-  const timeout = AbortSignal.timeout(SMTP_TIMEOUT_MS);
+  const isStartTls = args.port === 587;
   let conn: Deno.Conn | null = null;
 
   try {
-    if (timeout.aborted) throw new Error('SMTP connect timeout');
-
-    const isStartTls = args.port === 587;
-    const useTls = args.port === 465 || isStartTls;
-
-    if (useTls && !isStartTls) {
-      conn = await Deno.connectTls({ hostname: args.host, port: args.port });
-    } else {
+    if (isStartTls) {
       conn = await Deno.connect({ hostname: args.host, port: args.port });
+    } else {
+      conn = await Deno.connectTls({ hostname: args.host, port: args.port });
     }
 
-    // Attach timeout via reader/writer with the AbortSignal is complex; instead
-    // wrap the connection with a TransformStream so we can use standard streams.
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-    let pipe: Promise<void> = conn.readable.pipeTo(writable);
-    let reader = readable.getReader();
-    let writer = conn.writable.getWriter();
+    const reader = conn.readable.getReader();
+    const writer = conn.writable.getWriter();
 
     try {
       await smtpReadResponse(reader, '220');
@@ -113,18 +104,45 @@ async function sendRawSmtp(args: {
       if (isStartTls) {
         await smtpWriteLine(writer, 'STARTTLS');
         await smtpReadResponse(reader, '220');
-        // Upgrade the connection
-        await writer.release();
-        await reader.cancel();
-        await pipe.catch(() => {});
-        conn = await Deno.startTls(conn, { hostname: args.host });
-        const after = new TransformStream<Uint8Array, Uint8Array>();
-        pipe = conn.readable.pipeTo(after.writable);
-        reader = after.readable.getReader();
-        writer = conn.writable.getWriter();
+        reader.releaseLock();
+        writer.releaseLock();
+        conn = await Deno.startTls(conn as Deno.TcpConn, { hostname: args.host });
+        const newReader = conn.readable.getReader();
+        const newWriter = conn.writable.getWriter();
 
-        await smtpWriteLine(writer, `EHLO hpa-reporting`);
-        await smtpReadResponse(reader, '250');
+        await smtpWriteLine(newWriter, `EHLO hpa-reporting`);
+        await smtpReadResponse(newReader, '250');
+
+        await smtpWriteLine(newWriter, 'AUTH LOGIN');
+        await smtpReadResponse(newReader, '334');
+        await smtpWriteLine(newWriter, encodeBase64(args.user));
+        await smtpReadResponse(newReader, '334');
+        await smtpWriteLine(newWriter, encodeBase64(args.password));
+        await smtpReadResponse(newReader, '235');
+
+        await smtpWriteLine(newWriter, `MAIL FROM:<${args.from}>`);
+        await smtpReadResponse(newReader, '250');
+        await smtpWriteLine(newWriter, `RCPT TO:<${args.to}>`);
+        await smtpReadResponse(newReader, '250');
+        await smtpWriteLine(newWriter, 'DATA');
+        await smtpReadResponse(newReader, '354');
+
+        const messageId = `<${crypto.randomUUID()}@hpa-reporting>`;
+        const mime = buildMime({
+          from: args.from,
+          to: args.to,
+          subject: args.subject,
+          bodyText: args.bodyText,
+          ics: args.ics,
+          method: args.method,
+        }).replace(/\n/g, '\r\n');
+
+        await smtpWriteLine(newWriter, `${mime}\r\n.`);
+        await smtpReadResponse(newReader, '250');
+        await smtpWriteLine(newWriter, 'QUIT');
+        await smtpReadResponse(newReader, '221');
+
+        return { ok: true, messageId };
       }
 
       await smtpWriteLine(writer, 'AUTH LOGIN');
@@ -158,9 +176,8 @@ async function sendRawSmtp(args: {
 
       return { ok: true, messageId };
     } finally {
-      try { writer.release(); } catch { /* ignore */ }
-      try { reader.cancel(); } catch { /* ignore */ }
-      try { await (pipe as any).catch(() => {}); } catch { /* ignore */ }
+      try { reader.releaseLock(); } catch { /* ignore */ }
+      try { writer.releaseLock(); } catch { /* ignore */ }
     }
   } catch (e) {
     return { ok: false, error: String((e as Error).message).slice(0, 300) };
@@ -168,6 +185,7 @@ async function sendRawSmtp(args: {
     try { conn?.close(); } catch { /* ignore */ }
   }
 }
+
 
 
 export interface SenderInfo {
