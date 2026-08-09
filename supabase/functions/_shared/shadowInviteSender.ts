@@ -176,6 +176,7 @@ export async function sendShadowInvite(args: SendInviteArgs): Promise<SendInvite
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      method: 'POST',
       headers: { Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: `${FALLBACK_FROM_NAME} <${sender.from_email}>`,
