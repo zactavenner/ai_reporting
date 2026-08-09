@@ -87,6 +87,12 @@ async function sendRawSmtp(args: {
   console.log(`[smtp_raw] ${label} connecting to ${args.host}:${args.port}`);
   let conn: Deno.Conn | null = null;
 
+  const start = Date.now();
+  const deadline = setTimeout(() => {
+    console.error(`[smtp_raw] global deadline reached; closing socket`);
+    try { conn?.close(); } catch { /* ignore */ }
+  }, SMTP_TIMEOUT_MS);
+
   try {
     const connectPromise = isStartTls
       ? Deno.connect({ hostname: args.host, port: args.port })
@@ -109,7 +115,7 @@ async function sendRawSmtp(args: {
 
       await smtpWriteLine(writer, `EHLO hpa-reporting`);
       await smtpReadResponse(reader, '250');
-      console.log(`[smtp_raw] EHLO OK`);
+      console.log(`[smtp_raw] EHLO OK (${Date.now() - start}ms)`);
 
       if (isStartTls) {
         console.log(`[smtp_raw] starting TLS`);
@@ -124,13 +130,13 @@ async function sendRawSmtp(args: {
             setTimeout(() => reject(new Error('STARTTLS handshake timeout')), SMTP_TIMEOUT_MS)
           ),
         ]);
-        console.log(`[smtp_raw] TLS upgraded`);
+        console.log(`[smtp_raw] TLS upgraded (${Date.now() - start}ms)`);
         const newReader = conn.readable.getReader();
         const newWriter = conn.writable.getWriter();
 
         await smtpWriteLine(newWriter, `EHLO hpa-reporting`);
         await smtpReadResponse(newReader, '250');
-        console.log(`[smtp_raw] TLS EHLO OK`);
+        console.log(`[smtp_raw] TLS EHLO OK (${Date.now() - start}ms)`);
 
         await smtpWriteLine(newWriter, 'AUTH LOGIN');
         await smtpReadResponse(newReader, '334');
@@ -138,7 +144,7 @@ async function sendRawSmtp(args: {
         await smtpReadResponse(newReader, '334');
         await smtpWriteLine(newWriter, encodeBase64(args.password));
         await smtpReadResponse(newReader, '235');
-        console.log(`[smtp_raw] authenticated`);
+        console.log(`[smtp_raw] authenticated (${Date.now() - start}ms)`);
 
         await smtpWriteLine(newWriter, `MAIL FROM:<${args.from}>`);
         await smtpReadResponse(newReader, '250');
@@ -146,7 +152,7 @@ async function sendRawSmtp(args: {
         await smtpReadResponse(newReader, '250');
         await smtpWriteLine(newWriter, 'DATA');
         await smtpReadResponse(newReader, '354');
-        console.log(`[smtp_raw] ready for data`);
+        console.log(`[smtp_raw] ready for data (${Date.now() - start}ms)`);
 
         const messageId = `<${crypto.randomUUID()}@hpa-reporting>`;
         const mime = buildMime({
@@ -163,7 +169,7 @@ async function sendRawSmtp(args: {
         await smtpWriteLine(newWriter, 'QUIT');
         await smtpReadResponse(newReader, '221');
 
-        console.log(`[smtp_raw] sent via ${args.host}:${args.port} -> ${args.to}`);
+        console.log(`[smtp_raw] sent via ${args.host}:${args.port} -> ${args.to} (${Date.now() - start}ms)`);
         return { ok: true, messageId };
       }
 
@@ -196,7 +202,7 @@ async function sendRawSmtp(args: {
       await smtpWriteLine(writer, 'QUIT');
       await smtpReadResponse(reader, '221');
 
-      console.log(`[smtp_raw] sent via ${args.host}:${args.port} -> ${args.to}`);
+      console.log(`[smtp_raw] sent via ${args.host}:${args.port} -> ${args.to} (${Date.now() - start}ms)`);
       return { ok: true, messageId };
     } finally {
       try { reader.releaseLock(); } catch { /* ignore */ }
@@ -204,12 +210,14 @@ async function sendRawSmtp(args: {
     }
   } catch (e) {
     const error = String((e as Error).message).slice(0, 300);
-    console.error(`[smtp_raw] error: ${error}`);
+    console.error(`[smtp_raw] error (${Date.now() - start}ms): ${error}`);
     return { ok: false, error };
   } finally {
+    clearTimeout(deadline);
     try { conn?.close(); } catch { /* ignore */ }
   }
 }
+
 
 
 
