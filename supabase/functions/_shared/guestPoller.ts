@@ -43,6 +43,27 @@ import {
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
 /**
+ * Run async tasks with a bounded concurrency. Returns an array of results
+ * in the same order as the input tasks.
+ */
+async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let index = 0;
+
+  async function worker() {
+    while (index < tasks.length) {
+      const current = index++;
+      results[current] = await tasks[current]();
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+
+/**
  * Detection mode.
  *   shadow_email  — DEFAULT. Zero-OAuth: email an .ics invite to the notetaker.
  *   google_guest  — Dormant legacy path: patch the organizer's Google event.
