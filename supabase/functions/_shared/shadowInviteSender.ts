@@ -83,35 +83,54 @@ async function sendRawSmtp(args: {
   method: 'REQUEST' | 'CANCEL';
 }): Promise<{ ok: true; messageId: string } | { ok: false; error: string }> {
   const isStartTls = args.port === 587;
+  const label = isStartTls ? 'STARTTLS' : 'TLS';
+  console.log(`[smtp_raw] ${label} connecting to ${args.host}:${args.port}`);
   let conn: Deno.Conn | null = null;
 
   try {
-    if (isStartTls) {
-      conn = await Deno.connect({ hostname: args.host, port: args.port });
-    } else {
-      conn = await Deno.connectTls({ hostname: args.host, port: args.port });
-    }
+    const connectPromise = isStartTls
+      ? Deno.connect({ hostname: args.host, port: args.port })
+      : Deno.connectTls({ hostname: args.host, port: args.port });
+    conn = await Promise.race([
+      connectPromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('SMTP connect timeout')), SMTP_TIMEOUT_MS)
+      ),
+    ]);
+    console.log(`[smtp_raw] connected`);
 
     const reader = conn.readable.getReader();
     const writer = conn.writable.getWriter();
 
     try {
+      console.log(`[smtp_raw] waiting for greeting`);
       await smtpReadResponse(reader, '220');
+      console.log(`[smtp_raw] greeting OK`);
 
       await smtpWriteLine(writer, `EHLO hpa-reporting`);
       await smtpReadResponse(reader, '250');
+      console.log(`[smtp_raw] EHLO OK`);
 
       if (isStartTls) {
+        console.log(`[smtp_raw] starting TLS`);
         await smtpWriteLine(writer, 'STARTTLS');
         await smtpReadResponse(reader, '220');
         reader.releaseLock();
         writer.releaseLock();
-        conn = await Deno.startTls(conn as Deno.TcpConn, { hostname: args.host });
+        console.log(`[smtp_raw] upgrading to TLS`);
+        conn = await Promise.race([
+          Deno.startTls(conn as Deno.TcpConn, { hostname: args.host }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('STARTTLS handshake timeout')), SMTP_TIMEOUT_MS)
+          ),
+        ]);
+        console.log(`[smtp_raw] TLS upgraded`);
         const newReader = conn.readable.getReader();
         const newWriter = conn.writable.getWriter();
 
         await smtpWriteLine(newWriter, `EHLO hpa-reporting`);
         await smtpReadResponse(newReader, '250');
+        console.log(`[smtp_raw] TLS EHLO OK`);
 
         await smtpWriteLine(newWriter, 'AUTH LOGIN');
         await smtpReadResponse(newReader, '334');
@@ -119,6 +138,7 @@ async function sendRawSmtp(args: {
         await smtpReadResponse(newReader, '334');
         await smtpWriteLine(newWriter, encodeBase64(args.password));
         await smtpReadResponse(newReader, '235');
+        console.log(`[smtp_raw] authenticated`);
 
         await smtpWriteLine(newWriter, `MAIL FROM:<${args.from}>`);
         await smtpReadResponse(newReader, '250');
@@ -126,6 +146,7 @@ async function sendRawSmtp(args: {
         await smtpReadResponse(newReader, '250');
         await smtpWriteLine(newWriter, 'DATA');
         await smtpReadResponse(newReader, '354');
+        console.log(`[smtp_raw] ready for data`);
 
         const messageId = `<${crypto.randomUUID()}@hpa-reporting>`;
         const mime = buildMime({
@@ -142,6 +163,7 @@ async function sendRawSmtp(args: {
         await smtpWriteLine(newWriter, 'QUIT');
         await smtpReadResponse(newReader, '221');
 
+        console.log(`[smtp_raw] sent via ${args.host}:${args.port} -> ${args.to}`);
         return { ok: true, messageId };
       }
 
@@ -174,17 +196,21 @@ async function sendRawSmtp(args: {
       await smtpWriteLine(writer, 'QUIT');
       await smtpReadResponse(reader, '221');
 
+      console.log(`[smtp_raw] sent via ${args.host}:${args.port} -> ${args.to}`);
       return { ok: true, messageId };
     } finally {
       try { reader.releaseLock(); } catch { /* ignore */ }
       try { writer.releaseLock(); } catch { /* ignore */ }
     }
   } catch (e) {
-    return { ok: false, error: String((e as Error).message).slice(0, 300) };
+    const error = String((e as Error).message).slice(0, 300);
+    console.error(`[smtp_raw] error: ${error}`);
+    return { ok: false, error };
   } finally {
     try { conn?.close(); } catch { /* ignore */ }
   }
 }
+
 
 
 
