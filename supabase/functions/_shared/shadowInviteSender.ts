@@ -14,7 +14,6 @@
 import { getValidAccessToken, type GmailAccountRow } from './gmail.ts';
 
 // Raw SMTP client — replaces denomailer because its STARTTLS path is unstable
-// Raw SMTP client — replaces denomailer because its STARTTLS path is unstable
 // under Deno Deploy. Uses a persistent buffered reader (the previous version
 // dropped bytes between reads, which stalled on multiline EHLO replies).
 // Supports implicit TLS (465, preferred) and STARTTLS (587).
@@ -191,7 +190,9 @@ function smtpConfig() {
   const user = Deno.env.get('SMTP_USER');
   const password = Deno.env.get('SMTP_PASSWORD');
   if (!host || !user || !password) return null;
-  const port = Number(Deno.env.get('SMTP_PORT') || '587');
+  // SMTP_PORT_OVERRIDE wins (existing secrets are immutable once created).
+  // 465 = implicit TLS, preferred; 587 = STARTTLS.
+  const port = Number(Deno.env.get('SMTP_PORT_OVERRIDE') || Deno.env.get('SMTP_PORT') || '465');
   const from = Deno.env.get('SHADOW_INVITE_FROM') || user;
   return { host, port, user, password, from };
 }
