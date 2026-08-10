@@ -37,6 +37,8 @@ interface PastRow {
   started_at: string | null;
   duration_minutes: number | null;
   summary: string | null;
+  action_items?: unknown;
+  source?: string | null;
   recording_url: string | null;
   contact_name: string | null;
   sales_agent_name: string | null;
@@ -48,11 +50,16 @@ interface PastRow {
   crm_sync_error: string | null;
 }
 
+interface MissedRow extends UpcomingRow {
+  capture_reason: string;
+}
+
 interface Overview {
   generated_at: string;
-  kpis: { past_completed: number; today: number; upcoming: number; invited: number; pending: number; no_meeting_link: number };
+  kpis: { past_completed: number; today: number; upcoming: number; invited: number; pending: number; no_meeting_link: number; not_captured?: number };
   upcoming: UpcomingRow[];
   past: PastRow[];
+  missed?: MissedRow[];
   health: {
     job_status: Record<string, number>;
     pending_reasons: Record<string, number>;
@@ -62,7 +69,14 @@ interface Overview {
   };
 }
 
-const when = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, h:mm a') : '—');
+/** Viewer-local timezone, shown explicitly so meeting times are never ambiguous. */
+const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const TZ_ABBR = (() => {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(new Date());
+  return parts.find((p) => p.type === 'timeZoneName')?.value || VIEWER_TZ;
+})();
+
+const when = (iso: string | null) => (iso ? `${format(new Date(iso), 'MMM d, h:mm a')} ${TZ_ABBR}` : '—');
 
 function InviteBadge({ row }: { row: UpcomingRow }) {
   if (row.status === 'invited') {
@@ -168,6 +182,10 @@ export function AIMeetingsTab() {
         <Kpi icon={Link2Off} label="No join link" value={data?.kpis.no_meeting_link ?? '—'} tone="warn" hint="Nothing to join" />
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        All times shown in your timezone ({VIEWER_TZ} · {TZ_ABBR}).
+      </p>
+
       {noLink.length > 0 && (
         <Card className="p-4 border-amber-500/40 bg-amber-500/5">
           <div className="flex items-start gap-3">
@@ -188,7 +206,8 @@ export function AIMeetingsTab() {
       <Tabs defaultValue="upcoming">
         <TabsList>
           <TabsTrigger value="upcoming">Upcoming ({data?.upcoming.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="past">Past ({data?.past.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="past">Recorded ({data?.past.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="missed">Not captured ({data?.missed?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="health">Integration health</TabsTrigger>
         </TabsList>
 
@@ -232,7 +251,10 @@ export function AIMeetingsTab() {
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</div>
             ) : !data?.past.length ? (
-              <div className="p-8 text-center text-muted-foreground">No completed meetings recorded yet.</div>
+              <div className="p-8 text-center text-muted-foreground">
+                No recorded meetings with notes yet. Notes appear here once the notetaker joins a call and MeetGeek returns
+                its summary — check “Not captured” for calls that happened without a recording.
+              </div>
             ) : (
               <div className="divide-y divide-border">
                 {data.past.map((row) => (
@@ -252,6 +274,9 @@ export function AIMeetingsTab() {
                       </div>
                       <ScoreBadge total={row.qa_total} gate={row.qa_gate_status} />
                       <CrmBadge status={row.crm_sync_status} />
+                      <Badge variant="outline" className="text-[10px]">
+                        {row.source === 'meetgeek_sync' ? 'MeetGeek sync' : 'Notetaker'}
+                      </Badge>
                       {row.recording_url && (
                         <a href={row.recording_url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">Recording</a>
                       )}
@@ -259,10 +284,55 @@ export function AIMeetingsTab() {
                     {row.summary && (
                       <p className="text-xs text-muted-foreground line-clamp-3">{row.summary}</p>
                     )}
+                    {Array.isArray(row.action_items) && row.action_items.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {(row.action_items as any[]).slice(0, 4).map((it, i) => (
+                          <li key={i} className="text-xs text-muted-foreground">
+                            • {typeof it === 'string' ? it : it?.title || it?.text || JSON.stringify(it)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {row.qa_pipeline_outcome && (
                       <div className="text-xs"><span className="text-muted-foreground">Outcome: </span>{row.qa_pipeline_outcome}</div>
                     )}
                     {row.crm_sync_error && <div className="text-xs text-destructive">CRM: {row.crm_sync_error}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="missed" className="mt-4">
+          <Card className="overflow-hidden">
+            {isLoading ? (
+              <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</div>
+            ) : !data?.missed?.length ? (
+              <div className="p-8 text-center text-muted-foreground">Every past appointment produced a recording. 🎉</div>
+            ) : (
+              <div className="divide-y divide-border">
+                {data.missed.map((row) => (
+                  <div key={row.id} className="p-4 space-y-1">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">
+                          {row.client_name}
+                          <span className="text-muted-foreground font-normal"> · {row.ghl_calendar_name || 'Booking'}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {when(row.scheduled_start)}
+                          {row.contact_name ? ` · ${row.contact_name}` : ''}
+                          {row.assigned_user_name ? ` · owner ${row.assigned_user_name}` : ''}
+                        </div>
+                      </div>
+                      {row.status === 'invited' ? (
+                        <Badge variant="outline" className="text-amber-600 border-amber-500/40">Invited · no transcript</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Never invited</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{row.capture_reason}</p>
                   </div>
                 ))}
               </div>
