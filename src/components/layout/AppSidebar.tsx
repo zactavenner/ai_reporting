@@ -155,6 +155,7 @@ const navStructure = [
     children: [
       { title: 'AI Hub', value: 'ai', icon: Bot },
       { title: 'Meetings', value: 'meetings', icon: Video },
+      { title: 'AI Meetings', value: 'ai-meetings', icon: Sparkles },
       { title: 'Deals', value: 'deals', icon: Handshake },
       { title: 'Outreach', value: 'outreach', icon: MessageSquare },
     ],

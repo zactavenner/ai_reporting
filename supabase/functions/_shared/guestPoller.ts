@@ -74,13 +74,28 @@ async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: n
 export type InviteMode = 'shadow_email' | 'google_guest';
 
 const VIDEO_LINK_RE =
-  /(https?:\/\/[^\s<>"']*(?:zoom\.us\/j\/|zoom\.us\/my\/|meet\.google\.com\/|teams\.microsoft\.com\/|whereby\.com\/|meet\.jit\.si\/|us\d{2}web\.zoom\.us\/)[^\s<>"']*)/i;
+  /(https?:\/\/[^\s<>"']*(?:zoom\.us\/|zoomgov\.com\/|meet\.google\.com\/|teams\.microsoft\.com\/|teams\.live\.com\/|whereby\.com\/|meet\.jit\.si\/|webex\.com\/|gotomeet\.me\/|meet\.goto\.com\/|ringcentral\.com\/|bluejeans\.com\/|chime\.aws\/|dialpad\.com\/|around\.co\/|riverside\.fm\/|streamyard\.com\/|meet\.zoho\.|huddle\.team\/)[^\s<>"']*)/i;
 
-/** Pull the first video meeting link out of any GHL appointment text field. */
+/** Any absolute URL, used as a last-resort join link (GHL custom meeting URLs). */
+const ANY_LINK_RE = /(https?:\/\/[^\s<>"']{6,})/i;
+/** Never treat these as a joinable meeting link. */
+const LINK_DENY_RE =
+  /(gohighlevel\.com|leadconnectorhq\.com|msgsndr\.com|link\.msgsndr|calendly\.com\/[^\s]*\/?$|unsubscribe|\.(png|jpe?g|gif|pdf|css|js)(\?|$))/i;
+
+/**
+ * Pull the first joinable meeting link out of any GHL appointment text field.
+ * Known video providers win; otherwise any non-CRM absolute URL is accepted,
+ * because many GHL calendars store a custom/self-hosted room URL in `address`.
+ */
 export function extractVideoLink(...fields: (string | null | undefined)[]): string | null {
+  const clean = (v: string) => v.replace(/[.,;)]+$/, '');
   for (const field of fields) {
     const match = String(field || '').match(VIDEO_LINK_RE);
-    if (match) return match[1].replace(/[.,;)]+$/, '');
+    if (match) return clean(match[1]);
+  }
+  for (const field of fields) {
+    const match = String(field || '').match(ANY_LINK_RE);
+    if (match && !LINK_DENY_RE.test(match[1])) return clean(match[1]);
   }
   return null;
 }
@@ -187,9 +202,19 @@ async function fetchUpcomingGhlAppointments(args: {
       endTime: e.endTime ?? null,
       externalGoogleEventId: e.googleEventId || e.externalId || null,
       meetingUrl:
-        extractVideoLink(e.address, e.meetingUrl, e.meetingLocation, e.notes, e.description) ||
-        e.meetingUrl ||
-        null,
+        extractVideoLink(
+          e.address,
+          e.meetingUrl,
+          e.meetingLocation,
+          e.location,
+          e.notes,
+          e.description,
+          e.appointment?.address,
+          e.appointment?.meetingUrl,
+          e.calendar?.address,
+          e.calendar?.meetingUrl,
+          typeof e.customFields === 'object' ? JSON.stringify(e.customFields) : e.customFields,
+        ) || null,
       cancelled: cancelled.test(String(e.appointmentStatus || e.status || '')),
       calendarName: args.calendarName || null,
       attribution,
@@ -227,7 +252,9 @@ async function runShadowInvite(args: {
     await finish({
       status: 'pending',
       error_code: 'no_meeting_link',
-      error_message: 'Appointment has no video meeting link yet — will retry on the next poll.',
+      error_message:
+        'The CRM appointment carries no join URL (phone/in-person booking, or the calendar’s conferencing link is not set). ' +
+        'Nothing for the notetaker to join — retried automatically on every poll.',
     });
     return 'needs_meeting_link';
   }

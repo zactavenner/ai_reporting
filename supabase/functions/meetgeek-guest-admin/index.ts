@@ -134,11 +134,144 @@ Deno.serve(async (req) => {
       }
 
       case 'gc_list_connections': {
+        // (see ai_meetings_overview below for the read-only analytics feed)
         const { data } = await supabase
           .from('google_calendar_connections')
           .select('id, organizer_email, display_name, status, scope, refresh_token, access_token_expires_at, last_verified_at, last_error, created_at')
           .order('created_at', { ascending: false });
         return json({ connections: (data || []).map(redactConnection) });
+      }
+
+      // Read-only feed for the "AI Meetings" analytics tab: upcoming invites,
+      // recorded meetings with QA + CRM sync status, and pipeline health.
+      case 'ai_meetings_overview': {
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const dayStart = new Date(now); dayStart.setUTCHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+        const pastLimit = Math.min(Math.max(Number(body?.past_limit) || 100, 1), 300);
+
+        const { data: clientRows } = await supabase.from('clients').select('id, name, status');
+        const clientMap = new Map((clientRows || []).map((c: any) => [c.id, c]));
+
+        let upcomingQ = supabase
+          .from('meetgeek_guest_invite_jobs')
+          .select('id, client_id, status, error_code, error_message, scheduled_start, scheduled_end, meeting_url, invite_summary, ghl_calendar_name, contact_name, contact_email, assigned_user_name, invite_provider, invite_last_sent_at, invite_send_count, meeting_record_id')
+          .gte('scheduled_start', nowIso)
+          .neq('status', 'cancelled')
+          .order('scheduled_start', { ascending: true })
+          .limit(300);
+        if (clientId) upcomingQ = upcomingQ.eq('client_id', clientId);
+        const { data: upcomingJobs } = await upcomingQ;
+
+        let pastQ = supabase
+          .from('meeting_records')
+          .select('id, client_id, title, status, started_at, ended_at, duration_minutes, summary, recording_url, source_url, contact_name, contact_email, ghl_contact_id, sales_agent_name, attribution_method, ghl_calendar_name')
+          .lte('started_at', nowIso)
+          .order('started_at', { ascending: false })
+          .limit(pastLimit);
+        if (clientId) pastQ = pastQ.eq('client_id', clientId);
+        const { data: pastMeetings } = await pastQ;
+
+        // Legacy fallback: MeetGeek-synced meetings that predate meeting_records.
+        let legacyPast: any[] = [];
+        if (!(pastMeetings || []).length) {
+          let legacyQ = supabase
+            .from('agency_meetings')
+            .select('id, client_id, title, meeting_date, duration_minutes, summary, recording_url')
+            .order('meeting_date', { ascending: false })
+            .limit(pastLimit);
+          if (clientId) legacyQ = legacyQ.eq('client_id', clientId);
+          const { data } = await legacyQ;
+          legacyPast = (data || []).map((m: any) => ({
+            id: m.id,
+            client_id: m.client_id,
+            title: m.title,
+            started_at: m.meeting_date,
+            duration_minutes: m.duration_minutes,
+            summary: m.summary,
+            recording_url: m.recording_url,
+            contact_name: null,
+            sales_agent_name: null,
+            ghl_calendar_name: null,
+            source: 'meetgeek_sync',
+          }));
+        }
+
+        const recordIds = (pastMeetings || []).map((m: any) => m.id);
+        const activityByRecord = new Map<string, any>();
+        if (recordIds.length) {
+          const { data: activity } = await supabase
+            .from('meeting_call_activity')
+            .select('meeting_record_id, qa_total, qa_gate_status, qa_pipeline_outcome, crm_sync_status, crm_sync_error, crm_synced_at, lead_id, summary')
+            .in('meeting_record_id', recordIds);
+          for (const a of activity || []) activityByRecord.set(a.meeting_record_id, a);
+        }
+
+        // Pipeline health: invite job status + failure-reason rollup.
+        const { data: allJobs } = await supabase
+          .from('meetgeek_guest_invite_jobs')
+          .select('status, error_code, invite_provider, invite_last_sent_at')
+          .limit(5000);
+        const statusCounts: Record<string, number> = {};
+        const reasonCounts: Record<string, number> = {};
+        let lastInviteSentAt: string | null = null;
+        for (const j of allJobs || []) {
+          statusCounts[j.status] = (statusCounts[j.status] || 0) + 1;
+          if (j.status === 'pending' && j.error_code) reasonCounts[j.error_code] = (reasonCounts[j.error_code] || 0) + 1;
+          if (j.invite_last_sent_at && (!lastInviteSentAt || j.invite_last_sent_at > lastInviteSentAt)) {
+            lastInviteSentAt = j.invite_last_sent_at;
+          }
+        }
+
+        const sender = await resolveInviteSender(supabase);
+        const { count: enabledConfigs } = await supabase
+          .from('client_meetgeek_guest_configs')
+          .select('id', { count: 'exact', head: true })
+          .eq('enabled', true);
+
+        const decorate = (row: any) => ({
+          ...row,
+          client_name: clientMap.get(row.client_id)?.name || 'Unassigned',
+        });
+
+        const todayCount = (upcomingJobs || []).filter(
+          (j: any) => j.scheduled_start >= dayStart.toISOString() && j.scheduled_start < dayEnd.toISOString(),
+        ).length;
+
+        return json({
+          generated_at: nowIso,
+          kpis: {
+            past_completed: (pastMeetings || []).length || legacyPast.length,
+            today: todayCount,
+            upcoming: (upcomingJobs || []).length,
+            invited: statusCounts.invited || 0,
+            pending: statusCounts.pending || 0,
+            no_meeting_link: reasonCounts.no_meeting_link || 0,
+          },
+          upcoming: (upcomingJobs || []).map(decorate),
+          past: ((pastMeetings || []).length ? pastMeetings! : legacyPast).map((m: any) => {
+            const a = activityByRecord.get(m.id) || {};
+            return {
+              ...decorate(m),
+              summary: m.summary || a.summary || null,
+              qa_total: a.qa_total ?? null,
+              qa_gate_status: a.qa_gate_status ?? null,
+              qa_pipeline_outcome: a.qa_pipeline_outcome ?? null,
+              crm_sync_status: a.crm_sync_status ?? (m.ghl_contact_id ? 'linked' : 'unmatched'),
+              crm_sync_error: a.crm_sync_error ?? null,
+              crm_synced_at: a.crm_synced_at ?? null,
+              lead_id: a.lead_id ?? null,
+            };
+          }),
+          health: {
+            job_status: statusCounts,
+            pending_reasons: reasonCounts,
+            enabled_clients: enabledConfigs || 0,
+            last_invite_sent_at: lastInviteSentAt,
+            sender: { configured: sender.configured, provider: (sender as any).provider ?? null, from_email: sender.from_email ?? null, detail: sender.detail ?? null },
+          },
+        });
       }
 
       case 'gc_verify_connection': {
