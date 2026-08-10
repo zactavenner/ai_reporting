@@ -182,6 +182,10 @@ export function AIMeetingsTab() {
         <Kpi icon={Link2Off} label="No join link" value={data?.kpis.no_meeting_link ?? '—'} tone="warn" hint="Nothing to join" />
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        All times shown in your timezone ({VIEWER_TZ} · {TZ_ABBR}).
+      </p>
+
       {noLink.length > 0 && (
         <Card className="p-4 border-amber-500/40 bg-amber-500/5">
           <div className="flex items-start gap-3">
@@ -202,7 +206,8 @@ export function AIMeetingsTab() {
       <Tabs defaultValue="upcoming">
         <TabsList>
           <TabsTrigger value="upcoming">Upcoming ({data?.upcoming.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="past">Past ({data?.past.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="past">Recorded ({data?.past.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="missed">Not captured ({data?.missed?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="health">Integration health</TabsTrigger>
         </TabsList>
 
@@ -246,7 +251,10 @@ export function AIMeetingsTab() {
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</div>
             ) : !data?.past.length ? (
-              <div className="p-8 text-center text-muted-foreground">No completed meetings recorded yet.</div>
+              <div className="p-8 text-center text-muted-foreground">
+                No recorded meetings with notes yet. Notes appear here once the notetaker joins a call and MeetGeek returns
+                its summary — check “Not captured” for calls that happened without a recording.
+              </div>
             ) : (
               <div className="divide-y divide-border">
                 {data.past.map((row) => (
