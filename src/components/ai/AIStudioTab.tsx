@@ -99,9 +99,11 @@ const IMAGE_MODELS: { value: "nano-banana" | "openai" | "riverflow"; label: stri
 const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: number; pricePerSecond: number }[] = [
   { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p (fastest) or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
   { value: "bytedance/seedance-2.0",      label: "Seedance",        hint: "Seedance 2.0 — 720p only, up to 15s, text-to-video + first/last frame keyframing + reference images, native audio", maxSeconds: 15, pricePerSecond: 0.0938 },
+  { value: "bytedance/seedance-2.5",      label: "Seedance 2.5",    hint: "Seedance 2.5 — long-form: 4–30s in ONE clip, 480p or 720p, first/last frame control, native audio. Best pick for full 20–30s ads (no clip stitching).", maxSeconds: 30, pricePerSecond: 0.2311 },
 ];
 export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
 export const SEEDANCE_VIDEO_MODEL = "bytedance/seedance-2.0";
+export const SEEDANCE_25_VIDEO_MODEL = "bytedance/seedance-2.5";
 // Resolution caps per model. 4K has been removed from the UI.
 type VideoRes = "480p" | "720p" | "1080p" | "2k" | "4k";
 const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
@@ -109,13 +111,37 @@ const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   "minimax/hailuo-3":            ["720p", "2k"],
   // Seedance is locked to 720p in Reporting 5.0.
   "bytedance/seedance-2.0":      ["720p"],
+  // Seedance 2.5 offers 480p (cheapest) and 720p per OpenRouter /videos/models.
+  "bytedance/seedance-2.5":      ["480p", "720p"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
 const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
   "minimax/hailuo-3": { "720p": 0.0578, "2k": 0.13 },
   "bytedance/seedance-2.0": { "720p": 0.0538 },
+  // Seedance 2.5 bills video tokens (w × h × 24fps ÷ 1024 × $0.0000107/token),
+  // which works out to a flat per-second rate at each resolution.
+  "bytedance/seedance-2.5": { "480p": 0.1028, "720p": 0.2311 },
 };
+// Longest single clip each model supports — drives the duration slider ceiling.
+const VIDEO_MODEL_MAX_SECONDS: Record<string, number> = {
+  "minimax/hailuo-3": 15,
+  "bytedance/seedance-2.0": 15,
+  "bytedance/seedance-2.5": 30,
+};
+// Talk-speed presets. No video provider exposes a "speech rate" parameter, so the
+// pace is enforced as a words-per-minute directive on the script + render prompt.
+export type SpeechPace = "normal" | "fast" | "rapid";
+const SPEECH_PACES: { value: SpeechPace; label: string; wpm: number; hint: string }[] = [
+  { value: "normal", label: "Normal", wpm: 158, hint: "Conversational ~150–165 wpm" },
+  { value: "fast",   label: "Fast",   wpm: 200, hint: "Tight, energetic ~190–215 wpm — minimal pauses" },
+  { value: "rapid",  label: "Rapid",  wpm: 245, hint: "Rapid-fire ad read ~230–260 wpm — zero dead air, jump-cut energy" },
+];
+/** Words a script can carry at the locked length + pace. Keeps VO from overrunning. */
+function paceWordBudget(seconds: number, pace: SpeechPace): number {
+  const wpm = SPEECH_PACES.find(p => p.value === pace)?.wpm ?? 158;
+  return Math.round((seconds / 60) * wpm);
+}
 function modelPricePerSecond(modelId: string, res: VideoRes, fallback: number): number {
   return VIDEO_MODEL_PRICE[modelId]?.[res] ?? fallback * resolutionMultiplier(res);
 }
@@ -1071,18 +1097,29 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     try { localStorage.setItem("ai-studio:video-resolution", videoResolution); } catch {}
   }, [videoResolution]);
-  // Target total video length in seconds. HappyHorse/Seedance are hard-capped
-  // to 15s per clip, so 30s renders as two back-to-back 15s clips (same
-  // ingredient/first-frame + same prompt) for character consistency.
-  const [videoTotalDuration, setVideoTotalDuration] = useState<15 | 30>(() => {
+  // Target total video length in seconds. H3 / Seedance 2.0 are hard-capped to 15s
+  // per clip, so 30s renders as two back-to-back 15s clips (same ingredient/first
+  // frame) for character consistency. Seedance 2.5 renders 4–30s in ONE clip, so
+  // the slider is free-form up to its cap.
+  const [videoTotalDuration, setVideoTotalDuration] = useState<number>(() => {
     try {
       const v = Number(localStorage.getItem("ai-studio:video-total-duration"));
-      return v === 30 ? 30 : 15;
+      return Number.isFinite(v) && v >= 4 && v <= 30 ? Math.round(v) : 15;
     } catch { return 15; }
   });
   useEffect(() => {
     try { localStorage.setItem("ai-studio:video-total-duration", String(videoTotalDuration)); } catch {}
   }, [videoTotalDuration]);
+  // Talk speed for the voiceover. Persisted so fast-paced ad workflows stay sticky.
+  const [speechPace, setSpeechPace] = useState<SpeechPace>(() => {
+    try {
+      const v = localStorage.getItem("ai-studio:speech-pace");
+      return v === "fast" || v === "rapid" || v === "normal" ? v : "fast";
+    } catch { return "fast"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:speech-pace", speechPace); } catch {}
+  }, [speechPace]);
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
@@ -1740,10 +1777,27 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             lockLines.push(
               `🔒 These composer settings are FINAL. If the user's prompt text conflicts with them, follow the composer settings and note the override in your reply — never silently fall back to defaults.`,
             );
-            if (videoTotalDuration === 30) {
+            const perClipCap = VIDEO_MODEL_MAX_SECONDS[lockedModel] ?? 15;
+            const paceMeta = SPEECH_PACES.find(p => p.value === speechPace);
+            lockLines.push(
+              `🔒 SPEECH PACE LOCK: "${speechPace}" (~${paceMeta?.wpm ?? 158} words per minute). ${
+                speechPace === "rapid"
+                  ? "Write and direct the VO rapid-fire: 3–8 word sentences, zero dead air, no pauses between lines, jump-cut energy. Add \"speaks rapid-fire, urgent high-energy delivery, no pauses\" to every render prompt."
+                  : speechPace === "fast"
+                    ? "Write and direct the VO fast and tight: minimal pauses, punchy lines. Add \"speaks quickly and energetically, tight pacing, no dead air\" to every render prompt."
+                    : "Conversational delivery at a natural pace."
+              } The script must fit ~${paceWordBudget(videoTotalDuration, speechPace)} words total for ${videoTotalDuration}s at this pace — never write more.`,
+            );
+            if (videoTotalDuration > perClipCap) {
+              const clips = Math.ceil(videoTotalDuration / perClipCap);
               const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
               lockLines.push(
-                `🔒 TOTAL LENGTH = 30s → emit EXACTLY TWO generate_seedance_video tool_calls IN THE SAME assistant turn (parallel). Both calls use model="${lockedModel}", duration=15, resolution="${lockedRes}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat of the prompt; Clip 2 = the continuation/payoff. Keep the SAME subject, wardrobe, camera framing and lighting across both clips for character consistency. Never emit more than 2 calls for a 30s render.`,
+                `🔒 TOTAL LENGTH = ${videoTotalDuration}s and "${lockedModel}" caps at ${perClipCap}s per clip → emit EXACTLY ${clips} generate_seedance_video tool_calls IN THE SAME assistant turn (parallel), with durations summing to ${videoTotalDuration}s. Every call uses model="${lockedModel}", resolution="${lockedRes}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}${videoFrames?.ingredientUrl ? `, and preserve the ingredient reference` : ""}. Clip 1 = opening beat; the last clip = the payoff. Keep the SAME subject, wardrobe, camera framing and lighting across clips for character consistency. Never emit more than ${clips} calls.`,
+              );
+            } else {
+              const identityUrl = videoFrames?.firstFrameUrl || videoFrames?.ingredientUrl || "";
+              lockLines.push(
+                `🔒 TOTAL LENGTH = ${videoTotalDuration}s → emit ONE generate_seedance_video tool_call with duration=${videoTotalDuration}, model="${lockedModel}", resolution="${lockedRes}", aspect_ratio="${lockedAspect}"${identityUrl ? `, image_url="${identityUrl}"` : ""}. "${lockedModel}" renders this length in a single clip — do NOT split it.`,
               );
             }
           }
@@ -1773,7 +1827,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         })(),
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
-        ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution } : {}),
+        ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
         avatarId: selectedAvatarId,
         adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
@@ -2811,22 +2865,59 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   );
                 })()}
                 {selectedAgentMode === "video" && (
+                  (() => {
+                    const perClip = VIDEO_MODEL_MAX_SECONDS[videoModel] ?? 15;
+                    const clips = Math.max(1, Math.ceil(videoTotalDuration / perClip));
+                    const perSec = modelPricePerSecond(
+                      videoModel,
+                      videoResolution as VideoRes,
+                      VIDEO_MODELS.find(m => m.value === videoModel)?.pricePerSecond ?? 0.1,
+                    );
+                    const est = videoTotalDuration * perSec;
+                    return (
+                      <div className="flex items-center gap-2 pl-1.5 border-l border-border/60">
+                        <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
+                        <input
+                          type="range"
+                          min={4}
+                          max={30}
+                          step={1}
+                          value={videoTotalDuration}
+                          onChange={(e) => setVideoTotalDuration(Number(e.target.value))}
+                          aria-label="Total video length in seconds"
+                          title={`${videoTotalDuration}s total — ${clips === 1 ? "single clip" : `${clips} clips of up to ${perClip}s stitched for character consistency`}`}
+                          className="w-24 h-1 accent-primary cursor-pointer"
+                        />
+                        <span className="text-[10px] font-medium tabular-nums text-foreground/90">
+                          {videoTotalDuration}s
+                        </span>
+                        <span className="text-[9px] text-muted-foreground">
+                          {clips > 1 ? `${clips}×${perClip}s · ` : ""}~${est < 1 ? est.toFixed(3) : est.toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })()
+                )}
+                {selectedAgentMode === "video" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
-                    {([15, 30] as const).map((d) => {
-                      const active = videoTotalDuration === d;
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Pace:</span>
+                    {SPEECH_PACES.map((p) => {
+                      const active = speechPace === p.value;
                       return (
                         <button
-                          key={d}
+                          key={p.value}
                           type="button"
-                          onClick={() => setVideoTotalDuration(d)}
-                          title={d === 15 ? "Single 15s clip" : "Two 15s clips concatenated (same ingredient/first-frame for character consistency)"}
+                          onClick={() => setSpeechPace(p.value)}
+                          title={`${p.hint} — fits ~${paceWordBudget(videoTotalDuration, p.value)} words in ${videoTotalDuration}s`}
                           className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
                         >
-                          {d}s{d === 30 ? " (2×15)" : ""}
+                          {p.label}
                         </button>
                       );
                     })}
+                    <span className="text-[9px] text-muted-foreground">
+                      ~{paceWordBudget(videoTotalDuration, speechPace)}w
+                    </span>
                   </div>
                 )}
                 {selectedAgentMode === "static" && (
