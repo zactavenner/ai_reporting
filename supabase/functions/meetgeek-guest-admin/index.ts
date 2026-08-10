@@ -173,6 +173,31 @@ Deno.serve(async (req) => {
         if (clientId) pastQ = pastQ.eq('client_id', clientId);
         const { data: pastMeetings } = await pastQ;
 
+        // Legacy fallback: MeetGeek-synced meetings that predate meeting_records.
+        let legacyPast: any[] = [];
+        if (!(pastMeetings || []).length) {
+          let legacyQ = supabase
+            .from('agency_meetings')
+            .select('id, client_id, title, meeting_date, duration_minutes, summary, recording_url')
+            .order('meeting_date', { ascending: false })
+            .limit(pastLimit);
+          if (clientId) legacyQ = legacyQ.eq('client_id', clientId);
+          const { data } = await legacyQ;
+          legacyPast = (data || []).map((m: any) => ({
+            id: m.id,
+            client_id: m.client_id,
+            title: m.title,
+            started_at: m.meeting_date,
+            duration_minutes: m.duration_minutes,
+            summary: m.summary,
+            recording_url: m.recording_url,
+            contact_name: null,
+            sales_agent_name: null,
+            ghl_calendar_name: null,
+            source: 'meetgeek_sync',
+          }));
+        }
+
         const recordIds = (pastMeetings || []).map((m: any) => m.id);
         const activityByRecord = new Map<string, any>();
         if (recordIds.length) {
@@ -217,7 +242,7 @@ Deno.serve(async (req) => {
         return json({
           generated_at: nowIso,
           kpis: {
-            past_completed: (pastMeetings || []).length,
+            past_completed: (pastMeetings || []).length || legacyPast.length,
             today: todayCount,
             upcoming: (upcomingJobs || []).length,
             invited: statusCounts.invited || 0,
@@ -225,7 +250,7 @@ Deno.serve(async (req) => {
             no_meeting_link: reasonCounts.no_meeting_link || 0,
           },
           upcoming: (upcomingJobs || []).map(decorate),
-          past: (pastMeetings || []).map((m: any) => {
+          past: ((pastMeetings || []).length ? pastMeetings! : legacyPast).map((m: any) => {
             const a = activityByRecord.get(m.id) || {};
             return {
               ...decorate(m),
