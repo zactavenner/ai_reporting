@@ -12,6 +12,7 @@ import { SHARED_SECRET_HEADER } from '../_shared/calendarGuest.ts';
 import { getMappedGhl } from '../_shared/ghlMapping.ts';
 import { runGuestInvitePolling } from '../_shared/guestPoller.ts';
 import { resolveInviteSender } from '../_shared/shadowInviteSender.ts';
+import { rollupAttendance, syncGhlAttendance } from '../_shared/ghlAttendance.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -151,6 +152,17 @@ Deno.serve(async (req) => {
         const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
         const pastLimit = Math.min(Math.max(Number(body?.past_limit) || 100, 1), 300);
 
+        // Optional date-range filter (YYYY-MM-DD, inclusive). When absent the
+        // feed keeps its previous behaviour: all upcoming + last 45 days.
+        const parseDay = (v: unknown, endOfDay = false) => {
+          const s = String(v || '').trim();
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+          return `${s}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`;
+        };
+        const rangeFrom = parseDay(body?.start_date);
+        const rangeTo = parseDay(body?.end_date, true);
+        const hasRange = !!(rangeFrom && rangeTo);
+
         const { data: clientRows } = await supabase.from('clients').select('id, name, status');
         const clientMap = new Map((clientRows || []).map((c: any) => [c.id, c]));
 
@@ -162,6 +174,7 @@ Deno.serve(async (req) => {
           .order('scheduled_start', { ascending: true })
           .limit(300);
         if (clientId) upcomingQ = upcomingQ.eq('client_id', clientId);
+        if (hasRange) upcomingQ = upcomingQ.gte('scheduled_start', rangeFrom!).lte('scheduled_start', rangeTo!);
         const { data: upcomingJobs } = await upcomingQ;
 
         let pastQ = supabase
@@ -171,6 +184,7 @@ Deno.serve(async (req) => {
           .order('started_at', { ascending: false })
           .limit(pastLimit);
         if (clientId) pastQ = pastQ.eq('client_id', clientId);
+        if (hasRange) pastQ = pastQ.gte('started_at', rangeFrom!).lte('started_at', rangeTo!);
         const { data: pastMeetings } = await pastQ;
 
         // Legacy MeetGeek-synced meetings that predate meeting_records. These are
@@ -183,6 +197,7 @@ Deno.serve(async (req) => {
             .order('meeting_date', { ascending: false })
             .limit(pastLimit);
           if (clientId) legacyQ = legacyQ.eq('client_id', clientId);
+          if (hasRange) legacyQ = legacyQ.gte('meeting_date', rangeFrom!).lte('meeting_date', rangeTo!);
           const { data } = await legacyQ;
           legacyPast = (data || []).map((m: any) => ({
             id: m.id,
