@@ -428,6 +428,7 @@ export function AIMeetingsTab() {
         </TabsContent>
 
         <TabsContent value="health" className="mt-4 space-y-3">
+          {null}
           <Card className="p-4 space-y-3">
             <div className="text-sm font-semibold">Invite pipeline</div>
             <div className="flex flex-wrap gap-2">
