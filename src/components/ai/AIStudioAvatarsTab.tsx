@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Plus, Trash2, Sparkles, UserCircle2, Check, Library, Wand2, BookOpen } from "lucide-react";
+import { Loader2, Plus, Trash2, Sparkles, UserCircle2, Check, Library, Wand2, BookOpen, Upload, X } from "lucide-react";
 import {
   useAvatars,
   useCreateAvatar,
@@ -51,6 +51,8 @@ export function AIStudioAvatarsTab({
   const [useGpt5, setUseGpt5] = useState(true);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [cloningId, setCloningId] = useState<string | null>(null);
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
+  const [uploadingRef, setUploadingRef] = useState(false);
 
   const stockAvatars = avatars.filter((a) => a.is_stock);
   const clientAvatars = avatars.filter((a) => !a.is_stock);
@@ -58,7 +60,30 @@ export function AIStudioAvatarsTab({
   const reset = () => {
     setName(""); setDescription(""); setGender("female"); setAgeRange("26-35");
     setEthnicity("caucasian"); setStyle("ugc"); setModel("openai"); setIsStock(false);
-    setStyleRefIds([]); setUseGpt5(true);
+    setStyleRefIds([]); setUseGpt5(true); setReferenceUrl(null);
+  };
+
+  const handleReferenceUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) { toast.error("Please upload an image file"); return; }
+    if (file.size > 15 * 1024 * 1024) { toast.error("Image must be under 15MB"); return; }
+    setUploadingRef(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `avatar-references/${clientId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await supabase.storage.from("assets").upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from("assets").getPublicUrl(path);
+      setReferenceUrl(data.publicUrl);
+      if (model !== "nano-banana-pro") setModel("nano-banana-pro");
+      toast.success("Reference image uploaded");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to upload reference image");
+    } finally {
+      setUploadingRef(false);
+    }
   };
 
   const generate = async () => {
@@ -76,6 +101,7 @@ export function AIStudioAvatarsTab({
           aspectRatio: "3:4",
           useGpt5Enhancer: useGpt5,
           styleReferenceAvatarIds: styleRefIds.length > 0 ? styleRefIds : undefined,
+          referenceImageUrl: referenceUrl || undefined,
         },
       });
       if (error) throw error;
