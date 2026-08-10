@@ -192,7 +192,8 @@ async function gwFetch(path: string, init: RequestInit & { qs?: Record<string, s
   // Sheets quota is per-minute; serialize requests with a small floor gap and
   // back off on 429/5xx (honoring Retry-After). 4xx other than 429 never
   // recovers on retry, so those throw immediately.
-  for (let attempt = 1; attempt <= 4; attempt++) {
+  const MAX_ATTEMPTS = 6;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     await sheetsThrottle();
     const res = await fetch(url.toString(), {
       ...init,
@@ -206,13 +207,13 @@ async function gwFetch(path: string, init: RequestInit & { qs?: Record<string, s
     const text = await res.text();
     if (res.ok) return text ? JSON.parse(text) : {};
     const retryable = res.status === 429 || res.status >= 500;
-    if (!retryable || attempt === 4) {
+    if (!retryable || attempt === MAX_ATTEMPTS) {
       throw new Error(`sheets ${res.status}: ${text.slice(0, 400)}`);
     }
     const retryAfter = Number(res.headers.get('retry-after') ?? 0);
     const waitMs = retryAfter > 0
       ? retryAfter * 1000
-      : Math.min(30000, 2000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 750);
+      : Math.min(60000, 3000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 1000);
     console.warn(`sheets ${res.status} on ${path} — retrying in ${waitMs}ms (attempt ${attempt})`);
     await sleep(waitMs);
   }
