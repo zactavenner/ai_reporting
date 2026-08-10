@@ -257,7 +257,8 @@ Deno.serve(async (req) => {
         return json({
           generated_at: nowIso,
           kpis: {
-            past_completed: (pastMeetings || []).length || legacyPast.length,
+            past_completed: (pastMeetings || []).length + legacyPast.length,
+            not_captured: (missedJobs || []).length,
             today: todayCount,
             upcoming: (upcomingJobs || []).length,
             invited: statusCounts.invited || 0,
