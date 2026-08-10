@@ -292,6 +292,7 @@ export function AIMeetingsTab() {
           <TabsTrigger value="upcoming">Upcoming ({data?.upcoming.length ?? 0})</TabsTrigger>
           <TabsTrigger value="past">Recorded ({data?.past.length ?? 0})</TabsTrigger>
           <TabsTrigger value="missed">Not captured ({data?.missed?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="attendance">Attendance ({data?.attendance?.total ?? 0})</TabsTrigger>
           <TabsTrigger value="health">Integration health</TabsTrigger>
         </TabsList>
 
@@ -322,6 +323,7 @@ export function AIMeetingsTab() {
                     {row.meeting_url && (
                       <a href={row.meeting_url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">Join link</a>
                     )}
+                    <AttendanceBadge status={row.attendance_status} />
                     <InviteBadge row={row} />
                   </div>
                 ))}
@@ -415,6 +417,7 @@ export function AIMeetingsTab() {
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground">Never invited</Badge>
                       )}
+                      <AttendanceBadge status={row.attendance_status} />
                     </div>
                     <p className="text-xs text-muted-foreground">{row.capture_reason}</p>
                   </div>
