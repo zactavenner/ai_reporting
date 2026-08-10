@@ -39,6 +39,7 @@ import {
   type AppointmentAttribution,
   type AttributionCache,
 } from './ghlAttribution.ts';
+import { normalizeAttendance } from './ghlAttendance.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const SHADOW_INVITE_CONCURRENCY = 5;
