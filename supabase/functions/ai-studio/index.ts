@@ -5333,7 +5333,12 @@ Deno.serve(async (req) => {
                   aspect_ratio: aspect,
                 });
                 const selectedVideoLabel = VIDEO_MODEL_CAPS[reelVideoModel]?.label?.split(" (")?.[0] || "video render";
-                let imageUrl: string | null = args.image_url || null;
+                // HARD RULE: a user-supplied first frame ALWAYS wins over an
+                // LLM-supplied url and must never be replaced by a generated
+                // keyframe. Previously image_to_reel ignored videoFrames, so
+                // Seedance rendered its own invented image instead of the
+                // uploaded first frame.
+                let imageUrl: string | null = videoFrames?.firstFrameUrl || args.image_url || null;
                 let staticImg: any = null;
                 if (!imageUrl) {
                   if (!args.brief) { result = { error: "image_to_reel needs either image_url or brief" }; }
