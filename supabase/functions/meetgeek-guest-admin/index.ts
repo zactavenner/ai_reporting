@@ -244,7 +244,7 @@ Deno.serve(async (req) => {
         // Past appointments that never produced a recording/transcript.
         let missedQ = supabase
           .from('meetgeek_guest_invite_jobs')
-          .select('id, client_id, status, error_code, error_message, scheduled_start, scheduled_end, meeting_url, ghl_calendar_name, contact_name, contact_email, assigned_user_name, invite_provider, invite_last_sent_at, meeting_record_id')
+          .select('id, client_id, status, error_code, error_message, scheduled_start, scheduled_end, meeting_url, ghl_calendar_name, contact_name, contact_email, assigned_user_name, invite_provider, invite_last_sent_at, meeting_record_id, ghl_appointment_status, attendance_status, attendance_checked_at')
           .lt('scheduled_start', nowIso)
           .gte('scheduled_start', new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString())
           .is('meeting_record_id', null)
@@ -252,7 +252,32 @@ Deno.serve(async (req) => {
           .order('scheduled_start', { ascending: false })
           .limit(pastLimit);
         if (clientId) missedQ = missedQ.eq('client_id', clientId);
+        if (hasRange) missedQ = missedQ.gte('scheduled_start', rangeFrom!).lte('scheduled_start', rangeTo!);
         const { data: missedJobs } = await missedQ;
+
+        // Attendance (show / no-show) for every booked slot in scope. The CRM
+        // owns the outcome; jobs carry the synced value.
+        const attFrom = hasRange ? rangeFrom! : dayStart.toISOString();
+        const attTo = hasRange ? rangeTo! : dayEnd.toISOString();
+        let attQ = supabase
+          .from('meetgeek_guest_invite_jobs')
+          .select('id, client_id, scheduled_start, attendance_status, attendance_checked_at, error_code, meeting_record_id')
+          .gte('scheduled_start', attFrom)
+          .lte('scheduled_start', attTo)
+          .limit(3000);
+        if (clientId) attQ = attQ.eq('client_id', clientId);
+        const { data: attendanceRows } = await attQ;
+        const attendance = rollupAttendance(attendanceRows || []);
+        const attendanceByClient = new Map<string, any[]>();
+        for (const r of attendanceRows || []) {
+          const list = attendanceByClient.get(r.client_id) || [];
+          list.push(r);
+          attendanceByClient.set(r.client_id, list);
+        }
+        const lastAttendanceCheck = (attendanceRows || []).reduce<string | null>(
+          (acc, r: any) => (r.attendance_checked_at && (!acc || r.attendance_checked_at > acc) ? r.attendance_checked_at : acc),
+          null,
+        );
 
         const sender = await resolveInviteSender(supabase);
         const { count: enabledConfigs } = await supabase
@@ -271,6 +296,7 @@ Deno.serve(async (req) => {
 
         return json({
           generated_at: nowIso,
+          range: hasRange ? { start_date: body?.start_date, end_date: body?.end_date } : null,
           kpis: {
             past_completed: (pastMeetings || []).length + legacyPast.length,
             not_captured: (missedJobs || []).length,
@@ -279,6 +305,21 @@ Deno.serve(async (req) => {
             invited: statusCounts.invited || 0,
             pending: statusCounts.pending || 0,
             no_meeting_link: reasonCounts.no_meeting_link || 0,
+            showed: attendance.showed,
+            noshow: attendance.noshow,
+            show_rate: attendance.show_rate,
+          },
+          attendance: {
+            ...attendance,
+            window: { from: attFrom, to: attTo },
+            last_checked_at: lastAttendanceCheck,
+            by_client: Array.from(attendanceByClient.entries())
+              .map(([cid, rows]) => ({
+                client_id: cid,
+                client_name: clientMap.get(cid)?.name || 'Unassigned',
+                ...rollupAttendance(rows),
+              }))
+              .sort((a, b) => b.total - a.total),
           },
           upcoming: (upcomingJobs || []).map(decorate),
           missed: (missedJobs || []).map((j: any) => ({
