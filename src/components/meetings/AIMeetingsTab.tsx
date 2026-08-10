@@ -114,6 +114,20 @@ function InviteBadge({ row }: { row: UpcomingRow }) {
 }
 
 function ScoreBadge({ total, gate }: { total: number | null; gate: string | null }) {
+  return <ScoreBadgeInner total={total} gate={gate} />;
+}
+
+/** CRM-owned outcome for a booked slot: showed, no-show, cancelled or pending. */
+function AttendanceBadge({ status }: { status?: string | null }) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'showed') return <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30">Showed</Badge>;
+  if (s === 'noshow') return <Badge className="bg-destructive/15 text-destructive border-destructive/30">No-show</Badge>;
+  if (s === 'cancelled') return <Badge variant="outline" className="text-muted-foreground">Cancelled</Badge>;
+  if (s === 'confirmed') return <Badge variant="outline" className="text-primary border-primary/40">Confirmed</Badge>;
+  return <Badge variant="outline" className="text-muted-foreground">Attendance pending</Badge>;
+}
+
+function ScoreBadgeInner({ total, gate }: { total: number | null; gate: string | null }) {
   if (total == null) return <span className="text-xs text-muted-foreground">Not scored</span>;
   const tone = total >= 80 ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
     : total >= 60 ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
