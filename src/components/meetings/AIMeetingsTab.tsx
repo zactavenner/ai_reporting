@@ -37,6 +37,8 @@ interface PastRow {
   started_at: string | null;
   duration_minutes: number | null;
   summary: string | null;
+  action_items?: unknown;
+  source?: string | null;
   recording_url: string | null;
   contact_name: string | null;
   sales_agent_name: string | null;
@@ -48,11 +50,16 @@ interface PastRow {
   crm_sync_error: string | null;
 }
 
+interface MissedRow extends UpcomingRow {
+  capture_reason: string;
+}
+
 interface Overview {
   generated_at: string;
-  kpis: { past_completed: number; today: number; upcoming: number; invited: number; pending: number; no_meeting_link: number };
+  kpis: { past_completed: number; today: number; upcoming: number; invited: number; pending: number; no_meeting_link: number; not_captured?: number };
   upcoming: UpcomingRow[];
   past: PastRow[];
+  missed?: MissedRow[];
   health: {
     job_status: Record<string, number>;
     pending_reasons: Record<string, number>;
@@ -62,7 +69,14 @@ interface Overview {
   };
 }
 
-const when = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, h:mm a') : '—');
+/** Viewer-local timezone, shown explicitly so meeting times are never ambiguous. */
+const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const TZ_ABBR = (() => {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(new Date());
+  return parts.find((p) => p.type === 'timeZoneName')?.value || VIEWER_TZ;
+})();
+
+const when = (iso: string | null) => (iso ? `${format(new Date(iso), 'MMM d, h:mm a')} ${TZ_ABBR}` : '—');
 
 function InviteBadge({ row }: { row: UpcomingRow }) {
   if (row.status === 'invited') {
