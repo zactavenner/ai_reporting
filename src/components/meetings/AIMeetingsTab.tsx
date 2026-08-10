@@ -427,8 +427,45 @@ export function AIMeetingsTab() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="attendance" className="mt-4">
+          <Card className="overflow-hidden">
+            {isLoading ? (
+              <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</div>
+            ) : !data?.attendance?.by_client?.length ? (
+              <div className="p-8 text-center text-muted-foreground">
+                No booked appointments in this range. Attendance comes from the CRM — hit “Sync attendance” to refresh outcomes.
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                <div className="p-3 grid grid-cols-6 gap-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  <div className="col-span-2">Client</div>
+                  <div className="text-right">Booked</div>
+                  <div className="text-right">Showed</div>
+                  <div className="text-right">No-show</div>
+                  <div className="text-right">Show rate</div>
+                </div>
+                {data.attendance.by_client.map((r) => (
+                  <div key={r.client_id} className="p-3 grid grid-cols-6 gap-2 text-sm items-center">
+                    <div className="col-span-2 truncate font-medium">{r.client_name}</div>
+                    <div className="text-right tabular-nums">{r.total}</div>
+                    <div className="text-right tabular-nums text-emerald-600">{r.showed}</div>
+                    <div className="text-right tabular-nums text-destructive">{r.noshow}</div>
+                    <div className="text-right tabular-nums font-semibold">{r.show_rate != null ? `${r.show_rate}%` : '—'}</div>
+                  </div>
+                ))}
+                <div className="p-3 grid grid-cols-6 gap-2 text-sm items-center bg-muted/40 font-semibold">
+                  <div className="col-span-2">All clients</div>
+                  <div className="text-right tabular-nums">{data.attendance.total}</div>
+                  <div className="text-right tabular-nums text-emerald-600">{data.attendance.showed}</div>
+                  <div className="text-right tabular-nums text-destructive">{data.attendance.noshow}</div>
+                  <div className="text-right tabular-nums">{data.attendance.show_rate != null ? `${data.attendance.show_rate}%` : '—'}</div>
+                </div>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
         <TabsContent value="health" className="mt-4 space-y-3">
-          {null}
           <Card className="p-4 space-y-3">
             <div className="text-sm font-semibold">Invite pipeline</div>
             <div className="flex flex-wrap gap-2">
