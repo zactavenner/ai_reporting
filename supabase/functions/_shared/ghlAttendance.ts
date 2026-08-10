@@ -119,37 +119,59 @@ export async function syncGhlAttendance(args: {
     result.calendars = calendars.length;
 
     const statusByAppointment = new Map<string, string>();
-    for (const cal of calendars) {
-      try {
-        const events = await fetchEventsInWindow({
-          apiKey: client.ghl_api_key,
-          locationId: client.ghl_location_id,
-          calendarId: cal.id,
-          startMs,
-          endMs,
-        });
-        result.events += events.length;
-        for (const e of events) {
+    // Calendars are fetched with bounded concurrency: locations can carry 20+
+    // booking calendars and serial fetches blow the edge-function timeout.
+    const CONCURRENCY = 6;
+    for (let i = 0; i < calendars.length; i += CONCURRENCY) {
+      const batch = calendars.slice(i, i + CONCURRENCY);
+      const settled = await Promise.all(
+        batch.map(async (cal) => {
+          try {
+            const events = await fetchEventsInWindow({
+              apiKey: client.ghl_api_key,
+              locationId: client.ghl_location_id,
+              calendarId: cal.id,
+              startMs,
+              endMs,
+            });
+            return { events, error: null as string | null };
+          } catch (e) {
+            return { events: [] as any[], error: `${cal.name}: ${String((e as Error).message).slice(0, 120)}` };
+          }
+        }),
+      );
+      for (const s of settled) {
+        if (s.error) result.errors.push(s.error);
+        result.events += s.events.length;
+        for (const e of s.events) {
           statusByAppointment.set(String(e.id), String(e.appointmentStatus || e.status || ''));
         }
-      } catch (e) {
-        result.errors.push(`${cal.name}: ${String((e as Error).message).slice(0, 120)}`);
       }
     }
 
+    // One write per distinct raw status instead of one per appointment.
     const nowIso = new Date().toISOString();
+    const idsByStatus = new Map<string, string[]>();
     for (const [appointmentId, rawStatus] of statusByAppointment) {
-      const { data: updated } = await supabase
-        .from('meetgeek_guest_invite_jobs')
-        .update({
-          ghl_appointment_status: rawStatus || null,
-          attendance_status: normalizeAttendance(rawStatus),
-          attendance_checked_at: nowIso,
-        })
-        .eq('client_id', client.id)
-        .eq('ghl_appointment_id', appointmentId)
-        .select('id');
-      result.jobs_updated += (updated || []).length;
+      const key = rawStatus || '';
+      const list = idsByStatus.get(key) || [];
+      list.push(appointmentId);
+      idsByStatus.set(key, list);
+    }
+    for (const [rawStatus, ids] of idsByStatus) {
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data: updated } = await supabase
+          .from('meetgeek_guest_invite_jobs')
+          .update({
+            ghl_appointment_status: rawStatus || null,
+            attendance_status: normalizeAttendance(rawStatus),
+            attendance_checked_at: nowIso,
+          })
+          .eq('client_id', client.id)
+          .in('ghl_appointment_id', ids.slice(i, i + 200))
+          .select('id');
+        result.jobs_updated += (updated || []).length;
+      }
     }
 
     totalEvents += result.events;
