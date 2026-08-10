@@ -8,9 +8,11 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  AlertTriangle, CalendarClock, CheckCircle2, Link2Off, Loader2, RefreshCw, Sparkles, Video,
+  AlertTriangle, CalendarClock, CheckCircle2, Link2Off, Loader2, RefreshCw, Sparkles, UserCheck, UserX, Video,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
+import { toast } from 'sonner';
+import { DateRangePresetPicker } from '@/components/shared/DateRangePresetPicker';
 import { useClients } from '@/hooks/useClients';
 
 interface UpcomingRow {
@@ -28,6 +30,8 @@ interface UpcomingRow {
   assigned_user_name: string | null;
   invite_provider: string | null;
   invite_send_count: number | null;
+  attendance_status?: string | null;
+  ghl_appointment_status?: string | null;
 }
 
 interface PastRow {
@@ -54,9 +58,27 @@ interface MissedRow extends UpcomingRow {
   capture_reason: string;
 }
 
+interface AttendanceRollup {
+  showed: number;
+  noshow: number;
+  cancelled: number;
+  awaiting: number;
+  total: number;
+  show_rate: number | null;
+}
+
 interface Overview {
   generated_at: string;
-  kpis: { past_completed: number; today: number; upcoming: number; invited: number; pending: number; no_meeting_link: number; not_captured?: number };
+  range?: { start_date: string; end_date: string } | null;
+  kpis: {
+    past_completed: number; today: number; upcoming: number; invited: number; pending: number;
+    no_meeting_link: number; not_captured?: number; showed?: number; noshow?: number; show_rate?: number | null;
+  };
+  attendance?: AttendanceRollup & {
+    window: { from: string; to: string };
+    last_checked_at: string | null;
+    by_client: (AttendanceRollup & { client_id: string; client_name: string })[];
+  };
   upcoming: UpcomingRow[];
   past: PastRow[];
   missed?: MissedRow[];
