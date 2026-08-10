@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
 
         let upcomingQ = supabase
           .from('meetgeek_guest_invite_jobs')
-          .select('id, client_id, status, error_code, error_message, scheduled_start, scheduled_end, meeting_url, invite_summary, ghl_calendar_name, contact_name, contact_email, assigned_user_name, invite_provider, invite_last_sent_at, invite_send_count, meeting_record_id')
+          .select('id, client_id, status, error_code, error_message, scheduled_start, scheduled_end, meeting_url, invite_summary, ghl_calendar_name, contact_name, contact_email, assigned_user_name, invite_provider, invite_last_sent_at, invite_send_count, meeting_record_id, ghl_appointment_status, attendance_status, attendance_checked_at')
           .gte('scheduled_start', nowIso)
           .neq('status', 'cancelled')
           .order('scheduled_start', { ascending: true })
@@ -361,6 +361,7 @@ Deno.serve(async (req) => {
       }
 
       case 'gc_verify_connection': {
+        // (attendance sync lives in ai_meetings_attendance_sync below)
         const id = String(body?.connection_id || '');
         if (!id) return json({ error: 'connection_id required' }, 400);
         const result = await verifyConnection(supabase, id);
