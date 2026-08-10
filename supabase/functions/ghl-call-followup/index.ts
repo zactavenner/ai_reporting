@@ -86,19 +86,54 @@ async function findCallMessage(
   };
 }
 
-async function downloadRecording(apiKey: string, locationId: string, messageId: string): Promise<Blob | null> {
+async function downloadRecording(
+  apiKey: string,
+  locationId: string,
+  messageId: string,
+): Promise<{ blob: Blob; fileName: string } | null> {
   const res = await fetch(
     `${GHL_BASE}/conversations/messages/${messageId}/locations/${locationId}/recording`,
     { headers: { Authorization: `Bearer ${apiKey}`, Version: "2021-07-28" } },
   );
   if (!res.ok) {
-    if (res.status === 404) return null;
+    // 404/422 = this message simply has no stored recording (voicemail, unanswered, SMS-logged call).
+    if (res.status === 404 || res.status === 422 || res.status === 400) return null;
     throw new Error(`GHL recording ${res.status}`);
   }
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.byteLength < 1024) return null;
-  const type = res.headers.get("content-type") || "audio/mpeg";
-  return new Blob([bytes], { type });
+
+  let type = (res.headers.get("content-type") || "audio/mpeg").split(";")[0].trim();
+  let bytes = new Uint8Array(await res.arrayBuffer());
+
+  // Some locations return a JSON envelope with a signed URL instead of raw audio.
+  if (type.includes("json")) {
+    try {
+      const meta = JSON.parse(new TextDecoder().decode(bytes));
+      const url = meta?.url || meta?.recordingUrl || meta?.signedUrl || meta?.data?.url;
+      if (!url) return null;
+      const fileRes = await fetch(url);
+      if (!fileRes.ok) return null;
+      type = (fileRes.headers.get("content-type") || "audio/mpeg").split(";")[0].trim();
+      bytes = new Uint8Array(await fileRes.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+
+  if (bytes.byteLength < 2048) return null;
+
+  // Sniff the real container so the transcription API gets a matching extension.
+  const head = bytes.subarray(0, 12);
+  const ascii = String.fromCharCode(...head);
+  let ext = "mp3";
+  if (ascii.startsWith("RIFF")) ext = "wav";
+  else if (ascii.startsWith("OggS")) ext = "ogg";
+  else if (ascii.includes("ftyp")) ext = "m4a";
+  else if (head[0] === 0x1a && head[1] === 0x45) ext = "webm";
+  else if (ascii.startsWith("ID3") || (head[0] === 0xff && (head[1] & 0xe0) === 0xe0)) ext = "mp3";
+  else if (!type.startsWith("audio/") && !type.startsWith("video/")) return null;
+
+  const mime = ext === "wav" ? "audio/wav" : ext === "ogg" ? "audio/ogg" : ext === "m4a" ? "audio/mp4" : ext === "webm" ? "audio/webm" : "audio/mpeg";
+  return { blob: new Blob([bytes], { type: mime }), fileName: `ghl-call.${ext}` };
 }
 
 interface Analysis {
@@ -263,7 +298,7 @@ serve(async (req) => {
           continue;
         }
 
-        const transcript = await transcribeRecording(audio, { fileName: "ghl-call.mp3" });
+        const transcript = await transcribeRecording(audio.blob, { fileName: audio.fileName });
         if (!transcript) {
           outcome.status = "empty_transcript";
           results.push(outcome);
