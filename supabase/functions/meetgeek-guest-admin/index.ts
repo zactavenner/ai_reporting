@@ -361,7 +361,27 @@ Deno.serve(async (req) => {
       }
 
       case 'gc_verify_connection': {
-        // (attendance sync lives in ai_meetings_attendance_sync below)
+        const id = String(body?.connection_id || '');
+        if (!id) return json({ error: 'connection_id required' }, 400);
+        const result = await verifyConnection(supabase, id);
+        return json(result);
+      }
+
+      // Refresh show / no-show outcomes from the CRM for a date window.
+      case 'ai_meetings_attendance_sync': {
+        const day = (v: unknown, endOfDay = false) => {
+          const s = String(v || '').trim();
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+          return `${s}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`;
+        };
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const startIso = day(body?.start_date) || `${todayIso}T00:00:00.000Z`;
+        const endIso = day(body?.end_date, true) || `${todayIso}T23:59:59.999Z`;
+        const result = await syncGhlAttendance({ supabase, clientId, startIso, endIso });
+        return json({ ok: true, ...result });
+      }
+
+      case 'gc_verify_connection_legacy': {
         const id = String(body?.connection_id || '');
         if (!id) return json({ error: 'connection_id required' }, 400);
         const result = await verifyConnection(supabase, id);
