@@ -660,6 +660,10 @@ export async function runGuestInvitePolling(args: {
             scheduled_start: appointment.startTime,
             scheduled_end: appointment.endTime,
             meeting_url: extractVideoLink(appointment.meetingUrl),
+            // Attendance (show / no-show) is CRM-owned; store it as detected.
+            ghl_appointment_status: appointment.appointmentStatus || null,
+            attendance_status: normalizeAttendance(appointment.appointmentStatus),
+            attendance_checked_at: new Date().toISOString(),
             rejection_reason: null,
             error_message: shadow || hasConnection ? null : 'Waiting for the organizer Google Calendar connection.',
           },
