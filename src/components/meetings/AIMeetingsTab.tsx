@@ -161,13 +161,26 @@ function Kpi({ icon: Icon, label, value, hint, tone }: {
 
 export function AIMeetingsTab() {
   const [clientId, setClientId] = useState<string>('all');
+  // Date filter applies to recorded, not-captured and attendance views.
+  const [range, setRange] = useState<{ from: Date; to: Date }>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return { from: subDays(today, 6), to: today };
+  });
+  const [syncing, setSyncing] = useState(false);
   const { data: clients = [] } = useClients();
+  const day = (d: Date) => format(d, 'yyyy-MM-dd');
 
   const { data, isLoading, isFetching, refetch, error } = useQuery<Overview>({
-    queryKey: ['ai-meetings-overview', clientId],
+    queryKey: ['ai-meetings-overview', clientId, day(range.from), day(range.to)],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('meetgeek-guest-admin', {
-        body: { action: 'ai_meetings_overview', client_id: clientId === 'all' ? null : clientId },
+        body: {
+          action: 'ai_meetings_overview',
+          client_id: clientId === 'all' ? null : clientId,
+          start_date: day(range.from),
+          end_date: day(range.to),
+        },
         headers: dashboardAuthHeaders(),
       });
       if (error) throw error;
@@ -178,6 +191,31 @@ export function AIMeetingsTab() {
   });
 
   const noLink = useMemo(() => (data?.upcoming || []).filter((r) => r.error_code === 'no_meeting_link'), [data]);
+
+  // Pull the latest show / no-show outcomes straight from the CRM for the range.
+  const syncAttendance = async () => {
+    setSyncing(true);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke('meetgeek-guest-admin', {
+        body: {
+          action: 'ai_meetings_attendance_sync',
+          client_id: clientId === 'all' ? null : clientId,
+          start_date: day(range.from),
+          end_date: day(range.to),
+        },
+        headers: dashboardAuthHeaders(),
+      });
+      if (err) throw err;
+      if ((res as any)?.error) throw new Error(String((res as any).error));
+      const totals = (res as any)?.totals || {};
+      toast.success(`Attendance synced — ${totals.jobs_updated ?? 0} appointments updated`);
+      await refetch();
+    } catch (e) {
+      toast.error(`Attendance sync failed: ${(e as Error).message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -191,6 +229,7 @@ export function AIMeetingsTab() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <DateRangePresetPicker value={range} onChange={setRange} />
           <Select value={clientId} onValueChange={setClientId}>
             <SelectTrigger className="w-56"><SelectValue placeholder="All clients" /></SelectTrigger>
             <SelectContent>
@@ -198,6 +237,10 @@ export function AIMeetingsTab() {
               {clients.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={syncAttendance} disabled={syncing}>
+            {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserCheck className="h-4 w-4 mr-2" />}
+            Sync attendance
+          </Button>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
           </Button>
@@ -210,16 +253,21 @@ export function AIMeetingsTab() {
         </Card>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Kpi icon={CheckCircle2} label="Past completed" value={data?.kpis.past_completed ?? '—'} tone="ok" hint="Recorded & transcribed" />
         <Kpi icon={CalendarClock} label="Today" value={data?.kpis.today ?? '—'} hint="Scheduled today" />
         <Kpi icon={Video} label="Upcoming" value={data?.kpis.upcoming ?? '—'} hint="Next 14 days" />
         <Kpi icon={CheckCircle2} label="Notetaker invited" value={data?.kpis.invited ?? '—'} tone="ok" />
         <Kpi icon={Link2Off} label="No join link" value={data?.kpis.no_meeting_link ?? '—'} tone="warn" hint="Nothing to join" />
+        <Kpi icon={UserCheck} label="Showed" value={data?.attendance?.showed ?? '—'} tone="ok"
+          hint={data?.attendance?.show_rate != null ? `${data.attendance.show_rate}% show rate` : 'From the CRM'} />
+        <Kpi icon={UserX} label="No-shows" value={data?.attendance?.noshow ?? '—'} tone="warn"
+          hint={`${data?.attendance?.awaiting ?? 0} awaiting outcome`} />
       </div>
 
       <p className="text-xs text-muted-foreground">
-        All times shown in your timezone ({VIEWER_TZ} · {TZ_ABBR}).
+        All times shown in your timezone ({VIEWER_TZ} · {TZ_ABBR}). Filtered {format(range.from, 'MMM d')} – {format(range.to, 'MMM d, yyyy')}.
+        {data?.attendance?.last_checked_at ? ` Attendance last checked ${when(data.attendance.last_checked_at)}.` : ''}
       </p>
 
       {noLink.length > 0 && (
