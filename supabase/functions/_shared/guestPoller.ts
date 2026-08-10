@@ -202,9 +202,19 @@ async function fetchUpcomingGhlAppointments(args: {
       endTime: e.endTime ?? null,
       externalGoogleEventId: e.googleEventId || e.externalId || null,
       meetingUrl:
-        extractVideoLink(e.address, e.meetingUrl, e.meetingLocation, e.notes, e.description) ||
-        e.meetingUrl ||
-        null,
+        extractVideoLink(
+          e.address,
+          e.meetingUrl,
+          e.meetingLocation,
+          e.location,
+          e.notes,
+          e.description,
+          e.appointment?.address,
+          e.appointment?.meetingUrl,
+          e.calendar?.address,
+          e.calendar?.meetingUrl,
+          typeof e.customFields === 'object' ? JSON.stringify(e.customFields) : e.customFields,
+        ) || null,
       cancelled: cancelled.test(String(e.appointmentStatus || e.status || '')),
       calendarName: args.calendarName || null,
       attribution,
@@ -242,7 +252,9 @@ async function runShadowInvite(args: {
     await finish({
       status: 'pending',
       error_code: 'no_meeting_link',
-      error_message: 'Appointment has no video meeting link yet — will retry on the next poll.',
+      error_message:
+        'The CRM appointment carries no join URL (phone/in-person booking, or the calendar’s conferencing link is not set). ' +
+        'Nothing for the notetaker to join — retried automatically on every poll.',
     });
     return 'needs_meeting_link';
   }
