@@ -7,6 +7,7 @@ import { AISheetSummaryButton } from '@/components/ai/AISheetSummaryButton';
 import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { DailyAISummaryCard } from '@/components/dashboard/DailyAISummaryCard';
 import { TasksDueCard } from '@/components/dashboard/TasksDueCard';
+import { AIMeetingsTab } from '@/components/meetings/AIMeetingsTab';
 import { DataAccuracyAuditPanel } from '@/components/dashboard/DataAccuracyAuditPanel';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { AIInsightsCard } from '@/components/dashboard/AIInsightsCard';
