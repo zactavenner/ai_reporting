@@ -529,6 +529,13 @@ const Index = () => {
               </SectionErrorBoundary>
             )}
 
+            {/* AI Meetings — notetaker coverage, lead scoring, CRM sync */}
+            {activeTab === 'ai-meetings' && (
+              <SectionErrorBoundary sectionName="AI Meetings">
+                <AIMeetingsTab />
+              </SectionErrorBoundary>
+            )}
+
             {/* Meetings */}
             {activeTab === 'meetings' && (
               <SectionErrorBoundary sectionName="Meetings">
