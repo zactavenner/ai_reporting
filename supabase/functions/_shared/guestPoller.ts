@@ -160,6 +160,8 @@ function toConfig(row: any): GuestConfig {
 export type PolledAppointment = GhlAppointmentLite & {
   cancelled: boolean;
   calendarName?: string | null;
+  /** Raw CRM appointment status (confirmed / showed / noshow / cancelled). */
+  appointmentStatus?: string | null;
   /** Full CRM attribution captured at detection time. */
   attribution?: AppointmentAttribution;
 };
@@ -216,6 +218,7 @@ async function fetchUpcomingGhlAppointments(args: {
           typeof e.customFields === 'object' ? JSON.stringify(e.customFields) : e.customFields,
         ) || null,
       cancelled: cancelled.test(String(e.appointmentStatus || e.status || '')),
+      appointmentStatus: String(e.appointmentStatus || e.status || '') || null,
       calendarName: args.calendarName || null,
       attribution,
     });
