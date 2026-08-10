@@ -173,12 +173,13 @@ Deno.serve(async (req) => {
         if (clientId) pastQ = pastQ.eq('client_id', clientId);
         const { data: pastMeetings } = await pastQ;
 
-        // Legacy fallback: MeetGeek-synced meetings that predate meeting_records.
+        // Legacy MeetGeek-synced meetings that predate meeting_records. These are
+        // always merged in so notes/summaries are never hidden.
         let legacyPast: any[] = [];
-        if (!(pastMeetings || []).length) {
+        {
           let legacyQ = supabase
             .from('agency_meetings')
-            .select('id, client_id, title, meeting_date, duration_minutes, summary, recording_url')
+            .select('id, client_id, title, meeting_date, duration_minutes, summary, action_items, recording_url, meetgeek_url')
             .order('meeting_date', { ascending: false })
             .limit(pastLimit);
           if (clientId) legacyQ = legacyQ.eq('client_id', clientId);
@@ -190,7 +191,8 @@ Deno.serve(async (req) => {
             started_at: m.meeting_date,
             duration_minutes: m.duration_minutes,
             summary: m.summary,
-            recording_url: m.recording_url,
+            action_items: Array.isArray(m.action_items) ? m.action_items : [],
+            recording_url: m.recording_url || m.meetgeek_url,
             contact_name: null,
             sales_agent_name: null,
             ghl_calendar_name: null,
@@ -224,6 +226,19 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Past appointments that never produced a recording/transcript.
+        let missedQ = supabase
+          .from('meetgeek_guest_invite_jobs')
+          .select('id, client_id, status, error_code, error_message, scheduled_start, scheduled_end, meeting_url, ghl_calendar_name, contact_name, contact_email, assigned_user_name, invite_provider, invite_last_sent_at, meeting_record_id')
+          .lt('scheduled_start', nowIso)
+          .gte('scheduled_start', new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString())
+          .is('meeting_record_id', null)
+          .neq('status', 'cancelled')
+          .order('scheduled_start', { ascending: false })
+          .limit(pastLimit);
+        if (clientId) missedQ = missedQ.eq('client_id', clientId);
+        const { data: missedJobs } = await missedQ;
+
         const sender = await resolveInviteSender(supabase);
         const { count: enabledConfigs } = await supabase
           .from('client_meetgeek_guest_configs')
@@ -250,11 +265,25 @@ Deno.serve(async (req) => {
             no_meeting_link: reasonCounts.no_meeting_link || 0,
           },
           upcoming: (upcomingJobs || []).map(decorate),
-          past: ((pastMeetings || []).length ? pastMeetings! : legacyPast).map((m: any) => {
+          missed: (missedJobs || []).map((j: any) => ({
+            ...decorate(j),
+            capture_reason:
+              j.status === 'invited'
+                ? 'Notetaker was invited but no recording/transcript came back — the bot likely never got admitted to the room.'
+                : j.error_code === 'no_meeting_link'
+                  ? 'No join URL on the CRM appointment (phone or in-person), so nothing could be recorded.'
+                  : j.error_message || 'Invite never completed, so the call was not captured.',
+          })),
+          past: [
+            ...(pastMeetings || []),
+            ...legacyPast,
+          ].map((m: any) => {
             const a = activityByRecord.get(m.id) || {};
             return {
               ...decorate(m),
               summary: m.summary || a.summary || null,
+              action_items: Array.isArray(m.action_items) ? m.action_items : [],
+              source: m.source || 'notetaker',
               qa_total: a.qa_total ?? null,
               qa_gate_status: a.qa_gate_status ?? null,
               qa_pipeline_outcome: a.qa_pipeline_outcome ?? null,
