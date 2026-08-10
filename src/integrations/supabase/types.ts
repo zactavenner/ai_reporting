@@ -13417,6 +13417,8 @@ export type Database = {
           assigned_user_id: string | null
           assigned_user_name: string | null
           attempts: number
+          attendance_checked_at: string | null
+          attendance_status: string | null
           bot_guest_email: string | null
           client_id: string | null
           completed_at: string | null
@@ -13427,6 +13429,7 @@ export type Database = {
           error_code: string | null
           error_message: string | null
           ghl_appointment_id: string | null
+          ghl_appointment_status: string | null
           ghl_calendar_id: string | null
           ghl_calendar_name: string | null
           ghl_contact_id: string | null
@@ -13463,6 +13466,8 @@ export type Database = {
           assigned_user_id?: string | null
           assigned_user_name?: string | null
           attempts?: number
+          attendance_checked_at?: string | null
+          attendance_status?: string | null
           bot_guest_email?: string | null
           client_id?: string | null
           completed_at?: string | null
@@ -13473,6 +13478,7 @@ export type Database = {
           error_code?: string | null
           error_message?: string | null
           ghl_appointment_id?: string | null
+          ghl_appointment_status?: string | null
           ghl_calendar_id?: string | null
           ghl_calendar_name?: string | null
           ghl_contact_id?: string | null
@@ -13509,6 +13515,8 @@ export type Database = {
           assigned_user_id?: string | null
           assigned_user_name?: string | null
           attempts?: number
+          attendance_checked_at?: string | null
+          attendance_status?: string | null
           bot_guest_email?: string | null
           client_id?: string | null
           completed_at?: string | null
@@ -13519,6 +13527,7 @@ export type Database = {
           error_code?: string | null
           error_message?: string | null
           ghl_appointment_id?: string | null
+          ghl_appointment_status?: string | null
           ghl_calendar_id?: string | null
           ghl_calendar_name?: string | null
           ghl_contact_id?: string | null

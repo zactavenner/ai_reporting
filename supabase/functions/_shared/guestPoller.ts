@@ -39,6 +39,7 @@ import {
   type AppointmentAttribution,
   type AttributionCache,
 } from './ghlAttribution.ts';
+import { normalizeAttendance } from './ghlAttendance.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const SHADOW_INVITE_CONCURRENCY = 5;
@@ -160,6 +161,8 @@ function toConfig(row: any): GuestConfig {
 export type PolledAppointment = GhlAppointmentLite & {
   cancelled: boolean;
   calendarName?: string | null;
+  /** Raw CRM appointment status (confirmed / showed / noshow / cancelled). */
+  appointmentStatus?: string | null;
   /** Full CRM attribution captured at detection time. */
   attribution?: AppointmentAttribution;
 };
@@ -216,6 +219,7 @@ async function fetchUpcomingGhlAppointments(args: {
           typeof e.customFields === 'object' ? JSON.stringify(e.customFields) : e.customFields,
         ) || null,
       cancelled: cancelled.test(String(e.appointmentStatus || e.status || '')),
+      appointmentStatus: String(e.appointmentStatus || e.status || '') || null,
       calendarName: args.calendarName || null,
       attribution,
     });
@@ -657,6 +661,10 @@ export async function runGuestInvitePolling(args: {
             scheduled_start: appointment.startTime,
             scheduled_end: appointment.endTime,
             meeting_url: extractVideoLink(appointment.meetingUrl),
+            // Attendance (show / no-show) is CRM-owned; store it as detected.
+            ghl_appointment_status: appointment.appointmentStatus || null,
+            attendance_status: normalizeAttendance(appointment.appointmentStatus),
+            attendance_checked_at: new Date().toISOString(),
             rejection_reason: null,
             error_message: shadow || hasConnection ? null : 'Waiting for the organizer Google Calendar connection.',
           },
