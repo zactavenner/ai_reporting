@@ -3044,7 +3044,7 @@ function splitVideoPromptForModel(prompt: string, totalDuration: number, maxDura
   });
 }
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoDuration?: number | null; speechPace?: string | null; videoAspect?: "9:16" | "16:9"; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoDuration?: number | null; speechPace?: string | null; videoAspect?: "9:16" | "16:9"; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string; ingredientUrls?: string[] } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   (() => {
@@ -3313,7 +3313,7 @@ Deno.serve(async (req) => {
     imageModels?: Array<"nano-banana" | "openai" | "riverflow"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
-    videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
+    videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string; ingredientUrls?: string[] } | null;
     videoResolution?: "720p" | "1080p" | "2k" | "4k" | null;
     avatarId?: string | null;
     adFormat?: string | null;
