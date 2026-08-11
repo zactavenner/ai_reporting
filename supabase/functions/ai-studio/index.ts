@@ -1212,6 +1212,8 @@ async function generateSeedanceVideo(opts: {
   imageUrl?: string | null;    // optional first-frame for image-to-video
   lastFrameUrl?: string | null;
   ingredientUrl?: string | null; // optional product/subject reference (preserved across the clip)
+  /** Additional product/subject references (Seedance 2.0 & 2.5 accept multiple ingredient images). */
+  ingredientUrls?: (string | null | undefined)[] | null;
   model?: string | null;       // explicit OpenRouter model id
   clientId: string | null;
   conversationId: string;
