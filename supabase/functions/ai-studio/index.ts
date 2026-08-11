@@ -1692,9 +1692,13 @@ async function generateSeedanceVideo(opts: {
     if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
     if (providerLastFrameUrl) frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
     if (frames.length) body.frame_images = frames;
-    if (providerIngredientUrl) {
+    // Seedance 2.0 and 2.5 both accept multiple ingredient/reference images.
+    const seedanceRefs = providerIngredientUrls
+      .filter((u) => u !== providerImageUrl && u !== providerLastFrameUrl)
+      .slice(0, 7);
+    if (seedanceRefs.length) {
       // Spec: visual guidance images go in `input_references`, not the legacy `reference_images` key.
-      body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+      body.input_references = seedanceRefs.map((u) => ({ type: "image_url", image_url: { url: u } }));
     }
   } else if (isHailuo) {
     // MiniMax H3 — OpenRouter /api/v1/videos contract (verified via /videos/models):
