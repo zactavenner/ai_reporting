@@ -1394,6 +1394,11 @@ async function generateSeedanceVideo(opts: {
   let providerImageUrl = opts.imageUrl || null;
   let providerLastFrameUrl = opts.lastFrameUrl || null;
   let providerIngredientUrl = opts.ingredientUrl || null;
+  // Multi-ingredient support: the primary ingredient plus any extra references.
+  let providerIngredientUrls: string[] = Array.from(new Set(
+    [opts.ingredientUrl, ...(opts.ingredientUrls || [])].filter((u): u is string => !!u && typeof u === "string"),
+  ));
+  if (!providerIngredientUrl && providerIngredientUrls.length) providerIngredientUrl = providerIngredientUrls[0];
   const frameRehostEvents: Record<string, unknown>[] = [];
   const prepareFrame = async (url: string | null, purpose: "first-frame" | "last-frame" | "ingredient") => {
     if (!url) return null;
@@ -1414,6 +1419,15 @@ async function generateSeedanceVideo(opts: {
     providerImageUrl = await prepareFrame(providerImageUrl, "first-frame");
     providerLastFrameUrl = await prepareFrame(providerLastFrameUrl, "last-frame");
     providerIngredientUrl = await prepareFrame(providerIngredientUrl, "ingredient");
+    const preparedIngredients: string[] = [];
+    for (const u of providerIngredientUrls) {
+      const p = await prepareFrame(u, "ingredient");
+      if (p) preparedIngredients.push(p);
+    }
+    providerIngredientUrls = Array.from(new Set(preparedIngredients));
+  }
+  if (providerIngredientUrl && !providerIngredientUrls.includes(providerIngredientUrl)) {
+    providerIngredientUrls.unshift(providerIngredientUrl);
   }
 
   await recordVideoModelDecision(supa, "generateSeedanceVideo.resolved", {
