@@ -2958,16 +2958,22 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       accept="image/*"
                       className="hidden"
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
+                        const files = Array.from(e.target.files || []);
                         const slot = frameSlotRef.current;
-                        if (f && slot) uploadFrame(slot, f);
+                        if (files.length && slot) uploadFrame(slot, slot === "ingredient" ? files : files[0]);
                         e.target.value = "";
                       }}
+                      multiple
                     />
                     {([
                       { slot: "firstFrame" as const, label: "First", url: videoFrames.firstFrameUrl, tip: "First frame — Seedance starts from this image" },
                       { slot: "lastFrame" as const,  label: "Last",  url: videoFrames.lastFrameUrl,  tip: "Last frame — Seedance ends on this image" },
-                      { slot: "ingredient" as const, label: "Ingredient", url: videoFrames.ingredientUrl, tip: "Product / ingredient reference — model preserves this in the clip" },
+                      {
+                        slot: "ingredient" as const,
+                        label: (videoFrames.ingredientUrls?.length || 0) > 1 ? `Ingredients ×${videoFrames.ingredientUrls!.length}` : "Ingredient",
+                        url: videoFrames.ingredientUrls?.[0] || videoFrames.ingredientUrl,
+                        tip: "Product / ingredient references — select multiple images; Seedance 2.0 & 2.5 preserve all of them (up to 7)",
+                      },
                     ]).map(({ slot, label, url, tip }) => (
                       <button
                         key={slot}
@@ -2993,7 +2999,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                                 ...curr,
                                 ...(slot === "firstFrame" ? { firstFrameUrl: undefined } : {}),
                                 ...(slot === "lastFrame" ? { lastFrameUrl: undefined } : {}),
-                                ...(slot === "ingredient" ? { ingredientUrl: undefined } : {}),
+                                ...(slot === "ingredient" ? { ingredientUrl: undefined, ingredientUrls: [] } : {}),
                               }));
                             }}
                             className="ml-0.5 hover:text-destructive"
