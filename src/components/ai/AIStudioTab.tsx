@@ -1773,6 +1773,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
+            const extraIngredients = (videoFrames?.ingredientUrls || []).filter((u) => u && u !== videoFrames?.ingredientUrl);
+            if (extraIngredients.length) lockLines.push(`🔒 additional_ingredient_urls=${extraIngredients.map((u) => `"${u}"`).join(", ")} (all sent to Seedance as reference images)`);
             if (selectedAvatarId && selectedAvatar) {
               lockLines.push(
                 `🔒 AVATAR LOCK: use avatar "${selectedAvatar.name}" (id="${selectedAvatarId}"${selectedAvatar.image_url ? `, image_url="${selectedAvatar.image_url}"` : ""}) as the on-camera talent for every clip. Do NOT invent a different person or swap wardrobe between clips.`,
