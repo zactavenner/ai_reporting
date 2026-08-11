@@ -1272,7 +1272,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Sticky frame slots for video generation (first frame / last frame / ingredient/product image)
   type FrameSlot = "firstFrame" | "lastFrame" | "ingredient";
-  const [videoFrames, setVideoFrames] = useState<{ firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string }>(() => {
+  const [videoFrames, setVideoFrames] = useState<{ firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string; ingredientUrls?: string[] }>(() => {
     try { return JSON.parse(localStorage.getItem(`ai-studio:video-frames:${clientId}`) || "{}"); } catch { return {}; }
   });
   useEffect(() => {
@@ -1281,21 +1281,28 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   const frameInputRef = useRef<HTMLInputElement>(null);
   const frameSlotRef = useRef<FrameSlot | null>(null);
   const [uploadingSlot, setUploadingSlot] = useState<FrameSlot | null>(null);
-  const uploadFrame = useCallback(async (slot: FrameSlot, file: File) => {
-    if (file.size > 20 * 1024 * 1024) { toast.error("Frame exceeds 20MB"); return; }
+  const uploadFrame = useCallback(async (slot: FrameSlot, files: File | File[]) => {
+    const list = Array.isArray(files) ? files : [files];
+    if (list.some((f) => f.size > 20 * 1024 * 1024)) { toast.error("Each frame must be under 20MB"); return; }
     setUploadingSlot(slot);
     try {
-      const ext = file.name.split(".").pop() || "png";
-      const path = `ai-studio/${clientId}/frames/${slot}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-      const { error } = await supabase.storage.from("gpt-files").upload(path, file, { contentType: file.type, upsert: false });
-      if (error) throw error;
-      const { data: pub } = supabase.storage.from("gpt-files").getPublicUrl(path);
-      setVideoFrames(curr => ({
-        ...curr,
-        ...(slot === "firstFrame" ? { firstFrameUrl: pub.publicUrl } : {}),
-        ...(slot === "lastFrame" ? { lastFrameUrl: pub.publicUrl } : {}),
-        ...(slot === "ingredient" ? { ingredientUrl: pub.publicUrl } : {}),
-      }));
+      const uploaded: string[] = [];
+      for (const file of list) {
+        const ext = file.name.split(".").pop() || "png";
+        const path = `ai-studio/${clientId}/frames/${slot}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+        const { error } = await supabase.storage.from("gpt-files").upload(path, file, { contentType: file.type, upsert: false });
+        if (error) throw error;
+        const { data: pub } = supabase.storage.from("gpt-files").getPublicUrl(path);
+        uploaded.push(pub.publicUrl);
+      }
+      if (!uploaded.length) return;
+      setVideoFrames(curr => {
+        if (slot === "firstFrame") return { ...curr, firstFrameUrl: uploaded[0] };
+        if (slot === "lastFrame") return { ...curr, lastFrameUrl: uploaded[0] };
+        // Ingredient slot accepts MULTIPLE reference images (Seedance 2.0 & 2.5).
+        const next = Array.from(new Set([...(curr.ingredientUrls || []), ...(curr.ingredientUrl ? [curr.ingredientUrl] : []), ...uploaded])).slice(0, 7);
+        return { ...curr, ingredientUrl: next[0], ingredientUrls: next };
+      });
     } catch (e: any) {
       toast.error(`Upload failed: ${e?.message || e}`);
     } finally {
@@ -1766,6 +1773,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
+            const extraIngredients = (videoFrames?.ingredientUrls || []).filter((u) => u && u !== videoFrames?.ingredientUrl);
+            if (extraIngredients.length) lockLines.push(`🔒 additional_ingredient_urls=${extraIngredients.map((u) => `"${u}"`).join(", ")} (all sent to Seedance as reference images)`);
             if (selectedAvatarId && selectedAvatar) {
               lockLines.push(
                 `🔒 AVATAR LOCK: use avatar "${selectedAvatar.name}" (id="${selectedAvatarId}"${selectedAvatar.image_url ? `, image_url="${selectedAvatar.image_url}"` : ""}) as the on-camera talent for every clip. Do NOT invent a different person or swap wardrobe between clips.`,
@@ -2951,16 +2960,22 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                       accept="image/*"
                       className="hidden"
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
+                        const files = Array.from(e.target.files || []);
                         const slot = frameSlotRef.current;
-                        if (f && slot) uploadFrame(slot, f);
+                        if (files.length && slot) uploadFrame(slot, slot === "ingredient" ? files : files[0]);
                         e.target.value = "";
                       }}
+                      multiple
                     />
                     {([
                       { slot: "firstFrame" as const, label: "First", url: videoFrames.firstFrameUrl, tip: "First frame — Seedance starts from this image" },
                       { slot: "lastFrame" as const,  label: "Last",  url: videoFrames.lastFrameUrl,  tip: "Last frame — Seedance ends on this image" },
-                      { slot: "ingredient" as const, label: "Ingredient", url: videoFrames.ingredientUrl, tip: "Product / ingredient reference — model preserves this in the clip" },
+                      {
+                        slot: "ingredient" as const,
+                        label: (videoFrames.ingredientUrls?.length || 0) > 1 ? `Ingredients ×${videoFrames.ingredientUrls!.length}` : "Ingredient",
+                        url: videoFrames.ingredientUrls?.[0] || videoFrames.ingredientUrl,
+                        tip: "Product / ingredient references — select multiple images; Seedance 2.0 & 2.5 preserve all of them (up to 7)",
+                      },
                     ]).map(({ slot, label, url, tip }) => (
                       <button
                         key={slot}
@@ -2986,7 +3001,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                                 ...curr,
                                 ...(slot === "firstFrame" ? { firstFrameUrl: undefined } : {}),
                                 ...(slot === "lastFrame" ? { lastFrameUrl: undefined } : {}),
-                                ...(slot === "ingredient" ? { ingredientUrl: undefined } : {}),
+                                ...(slot === "ingredient" ? { ingredientUrl: undefined, ingredientUrls: [] } : {}),
                               }));
                             }}
                             className="ml-0.5 hover:text-destructive"

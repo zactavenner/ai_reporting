@@ -1212,6 +1212,8 @@ async function generateSeedanceVideo(opts: {
   imageUrl?: string | null;    // optional first-frame for image-to-video
   lastFrameUrl?: string | null;
   ingredientUrl?: string | null; // optional product/subject reference (preserved across the clip)
+  /** Additional product/subject references (Seedance 2.0 & 2.5 accept multiple ingredient images). */
+  ingredientUrls?: (string | null | undefined)[] | null;
   model?: string | null;       // explicit OpenRouter model id
   clientId: string | null;
   conversationId: string;
@@ -1392,6 +1394,11 @@ async function generateSeedanceVideo(opts: {
   let providerImageUrl = opts.imageUrl || null;
   let providerLastFrameUrl = opts.lastFrameUrl || null;
   let providerIngredientUrl = opts.ingredientUrl || null;
+  // Multi-ingredient support: the primary ingredient plus any extra references.
+  let providerIngredientUrls: string[] = Array.from(new Set(
+    [opts.ingredientUrl, ...(opts.ingredientUrls || [])].filter((u): u is string => !!u && typeof u === "string"),
+  ));
+  if (!providerIngredientUrl && providerIngredientUrls.length) providerIngredientUrl = providerIngredientUrls[0];
   const frameRehostEvents: Record<string, unknown>[] = [];
   const prepareFrame = async (url: string | null, purpose: "first-frame" | "last-frame" | "ingredient") => {
     if (!url) return null;
@@ -1412,6 +1419,15 @@ async function generateSeedanceVideo(opts: {
     providerImageUrl = await prepareFrame(providerImageUrl, "first-frame");
     providerLastFrameUrl = await prepareFrame(providerLastFrameUrl, "last-frame");
     providerIngredientUrl = await prepareFrame(providerIngredientUrl, "ingredient");
+    const preparedIngredients: string[] = [];
+    for (const u of providerIngredientUrls) {
+      const p = await prepareFrame(u, "ingredient");
+      if (p) preparedIngredients.push(p);
+    }
+    providerIngredientUrls = Array.from(new Set(preparedIngredients));
+  }
+  if (providerIngredientUrl && !providerIngredientUrls.includes(providerIngredientUrl)) {
+    providerIngredientUrls.unshift(providerIngredientUrl);
   }
 
   await recordVideoModelDecision(supa, "generateSeedanceVideo.resolved", {
@@ -1676,9 +1692,13 @@ async function generateSeedanceVideo(opts: {
     if (providerImageUrl) frames.push({ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" });
     if (providerLastFrameUrl) frames.push({ type: "image_url", image_url: { url: providerLastFrameUrl }, frame_type: "last_frame" });
     if (frames.length) body.frame_images = frames;
-    if (providerIngredientUrl) {
+    // Seedance 2.0 and 2.5 both accept multiple ingredient/reference images.
+    const seedanceRefs = providerIngredientUrls
+      .filter((u) => u !== providerImageUrl && u !== providerLastFrameUrl)
+      .slice(0, 7);
+    if (seedanceRefs.length) {
       // Spec: visual guidance images go in `input_references`, not the legacy `reference_images` key.
-      body.input_references = [{ type: "image_url", image_url: { url: providerIngredientUrl } }];
+      body.input_references = seedanceRefs.map((u) => ({ type: "image_url", image_url: { url: u } }));
     }
   } else if (isHailuo) {
     // MiniMax H3 — OpenRouter /api/v1/videos contract (verified via /videos/models):
@@ -3024,7 +3044,7 @@ function splitVideoPromptForModel(prompt: string, totalDuration: number, maxDura
   });
 }
 
-const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoDuration?: number | null; speechPace?: string | null; videoAspect?: "9:16" | "16:9"; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
+const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string; sheetId?: string | null; quality: string; brandSummary: string; imageModels?: string[]; videoModel?: string; videoModels?: string[]; videoResolution?: string | null; videoDuration?: number | null; speechPace?: string | null; videoAspect?: "9:16" | "16:9"; videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string; ingredientUrls?: string[] } | null; adFormat?: string | null; hookFramework?: string | null; burnCaptions?: boolean; avatar?: { id: string; name: string; image_url: string; gender?: string; age_range?: string; ethnicity?: string; description?: string; elevenlabs_voice_id?: string } | null }) => [
   "You are AI Studio — an ads-agency assistant that edits Google Docs/Sheets and builds static ad creatives.",
   "",
   (() => {
@@ -3149,12 +3169,16 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
   (() => {
     const f = ctx.videoFrames || {};
     const ff = f.firstFrameUrl, lf = f.lastFrameUrl, ig = f.ingredientUrl;
-    if (!ff && !lf && !ig) return null;
+    const extraIngredients = (f.ingredientUrls || []).filter((u) => u && u !== ig);
+    if (!ff && !lf && !ig && !extraIngredients.length) return null;
     const lines = [
       "VIDEO FRAME SLOTS (the user attached sticky frame references for video generation — ALWAYS apply to every generate_seedance_video call):",
       ff ? `- FIRST FRAME image_url: ${ff} → pass as generate_seedance_video.image_url so the clip STARTS from this exact frame.` : "",
       lf ? `- LAST FRAME image_url:  ${lf} → pass as generate_seedance_video.last_frame_url so the clip ENDS on this exact frame.` : "",
       ig ? `- INGREDIENT / PRODUCT reference: ${ig} → describe this product faithfully in the video prompt and (if no first frame above) ALSO pass it as image_url so the product is preserved across frames.` : "",
+      extraIngredients.length
+        ? `- ADDITIONAL INGREDIENT references (Seedance supports multiple): ${extraIngredients.join(", ")} → all of these are sent to the model as reference images; describe every one of them faithfully in the video prompt.`
+        : "",
       "- When multi-clip splitting is required, reuse first/last frames sensibly: the FIRST frame seeds Clip 1, the LAST frame finishes the FINAL clip; intermediate clips chain (use the prior clip's last frame conceptually in the prompt).",
     ].filter(Boolean);
     return lines.join("\n");
@@ -3293,7 +3317,7 @@ Deno.serve(async (req) => {
     imageModels?: Array<"nano-banana" | "openai" | "riverflow"> | null;
     videoModel?: string | null;
     videoModels?: string[] | null;
-    videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string } | null;
+    videoFrames?: { firstFrameUrl?: string; lastFrameUrl?: string; ingredientUrl?: string; ingredientUrls?: string[] } | null;
     videoResolution?: "720p" | "1080p" | "2k" | "4k" | null;
     avatarId?: string | null;
     adFormat?: string | null;
@@ -4322,6 +4346,7 @@ Deno.serve(async (req) => {
                 imageUrl,
                 lastFrameUrl,
                 ingredientUrl,
+                ingredientUrls: videoFrames?.ingredientUrls || null,
                 model,
                 clientId: clientId || null,
                 conversationId,
@@ -5148,6 +5173,7 @@ Deno.serve(async (req) => {
                     imageUrl: segImageUrl,
                     lastFrameUrl: segLastFrame,
                     ingredientUrl: baseIngredient,
+                    ingredientUrls: videoFrames?.ingredientUrls || null,
                     fast: !!args.fast,
                     model: mdl,
                     clientId: clientId || null,
@@ -5424,6 +5450,7 @@ Deno.serve(async (req) => {
                     imageUrl,
                     lastFrameUrl: videoFrames?.lastFrameUrl || null,
                     ingredientUrl: videoFrames?.ingredientUrl && videoFrames.ingredientUrl !== imageUrl ? videoFrames.ingredientUrl : null,
+                    ingredientUrls: (videoFrames?.ingredientUrls || []).filter((u) => u && u !== imageUrl),
                     fast: !!args.fast,
                     model: reelVideoModel,
                     clientId: clientId || null,
