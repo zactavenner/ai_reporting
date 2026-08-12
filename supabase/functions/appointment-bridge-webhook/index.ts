@@ -22,12 +22,19 @@ serve(async (req) => {
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch {
-      body = {};
+      // GHL can post form-encoded bodies.
+      try {
+        body = Object.fromEntries(new URLSearchParams(raw).entries());
+      } catch {
+        body = {};
+      }
     }
 
     const sb = serviceClient();
 
     const url = new URL(req.url);
+    // Any query param is also accepted as a field (GHL "custom values" URLs).
+    for (const [k, v] of url.searchParams.entries()) if (body[k] === undefined) body[k] = v;
     const qToken = (url.searchParams.get('token') || url.searchParams.get('secret') || '').trim();
     const token = (req.headers.get('x-hpa-webhook-token') || qToken).trim();
     const secret = await resolveGhlAppointmentWebhookSecret(sb);
@@ -36,10 +43,25 @@ serve(async (req) => {
       (url.searchParams.get('password') || '') === INTERNAL_PASSWORD;
     if (!tokenOk && !passwordOk) return json({ error: 'unauthorized' }, 401);
 
-    const appointmentId = String(body.appointment_id || body.appointmentId || '').trim();
-    const appointmentTime = String(body.appointment_time || body.start_time || '').trim();
-    const contactPhone = toE164(body.contact_phone || body.phone);
-    const userPhone = toE164(body.assigned_user_phone || body.user_phone);
+    const appt = body.appointment || body.calendar || {};
+    const contact = body.contact || {};
+    const assigned = body.assigned_user || body.user || body.assignedUser || {};
+
+    const appointmentId = String(
+      body.appointment_id || body.appointmentId || appt.id || appt.appointmentId ||
+      body.id || body.event_id || '',
+    ).trim();
+    const appointmentTime = String(
+      body.appointment_time || body.start_time || body.startTime ||
+      appt.startTime || appt.start_time || appt.selectedTimezoneStartTime || '',
+    ).trim();
+    const contactPhone = toE164(
+      body.contact_phone || body.phone || contact.phone || contact.phone_number || body.full_phone,
+    );
+    const userPhone = toE164(
+      body.assigned_user_phone || body.user_phone || assigned.phone ||
+      body.assignedUserPhone || appt.assignedUserPhone,
+    );
 
     if (!appointmentId) return json({ error: 'appointment_id is required' }, 400);
     if (!appointmentTime || Number.isNaN(Date.parse(appointmentTime))) {
@@ -53,11 +75,15 @@ serve(async (req) => {
     const payload = {
       client_id: body.client_id || null,
       appointment_id: appointmentId,
-      contact_id: body.contact_id ? String(body.contact_id) : null,
-      contact_name: body.contact_name ? String(body.contact_name) : null,
+      contact_id: (body.contact_id || contact.id) ? String(body.contact_id || contact.id) : null,
+      contact_name: (body.contact_name || contact.name || contact.full_name)
+        ? String(body.contact_name || contact.name || contact.full_name)
+        : null,
       contact_phone: contactPhone,
-      assigned_user_id: body.assigned_user_id ? String(body.assigned_user_id) : null,
-      assigned_user_name: body.assigned_user_name ? String(body.assigned_user_name) : null,
+      assigned_user_id: (body.assigned_user_id || assigned.id) ? String(body.assigned_user_id || assigned.id) : null,
+      assigned_user_name: (body.assigned_user_name || assigned.name)
+        ? String(body.assigned_user_name || assigned.name)
+        : null,
       assigned_user_phone: userPhone,
       appointment_time: startsAt,
       scheduled_at: startsAt,
