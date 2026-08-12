@@ -35,6 +35,7 @@ import {
   Timer,
   MessageCircle,
   Activity,
+  PhoneForwarded,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -110,6 +111,12 @@ const navStructure = [
     value: 'whatsapp',
     icon: MessageCircle,
     href: '/whatsapp',
+  },
+  {
+    title: 'Call Bridge',
+    value: 'call-bridge',
+    icon: PhoneForwarded,
+    href: '/call-bridge',
   },
   {
     title: 'Data Health',
