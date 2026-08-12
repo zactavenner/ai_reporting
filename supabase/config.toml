@@ -54,6 +54,21 @@ verify_jwt = false
 [functions.send-sheet-stats-email]
 verify_jwt = false
 
+[functions.appointment-bridge-webhook]
+verify_jwt = false
+
+[functions.appointment-bridge-dispatch]
+verify_jwt = false
+
+[functions.appointment-bridge-voice]
+verify_jwt = false
+
+[functions.appointment-bridge-events]
+verify_jwt = false
+
+[functions.appointment-bridge-admin]
+verify_jwt = false
+
 [functions.ghl-conversation-webhook]
 verify_jwt = false
 

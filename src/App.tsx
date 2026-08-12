@@ -51,6 +51,7 @@ const HuddlePage = lazyRetry(() => import("./pages/HuddlePage"));
 const SetterPage = lazyRetry(() => import("./pages/SetterPage"));
 const DataHealthPage = lazyRetry(() => import("./pages/DataHealthPage"));
 const AgentInfraPage = lazyRetry(() => import("./pages/AgentInfraPage"));
+const CallBridgePage = lazyRetry(() => import("./pages/CallBridgePage"));
 
 function PageLoader() {
   return (
@@ -96,6 +97,7 @@ const App = () => (
             <Route path="/daily" element={<PasswordGate><DailyReportPage /></PasswordGate>} />
             <Route path="/daily/thanks" element={<PasswordGate><DailyReportThankYouPage /></PasswordGate>} />
             <Route path="/whatsapp" element={<PasswordGate><WhatsAppPage /></PasswordGate>} />
+            <Route path="/call-bridge" element={<PasswordGate><CallBridgePage /></PasswordGate>} />
             <Route path="/ai-studio/styles" element={<PasswordGate><AIStudioStylesPage /></PasswordGate>} />
             <Route path="/approvals" element={<PasswordGate><ApprovalsPage /></PasswordGate>} />
             <Route path="/approvals/history" element={<PasswordGate><ApprovalsPage /></PasswordGate>} />

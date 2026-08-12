@@ -2754,6 +2754,156 @@ export type Database = {
           },
         ]
       }
+      appointment_call_bridge_events: {
+        Row: {
+          bridge_id: string
+          call_sid: string | null
+          created_at: string
+          detail: string | null
+          event_type: string
+          id: string
+          leg: string | null
+          payload: Json | null
+        }
+        Insert: {
+          bridge_id: string
+          call_sid?: string | null
+          created_at?: string
+          detail?: string | null
+          event_type: string
+          id?: string
+          leg?: string | null
+          payload?: Json | null
+        }
+        Update: {
+          bridge_id?: string
+          call_sid?: string | null
+          created_at?: string
+          detail?: string | null
+          event_type?: string
+          id?: string
+          leg?: string | null
+          payload?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_call_bridge_events_bridge_id_fkey"
+            columns: ["bridge_id"]
+            isOneToOne: false
+            referencedRelation: "appointment_call_bridges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      appointment_call_bridges: {
+        Row: {
+          appointment_id: string
+          appointment_time: string
+          assigned_user_id: string | null
+          assigned_user_name: string | null
+          assigned_user_phone: string
+          attempts: number
+          call_started_at: string | null
+          client_id: string | null
+          conference_name: string | null
+          contact_answered_at: string | null
+          contact_call_sid: string | null
+          contact_id: string | null
+          contact_name: string | null
+          contact_phone: string
+          created_at: string
+          duration_seconds: number | null
+          ended_at: string | null
+          from_number: string | null
+          id: string
+          last_error: string | null
+          raw_payload: Json | null
+          scheduled_at: string
+          status: string
+          updated_at: string
+          user_answered_at: string | null
+          user_call_sid: string | null
+        }
+        Insert: {
+          appointment_id: string
+          appointment_time: string
+          assigned_user_id?: string | null
+          assigned_user_name?: string | null
+          assigned_user_phone: string
+          attempts?: number
+          call_started_at?: string | null
+          client_id?: string | null
+          conference_name?: string | null
+          contact_answered_at?: string | null
+          contact_call_sid?: string | null
+          contact_id?: string | null
+          contact_name?: string | null
+          contact_phone: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          from_number?: string | null
+          id?: string
+          last_error?: string | null
+          raw_payload?: Json | null
+          scheduled_at: string
+          status?: string
+          updated_at?: string
+          user_answered_at?: string | null
+          user_call_sid?: string | null
+        }
+        Update: {
+          appointment_id?: string
+          appointment_time?: string
+          assigned_user_id?: string | null
+          assigned_user_name?: string | null
+          assigned_user_phone?: string
+          attempts?: number
+          call_started_at?: string | null
+          client_id?: string | null
+          conference_name?: string | null
+          contact_answered_at?: string | null
+          contact_call_sid?: string | null
+          contact_id?: string | null
+          contact_name?: string | null
+          contact_phone?: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          from_number?: string | null
+          id?: string
+          last_error?: string | null
+          raw_payload?: Json | null
+          scheduled_at?: string
+          status?: string
+          updated_at?: string
+          user_answered_at?: string | null
+          user_call_sid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_call_bridges_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "appointment_call_bridges_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_call_bridges_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       approval_queue: {
         Row: {
           agent_reasoning: string | null
