@@ -53,10 +53,25 @@ serve(async (req) => {
 
       const data = await response.json();
       if (!response.ok || !data.ok) {
+        const slackError = String(data?.error || `http_${response.status}`);
+        const authError = ["token_revoked", "invalid_auth", "not_authed", "account_inactive", "token_expired"].includes(slackError);
+        console.error(`Slack conversations.list failed [${response.status}]: ${JSON.stringify(data)}`);
+        if (authError) {
+          // Degrade gracefully: the Slack connection needs to be reconnected.
+          return new Response(
+            JSON.stringify({
+              channels: [],
+              slack_error: slackError,
+              needs_reconnect: true,
+              message: "Slack connection is no longer authorized. Reconnect Slack to load channels.",
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
         throw new Error(`Slack API failed [${response.status}]: ${JSON.stringify(data)}`);
       }
 
-      for (const ch of data.channels) {
+      for (const ch of data.channels || []) {
         seenIds.add(ch.id);
         allChannels.push({
           id: ch.id,

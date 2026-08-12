@@ -14,9 +14,17 @@ export function useSlackChannels() {
     queryKey: ['slack-channels'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('slack-list-channels');
-      if (error) throw error;
+      if (error) {
+        // Never break the page when Slack is unavailable / needs reconnecting.
+        console.error('slack-list-channels failed:', error);
+        return [] as SlackChannel[];
+      }
+      if (data?.needs_reconnect) {
+        console.warn('Slack needs reconnecting:', data.slack_error);
+      }
       return (data?.channels || []) as SlackChannel[];
     },
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
