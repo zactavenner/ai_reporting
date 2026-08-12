@@ -538,11 +538,6 @@ const Index = () => {
               </SectionErrorBoundary>
             )}
 
-            {/* Meetings */}
-            {activeTab === 'meetings' && (
-              <></>
-            )}
-
             {/* Call Transcripts — phone call transcription & sales intelligence */}
             {activeTab === 'call-transcripts' && (
               <SectionErrorBoundary sectionName="Call Transcripts">
@@ -550,6 +545,7 @@ const Index = () => {
               </SectionErrorBoundary>
             )}
 
+            {/* Meetings */}
             {activeTab === 'meetings' && (
               <SectionErrorBoundary sectionName="Meetings">
                 <div className="flex items-center justify-between mb-4">

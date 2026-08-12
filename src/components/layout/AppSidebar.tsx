@@ -36,6 +36,7 @@ import {
   MessageCircle,
   Activity,
   PhoneForwarded,
+  Phone,
 } from 'lucide-react';
 import {
   Sidebar,
