@@ -8,6 +8,7 @@ import { DateRangeFilter } from '@/components/dashboard/DateRangeFilter';
 import { DailyAISummaryCard } from '@/components/dashboard/DailyAISummaryCard';
 import { TasksDueCard } from '@/components/dashboard/TasksDueCard';
 import { AIMeetingsTab } from '@/components/meetings/AIMeetingsTab';
+import { CallTranscriptsTab } from '@/components/calls/CallTranscriptsTab';
 import { DataAccuracyAuditPanel } from '@/components/dashboard/DataAccuracyAuditPanel';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { AIInsightsCard } from '@/components/dashboard/AIInsightsCard';
@@ -538,6 +539,17 @@ const Index = () => {
             )}
 
             {/* Meetings */}
+            {activeTab === 'meetings' && (
+              <></>
+            )}
+
+            {/* Call Transcripts — phone call transcription & sales intelligence */}
+            {activeTab === 'call-transcripts' && (
+              <SectionErrorBoundary sectionName="Call Transcripts">
+                <CallTranscriptsTab />
+              </SectionErrorBoundary>
+            )}
+
             {activeTab === 'meetings' && (
               <SectionErrorBoundary sectionName="Meetings">
                 <div className="flex items-center justify-between mb-4">
