@@ -16208,6 +16208,172 @@ export type Database = {
           },
         ]
       }
+      phone_call_records: {
+        Row: {
+          accredited: string | null
+          analyzed_at: string | null
+          answered_at: string | null
+          appointment_id: string | null
+          assigned_user: string | null
+          assigned_user_id: string | null
+          assigned_user_phone: string | null
+          call_id: string
+          call_status: string | null
+          campaign: string | null
+          client_id: string | null
+          commitment_level: string | null
+          connected: boolean | null
+          contact_email: string | null
+          contact_id: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          direction: string | null
+          duration_seconds: number | null
+          ended_at: string | null
+          follow_up_date: string | null
+          ghl_synced_at: string | null
+          id: string
+          important_quotes: Json | null
+          intent_score: number | null
+          investment_amount: number | null
+          investment_range: string | null
+          investment_timeline: string | null
+          next_step: string | null
+          objections: Json | null
+          outcome: string | null
+          provider: string | null
+          raw_payload: Json | null
+          recording_url: string | null
+          sentiment: string | null
+          speaker_segments: Json | null
+          started_at: string | null
+          summary: string | null
+          tags: Json | null
+          transcribed_at: string | null
+          transcript: string | null
+          transcription_error: string | null
+          transcription_status: string
+          updated_at: string
+        }
+        Insert: {
+          accredited?: string | null
+          analyzed_at?: string | null
+          answered_at?: string | null
+          appointment_id?: string | null
+          assigned_user?: string | null
+          assigned_user_id?: string | null
+          assigned_user_phone?: string | null
+          call_id: string
+          call_status?: string | null
+          campaign?: string | null
+          client_id?: string | null
+          commitment_level?: string | null
+          connected?: boolean | null
+          contact_email?: string | null
+          contact_id?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          direction?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          follow_up_date?: string | null
+          ghl_synced_at?: string | null
+          id?: string
+          important_quotes?: Json | null
+          intent_score?: number | null
+          investment_amount?: number | null
+          investment_range?: string | null
+          investment_timeline?: string | null
+          next_step?: string | null
+          objections?: Json | null
+          outcome?: string | null
+          provider?: string | null
+          raw_payload?: Json | null
+          recording_url?: string | null
+          sentiment?: string | null
+          speaker_segments?: Json | null
+          started_at?: string | null
+          summary?: string | null
+          tags?: Json | null
+          transcribed_at?: string | null
+          transcript?: string | null
+          transcription_error?: string | null
+          transcription_status?: string
+          updated_at?: string
+        }
+        Update: {
+          accredited?: string | null
+          analyzed_at?: string | null
+          answered_at?: string | null
+          appointment_id?: string | null
+          assigned_user?: string | null
+          assigned_user_id?: string | null
+          assigned_user_phone?: string | null
+          call_id?: string
+          call_status?: string | null
+          campaign?: string | null
+          client_id?: string | null
+          commitment_level?: string | null
+          connected?: boolean | null
+          contact_email?: string | null
+          contact_id?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          direction?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          follow_up_date?: string | null
+          ghl_synced_at?: string | null
+          id?: string
+          important_quotes?: Json | null
+          intent_score?: number | null
+          investment_amount?: number | null
+          investment_range?: string | null
+          investment_timeline?: string | null
+          next_step?: string | null
+          objections?: Json | null
+          outcome?: string | null
+          provider?: string | null
+          raw_payload?: Json | null
+          recording_url?: string | null
+          sentiment?: string | null
+          speaker_segments?: Json | null
+          started_at?: string | null
+          summary?: string | null
+          tags?: Json | null
+          transcribed_at?: string | null
+          transcript?: string | null
+          transcription_error?: string | null
+          transcription_status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_call_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "phone_call_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_call_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       pipeline_opportunities: {
         Row: {
           contact_email: string | null

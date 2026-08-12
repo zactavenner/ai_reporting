@@ -195,3 +195,6 @@ verify_jwt = false
 
 [functions.send-sheet-stats-email]
 verify_jwt = false
+
+[functions.call-transcription]
+verify_jwt = false

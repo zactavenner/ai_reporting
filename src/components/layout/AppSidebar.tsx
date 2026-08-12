@@ -36,6 +36,7 @@ import {
   MessageCircle,
   Activity,
   PhoneForwarded,
+  Phone,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -163,6 +164,7 @@ const navStructure = [
       { title: 'AI Hub', value: 'ai', icon: Bot },
       { title: 'Meetings', value: 'meetings', icon: Video },
       { title: 'AI Meetings', value: 'ai-meetings', icon: Sparkles },
+      { title: 'Call Transcripts', value: 'call-transcripts', icon: Phone },
       { title: 'Deals', value: 'deals', icon: Handshake },
       { title: 'Outreach', value: 'outreach', icon: MessageSquare },
     ],
