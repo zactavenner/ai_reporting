@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -164,6 +165,7 @@ export default function CallBridgePage() {
   ];
 
   return (
+    <AppLayout>
     <div className="space-y-6 p-4 md:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -346,5 +348,6 @@ export default function CallBridgePage() {
         </DialogContent>
       </Dialog>
     </div>
+    </AppLayout>
   );
 }
