@@ -299,6 +299,13 @@ async function runShadowInvite(args: {
     contactName: appointment.attribution?.contactName || null,
     fallbackTitle: appointment.title || null,
   });
+  // Google Calendar silently ignores an invitation whose ORGANIZER is the same
+  // mailbox as the ATTENDEE (a "self invite"). The SMTP envelope still uses the
+  // working sender address; only the iCalendar organizer identity is distinct.
+  const organizerEmail =
+    sender.from_email && sender.from_email.toLowerCase() !== String(botGuestEmail).toLowerCase()
+      ? sender.from_email
+      : (Deno.env.get('SHADOW_INVITE_ORGANIZER') || 'invites@highperformanceads.com');
   const ics = buildShadowInviteIcs({
     uid,
     method,
@@ -313,7 +320,7 @@ async function runShadowInvite(args: {
       `Ref: ${uid}`,
     ].filter(Boolean).join('\n'),
     meetingUrl: link,
-    organizerEmail: sender.from_email,
+    organizerEmail,
     organizerName: 'HPA Reporting',
     attendeeEmail: botGuestEmail,
   });

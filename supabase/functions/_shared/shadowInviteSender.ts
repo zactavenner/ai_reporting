@@ -274,22 +274,28 @@ export interface SendInviteResult {
 function buildMime(args: { from: string; to: string; subject: string; bodyText: string; ics: string; method: string }) {
   const boundary = `hpa-${crypto.randomUUID()}`;
   const encoded = b64(new TextEncoder().encode(args.ics));
+  // Gmail / Google Calendar only auto-process an invitation when the calendar
+  // part is an INLINE text/calendar alternative carrying method=REQUEST.
+  // Sending it as a multipart/mixed *attachment* makes Gmail render a plain
+  // .ics file attachment and never creates the event — that was the bug.
   return [
     `From: ${FALLBACK_FROM_NAME} <${args.from}>`,
     `To: ${args.to}`,
     `Subject: ${args.subject}`,
     'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    `Content-Class: urn:content-classes:calendarmessage`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
     '',
     `--${boundary}`,
     'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 7bit',
     '',
     args.bodyText,
     '',
     `--${boundary}`,
-    `Content-Type: text/calendar; charset="UTF-8"; method=${args.method}; name="invite.ics"`,
+    `Content-Type: text/calendar; charset="UTF-8"; method=${args.method}; component=VEVENT`,
     'Content-Transfer-Encoding: base64',
-    'Content-Disposition: attachment; filename="invite.ics"',
+    'Content-Disposition: inline; filename="invite.ics"',
     '',
     encoded.replace(/(.{76})/g, '$1\r\n'),
     '',
