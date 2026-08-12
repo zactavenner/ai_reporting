@@ -27,10 +27,13 @@ serve(async (req) => {
 
     const sb = serviceClient();
 
-    const token = (req.headers.get('x-hpa-webhook-token') || '').trim();
+    const url = new URL(req.url);
+    const qToken = (url.searchParams.get('token') || url.searchParams.get('secret') || '').trim();
+    const token = (req.headers.get('x-hpa-webhook-token') || qToken).trim();
     const secret = await resolveGhlAppointmentWebhookSecret(sb);
     const tokenOk = !!token && !!secret && timingSafeEqual(token, secret);
-    const passwordOk = body?.password === INTERNAL_PASSWORD;
+    const passwordOk = body?.password === INTERNAL_PASSWORD ||
+      (url.searchParams.get('password') || '') === INTERNAL_PASSWORD;
     if (!tokenOk && !passwordOk) return json({ error: 'unauthorized' }, 401);
 
     const appointmentId = String(body.appointment_id || body.appointmentId || '').trim();
