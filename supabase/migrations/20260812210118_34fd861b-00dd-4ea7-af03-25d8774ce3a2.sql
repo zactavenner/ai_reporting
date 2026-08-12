@@ -1,0 +1,2 @@
+DELETE FROM public.appointment_call_bridge_events WHERE bridge_id IN (SELECT id FROM public.appointment_call_bridges WHERE appointment_id IN ('test-ghl-1','test-ghl-2'));
+DELETE FROM public.appointment_call_bridges WHERE appointment_id IN ('test-ghl-1','test-ghl-2');
