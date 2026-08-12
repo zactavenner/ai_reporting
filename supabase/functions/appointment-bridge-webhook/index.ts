@@ -46,6 +46,18 @@ serve(async (req) => {
     const appt = body.appointment || body.calendar || {};
     const contact = body.contact || {};
     const assigned = body.assigned_user || body.user || body.assignedUser || {};
+    const custom = body.customData || body.custom_data || {};
+    const loc = body.location || {};
+
+    const pick = (...vals: unknown[]) => {
+      for (const v of vals) {
+        const s = v === null || v === undefined ? '' : String(v).trim();
+        if (s) return s;
+      }
+      return null;
+    };
+    const joinName = (first?: unknown, last?: unknown) =>
+      pick([first, last].map((p) => (p ? String(p).trim() : '')).filter(Boolean).join(' '));
 
     const appointmentId = String(
       body.appointment_id || body.appointmentId || appt.id || appt.appointmentId ||
@@ -72,18 +84,52 @@ serve(async (req) => {
 
     const startsAt = new Date(appointmentTime).toISOString();
 
+    // Resolve the client from the GHL location when not passed explicitly.
+    let clientId: string | null = body.client_id ? String(body.client_id) : null;
+    if (!clientId) {
+      const locationId = pick(body.location_id, body.locationId, loc.id);
+      if (locationId) {
+        const { data: byLoc } = await sb
+          .from('clients')
+          .select('id')
+          .eq('ghl_location_id', locationId)
+          .maybeSingle();
+        clientId = byLoc?.id ?? null;
+      }
+      if (!clientId) {
+        const locationName = pick(loc.name, body.location_name);
+        if (locationName) {
+          const { data: byName } = await sb
+            .from('clients')
+            .select('id')
+            .ilike('name', locationName)
+            .maybeSingle();
+          clientId = byName?.id ?? null;
+        }
+      }
+    }
+
     const payload = {
-      client_id: body.client_id || null,
+      client_id: clientId,
       appointment_id: appointmentId,
-      contact_id: (body.contact_id || contact.id) ? String(body.contact_id || contact.id) : null,
-      contact_name: (body.contact_name || contact.name || contact.full_name)
-        ? String(body.contact_name || contact.name || contact.full_name)
-        : null,
+      contact_id: pick(body.contact_id, contact.id, custom['Contact Id'], custom['Contact ID']),
+      contact_name: pick(
+        body.contact_name,
+        contact.name,
+        contact.full_name,
+        custom['Contact Name'],
+        body.full_name,
+        joinName(body.first_name || contact.first_name, body.last_name || contact.last_name),
+      ),
       contact_phone: contactPhone,
-      assigned_user_id: (body.assigned_user_id || assigned.id) ? String(body.assigned_user_id || assigned.id) : null,
-      assigned_user_name: (body.assigned_user_name || assigned.name)
-        ? String(body.assigned_user_name || assigned.name)
-        : null,
+      assigned_user_id: pick(body.assigned_user_id, assigned.id, custom['User ID'], custom['User Id']),
+      assigned_user_name: pick(
+        body.assigned_user_name,
+        assigned.name,
+        custom['User Name'],
+        joinName(assigned.firstName || assigned.first_name, assigned.lastName || assigned.last_name),
+        assigned.email,
+      ),
       assigned_user_phone: userPhone,
       appointment_time: startsAt,
       scheduled_at: startsAt,
