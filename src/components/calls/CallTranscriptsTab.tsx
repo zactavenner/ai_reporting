@@ -100,6 +100,7 @@ export function CallTranscriptsTab() {
     exportToCSV(
       filtered.map((c) => ({
         date: c.started_at,
+        client: c.client_id ? clientNames[c.client_id] || '' : '',
         contact: c.contact_name,
         phone: c.contact_phone,
         assigned_user: c.assigned_user,
