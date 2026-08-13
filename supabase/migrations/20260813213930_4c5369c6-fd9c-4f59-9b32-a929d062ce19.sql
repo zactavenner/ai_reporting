@@ -1,0 +1,1 @@
+update public.agency_settings set meetgeek_api_key = null;
