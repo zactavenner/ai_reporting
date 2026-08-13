@@ -56,9 +56,10 @@ type AccountRow = { client_id: string; client_name: string; ad_account_id: strin
 
 async function loadAccounts(sb: any, clientId?: string): Promise<AccountRow[]> {
   const q = sb.from('clients')
-    .select('id, name, status, meta_ad_account_id, meta_ad_account_ids, meta_access_token, meta_system_user_token')
-    .eq('status', 'active');
-  if (clientId) q.eq('id', clientId);
+    .select('id, name, status, meta_ad_account_id, meta_ad_account_ids, meta_access_token, meta_system_user_token');
+  // Explicit single-client runs (manual/backfill) bypass the status filter so
+  // onboarding/paused clients can still be synced on demand.
+  if (clientId) q.eq('id', clientId); else q.eq('status', 'active');
   const { data, error } = await q;
   if (error) throw error;
   const shared = Deno.env.get('META_SHARED_ACCESS_TOKEN') ?? '';
