@@ -43,7 +43,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function ghlFetch(url: string, apiKey: string, attempts = 4): Promise<Response> {
   let res: Response | null = null;
   for (let i = 0; i < attempts; i++) {
-    if (i > 0 || true) await sleep(i === 0 ? 250 : 0);
+    if (i === 0) await sleep(250); // pace every call
     res = await fetch(url, { headers: ghlHeaders(apiKey) });
     if (res.status !== 429) return res;
     const retryAfter = Number(res.headers.get("Retry-After") || "0");
