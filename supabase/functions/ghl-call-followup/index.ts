@@ -34,6 +34,26 @@ function ghlHeaders(apiKey: string) {
   return { Authorization: `Bearer ${apiKey}`, Version: "2021-07-28", Accept: "application/json" };
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * GHL rate-limits aggressively (HTTP 429). Retry with Retry-After/exponential
+ * backoff and pace every call so a batch never bursts past the quota.
+ */
+async function ghlFetch(url: string, apiKey: string, attempts = 4): Promise<Response> {
+  let res: Response | null = null;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0 || true) await sleep(i === 0 ? 250 : 0);
+    res = await fetch(url, { headers: ghlHeaders(apiKey) });
+    if (res.status !== 429) return res;
+    const retryAfter = Number(res.headers.get("Retry-After") || "0");
+    const waitMs = retryAfter > 0 ? Math.min(retryAfter * 1000, 15_000) : 1000 * 2 ** i;
+    await res.body?.cancel().catch(() => {});
+    if (i < attempts - 1) await sleep(waitMs);
+  }
+  return res!;
+}
+
 function isCallMessage(m: any) {
   const t = String(m?.messageType || m?.type || "").toUpperCase();
   return t.includes("CALL") || t.includes("VOICEMAIL");
@@ -46,9 +66,9 @@ async function findCallMessage(
   contactId: string,
   target: Date,
 ): Promise<{ messageId: string; dateAdded: string | null; durationSeconds: number | null; direction: string | null; status: string | null } | null> {
-  const convRes = await fetch(
+  const convRes = await ghlFetch(
     `${GHL_BASE}/conversations/search?locationId=${locationId}&contactId=${contactId}&limit=20`,
-    { headers: ghlHeaders(apiKey) },
+    apiKey,
   );
   if (!convRes.ok) throw new Error(`GHL conversations/search ${convRes.status}`);
   const convs = (await convRes.json())?.conversations || [];
@@ -57,9 +77,7 @@ async function findCallMessage(
   let bestDelta = Number.POSITIVE_INFINITY;
 
   for (const conv of convs) {
-    const msgRes = await fetch(`${GHL_BASE}/conversations/${conv.id}/messages?limit=100`, {
-      headers: ghlHeaders(apiKey),
-    });
+    const msgRes = await ghlFetch(`${GHL_BASE}/conversations/${conv.id}/messages?limit=100`, apiKey);
     if (!msgRes.ok) continue;
     const payload = await msgRes.json();
     const messages = payload?.messages?.messages || payload?.messages || [];
