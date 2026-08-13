@@ -47,6 +47,11 @@ export function CallTranscriptsTab() {
     [calls],
   );
 
+  const clientNames = useMemo(
+    () => Object.fromEntries(clients.map((c) => [c.id, c.name])) as Record<string, string>,
+    [clients],
+  );
+
   const filtered = useMemo(
     () =>
       calls.filter((c) => {
@@ -95,6 +100,7 @@ export function CallTranscriptsTab() {
     exportToCSV(
       filtered.map((c) => ({
         date: c.started_at,
+        client: c.client_id ? clientNames[c.client_id] || '' : '',
         contact: c.contact_name,
         phone: c.contact_phone,
         assigned_user: c.assigned_user,
@@ -221,6 +227,7 @@ export function CallTranscriptsTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                <TableHead>Client</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Assigned user</TableHead>
                 <TableHead>Duration</TableHead>
@@ -233,10 +240,10 @@ export function CallTranscriptsTab() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">Loading calls…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">Loading calls…</TableCell></TableRow>
               ) : !filtered.length ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
                     No calls yet. Point your call provider webhook at the URL above — completed calls with a
                     recording are transcribed and analyzed automatically.
                   </TableCell>
@@ -246,6 +253,9 @@ export function CallTranscriptsTab() {
                   <TableRow key={c.id} className="cursor-pointer" onClick={() => setSelected(c)}>
                     <TableCell className="whitespace-nowrap">
                       {c.started_at ? new Date(c.started_at).toLocaleString() : '—'}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {c.client_id ? clientNames[c.client_id] || 'Unknown client' : '—'}
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{c.contact_name || 'Unknown'}</div>
