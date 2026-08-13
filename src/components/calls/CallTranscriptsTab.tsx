@@ -52,7 +52,7 @@ export function CallTranscriptsTab() {
     [clients],
   );
 
-  const filtered = useMemo(
+  const matching = useMemo(
     () =>
       calls.filter((c) => {
         if (assignedUser !== 'all' && c.assigned_user !== assignedUser) return false;
@@ -70,6 +70,30 @@ export function CallTranscriptsTab() {
       }),
     [calls, assignedUser, outcome, sentiment, intentBand, minDuration],
   );
+
+  /** Show only one row per contact — the most informative, most recent call. */
+  const filtered = useMemo(() => {
+    const score = (c: CallTranscriptRecord) =>
+      (c.transcript ? 4 : 0) + (c.summary ? 2 : 0) + (c.outcome ? 1 : 0);
+    const best = new Map<string, CallTranscriptRecord>();
+    for (const c of matching) {
+      const key = c.contact_id || c.contact_phone || c.contact_email || c.id;
+      const prev = best.get(key);
+      if (!prev) { best.set(key, c); continue; }
+      const cScore = score(c);
+      const pScore = score(prev);
+      if (
+        cScore > pScore ||
+        (cScore === pScore &&
+          new Date(c.started_at || 0).getTime() > new Date(prev.started_at || 0).getTime())
+      ) {
+        best.set(key, c);
+      }
+    }
+    return Array.from(best.values()).sort(
+      (a, b) => new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime(),
+    );
+  }, [matching]);
 
   const kpis = useMemo(() => {
     const connected = filtered.filter((c) => c.connected || (c.duration_seconds || 0) > 20);
