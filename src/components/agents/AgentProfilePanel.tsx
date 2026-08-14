@@ -302,9 +302,6 @@ export function AgentProfilePanel({
           )}
         </div>
 
-        {capabilityModels.length > 0 && (
-          <></>
-        )}
         {mode === "master" && (
           <div>
             <div className="flex items-center justify-between mb-1">
