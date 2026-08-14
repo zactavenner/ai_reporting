@@ -54,6 +54,8 @@ export function AgentProfilePanel({
   const [scheduleCron, setScheduleCron] = useState<string>(agent.schedule_cron || "");
   const [schedulePrompt, setSchedulePrompt] = useState<string>(agent.schedule_prompt || "");
   const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(!!agent.schedule_enabled);
+  const [mcpUrl, setMcpUrl] = useState<string>(agent.mcp_url || "");
+  const [mcpEnabled, setMcpEnabled] = useState<boolean>(!!agent.mcp_enabled);
 
   useEffect(() => {
     setMemory(agent.memory_md || "");
@@ -67,6 +69,8 @@ export function AgentProfilePanel({
     setScheduleCron(agent.schedule_cron || "");
     setSchedulePrompt(agent.schedule_prompt || "");
     setScheduleEnabled(!!agent.schedule_enabled);
+    setMcpUrl(agent.mcp_url || "");
+    setMcpEnabled(!!agent.mcp_enabled);
   }, [agent.id]);
 
   const isClientView = mode === "client" && !!clientId;
