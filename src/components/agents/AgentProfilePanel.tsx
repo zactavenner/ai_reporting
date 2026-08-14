@@ -303,6 +303,33 @@ export function AgentProfilePanel({
         </div>
 
         {capabilityModels.length > 0 && (
+          <></>
+        )}
+        {mode === "master" && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                <Cable className="h-3 w-3" /> MCP server
+              </p>
+              <Switch
+                checked={mcpEnabled}
+                onCheckedChange={(v) => { setMcpEnabled(v); saveMaster({ mcp_enabled: v } as any); }}
+              />
+            </div>
+            <Input
+              value={mcpUrl}
+              onChange={(e) => setMcpUrl(e.target.value)}
+              onBlur={() => { if (mcpUrl !== (agent.mcp_url || "")) saveMaster({ mcp_url: mcpUrl || null } as any); }}
+              placeholder="https://example.com/api/mcp"
+              className="h-7 text-[11px]"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              When enabled, the agent lists this server's tools and can call them during a run.
+            </p>
+          </div>
+        )}
+
+        {capabilityModels.length > 0 && (
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
               <Sparkles className="h-3 w-3" /> Generative models available
