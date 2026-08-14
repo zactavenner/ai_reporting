@@ -5,6 +5,7 @@
 // Supabase. No external orchestrator.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { routeTaskType } from "../_shared/agentRouting.ts";
+import { McpClient, toOpenAiTools, type McpTool } from "../_shared/mcpClient.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,24 +107,70 @@ Deno.serve(async (req) => {
 
     const models = [agent.default_model, ...((agent.fallback_models as string[]) || [])].filter(Boolean);
 
-    const aiRes = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://reporting.highperformanceads.com",
-        "X-Title": `HPA Agent · ${agent.name}`,
-      },
-      body: JSON.stringify({
-        model: models[0],
-        models,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: taskPrompt },
-        ],
-        temperature: 0.4,
-      }),
-    });
+    // ---- MCP layer ----------------------------------------------------------
+    let mcp: McpClient | null = null;
+    let mcpTools: McpTool[] = [];
+    const mcpCalls: { tool: string; ok: boolean; error?: string }[] = [];
+    if (agent.mcp_enabled && agent.mcp_url) {
+      const token = agent.mcp_token_env ? Deno.env.get(agent.mcp_token_env) || null : null;
+      try {
+        mcp = new McpClient(agent.mcp_url, token);
+        mcpTools = await mcp.listTools();
+      } catch (e) {
+        mcp = null;
+        mcpCalls.push({ tool: "tools/list", ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    const messages: any[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: taskPrompt },
+    ];
+
+    const callModel = () =>
+      fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://reporting.highperformanceads.com",
+          "X-Title": `HPA Agent · ${agent.name}`,
+        },
+        body: JSON.stringify({
+          model: models[0],
+          models,
+          messages,
+          temperature: 0.4,
+          ...(mcpTools.length ? { tools: toOpenAiTools(mcpTools), tool_choice: "auto" } : {}),
+        }),
+      });
+
+    let aiRes = await callModel();
+    let aiData: any = null;
+
+    // Tool-call loop (MCP agents only).
+    for (let hop = 0; hop < 6 && aiRes.ok; hop++) {
+      aiData = await aiRes.json();
+      const msg = aiData.choices?.[0]?.message;
+      const toolCalls = msg?.tool_calls || [];
+      if (!mcp || !toolCalls.length) break;
+      messages.push(msg);
+      for (const tc of toolCalls) {
+        const name = tc.function?.name || "";
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* ignore */ }
+        let content = "";
+        try {
+          content = await mcp.callTool(name, args);
+          mcpCalls.push({ tool: name, ok: !content.startsWith("TOOL ERROR") });
+        } catch (e) {
+          content = `TOOL ERROR: ${e instanceof Error ? e.message : String(e)}`;
+          mcpCalls.push({ tool: name, ok: false, error: content });
+        }
+        messages.push({ role: "tool", tool_call_id: tc.id, name, content: content.slice(0, 30000) });
+      }
+      aiRes = await callModel();
+    }
 
     if (!aiRes.ok) {
       const errText = (await aiRes.text()).slice(0, 500);
@@ -140,7 +187,7 @@ Deno.serve(async (req) => {
       return json({ error: `OpenRouter ${aiRes.status}: ${errText}` }, aiRes.status === 429 || aiRes.status === 402 ? aiRes.status : 502);
     }
 
-    const aiData = await aiRes.json();
+    if (!aiData || aiData.choices?.[0]?.message?.tool_calls?.length) aiData = await aiRes.json();
     const output = aiData.choices?.[0]?.message?.content || "";
     const usage = aiData.usage || {};
 
@@ -154,6 +201,7 @@ Deno.serve(async (req) => {
         model: aiData.model || models[0],
         output_md: output,
         connectors_used: connectorResults.map((c: any) => ({ label: c.label, status: c.status, rows: c.row_count ?? null })),
+        mcp_calls: mcpCalls.length ? mcpCalls : null,
         input_tokens: usage.prompt_tokens || 0,
         output_tokens: usage.completion_tokens || 0,
         duration_ms: Date.now() - startedAt,
@@ -182,6 +230,8 @@ Deno.serve(async (req) => {
       run_id: runRow?.id ?? null,
       model: aiData.model || models[0],
       connectors: connectorResults.map((c: any) => ({ label: c.label, status: c.status, rows: c.row_count ?? null })),
+      mcp_tools: mcpTools.map((t) => t.name),
+      mcp_calls: mcpCalls,
       output,
     });
   } catch (e) {

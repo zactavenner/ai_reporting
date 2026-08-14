@@ -25,6 +25,9 @@ export type AgencyAgent = {
   schedule_prompt?: string | null;
   schedule_enabled?: boolean;
   last_run_at?: string | null;
+  mcp_url?: string | null;
+  mcp_enabled?: boolean;
+  mcp_token_env?: string | null;
 };
 
 export type AgencyAgentTraining = {

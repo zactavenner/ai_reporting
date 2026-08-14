@@ -1,0 +1,1 @@
+ALTER TABLE public.agent_task_runs ADD COLUMN IF NOT EXISTS mcp_calls jsonb;
