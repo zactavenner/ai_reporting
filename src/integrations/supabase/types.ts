@@ -819,6 +819,9 @@ export type Database = {
           is_active: boolean
           is_custom: boolean
           last_run_at: string | null
+          mcp_enabled: boolean
+          mcp_token_env: string | null
+          mcp_url: string | null
           memory_md: string | null
           name: string
           role: string
@@ -845,6 +848,9 @@ export type Database = {
           is_active?: boolean
           is_custom?: boolean
           last_run_at?: string | null
+          mcp_enabled?: boolean
+          mcp_token_env?: string | null
+          mcp_url?: string | null
           memory_md?: string | null
           name: string
           role: string
@@ -871,6 +877,9 @@ export type Database = {
           is_active?: boolean
           is_custom?: boolean
           last_run_at?: string | null
+          mcp_enabled?: boolean
+          mcp_token_env?: string | null
+          mcp_url?: string | null
           memory_md?: string | null
           name?: string
           role?: string
