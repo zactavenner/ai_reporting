@@ -1719,6 +1719,7 @@ export type Database = {
           error: string | null
           id: string
           input_tokens: number
+          mcp_calls: Json | null
           model: string | null
           output_md: string | null
           output_tokens: number
@@ -1734,6 +1735,7 @@ export type Database = {
           error?: string | null
           id?: string
           input_tokens?: number
+          mcp_calls?: Json | null
           model?: string | null
           output_md?: string | null
           output_tokens?: number
@@ -1749,6 +1751,7 @@ export type Database = {
           error?: string | null
           id?: string
           input_tokens?: number
+          mcp_calls?: Json | null
           model?: string | null
           output_md?: string | null
           output_tokens?: number
