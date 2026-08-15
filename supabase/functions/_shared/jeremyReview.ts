@@ -4,7 +4,7 @@
 //
 // JEREMY never writes to Meta. Every code path here only reads Meta data that
 // was already synced and creates reviewable rows in meta_ad_recommendations.
-import { validateLaunchInput, type LaunchInput } from "./metaLaunchValidation.ts";
+import { validateLaunch, type LaunchInput } from "./metaLaunchValidation.ts";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 export const MIN_SPEND_FOR_ACTION = 100;
@@ -204,7 +204,7 @@ export async function prepareCampaignDraft(supabase: Db, clientId: string, input
       : String(inputs.countries || "US").split(",").map((c) => c.trim()).filter(Boolean),
   } as unknown as LaunchInput;
 
-  const errors = validateLaunchInput(input);
+  const errors = validateLaunch(input);
   if (errors.length) return { success: false as const, errors };
 
   const { data, error } = await supabase
@@ -212,7 +212,7 @@ export async function prepareCampaignDraft(supabase: Db, clientId: string, input
     .insert({
       client_id: clientId,
       status: "draft",
-      stage: "campaign",
+      stage: "draft",
       created_by: "media_buyer_jeremy (MCP draft)",
       ...input,
     })
