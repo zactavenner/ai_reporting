@@ -21595,6 +21595,10 @@ export type Database = {
       }
       reap_orphaned_canvas_placeholders: { Args: never; Returns: number }
       reap_stale_agent_tasks: { Args: { p_minutes?: number }; Returns: number }
+      repair_client_reporting_rows: {
+        Args: { p_client_id: string }
+        Returns: Json
+      }
       resolve_audit_entry: {
         Args: { entry_id: string; new_status: string; resolver: string }
         Returns: {
