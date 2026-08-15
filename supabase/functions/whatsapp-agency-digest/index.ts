@@ -20,6 +20,17 @@ const corsHeaders = {
 
 const CHUNK_LIMIT = 3500; // WhatsApp text messages cap out around 4096 chars.
 const TZ = 'America/Los_Angeles';
+const RUN_HOUR_LOCAL = 6;
+
+const laDate = (d = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const laHour = (d = new Date()) =>
+  Number(new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: '2-digit', hour12: false }).format(d));
+const yesterdayLa = () => {
+  const d = new Date(`${laDate()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -299,7 +310,12 @@ Deno.serve(async (req) => {
       }
 
       case 'send_digest': {
-        const digestDate = String(body.digest_date ?? '').trim();
+        // DST-safe gate: the two UTC cron triggers both fire, only the one that
+        // lands on local hour 06 proceeds; idempotency covers the rest.
+        if (body.source === 'cron' && body.force !== true && laHour() !== RUN_HOUR_LOCAL) {
+          return json({ sent: false, skipped: `local hour ${laHour()} != ${RUN_HOUR_LOCAL}`, tz: TZ });
+        }
+        const digestDate = String(body.digest_date ?? yesterdayLa()).trim();
         if (!/^\d{4}-\d{2}-\d{2}$/.test(digestDate)) return json({ error: 'digest_date (YYYY-MM-DD) required' }, 400);
         const cadence = String(body.cadence ?? 'daily');
         const t = await getTarget();
