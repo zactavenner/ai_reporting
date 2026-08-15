@@ -41,7 +41,13 @@ const API_TOOLS: ToolDef[] = [
   { name: 'get_ads_overview', description: 'Full Meta hierarchy + attribution totals for a client' },
 ];
 
-const ALL_TOOLS = [...META_TOOLS, ...API_TOOLS];
+const JEREMY_TOOLS: ToolDef[] = [
+  { name: 'jeremy_review_ads', description: 'Run the funded-outcome review and raise recommendations (no Meta writes)' },
+  { name: 'jeremy_list_recommendations', description: 'List JEREMY recommendations (optionally by status)' },
+  { name: 'jeremy_prepare_campaign_draft', description: 'Validate inputs and create a draft launch only' },
+];
+
+const ALL_TOOLS = [...META_TOOLS, ...API_TOOLS, ...JEREMY_TOOLS];
 const READONLY_TOOLS = ALL_TOOLS.filter((t) => !t.write).map((t) => t.name);
 
 export function AgentMcpPanel({ clientId }: AgentMcpPanelProps) {
@@ -93,7 +99,9 @@ export function AgentMcpPanel({ clientId }: AgentMcpPanelProps) {
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-primary" />
           <span className="font-semibold text-sm">AI Agent · MCP Tools</span>
-          <Badge variant="secondary" className="text-[10px]">{META_TOOLS.length} Meta · {API_TOOLS.length} API</Badge>
+          <Badge variant="secondary" className="text-[10px]">
+            {META_TOOLS.length} Meta · {API_TOOLS.length} API · {JEREMY_TOOLS.length} Jeremy
+          </Badge>
         </div>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
@@ -149,6 +157,25 @@ export function AgentMcpPanel({ clientId }: AgentMcpPanelProps) {
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Full API usage instructions (allowed tables, filter syntax, relations, composites) are sent to the client automatically in the MCP <code>initialize</code> response — no extra setup for new connections.
+            </p>
+          </div>
+
+          {/* Media Buyer (JEREMY) tools */}
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-2">Media Buyer (JEREMY) tools</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+              {JEREMY_TOOLS.map((t) => (
+                <div key={t.name} className="flex items-start gap-2 text-xs p-2 rounded border bg-background">
+                  <Badge variant="outline" className="text-[10px] mt-0.5 shrink-0">READ</Badge>
+                  <div className="min-w-0">
+                    <div className="font-mono font-medium truncate">{t.name}</div>
+                    <div className="text-muted-foreground">{t.description}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              JEREMY has no MCP tool that applies a recommendation or publishes to Meta — applying changes and launching campaigns stay explicit operator actions in the dashboard.
             </p>
           </div>
 
