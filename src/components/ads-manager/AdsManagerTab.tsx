@@ -25,6 +25,8 @@ import { AgentMcpPanel } from './shared/AgentMcpPanel';
 import { NewCampaignWizard } from './NewCampaignWizard';
 import { LaunchReadinessCard } from './LaunchReadinessCard';
 import { LaunchesTab } from './LaunchesTab';
+import { LaunchCenterTab } from './LaunchCenterTab';
+import { JeremyReviewTab } from './JeremyReviewTab';
 import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 import { useQuery } from '@tanstack/react-query';
@@ -516,6 +518,8 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           <TabsTrigger value="adsets">Ad Sets {filterCampaignName ? `(${adSets.length})` : ''}</TabsTrigger>
           <TabsTrigger value="ads">Ads {filterAdSetName ? `(${ads.length})` : ''}</TabsTrigger>
           <TabsTrigger value="launches">Launches</TabsTrigger>
+          <TabsTrigger value="launch-center">Launch Center</TabsTrigger>
+          <TabsTrigger value="jeremy">Jeremy Review</TabsTrigger>
         </TabsList>
 
         <div className="mt-3 space-y-3">
@@ -562,6 +566,12 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
         </TabsContent>
         <TabsContent value="launches">
           <LaunchesTab clientId={clientId} />
+        </TabsContent>
+        <TabsContent value="launch-center">
+          <LaunchCenterTab clientId={clientId} clientName={clientName} />
+        </TabsContent>
+        <TabsContent value="jeremy">
+          <JeremyReviewTab clientId={clientId} clientName={clientName} />
         </TabsContent>
       </Tabs>
 
