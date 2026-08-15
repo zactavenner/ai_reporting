@@ -139,11 +139,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: ledger } = await sb
+    let { data: ledger } = await sb
       .from('agency_daily_report_clients')
       .select('id, client_id, client_name, status, attempts, validation_passed, last_error, dispatched_at')
       .eq('agency_run_id', run.id);
-    const rows = ledger ?? [];
+    let rows = ledger ?? [];
 
     /* ── 3. reconcile from the per-client worker ledger ─────────────────────── */
     const { data: workerRuns } = await sb
