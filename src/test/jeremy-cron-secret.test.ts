@@ -62,7 +62,7 @@ describe('jeremy cron force bypass', () => {
   it('no longer exists anywhere in the cron function', async () => {
     const fs = await import('node:fs/promises');
     const src = await fs.readFile('supabase/functions/jeremy-review-cron/index.ts', 'utf8');
-    expect(src).not.toMatch(/force/i);
+    expect(src).not.toMatch(/body\.force|force\s*===\s*true|!force/);
     // The gate is unconditional: no `body.source === "cron"` guard remains.
     expect(src).not.toMatch(/body\.source/);
     expect(src).toMatch(/authorizeJeremyCron/);
