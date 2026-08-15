@@ -224,8 +224,9 @@ async function fetchGHLContacts(
   locationId: string,
   limit: number = 100,
   startAfterId?: string,
-  page?: number
-): Promise<{ contacts: GHLContact[]; nextPage?: number; total?: number }> {
+  page?: number,
+  requireDateAddedDesc: boolean = false,
+): Promise<{ contacts: GHLContact[]; nextPage?: number; total?: number; dateAddedDesc: boolean }> {
   const headers = {
     'Authorization': `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
@@ -240,6 +241,9 @@ async function fetchGHLContacts(
       limit,  // GHL v2 accepts both; send both for compatibility
       page: page || 1,
     };
+    if (requireDateAddedDesc) {
+      body.sort = [{ field: 'dateAdded', direction: 'desc' }];
+    }
 
     const response = await fetchGHL(`${GHL_BASE_URL}/contacts/search`, {
       method: 'POST',
@@ -253,14 +257,27 @@ async function fetchGHLContacts(
       const total = data.total || data.meta?.total || 0;
       const currentPage = data.currentPage || data.meta?.currentPage || page || 1;
       const nextPage = contacts.length === limit ? currentPage + 1 : undefined;
-      return { contacts, nextPage, total };
+      const dateAddedDesc = contacts.every((c: GHLContact, i: number) => {
+        if (!c.dateAdded || Number.isNaN(Date.parse(c.dateAdded))) return false;
+        if (i === 0) return true;
+        return Date.parse(contacts[i - 1].dateAdded) >= Date.parse(c.dateAdded);
+      });
+      if (requireDateAddedDesc && !dateAddedDesc) {
+        throw new Error('GHL contact search did not honor deterministic dateAdded descending order');
+      }
+      return { contacts, nextPage, total, dateAddedDesc };
     }
 
     // If POST /contacts/search returns 400, fall back to GET /contacts/
     const errorText = await response.text();
     console.warn(`POST /contacts/search failed (${response.status}), falling back to GET /contacts/: ${errorText.substring(0, 200)}`);
   } catch (err) {
+    if (requireDateAddedDesc) throw err;
     console.warn(`POST /contacts/search threw error, falling back to GET /contacts/:`, err);
+  }
+
+  if (requireDateAddedDesc) {
+    throw new Error('GHL advanced contact search failed; refusing an unbounded daily fallback');
   }
 
   // Fallback: deprecated GET /contacts/ endpoint (still works for some locations)
@@ -286,6 +303,7 @@ async function fetchGHLContacts(
     contacts,
     nextPage: nextPageExists ? (page || 1) + 1 : undefined,
     total,
+    dateAddedDesc: false,
   };
 }
 
@@ -1186,7 +1204,8 @@ async function syncPipelineOpportunitiesIncremental(
   client: { id: string; name: string; ghl_api_key: string; ghl_location_id: string },
   fundedPipelineId: string | null,
   fundedStageIds: string[],
-  committedStageIds: string[]
+  committedStageIds: string[],
+  maxPages: number = 50,
 ): Promise<{ funded: number; committed: number; opportunitiesProcessed: number; errors: string[] }> {
   const result = { funded: 0, committed: 0, opportunitiesProcessed: 0, errors: [] as string[] };
   
@@ -1207,7 +1226,7 @@ async function syncPipelineOpportunitiesIncremental(
     const allOpportunities: any[] = [];
     let hasMore = true;
     let startAfterId: string | null = null;
-    const MAX_PAGES = 50;
+    const MAX_PAGES = maxPages;
     let pageCount = 0;
     const seenOppIds = new Set<string>();
     
@@ -1233,6 +1252,7 @@ async function syncPipelineOpportunitiesIncremental(
       const newOpps = opportunities.filter((o: any) => !seenOppIds.has(o.id));
       if (newOpps.length === 0 && opportunities.length > 0) {
         console.log(`Incremental sync: pagination not advancing, stopping after ${pageCount} pages`);
+        result.errors.push(`Pipeline pagination did not advance after ${pageCount} page(s); results may be incomplete`);
         hasMore = false;
         break;
       }
@@ -1250,6 +1270,9 @@ async function syncPipelineOpportunitiesIncremental(
       pageCount++;
       await new Promise(resolve => setTimeout(resolve, 150));
     }
+    if (hasMore && pageCount >= MAX_PAGES) {
+      throw new Error(`configured pipeline exceeded the verified ${MAX_PAGES * 100}-opportunity safety bound`);
+    }
     
     console.log(`Fetched ${allOpportunities.length} opportunities from pipeline for ${client.name}`);
     
@@ -1261,6 +1284,7 @@ async function syncPipelineOpportunitiesIncremental(
       const monetaryValue = opp.monetaryValue || opp.monetary_value || 0;
       const stageName = opp.pipelineStageName || opp.stageName || '';
       const status = opp.status || 'open';
+      const stageChangedAt = opp.lastStageChangeAt || opp.dateUpdated || opp.dateAdded || new Date().toISOString();
       
       // Update the lead with opportunity data if contact exists
       if (contactId) {
@@ -1285,14 +1309,14 @@ async function syncPipelineOpportunitiesIncremental(
         // Check if funded_investor already exists (by contactId)
         const { data: existing } = await supabase
           .from('funded_investors')
-          .select('id')
+          .select('id, funded_amount, funded_at, is_verified_funded')
           .eq('client_id', client.id)
           .eq('external_id', externalId)
           .maybeSingle();
         
         if (!existing) {
           // Create new funded investor
-          let fundedAt = opp.lastStageChangeAt || opp.dateUpdated || opp.dateAdded || new Date().toISOString();
+          const fundedAt = stageChangedAt;
           
           let leadId: string | null = null;
           let firstContactAt: string | null = null;
@@ -1330,16 +1354,29 @@ async function syncPipelineOpportunitiesIncremental(
             name,
             lead_id: leadId,
             funded_amount: monetaryValue,
-            funded_at: fundedAt,
+            funded_at: stageChangedAt,
             first_contact_at: firstContactAt,
             time_to_fund_days: timeToFundDays,
             calls_to_fund: callsToFund,
             source: 'pipeline_stage',
+            is_verified_funded: true,
+            verification_source: 'configured_pipeline_stage',
           });
           
           if (!insertError) {
             result.funded++;
             console.log(`Created funded investor: ${name} ($${monetaryValue})`);
+          }
+        } else {
+          const { error: updateError } = await supabase.from('funded_investors').update({
+            funded_amount: monetaryValue,
+            funded_at: stageChangedAt,
+            is_verified_funded: true,
+            verification_source: 'configured_pipeline_stage',
+            source: 'pipeline_stage',
+          }).eq('id', existing.id);
+          if (!updateError && (!existing.is_verified_funded || Number(existing.funded_amount || 0) !== Number(monetaryValue))) {
+            result.funded++;
           }
         }
       }
@@ -1351,14 +1388,14 @@ async function syncPipelineOpportunitiesIncremental(
         // Check if record already exists
         const { data: existing } = await supabase
           .from('funded_investors')
-          .select('id, commitment_amount')
+          .select('id, commitment_amount, committed_at')
           .eq('client_id', client.id)
           .eq('external_id', externalId)
           .maybeSingle();
         
         if (!existing) {
           // Create new committed investor record
-          let commitmentAt = opp.lastStageChangeAt || opp.dateUpdated || opp.dateAdded || new Date().toISOString();
+          const commitmentAt = stageChangedAt;
           
           let leadId: string | null = null;
           if (contactId) {
@@ -1382,8 +1419,9 @@ async function syncPipelineOpportunitiesIncremental(
             name,
             lead_id: leadId,
             commitment_amount: monetaryValue,
+            committed_at: commitmentAt,
             funded_amount: 0,
-            funded_at: commitmentAt,
+            funded_at: null,
             source: 'commitment_stage',
           });
           
@@ -1391,12 +1429,14 @@ async function syncPipelineOpportunitiesIncremental(
             result.committed++;
             console.log(`Created committed investor: ${name} ($${monetaryValue})`);
           }
-        } else if (existing && !existing.commitment_amount && monetaryValue > 0) {
-          // Update existing record with commitment amount
-          await supabase
+        } else if (existing && (!existing.commitment_amount || !existing.committed_at)) {
+          // Preserve the first known commitment date while repairing records
+          // created by the legacy path that wrote it into funded_at.
+          const { error: updateError } = await supabase
             .from('funded_investors')
-            .update({ commitment_amount: monetaryValue })
+            .update({ commitment_amount: monetaryValue, committed_at: existing.committed_at || stageChangedAt })
             .eq('id', existing.id);
+          if (!updateError) result.committed++;
         }
       }
     }
@@ -1457,7 +1497,8 @@ async function syncClientContacts(
   let hasMore = true;
   let currentPage = 1;
   let totalProcessed = 0;
-  const MAX_CONTACTS = syncTimeline ? 500 : 50000; // Higher limit for larger accounts
+  let priorPageLastDate: number | null = null;
+  const MAX_CONTACTS = lightweightLeadSync ? 2000 : (syncTimeline ? 500 : 50000);
   
   // Calculate cutoff date if sinceDateDays is specified
   const cutoffDate = sinceDateDays ? new Date(Date.now() - sinceDateDays * 24 * 60 * 60 * 1000) : null;
@@ -1470,13 +1511,25 @@ async function syncClientContacts(
 
   try {
     while (hasMore && totalProcessed < MAX_CONTACTS) {
-      const { contacts, nextPage, total } = await fetchGHLContacts(
+      const { contacts, nextPage, total, dateAddedDesc } = await fetchGHLContacts(
         client.ghl_api_key,
         client.ghl_location_id,
         100,
         undefined,
-        currentPage
+        currentPage,
+        !!(lightweightLeadSync && cutoffDate),
       );
+
+      if (lightweightLeadSync && cutoffDate) {
+        if (!dateAddedDesc) throw new Error('recent contact search order could not be verified');
+        const firstDate = contacts[0]?.dateAdded ? Date.parse(contacts[0].dateAdded) : NaN;
+        if (priorPageLastDate !== null && Number.isFinite(firstDate) && firstDate > priorPageLastDate) {
+          throw new Error('recent contact pagination is not monotonically dateAdded descending');
+        }
+        const lastContact = contacts[contacts.length - 1];
+        const lastDate = lastContact?.dateAdded ? Date.parse(lastContact.dateAdded) : NaN;
+        if (Number.isFinite(lastDate)) priorPageLastDate = lastDate;
+      }
 
       if (totalProcessed === 0 && total) {
         console.log(`Total contacts in GHL for ${client.name}: ${total}`);
@@ -1488,6 +1541,7 @@ async function syncClientContacts(
         break;
       }
 
+      let reachedCutoff = false;
       for (const contact of contacts) {
         
         // If sinceDateDays is set and contact is older than cutoff, skip (but count for total)
@@ -1496,9 +1550,12 @@ async function syncClientContacts(
           if (contactDate < cutoffDate) {
             result.skipped++;
             totalProcessed++;
+            reachedCutoff = true;
             continue;
           }
         }
+
+        result.contactsInDateRange++;
         
         try {
           // Get opportunity for this contact to sync opportunity data
@@ -1532,7 +1589,10 @@ async function syncClientContacts(
         totalProcessed++;
       }
 
-      if (nextPage) {
+      if (reachedCutoff && lightweightLeadSync) {
+        // Search order was verified above, so every subsequent page is older.
+        hasMore = false;
+      } else if (nextPage) {
         currentPage = nextPage;
       } else {
         hasMore = false;
@@ -1540,9 +1600,11 @@ async function syncClientContacts(
 
       await new Promise(resolve => setTimeout(resolve, 500));
     }
+    if (hasMore && totalProcessed >= MAX_CONTACTS) {
+      throw new Error(`recent contact pull exceeded the verified ${MAX_CONTACTS}-contact safety bound`);
+    }
     
     result.totalApiContacts = totalProcessed;
-    result.contactsInDateRange = totalProcessed;
     
     // Sync timeline for queued contacts (in batches to avoid timeout)
     if (syncTimeline && contactsForTimeline.length > 0) {
@@ -3898,6 +3960,98 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
+    }
+
+    // Bounded reporting pull: recent contacts/leads plus the one configured
+    // commitment/funded pipeline. It deliberately skips the historical
+    // contact crawl, contact timelines, calendars and metrics; the daily
+    // report worker runs the calendar and recalculation stages separately.
+    if (mode === 'daily_reporting') {
+      if (!targetClientId) {
+        return new Response(JSON.stringify({ success: false, error: 'client_id is required for daily_reporting' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: client, error: clientError } = await supabase
+        .from('clients')
+        .select('id, name, ghl_api_key, ghl_location_id')
+        .eq('id', targetClientId)
+        .maybeSingle();
+      if (clientError || !client) {
+        return new Response(JSON.stringify({ success: false, error: 'Client not found' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!client.ghl_api_key || !client.ghl_location_id) {
+        return new Response(JSON.stringify({ success: false, error: 'Client has no GHL credentials configured' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: settings } = await supabase
+        .from('client_settings')
+        .select('funded_pipeline_id, funded_stage_ids, committed_stage_ids')
+        .eq('client_id', targetClientId)
+        .maybeSingle();
+      const fundedPipelineId: string | null = settings?.funded_pipeline_id || null;
+      const fundedStageIds: string[] = settings?.funded_stage_ids || [];
+      const committedStageIds: string[] = settings?.committed_stage_ids || [];
+
+      const { data: syncLog } = await supabase.from('sync_logs').insert({
+        client_id: targetClientId,
+        sync_type: 'ghl_daily_reporting',
+        status: 'running',
+        started_at: new Date().toISOString(),
+      }).select('id').maybeSingle();
+
+      const contacts = await syncClientContacts(
+        supabase,
+        client as any,
+        syncLog?.id,
+        sinceDateDays || 3,
+        false,
+        true,
+      );
+      const pipeline = await syncPipelineOpportunitiesIncremental(
+        supabase,
+        client as any,
+        fundedPipelineId,
+        fundedStageIds,
+        committedStageIds,
+        10,
+      );
+      const errors = [...contacts.errors, ...pipeline.errors];
+      const recordsSynced = contacts.created + contacts.updated + pipeline.opportunitiesProcessed;
+
+      if (syncLog) {
+        await supabase.from('sync_logs').update({
+          status: errors.length ? 'partial' : 'success',
+          records_synced: recordsSynced,
+          error_message: errors.length ? errors.slice(0, 10).join('; ') : null,
+          completed_at: new Date().toISOString(),
+        }).eq('id', syncLog.id);
+      }
+      await supabase.from('client_settings').update({
+        ghl_last_contacts_sync: new Date().toISOString(),
+      }).eq('client_id', targetClientId);
+      await supabase.from('clients').update({
+        last_ghl_sync_at: new Date().toISOString(),
+        ghl_sync_status: errors.length ? 'error' : 'healthy',
+        ghl_sync_error: errors.length ? errors.slice(0, 3).join('; ') : null,
+      }).eq('id', targetClientId);
+
+      return new Response(JSON.stringify({
+        success: errors.length === 0,
+        mode: 'daily_reporting',
+        lookback_days: sinceDateDays || 3,
+        contacts,
+        pipeline,
+        errors,
+      }), {
+        status: errors.length ? 502 : 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (mode === 'recent_conversations') {

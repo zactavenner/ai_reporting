@@ -33,6 +33,11 @@ const json = (payload: unknown, status = 200) =>
 const mask = (v: string | null | undefined) =>
   !v ? null : `${v.slice(0, 3)}•••${v.slice(-2)}`;
 
+const sha256 = async (value: string): Promise<string> => {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -150,16 +155,44 @@ Deno.serve(async (req) => {
         .eq('id', sendId);
     }
 
+    const chunkPayload = await Promise.all(chunks.map(async (c, i) => ({
+      send_id: sendId,
+      chunk_index: i,
+      chunk_count: chunks.length,
+      chars: c.length,
+      message_text: c,
+      message_hash: await sha256(c),
+    })));
     await sb.from('agency_report_send_chunks').upsert(
-      chunks.map((c, i) => ({ send_id: sendId, chunk_index: i, chunk_count: chunks.length, chars: c.length })),
+      chunkPayload,
       { onConflict: 'send_id,chunk_index', ignoreDuplicates: true },
     );
 
     const { data: chunkRows } = await sb
       .from('agency_report_send_chunks')
-      .select('id, chunk_index, status, provider_message_id')
+      .select('id, chunk_index, status, provider_message_id, message_text, message_hash, claimed_at')
       .eq('send_id', sendId)
       .order('chunk_index');
+
+    if ((chunkRows?.length ?? 0) !== chunks.length) {
+      throw new Error(`chunk ledger mismatch: expected ${chunks.length}, found ${chunkRows?.length ?? 0}`);
+    }
+
+    for (const row of chunkRows ?? []) {
+      const expected = chunkPayload[row.chunk_index];
+      if (!expected) throw new Error(`unexpected chunk index ${row.chunk_index}`);
+      if (row.message_hash && row.message_hash !== expected.message_hash) {
+        throw new Error(`idempotency conflict: chunk ${row.chunk_index} content changed`);
+      }
+      if (!row.message_hash) {
+        await sb.from('agency_report_send_chunks').update({
+          message_text: expected.message_text,
+          message_hash: expected.message_hash,
+        }).eq('id', row.id).is('message_hash', null);
+        row.message_text = expected.message_text;
+        row.message_hash = expected.message_hash;
+      }
+    }
 
     const contactId = await upsertContact(token, locationId, dest.phone_e164!, dest.contact_name || 'Zac');
     if (!contactId) throw new Error('contact upsert returned no id');
@@ -172,21 +205,50 @@ Deno.serve(async (req) => {
         confirmed++; messageIds.push(row.provider_message_id);
         continue; // a partial retry never re-sends a confirmed chunk
       }
-      const chunkText = chunks[row.chunk_index];
+      const chunkText = row.message_text ?? chunks[row.chunk_index];
       if (chunkText === undefined) continue;
+      // Atomic per-chunk claim. A concurrent invocation cannot send the same
+      // unconfirmed chunk unless the prior claim has been stale for 3 minutes.
+      const claimToken = crypto.randomUUID();
+      const staleBefore = new Date(Date.now() - 3 * 60_000).toISOString();
+      const { data: claimed, error: claimError } = await sb
+        .from('agency_report_send_chunks')
+        .update({ status: 'sending', claim_token: claimToken, claimed_at: new Date().toISOString(), error: null })
+        .eq('id', row.id)
+        .neq('status', 'sent')
+        .or(`claimed_at.is.null,claimed_at.lt.${staleBefore}`)
+        .select('id')
+        .maybeSingle();
+      if (claimError || !claimed) {
+        failure = claimError?.message ?? `chunk ${row.chunk_index} is already claimed`;
+        break;
+      }
       try {
         const messageId = await sendSms(token, contactId, dest.phone_e164!, chunkText);
         await sb.from('agency_report_send_chunks').update({
-          status: 'sent', provider_message_id: messageId, error: null, sent_at: new Date().toISOString(),
-        }).eq('id', row.id);
+          status: 'sent', provider_message_id: messageId, error: null,
+          sent_at: new Date().toISOString(), claim_token: null, claimed_at: null,
+        }).eq('id', row.id).eq('claim_token', claimToken);
         confirmed++; messageIds.push(messageId);
       } catch (e) {
         failure = String((e as Error)?.message || e).slice(0, 300);
-        await sb.from('agency_report_send_chunks').update({ status: 'failed', error: failure }).eq('id', row.id);
+        await sb.from('agency_report_send_chunks').update({
+          status: 'failed', error: failure, claim_token: null, claimed_at: null,
+        }).eq('id', row.id).eq('claim_token', claimToken);
         break; // preserve ordering; the next run resumes from this chunk
       }
     }
 
+    // Re-read the authoritative ledger so a concurrent invocation that
+    // completed between our snapshot and claim attempt cannot be overwritten
+    // from `sent` back to `failed`.
+    const { data: finalChunkRows } = await sb.from('agency_report_send_chunks')
+      .select('status, provider_message_id')
+      .eq('send_id', sendId);
+    confirmed = (finalChunkRows ?? []).filter((r) => r.status === 'sent' && !!r.provider_message_id).length;
+    messageIds.splice(0, messageIds.length, ...(finalChunkRows ?? [])
+      .filter((r) => r.status === 'sent' && !!r.provider_message_id)
+      .map((r) => r.provider_message_id));
     const allConfirmed = confirmed === chunks.length && chunks.length > 0;
     await sb.from('agency_report_sends').update({
       status: allConfirmed ? 'sent' : 'failed',

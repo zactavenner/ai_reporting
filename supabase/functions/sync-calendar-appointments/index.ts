@@ -37,7 +37,8 @@ interface AppointmentResult {
 async function fetchCalendarAppointments(
   apiKey: string,
   locationId: string,
-  calendarId: string
+  calendarId: string,
+  boundedRange?: { start: Date; end: Date },
 ): Promise<any[]> {
   const headers = {
     'Authorization': `Bearer ${apiKey}`,
@@ -49,10 +50,10 @@ async function fetchCalendarAppointments(
   
   try {
     // Use date range: last 365 days to future 30 days
-    const startTime = new Date();
-    startTime.setDate(startTime.getDate() - 365);
-    const endTime = new Date();
-    endTime.setDate(endTime.getDate() + 30);
+    const startTime = boundedRange?.start ?? new Date();
+    if (!boundedRange) startTime.setDate(startTime.getDate() - 365);
+    const endTime = boundedRange?.end ?? new Date();
+    if (!boundedRange) endTime.setDate(endTime.getDate() + 30);
     
     // Use the correct GHL API endpoint: /calendars/events
     const url = `${GHL_BASE_URL}/calendars/events?locationId=${locationId}&calendarId=${calendarId}&startTime=${startTime.getTime()}&endTime=${endTime.getTime()}`;
@@ -63,7 +64,7 @@ async function fetchCalendarAppointments(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`GHL calendar events fetch error: ${response.status} - ${errorText}`);
-      return [];
+      throw new Error(`GHL calendar ${calendarId} returned ${response.status}: ${errorText.slice(0, 200)}`);
     }
     
     const data = await response.json();
@@ -80,6 +81,7 @@ async function fetchCalendarAppointments(
     console.log(`Found ${appointments.length} appointments (filtered from ${events.length} events)`);
   } catch (err) {
     console.error(`Error fetching appointments for calendar ${calendarId}:`, err);
+    throw err;
   }
   
   console.log(`Total appointments fetched from calendar ${calendarId}: ${appointments.length}`);
@@ -389,12 +391,33 @@ serve(async (req) => {
   }
 
   try {
-    const { clientId } = await req.json();
+    const body = await req.json();
+    const { clientId } = body;
+    const reportingMode = body.reporting_mode === true;
+    const reportDate = typeof body.report_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.report_date)
+      ? body.report_date
+      : null;
+    let boundedRange: { start: Date; end: Date } | undefined;
+    if (reportingMode && reportDate) {
+      // One-day padding protects LA-day boundaries while bounding this pull to
+      // the trailing 30-day reporting horizon.
+      const start = new Date(`${reportDate}T00:00:00Z`);
+      start.setUTCDate(start.getUTCDate() - 30);
+      const end = new Date(`${reportDate}T00:00:00Z`);
+      end.setUTCDate(end.getUTCDate() + 2);
+      boundedRange = { start, end };
+    }
 
     if (!clientId) {
       return new Response(
         JSON.stringify({ error: 'clientId is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (reportingMode && !reportDate) {
+      return new Response(
+        JSON.stringify({ error: 'valid report_date is required in reporting_mode' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
@@ -496,7 +519,8 @@ serve(async (req) => {
         const appointments = await fetchCalendarAppointments(
           client.ghl_api_key,
           client.ghl_location_id,
-          calendarId
+          calendarId,
+          boundedRange,
         );
 
         for (const appt of appointments) {
@@ -532,7 +556,8 @@ serve(async (req) => {
         const appointments = await fetchCalendarAppointments(
           client.ghl_api_key,
           client.ghl_location_id,
-          calendarId
+          calendarId,
+          boundedRange,
         );
 
         for (const appt of appointments) {
@@ -591,7 +616,7 @@ serve(async (req) => {
       }
     }
 
-    if (uniqueContactIds.size > 0) {
+    if (!reportingMode && uniqueContactIds.size > 0) {
       console.log(`Triggering deep sync for ${uniqueContactIds.size} unique contacts...`);
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -649,7 +674,9 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: result.errors.length === 0,
+        reporting_mode: reportingMode,
+        report_date: reportDate,
         client: client.name,
         trackedCalendars: trackedCalendarIds,
         reconnectCalendars: reconnectCalendarIds,
@@ -660,7 +687,7 @@ serve(async (req) => {
         totalAppointments: result.appointments.length,
         sampleAppointments: result.appointments.slice(0, 10),
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: result.errors.length ? 502 : 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
     console.error('Calendar sync error:', err);

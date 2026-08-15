@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   aggregateWindow, buildWindows, buildIndicators, indicator,
   chunkSms, SMS_CHUNK_LIMIT, inLocalWindow, laMinutesOfDay, yesterdayLa,
-  GREEN, RED, NEUTRAL,
-  type FunnelRow,
+  agencyScheduleState, workerRunIsCurrent, buildAgencyMessage, GREEN, RED, NEUTRAL,
+  type FunnelRow, type AgencyWorkerReport,
 } from '../../supabase/functions/_shared/agencyReport';
 
 const REPORT_DATE = '2026-08-14';
@@ -62,6 +62,22 @@ describe('window aggregation', () => {
     expect(w.rates.show_rate).toBeCloseTo(18.18, 2);
     // Averaging daily CPLs would give ($1 + $100)/2; correct is 200/101.
     expect(w.costs.cpl).toBeCloseTo(1.98, 2);
+  });
+
+  it('counts missing sparse-view rows as zero-activity calendar days for pacing', () => {
+    const w = aggregateWindow(
+      [
+        { date: '2026-08-13', spend: 70, leads_total: 7 },
+        { date: '2026-08-14', spend: 140, leads_total: 14 },
+      ],
+      REPORT_DATE,
+      7,
+    );
+    expect(w.days_present).toBe(2);
+    expect(w.days_expected).toBe(7);
+    expect(w.totals.leads).toBe(21);
+    expect(w.per_day.leads).toBe(3);
+    expect(w.per_day.spend).toBe(30);
   });
 
   it('returns null (unavailable) rather than 0 when a denominator is missing', () => {
@@ -153,6 +169,51 @@ describe('SMS chunking', () => {
   });
 });
 
+describe('validated-only agency rollup', () => {
+  it('never adds unvalidated client numbers to portfolio totals', () => {
+    const validWindows = buildWindows([{ date: REPORT_DATE, spend: 100, leads_total: 10 }], REPORT_DATE);
+    const invalidWindows = buildWindows([{ date: REPORT_DATE, spend: 9999, leads_total: 999 }], REPORT_DATE);
+    const workers = new Map<string, AgencyWorkerReport>([
+      ['valid', {
+        validation_passed: true,
+        report_json: { windows: validWindows, metric_availability: { spend: true, leads: true } },
+        anomalies: [],
+      }],
+      ['invalid', {
+        validation_passed: false,
+        report_json: { windows: invalidWindows, metric_availability: { spend: true, leads: true } },
+        anomalies: [{ severity: 'critical', code: 'stale_data' }],
+      }],
+    ]);
+    const built = buildAgencyMessage(REPORT_DATE, [
+      { client_id: 'valid', client_name: 'Valid Client', status: 'completed', last_error: null },
+      { client_id: 'invalid', client_name: 'Invalid Client', status: 'validation_failed', last_error: 'stale' },
+    ], workers);
+
+    expect(built.counts).toEqual({ valid: 1, unavailable: 1, failed: 0 });
+    expect(built.text).toContain('Spend $100 [1/1] · Leads 10 [1/1]');
+    expect(built.text).not.toContain('$9,999');
+    expect(built.text).not.toContain('Leads 999');
+    expect(built.text).toContain('Invalid Client\n• ⚪ metrics unavailable (validation failed)');
+  });
+
+  it('computes portfolio CPL only across clients with both spend and lead coverage', () => {
+    const full = buildWindows([{ date: REPORT_DATE, spend: 100, leads_total: 10 }], REPORT_DATE);
+    const noMeta = buildWindows([{ date: REPORT_DATE, spend: 0, leads_total: 100 }], REPORT_DATE);
+    const workers = new Map<string, AgencyWorkerReport>([
+      ['full', { validation_passed: true, report_json: { windows: full, metric_availability: { spend: true, leads: true, cpl: true } } }],
+      ['no-meta', { validation_passed: true, report_json: { windows: noMeta, metric_availability: { spend: false, leads: true, cpl: false } } }],
+    ]);
+    const built = buildAgencyMessage(REPORT_DATE, [
+      { client_id: 'full', client_name: 'Full', status: 'completed', last_error: null },
+      { client_id: 'no-meta', client_name: 'No Meta', status: 'completed', last_error: null },
+    ], workers);
+
+    expect(built.text).toContain('Leads 110 [2/2] · CPL $10 [1/2]');
+    expect(built.text).not.toContain('CPL $0.91');
+  });
+});
+
 describe('DST-safe local-time gating', () => {
   // 11:30 UTC = 04:30 PDT (summer) but 03:30 PST (winter).
   it('acts at 04:xx local during daylight time', () => {
@@ -176,9 +237,32 @@ describe('DST-safe local-time gating', () => {
     expect(laMinutesOfDay(new Date('2026-01-14T13:00:00Z'))).toBe(5 * 60);
   });
 
+  it('keeps 05:00-05:04 open for deadline finalization and delivery retry', () => {
+    const deadline = agencyScheduleState(new Date('2026-08-14T12:00:00Z'));
+    expect(deadline.can_act).toBe(true);
+    expect(deadline.can_dispatch).toBe(false);
+    expect(deadline.past_deadline).toBe(true);
+    expect(agencyScheduleState(new Date('2026-08-14T12:04:00Z')).can_act).toBe(true);
+    expect(agencyScheduleState(new Date('2026-08-14T12:05:00Z')).can_act).toBe(false);
+  });
+
   it('reports YESTERDAY in LA even when UTC has already rolled over', () => {
     // 2026-08-15T06:00Z is still 2026-08-14 in LA, so yesterday is the 13th.
     expect(yesterdayLa(new Date('2026-08-15T06:00:00Z'))).toBe('2026-08-13');
     expect(yesterdayLa(new Date('2026-08-15T11:30:00Z'))).toBe('2026-08-14');
+  });
+});
+
+describe('fresh worker-attempt boundary', () => {
+  const collection = '2026-08-14T11:00:00.000Z';
+
+  it('rejects a completed row from before the agency collection attempt', () => {
+    expect(workerRunIsCurrent('2026-08-14T10:59:59.999Z', collection)).toBe(false);
+  });
+
+  it('accepts only a worker started at or after the collection attempt', () => {
+    expect(workerRunIsCurrent(collection, collection)).toBe(true);
+    expect(workerRunIsCurrent('2026-08-14T11:00:00.001Z', collection)).toBe(true);
+    expect(workerRunIsCurrent(null, collection)).toBe(false);
   });
 });
