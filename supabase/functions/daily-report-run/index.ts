@@ -195,6 +195,7 @@ Deno.serve(async (req) => {
       // Every required sync is recorded and hard-fails the run. A sync that
       // errors, times out or reports internal errors is never silently ignored.
       const syncFailures: Array<{ source: string; detail: unknown }> = [];
+      const anomalyQueue: any[] = [];
       if (body.skip_sync) {
         stage('sync', 'skipped', { reason: 'skip_sync' });
         syncFailures.push({ source: 'skip_sync', detail: 'sync stage was skipped; freshness is unverified' });
@@ -306,6 +307,7 @@ Deno.serve(async (req) => {
         .eq('date', reportDate);
 
       const anomalies: any[] = [];
+      anomalies.push(...anomalyQueue);
       for (const f of syncFailures) {
         anomalies.push({
           code: 'sync_failed', severity: 'critical', source: f.source,
