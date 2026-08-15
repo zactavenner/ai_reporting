@@ -380,6 +380,9 @@ Deno.serve(async (req) => {
           ghl_last_synced_at: freshRows?.ghl_last_synced_at ?? null,
           calls_last_synced_at: freshRows?.calls_last_synced_at ?? null,
           leads_last_created_at: freshRows?.leads_last_created_at ?? null,
+          max_age_hours: FRESHNESS_MAX_AGE_HOURS,
+          stale_sources: staleSources,
+          fresh: staleSources.length === 0,
         },
         funnel: {
           ads: {
