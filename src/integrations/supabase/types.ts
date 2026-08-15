@@ -1040,6 +1040,7 @@ export type Database = {
           clients_total: number
           clients_unavailable: number
           clients_valid: number
+          collection_started_at: string | null
           created_at: string
           delivery: Json
           finalized_at: string | null
@@ -1057,6 +1058,7 @@ export type Database = {
           clients_total?: number
           clients_unavailable?: number
           clients_valid?: number
+          collection_started_at?: string | null
           created_at?: string
           delivery?: Json
           finalized_at?: string | null
@@ -1074,6 +1076,7 @@ export type Database = {
           clients_total?: number
           clients_unavailable?: number
           clients_valid?: number
+          collection_started_at?: string | null
           created_at?: string
           delivery?: Json
           finalized_at?: string | null
@@ -1446,9 +1449,13 @@ export type Database = {
           chars: number
           chunk_count: number
           chunk_index: number
+          claim_token: string | null
+          claimed_at: string | null
           created_at: string
           error: string | null
           id: string
+          message_hash: string | null
+          message_text: string | null
           provider_message_id: string | null
           send_id: string
           sent_at: string | null
@@ -1459,9 +1466,13 @@ export type Database = {
           chars?: number
           chunk_count?: number
           chunk_index: number
+          claim_token?: string | null
+          claimed_at?: string | null
           created_at?: string
           error?: string | null
           id?: string
+          message_hash?: string | null
+          message_text?: string | null
           provider_message_id?: string | null
           send_id: string
           sent_at?: string | null
@@ -1472,9 +1483,13 @@ export type Database = {
           chars?: number
           chunk_count?: number
           chunk_index?: number
+          claim_token?: string | null
+          claimed_at?: string | null
           created_at?: string
           error?: string | null
           id?: string
+          message_hash?: string | null
+          message_text?: string | null
           provider_message_id?: string | null
           send_id?: string
           sent_at?: string | null
@@ -11370,7 +11385,7 @@ export type Database = {
           first_contact_at: string | null
           flags: Json
           funded_amount: number
-          funded_at: string
+          funded_at: string | null
           id: string
           is_verified_funded: boolean
           lead_id: string | null
@@ -11390,7 +11405,7 @@ export type Database = {
           first_contact_at?: string | null
           flags?: Json
           funded_amount?: number
-          funded_at?: string
+          funded_at?: string | null
           id?: string
           is_verified_funded?: boolean
           lead_id?: string | null
@@ -11410,7 +11425,7 @@ export type Database = {
           first_contact_at?: string | null
           flags?: Json
           funded_amount?: number
-          funded_at?: string
+          funded_at?: string | null
           id?: string
           is_verified_funded?: boolean
           lead_id?: string | null
