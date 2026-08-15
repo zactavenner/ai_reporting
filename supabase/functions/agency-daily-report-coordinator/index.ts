@@ -145,6 +145,15 @@ Deno.serve(async (req) => {
       .eq('agency_run_id', run.id);
     let rows = ledger ?? [];
 
+    // A dry run writes nothing, so synthesise the ledger from the live active
+    // client list to exercise realistic message size and chunking.
+    if (dryRun && rows.length === 0) {
+      rows = clientList.map((c) => ({
+        id: c.id, client_id: c.id, client_name: c.name, status: 'pending',
+        attempts: 0, validation_passed: null, last_error: null, dispatched_at: null,
+      })) as any;
+    }
+
     /* ── 3. reconcile from the per-client worker ledger ─────────────────────── */
     const { data: workerRuns } = await sb
       .from('daily_report_runs')
@@ -217,7 +226,7 @@ Deno.serve(async (req) => {
       .from('agency_daily_report_clients')
       .select('id, client_id, client_name, status, attempts, validation_passed, last_error, dispatched_at')
       .eq('agency_run_id', run.id);
-    let current = fresh ?? rows;
+    let current = dryRun ? rows : (fresh?.length ? fresh : rows);
     const outstanding = current.filter((r) => !TERMINAL.includes(r.status));
 
     if (pastDeadline && !dryRun && outstanding.length) {
