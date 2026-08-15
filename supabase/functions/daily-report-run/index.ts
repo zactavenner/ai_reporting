@@ -469,6 +469,12 @@ Deno.serve(async (req) => {
       stage('validate', validationPassed ? 'ok' : 'failed', { anomalies, reconciliation });
 
       // ── 5. REPORT (deterministic, DB-sourced) ────────────────────────────
+      const windows = buildWindows((funnelRows ?? []) as any, reportDate);
+      const indicators = buildIndicators(windows, {
+        spendTarget: configuration.daily_ad_spend_target
+          ? Number(configuration.daily_ad_spend_target)
+          : null,
+      });
       const report = {
         client: { id: client.id, name: client.name },
         report_date: reportDate,
