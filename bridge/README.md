@@ -8,9 +8,18 @@ contract is identical so the Lovable functions work unchanged.
 
 - `GET  /health`
 - `GET  /status`  → `{ status, phone_number, qr, qr_at }` (Bearer BRIDGE_TOKEN)
+- `GET  /groups`  → `{ groups: [{ jid, subject, participant_count, is_announce }] }`
+  (Bearer BRIDGE_TOKEN) — authoritative joined-group subjects straight from the
+  WhatsApp server. Required by the daily agency digest to resolve a group by its
+  exact subject; chat display names in the DB are contaminated with sender names.
 - `POST /send`    → `{ jid, message }` (Bearer BRIDGE_TOKEN)
 - `POST /logout`
 - `POST /reset`   — wipes local session, forces new QR pairing
+
+## After redeploying (group digest routing)
+
+`/groups` ships with this version. Once the redeploy is live, the backend can
+sync group subjects and resolve the "High Performance Reporting Group" target.
 
 ## Env vars
 
