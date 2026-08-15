@@ -557,9 +557,9 @@ Deno.serve(async (req) => {
   // Exactly ONE consolidated message per report date, after every client run
   // finished. Idempotency lives in agency_digest_sends, so the duplicate DST
   // cron invocation can never deliver twice.
-  if (!body.client_id) {
+  if (!body.client_id && deliver) {
     const digest = await invoke('whatsapp-agency-digest', {
-      secret: await internalSecret(),
+      secret: presented,
       action: 'send_digest',
       digest_date: reportDate,
       cadence: 'daily',
