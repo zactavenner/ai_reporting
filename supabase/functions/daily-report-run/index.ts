@@ -13,6 +13,11 @@
 // already-calculated values. The Google sheet is output-only, after validation.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { authorizeDailyReportRun } from '../_shared/dailyReportSecret.ts';
+import {
+  buildWindows,
+  buildIndicators,
+  addDays as addDaysIso,
+} from '../_shared/agencyReport.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +26,8 @@ const corsHeaders = {
 
 const TZ = 'America/Los_Angeles';
 const RUN_HOUR_LOCAL = 6;
+/** Reporting window: yesterday plus rolling 7/14/30-day comparisons. */
+const WINDOW_DAYS = 30;
 const TRAILING_DAYS = 7;
 /** A sync timestamp older than this makes the report stale, not merely noisy. */
 const FRESHNESS_MAX_AGE_HOURS = 26;
