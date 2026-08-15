@@ -9,15 +9,15 @@
 //   2. enrol every ACTIVE client into agency_daily_report_clients
 //   3. reconcile statuses from public.daily_report_runs
 //   4. dispatch daily-report-run for pending / retryable clients, max 3 at once
-//   5. finalize once everything is terminal, at 04:50, or hard-stop at 05:00
+//   5. stop dispatching at 04:50; reconcile until terminal or hard-stop at 05:00
 //   6. hand ONE consolidated SMS to agency-ghl-report-send (idempotent)
 //
 // No secret, credential or phone number is ever logged or returned.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { authorizeDailyReportRun } from '../_shared/dailyReportSecret.ts';
 import {
-  TZ, laDate, laHour, laMinutesOfDay, yesterdayLa, inLocalWindow,
-  chunkSms, money, buildIndicators, type Windows,
+  TZ, laDate, laHour, yesterdayLa,
+  chunkSms, buildAgencyMessage, agencyScheduleState, workerRunIsCurrent,
 } from '../_shared/agencyReport.ts';
 
 const corsHeaders = {
@@ -27,10 +27,6 @@ const corsHeaders = {
 
 const WINDOW_START_HOUR = 4;
 const WINDOW_END_HOUR = 5;
-/** 04:50 — stop dispatching and finalize with whatever is terminal. */
-const FINALIZE_MINUTE = WINDOW_START_HOUR * 60 + 50;
-/** 05:00 — hard deadline; anything unfinished is timed out and reported. */
-const DEADLINE_MINUTE = WINDOW_END_HOUR * 60;
 const MAX_CONCURRENT = 3;
 const MAX_ATTEMPTS = 3; // initial dispatch + at most two retries
 const TERMINAL = ['completed', 'validation_failed', 'error', 'timed_out'];
@@ -54,7 +50,9 @@ Deno.serve(async (req) => {
 
   const dryRun = body.dry_run === true;
   const now = new Date();
-  const inWindow = inLocalWindow(now, WINDOW_START_HOUR, WINDOW_END_HOUR);
+  const schedule = agencyScheduleState(now);
+  const minuteOfDay = schedule.minute;
+  const inWindow = schedule.can_act;
 
   // The local-time gate has no bypass. Only an authenticated dry run may look
   // at another date outside the window.
@@ -66,9 +64,8 @@ Deno.serve(async (req) => {
     ? body.report_date
     : yesterdayLa(now);
 
-  const minuteOfDay = laMinutesOfDay(now);
-  const pastFinalize = inWindow ? minuteOfDay >= FINALIZE_MINUTE : true;
-  const pastDeadline = inWindow ? minuteOfDay >= DEADLINE_MINUTE : true;
+  const pastFinalize = schedule.past_finalize_cutoff;
+  const pastDeadline = schedule.past_deadline;
 
   const invoke = async (fn: string, payload: Record<string, unknown>, timeoutMs = 60_000): Promise<Res> => {
     const ac = new AbortController();
@@ -91,18 +88,82 @@ Deno.serve(async (req) => {
     }
   };
 
+  // Authenticated, no-send end-to-end readiness mode. It runs one real client
+  // worker synchronously (all pulls + validation), then exercises the GHL
+  // contact/chunk route with dry_run=true. It never writes an agency run or
+  // sends an SMS, and is intentionally bounded to one explicitly named client.
+  if (dryRun && body.execute_workers === true) {
+    const clientId = typeof body.client_id === 'string' ? body.client_id : null;
+    if (!clientId) return json({ error: 'client_id is required when execute_workers=true' }, 400);
+    const workerCall = await invoke('daily-report-run', {
+      secret: presented,
+      client_id: clientId,
+      report_date: reportDate,
+      deliver: false,
+      dry_run: true,
+      background: false,
+      force: true,
+      source: 'agency_coordinator_readiness',
+    }, 420_000);
+    const { data: client } = await sb.from('clients').select('id, name').eq('id', clientId).maybeSingle();
+    const { data: worker } = await sb.from('daily_report_runs')
+      .select('client_id, status, validation_passed, error, report_json, anomalies, started_at, finished_at')
+      .eq('client_id', clientId)
+      .eq('report_date', reportDate)
+      .maybeSingle();
+    if (!workerCall.ok || !worker) {
+      return json({
+        ok: false, dry_run: true, sent: false, report_date: reportDate,
+        worker_http_status: workerCall.status, error: worker?.error ?? workerCall.body?.error ?? 'worker produced no audit row',
+      }, 502);
+    }
+    const ledger = [{
+      client_id: clientId,
+      client_name: client?.name ?? null,
+      status: worker.status,
+      last_error: worker.error ?? null,
+    }];
+    const built = buildAgencyMessage(reportDate, ledger, new Map([[clientId, worker]]));
+    const route = await invoke('agency-ghl-report-send', {
+      secret: presented,
+      dry_run: true,
+      report_date: reportDate,
+      cadence: 'daily',
+      kind: 'daily_report',
+      text: built.text,
+    }, 45_000);
+    return json({
+      ok: worker.validation_passed === true && route.ok,
+      dry_run: true,
+      sent: false,
+      report_date: reportDate,
+      worker: {
+        status: worker.status,
+        validation_passed: worker.validation_passed,
+        started_at: worker.started_at,
+        finished_at: worker.finished_at,
+        anomalies: worker.anomalies,
+      },
+      counts: built.counts,
+      chars: built.text.length,
+      chunks: chunkSms(built.text).length,
+      readiness: route.body,
+      preview: built.text,
+    }, worker.validation_passed === true && route.ok ? 200 : 422);
+  }
+
   try {
     /* ── 1. durable agency run ─────────────────────────────────────────────── */
     const { data: agencyRun, error: runErr } = await sb
       .from('agency_daily_report_runs')
       .upsert({ report_date: reportDate }, { onConflict: 'report_date', ignoreDuplicates: true })
-      .select('id, status, finalized_at, tick_count, delivery')
+      .select('id, status, started_at, collection_started_at, finalized_at, tick_count, delivery')
       .maybeSingle();
     let run = agencyRun;
     if (!run) {
       const { data: existing } = await sb
         .from('agency_daily_report_runs')
-        .select('id, status, finalized_at, tick_count, delivery')
+        .select('id, status, started_at, collection_started_at, finalized_at, tick_count, delivery')
         .eq('report_date', reportDate)
         .maybeSingle();
       run = existing ?? null;
@@ -116,8 +177,14 @@ Deno.serve(async (req) => {
     }
 
     if (!dryRun) {
+      if (!run.collection_started_at) {
+        run.collection_started_at = new Date().toISOString();
+      }
       await sb.from('agency_daily_report_runs')
-        .update({ tick_count: (run.tick_count ?? 0) + 1 })
+        .update({
+          tick_count: (run.tick_count ?? 0) + 1,
+          collection_started_at: run.collection_started_at,
+        })
         .eq('id', run.id);
     }
 
@@ -157,10 +224,16 @@ Deno.serve(async (req) => {
     /* ── 3. reconcile from the per-client worker ledger ─────────────────────── */
     const { data: workerRuns } = await sb
       .from('daily_report_runs')
-      .select('client_id, status, validation_passed, error, report_json, anomalies')
-      .eq('report_date', reportDate);
+      .select('client_id, status, validation_passed, error, report_json, anomalies, started_at')
+      .eq('report_date', reportDate)
+      // A completed row from an earlier manual/legacy attempt is not evidence
+      // that this agency run performed a fresh pull.
+      .gte('started_at', run.collection_started_at ?? run.started_at);
     const byClient = new Map<string, any>();
-    for (const w of workerRuns ?? []) byClient.set(w.client_id, w);
+    const currentBoundary = run.collection_started_at ?? run.started_at;
+    for (const w of workerRuns ?? []) {
+      if (workerRunIsCurrent(w.started_at, currentBoundary)) byClient.set(w.client_id, w);
+    }
 
     if (!dryRun) {
       for (const row of rows) {
@@ -237,7 +310,9 @@ Deno.serve(async (req) => {
     }
 
     const stillOutstanding = current.filter((r) => !TERMINAL.includes(r.status));
-    const shouldFinalize = dryRun || stillOutstanding.length === 0 || pastFinalize || pastDeadline;
+    // At 04:50 dispatch stops, but reconciliation continues until everything
+    // is terminal or the 05:00 hard deadline is reached.
+    const shouldFinalize = dryRun || stillOutstanding.length === 0 || pastDeadline;
 
     if (!shouldFinalize) {
       return json({
@@ -278,16 +353,19 @@ Deno.serve(async (req) => {
       : (delivery.attempted && !delivery.sent ? 'degraded' : 'completed');
 
     if (!dryRun) {
+      const deliveryConfirmed = delivery.sent === true;
       await sb.from('agency_daily_report_runs').update({
         status,
-        finalized_at: new Date().toISOString(),
+        // A failed delivery is retryable on the next 2-minute scheduler tick.
+        // Only a provider-confirmed send permanently finalizes the run.
+        finalized_at: deliveryConfirmed ? new Date().toISOString() : null,
         clients_total: current.length,
         clients_valid: built.counts.valid,
         clients_unavailable: built.counts.unavailable,
         clients_failed: built.counts.failed,
         delivery,
         audit: { chars: built.text.length, chunks: chunks.length, audit_notes: built.audit },
-        last_error: delivery.error ?? null,
+        last_error: deliveryConfirmed ? null : (delivery.error ?? 'delivery not provider-confirmed'),
       }).eq('id', run.id);
     }
 
@@ -298,7 +376,7 @@ Deno.serve(async (req) => {
     }));
 
     return json({
-      ok: true, report_date: reportDate, tz: TZ, phase: 'finalized',
+      ok: true, report_date: reportDate, tz: TZ, phase: dryRun || delivery.sent === true ? 'finalized' : 'delivery_retry_pending',
       status, counts: built.counts, clients_total: current.length,
       chunks: chunks.length, chars: built.text.length,
       delivery, dry_run: dryRun,
@@ -308,101 +386,3 @@ Deno.serve(async (req) => {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }
 });
-
-/* ── message construction (presentation only) ──────────────────────────────── */
-
-interface Counts { valid: number; unavailable: number; failed: number }
-
-function pace(ind: any): string {
-  return ind?.emoji ?? '⚪';
-}
-
-function buildAgencyMessage(
-  reportDate: string,
-  ledger: Array<{ client_id: string; client_name: string | null; status: string; last_error: string | null }>,
-  byClient: Map<string, any>,
-): { text: string; counts: Counts; audit: string[] } {
-  const counts: Counts = { valid: 0, unavailable: 0, failed: 0 };
-  const audit: string[] = [];
-  const blocks: string[] = [];
-
-  const totals = { spend: 0, leads: 0, qualified: 0, booked: 0, eligible: 0, showed: 0, commitments: 0, commitmentDollars: 0, funded: 0, fundedDollars: 0 };
-
-  const enriched = ledger.map((row) => {
-    const w = byClient.get(row.client_id);
-    const windows: Windows | null = w?.report_json?.windows ?? null;
-    return { row, w, windows, spend: Number(windows?.['1']?.totals?.spend ?? 0) };
-  }).sort((a, b) => b.spend - a.spend);
-
-  for (const { row, w, windows } of enriched) {
-    const name = row.client_name || 'Unknown client';
-    // `pending` / `dispatched` means the worker has not finished — that is an
-    // explicit unavailable, not a failure and never a zero.
-    if (row.status === 'pending' || row.status === 'dispatched') {
-      counts.unavailable++;
-      audit.push(`${name}: report not complete (${row.status})`);
-      blocks.push(`${name}\n• ⚪ report not complete`);
-      continue;
-    }
-    if (row.status === 'error' || row.status === 'timed_out' || !w) {
-      counts.failed++;
-      audit.push(`${name}: ${row.status}${row.last_error ? ` — ${row.last_error.slice(0, 80)}` : ''}`);
-      blocks.push(`${name}\n• ⚪ no validated data (${row.status})`);
-      continue;
-    }
-    if (!windows) {
-      counts.unavailable++;
-      audit.push(`${name}: report produced without window aggregation`);
-      blocks.push(`${name}\n• ⚪ metrics unavailable`);
-      continue;
-    }
-    const validated = w.validation_passed === true && row.status === 'completed';
-    if (validated) counts.valid++; else counts.unavailable++;
-
-    const d = windows['1'];
-    const avail = w.report_json?.metric_availability ?? {};
-    const ind = w.report_json?.indicators ?? buildIndicators(windows);
-    const n = (v: number | null, ok = true) => (ok && v !== null ? String(v) : 'n/a');
-
-    totals.spend += d.totals.spend;
-    totals.leads += d.totals.leads;
-    totals.qualified += d.totals.qualified;
-    totals.booked += d.totals.booked;
-    totals.eligible += d.totals.eligible;
-    totals.showed += d.totals.showed;
-    totals.commitments += d.totals.commitments;
-    totals.commitmentDollars += d.totals.commitment_dollars;
-    totals.funded += d.totals.funded;
-    totals.fundedDollars += d.totals.funded_dollars;
-
-    const trio = (metric: string) =>
-      `${pace(ind?.[metric]?.['7'])}${pace(ind?.[metric]?.['14'])}${pace(ind?.[metric]?.['30'])}`;
-
-    blocks.push([
-      `${name}${validated ? '' : ' ⚠️ unvalidated'}`,
-      `• Spend ${avail.spend === false ? 'n/a' : money(d.totals.spend)} · Leads ${n(d.totals.leads, avail.leads !== false)} ${trio('leads')} · CPL ${avail.cpl === false ? 'n/a' : money(d.costs.cpl)} ${trio('cpl')}`,
-      `• Booked ${n(d.totals.booked, avail.booked !== false)} ${trio('booked')} · Showed ${n(d.totals.showed, avail.show_rate !== false)}/${n(d.totals.eligible, avail.show_rate !== false)} (${d.rates.show_rate ?? 'n/a'}%) ${trio('show_rate')}`,
-      `• Commit ${n(d.totals.commitments, avail.commitments !== false)} (${money(d.totals.commitment_dollars)}) ${trio('commitments')} · Funded ${n(d.totals.funded, avail.funded !== false)} (${money(d.totals.funded_dollars)}) ${trio('funded')}`,
-      `• 7/14/30d avg leads ${windows['7'].per_day.leads ?? 'n/a'} / ${windows['14'].per_day.leads ?? 'n/a'} / ${windows['30'].per_day.leads ?? 'n/a'}`,
-    ].join('\n'));
-
-    const criticals = (w.anomalies ?? []).filter((a: any) => a.severity === 'critical').map((a: any) => a.code);
-    if (criticals.length) audit.push(`${name}: ${criticals.slice(0, 3).join(', ')}`);
-  }
-
-  const head = [
-    `HPA Agency Daily Report · ${reportDate} (${TZ})`,
-    `Portfolio — Spend ${money(totals.spend)} · Leads ${totals.leads} · CPL ${totals.leads ? money(totals.spend / totals.leads) : 'n/a'}`,
-    `Booked ${totals.booked} · Showed ${totals.showed}/${totals.eligible} (${totals.eligible ? Math.round((totals.showed / totals.eligible) * 1000) / 10 : 'n/a'}%) · Commit ${totals.commitments} (${money(totals.commitmentDollars)}) · Funded ${totals.funded} (${money(totals.fundedDollars)})`,
-    `Clients: ${counts.valid} validated · ${counts.unavailable} partial/unavailable · ${counts.failed} failed`,
-    `Pacing 🟢 better / 🔴 worse / ⚪ n-a vs 7d·14d·30d daily average`,
-  ].join('\n');
-
-  const footer = [
-    'Audit',
-    ...(audit.length ? audit.slice(0, 12).map((a) => `• ${a}`) : ['• none']),
-    'Unvalidated or n/a values are missing/failed sources, not zeros.',
-  ].join('\n');
-
-  return { text: [head, ...blocks, footer].join('\n\n'), counts, audit };
-}

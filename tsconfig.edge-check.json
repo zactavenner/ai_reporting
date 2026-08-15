@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"]
+  },
+  "files": [
+    "src/test/edge-globals.d.ts",
+    "supabase/functions/_shared/agencyReport.ts",
+    "supabase/functions/agency-daily-report-coordinator/index.ts",
+    "supabase/functions/agency-ghl-report-send/index.ts",
+    "supabase/functions/daily-report-run/index.ts",
+    "supabase/functions/sync-ghl-contacts/index.ts",
+    "supabase/functions/sync-calendar-appointments/index.ts"
+  ]
+}

@@ -56,6 +56,23 @@ export const inLocalWindow = (
 export const laMinutesOfDay = (d: Date = new Date(), tz = TZ): number =>
   laHour(d, tz) * 60 + laMinute(d, tz);
 
+export const agencyScheduleState = (d: Date = new Date(), tz = TZ) => {
+  const minute = laMinutesOfDay(d, tz);
+  return {
+    minute,
+    can_act: minute >= 4 * 60 && minute < 5 * 60 + 5,
+    can_dispatch: minute >= 4 * 60 && minute < 4 * 60 + 50,
+    past_finalize_cutoff: minute >= 4 * 60 + 50,
+    past_deadline: minute >= 5 * 60,
+  };
+};
+
+export const workerRunIsCurrent = (startedAt: string | null | undefined, collectionStartedAt: string): boolean => {
+  const workerTime = startedAt ? Date.parse(startedAt) : NaN;
+  const collectionTime = Date.parse(collectionStartedAt);
+  return Number.isFinite(workerTime) && Number.isFinite(collectionTime) && workerTime >= collectionTime;
+};
+
 /* ── window aggregation ───────────────────────────────────────────────────── */
 
 export interface FunnelRow {
@@ -168,7 +185,11 @@ export function aggregateWindow(rows: FunnelRow[], reportDate: string, size: Win
     t.funded_dollars += num(r.funded_dollars);
   }
   const days = inRange.length;
-  const div = (v: number) => (days ? Number((v / days).toFixed(2)) : null);
+  // The funnel view is sparse: a legitimately quiet day may have no row at
+  // all. Pacing therefore divides by the calendar-window size, not the number
+  // of rows returned. A wholly empty window remains unavailable because there
+  // is no source evidence proving that the zeros are real.
+  const div = (v: number) => (days ? Number((v / size).toFixed(2)) : null);
   return {
     size,
     start,
@@ -390,3 +411,144 @@ export function chunkSms(text: string, limit = SMS_CHUNK_LIMIT): string[] {
 
 export const money = (v: number | null): string =>
   v === null ? 'n/a' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: Math.abs(Number(v)) >= 100 ? 0 : 2 })}`;
+
+/* ── agency message construction ─────────────────────────────────────────── */
+
+export interface AgencyLedgerRow {
+  client_id: string;
+  client_name: string | null;
+  status: string;
+  last_error: string | null;
+}
+
+export interface AgencyMessageCounts { valid: number; unavailable: number; failed: number }
+
+export interface AgencyWorkerReport {
+  validation_passed?: boolean | null;
+  report_json?: {
+    windows?: Windows;
+    metric_availability?: Record<string, boolean>;
+    indicators?: Record<string, Record<string, Indicator>>;
+  } | null;
+  anomalies?: Array<{ severity?: string; code?: string }> | null;
+}
+
+const pace = (ind: Indicator | undefined): string => ind?.emoji ?? NEUTRAL;
+
+/**
+ * Build the consolidated agency SMS from validated worker output only.
+ * Unvalidated clients are listed in the audit section, but their numeric
+ * values never enter client blocks or portfolio totals.
+ */
+export function buildAgencyMessage(
+  reportDate: string,
+  ledger: AgencyLedgerRow[],
+  byClient: Map<string, AgencyWorkerReport>,
+): { text: string; counts: AgencyMessageCounts; audit: string[] } {
+  const counts: AgencyMessageCounts = { valid: 0, unavailable: 0, failed: 0 };
+  const audit: string[] = [];
+  const blocks: string[] = [];
+  const totals = { spend: 0, impressions: 0, clicks: 0, leads: 0, qualified: 0, bad: 0, pending: 0, cplSpend: 0, cplLeads: 0, booked: 0, eligible: 0, showed: 0, commitments: 0, commitmentDollars: 0, funded: 0, fundedDollars: 0 };
+  const coverage = { spend: 0, leads: 0, cpl: 0, booked: 0, shows: 0, commitments: 0, funded: 0 };
+
+  const enriched = ledger.map((row) => {
+    const worker = byClient.get(row.client_id);
+    const windows: Windows | null = worker?.report_json?.windows ?? null;
+    const validated = worker?.validation_passed === true && row.status === 'completed' && !!windows;
+    return { row, worker, windows, validated, spend: validated ? Number(windows?.['1']?.totals?.spend ?? 0) : -1 };
+  }).sort((a, b) => b.spend - a.spend);
+
+  for (const { row, worker, windows, validated } of enriched) {
+    const name = row.client_name || 'Unknown client';
+    if (row.status === 'error' || row.status === 'timed_out' || !worker) {
+      counts.failed++;
+      audit.push(`${name}: ${row.status}${row.last_error ? ` — ${row.last_error.slice(0, 80)}` : ''}`);
+      blocks.push(`${name}\n• ${NEUTRAL} no validated data (${row.status})`);
+      continue;
+    }
+    if (!validated || !windows) {
+      counts.unavailable++;
+      const reason = row.status === 'pending' || row.status === 'dispatched'
+        ? `report not complete (${row.status})`
+        : row.status === 'validation_failed' || worker.validation_passed === false
+          ? 'validation failed'
+          : 'window aggregation unavailable';
+      audit.push(`${name}: ${reason}`);
+      blocks.push(`${name}\n• ${NEUTRAL} metrics unavailable (${reason})`);
+      continue;
+    }
+
+    counts.valid++;
+    const d = windows['1'];
+    const avail = worker.report_json?.metric_availability ?? {};
+    const ind = worker.report_json?.indicators ?? buildIndicators(windows);
+    const n = (v: number | null, ok = true) => (ok && v !== null ? String(v) : 'n/a');
+    const trio = (metric: string) =>
+      `${pace(ind?.[metric]?.['7'])}${pace(ind?.[metric]?.['14'])}${pace(ind?.[metric]?.['30'])}`;
+
+    if (avail.spend !== false) {
+      totals.spend += d.totals.spend;
+      totals.impressions += d.totals.impressions;
+      totals.clicks += d.totals.clicks;
+      coverage.spend++;
+    }
+    if (avail.leads !== false) {
+      totals.leads += d.totals.leads;
+      totals.qualified += d.totals.qualified;
+      totals.bad += d.totals.bad;
+      totals.pending += d.totals.pending;
+      coverage.leads++;
+    }
+    if (avail.cpl !== false) {
+      totals.cplSpend += d.totals.spend;
+      totals.cplLeads += d.totals.leads;
+      coverage.cpl++;
+    }
+    if (avail.booked !== false) { totals.booked += d.totals.booked; coverage.booked++; }
+    if (avail.show_rate !== false) {
+      totals.eligible += d.totals.eligible; totals.showed += d.totals.showed; coverage.shows++;
+    }
+    if (avail.commitments !== false) {
+      totals.commitments += d.totals.commitments;
+      totals.commitmentDollars += d.totals.commitment_dollars;
+      coverage.commitments++;
+    }
+    if (avail.funded !== false) {
+      totals.funded += d.totals.funded;
+      totals.fundedDollars += d.totals.funded_dollars;
+      coverage.funded++;
+    }
+
+    blocks.push([
+      name,
+      `• Spend ${avail.spend === false ? 'n/a' : money(d.totals.spend)} · Leads ${n(d.totals.leads, avail.leads !== false)} ${trio('leads')} · CPL ${avail.cpl === false ? 'n/a' : money(d.costs.cpl)} ${trio('cpl')}`,
+      `• Ads Impr ${avail.spend === false ? 'n/a' : d.totals.impressions.toLocaleString('en-US')} · Clicks ${n(d.totals.clicks, avail.spend !== false)} · CTR ${avail.spend === false || !d.totals.impressions ? 'n/a' : `${Number(((d.totals.clicks / d.totals.impressions) * 100).toFixed(2))}%`}`,
+      `• Quality Q ${n(d.totals.qualified, avail.leads !== false)}/${n(d.totals.leads, avail.leads !== false)} (${avail.qualified_rate === false ? 'n/a' : d.rates.qualified_rate ?? 'n/a'}%) · Bad ${n(d.totals.bad, avail.leads !== false)} · Pending ${n(d.totals.pending, avail.leads !== false)} ${trio('qualified_rate')}`,
+      `• Booked ${n(d.totals.booked, avail.booked !== false)} ${trio('booked')} · Showed ${n(d.totals.showed, avail.show_rate !== false)}/${n(d.totals.eligible, avail.show_rate !== false)} (${avail.show_rate === false ? 'n/a' : d.rates.show_rate ?? 'n/a'}%) ${trio('show_rate')}`,
+      `• Commit ${n(d.totals.commitments, avail.commitments !== false)} (${avail.commitments === false ? 'n/a' : money(d.totals.commitment_dollars)}) ${trio('commitments')} · Funded ${n(d.totals.funded, avail.funded !== false)} (${avail.funded === false ? 'n/a' : money(d.totals.funded_dollars)}) ${trio('funded')}`,
+      `• 7/14/30d avg leads ${windows['7'].per_day.leads ?? 'n/a'} / ${windows['14'].per_day.leads ?? 'n/a'} / ${windows['30'].per_day.leads ?? 'n/a'}`,
+    ].join('\n'));
+
+    const criticals = (worker.anomalies ?? []).filter((a) => a.severity === 'critical').map((a) => a.code);
+    if (criticals.length) audit.push(`${name}: ${criticals.slice(0, 3).join(', ')}`);
+  }
+
+  const ofValid = (n: number) => `${n}/${counts.valid}`;
+  const head = [
+    `HPA Agency Daily Report · ${reportDate} (${TZ})`,
+    `Portfolio (validated sources) — Spend ${coverage.spend ? money(totals.spend) : 'n/a'} [${ofValid(coverage.spend)}] · Leads ${coverage.leads ? totals.leads : 'n/a'} [${ofValid(coverage.leads)}] · CPL ${coverage.cpl && totals.cplLeads ? money(totals.cplSpend / totals.cplLeads) : 'n/a'} [${ofValid(coverage.cpl)}]`,
+    `Ads — Impr ${coverage.spend ? totals.impressions.toLocaleString('en-US') : 'n/a'} · Clicks ${coverage.spend ? totals.clicks : 'n/a'} · CTR ${coverage.spend && totals.impressions ? `${Number(((totals.clicks / totals.impressions) * 100).toFixed(2))}%` : 'n/a'}`,
+    `Lead quality — Q ${coverage.leads ? `${totals.qualified}/${totals.leads} (${totals.leads ? Math.round((totals.qualified / totals.leads) * 1000) / 10 : 'n/a'}%)` : 'n/a'} · Bad ${coverage.leads ? totals.bad : 'n/a'} · Pending ${coverage.leads ? totals.pending : 'n/a'}`,
+    `Booked ${coverage.booked ? totals.booked : 'n/a'} · Showed ${coverage.shows ? `${totals.showed}/${totals.eligible} (${totals.eligible ? Math.round((totals.showed / totals.eligible) * 1000) / 10 : 'n/a'}%)` : 'n/a'} · Commit ${coverage.commitments ? `${totals.commitments} (${money(totals.commitmentDollars)})` : 'n/a'} · Funded ${coverage.funded ? `${totals.funded} (${money(totals.fundedDollars)})` : 'n/a'}`,
+    `Clients: ${counts.valid} validated · ${counts.unavailable} unavailable · ${counts.failed} failed`,
+    `Pacing ${GREEN} better / ${RED} worse / ${NEUTRAL} n-a vs 7d·14d·30d daily average`,
+  ].join('\n');
+
+  const footer = [
+    'Audit',
+    ...(audit.length ? audit.slice(0, 12).map((a) => `• ${a}`) : ['• none']),
+    'Unvalidated or n/a values are missing/failed sources, not zeros.',
+  ].join('\n');
+
+  return { text: [head, ...blocks, footer].join('\n\n'), counts, audit };
+}

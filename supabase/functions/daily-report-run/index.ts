@@ -1,7 +1,7 @@
-// Reporting 5.0 — ordered daily run (6:00 AM America/Los_Angeles).
+// Reporting 5.0 — ordered per-client worker (coordinated 04:00–05:00 America/Los_Angeles).
 //
 // Stage order is fixed and every stage is recorded on public.daily_report_runs:
-//   1 sync        → Meta ad spend (yesterday + trailing 7 days), GHL contacts,
+//   1 sync        → Meta ad spend (exact report date), bounded GHL contacts,
 //                   calendar appointments, pipelines
 //   2 normalize   → re-apply the repair predicates to newly synced rows
 //   3 recalculate → daily_metrics from v_daily_funnel_day (yesterday + 7 days)
@@ -21,7 +21,7 @@ const corsHeaders = {
 };
 
 const TZ = 'America/Los_Angeles';
-const RUN_HOUR_LOCAL = 6;
+const RUN_HOUR_LOCAL = 4;
 /** Reporting window: yesterday plus rolling 7/14/30-day comparisons. */
 const WINDOW_DAYS = 30;
 const TRAILING_DAYS = 7;
@@ -82,8 +82,8 @@ Deno.serve(async (req) => {
 
   const deliveryPassword = Deno.env.get('INTERNAL_FUNCTION_PASSWORD') || '';
 
-  // DST-safe gate: cron fires at 13:00 and 14:00 UTC; only the invocation that
-  // lands on local hour 06 proceeds.
+  // Legacy direct-cron safety gate. The agency coordinator normally invokes
+  // this worker with source=agency_coordinator and an explicit client_id.
   const fromCron = body.source === 'cron';
   if (fromCron && !body.force) {
     const hour = laHour();
@@ -132,6 +132,7 @@ Deno.serve(async (req) => {
 
   const runAll = async () => {
   for (const client of clients ?? []) {
+    const attemptStartedAt = new Date().toISOString();
     const stages: any[] = [];
     const stage = (name: string, status: string, detail: unknown) =>
       stages.push({ stage: name, status, at: new Date().toISOString(), detail });
@@ -175,8 +176,14 @@ Deno.serve(async (req) => {
         error: null,
         attempts: attemptHistory,
         attempt_count: attemptHistory.length + 1,
-        started_at: new Date().toISOString(),
+        started_at: attemptStartedAt,
         finished_at: null,
+        validation_passed: null,
+        report_json: null,
+        anomalies: [],
+        freshness: null,
+        reconciliation: null,
+        narrative: null,
       }, { onConflict: 'client_id,report_date' })
       .select('id, delivered_at')
       .single();
@@ -208,7 +215,7 @@ Deno.serve(async (req) => {
       // metric — never a silent zero and never a failure of an unrelated client.
       const { data: cfgRow } = await sb
         .from('client_settings')
-        .select('meta_ads_sync_enabled, tracked_calendar_ids, reconnect_calendar_ids, committed_stage_ids, funded_stage_ids, daily_ad_spend_target')
+        .select('meta_ads_sync_enabled, tracked_calendar_ids, reconnect_calendar_ids, committed_stage_ids, funded_stage_ids, funded_pipeline_id, daily_ad_spend_target')
         .eq('client_id', client.id)
         .maybeSingle();
       const { data: clientRow } = await sb
@@ -224,11 +231,12 @@ Deno.serve(async (req) => {
         ghl_configured: !!(clientRow?.ghl_location_id && clientRow?.ghl_api_key),
         calendars_configured:
           arr(cfgRow?.tracked_calendar_ids).length + arr(cfgRow?.reconnect_calendar_ids).length > 0,
-        commitment_stages_mapped: arr(cfgRow?.committed_stage_ids).length > 0,
-        funded_stages_mapped: arr(cfgRow?.funded_stage_ids).length > 0,
+        commitment_stages_mapped: !!cfgRow?.funded_pipeline_id && arr(cfgRow?.committed_stage_ids).length > 0,
+        funded_stages_mapped: !!cfgRow?.funded_pipeline_id && arr(cfgRow?.funded_stage_ids).length > 0,
         daily_ad_spend_target: cfgRow?.daily_ad_spend_target ?? null,
       };
       const metaActive = configuration.meta_configured && configuration.meta_sync_enabled;
+      const syncEvidence = { meta: false, crm: false, calendar: false };
 
       if (body.skip_sync) {
         stage('sync', 'skipped', { reason: 'skip_sync' });
@@ -242,6 +250,8 @@ Deno.serve(async (req) => {
           if (b && typeof b === 'object') {
             if (b.success === false) out.push('function reported success:false');
             if (typeof b.error === 'string' && b.error) out.push(b.error);
+            if (Number(b.summary?.failed ?? 0) > 0) out.push(`${b.summary.failed} source account(s) failed`);
+            if (b.summary && Number(b.summary.total_accounts) === 0) out.push('no configured source accounts were pulled');
           }
           return [...new Set(out)].slice(0, 5);
         };
@@ -275,15 +285,14 @@ Deno.serve(async (req) => {
           });
         }
 
-        // GHL contacts/opportunities: the real contact + opportunity pull so the
-        // commitment / funded logic actually runs (2-day incremental lookback).
+        // GHL contacts/opportunities: bounded recent contacts plus the one
+        // configured commitment/funded pipeline (no historical contact crawl).
         if (configuration.ghl_configured) {
           const leads = await invoke('sync-ghl-contacts', {
             client_id: client.id,
-            syncType: 'all',
-            sinceDateDays: Math.max(2, CRM_LOOKBACK_DAYS - 1),
-            syncTimeline: false,
-          }, 300_000);
+            mode: 'daily_reporting',
+            sinceDateDays: CRM_LOOKBACK_DAYS,
+          }, 180_000);
           required.push(['crm_contacts_opportunities', leads]);
         } else {
           anomalyQueue.push({
@@ -294,7 +303,11 @@ Deno.serve(async (req) => {
 
         // Calendars only when a tracked/reconnect calendar is configured.
         if (configuration.calendars_configured) {
-          const cal = await invoke('sync-calendar-appointments', { clientId: client.id }, 240_000);
+          const cal = await invoke('sync-calendar-appointments', {
+            clientId: client.id,
+            reporting_mode: true,
+            report_date: reportDate,
+          }, 180_000);
           required.push(['calendar_appointments', cal]);
         } else {
           anomalyQueue.push({
@@ -330,12 +343,15 @@ Deno.serve(async (req) => {
           };
           if (failed) syncFailures.push({ source: name, detail: syncDetail[name] });
           else if (partial.length > 0) syncPartials.push({ source: name, errors: partial });
+          else if (name === 'meta_ad_spend') syncEvidence.meta = true;
+          else if (name === 'crm_contacts_opportunities') syncEvidence.crm = true;
+          else if (name === 'calendar_appointments') syncEvidence.calendar = true;
         }
         stage('sync', syncFailures.length === 0 ? (syncPartials.length ? 'partial' : 'ok') : 'error', syncDetail);
         for (const p of syncPartials) {
           anomalyQueue.push({
-            code: 'sync_partial', severity: 'warning', source: p.source,
-            message: `Sync "${p.source}" completed with ${p.errors.length} record-level error(s).`,
+            code: 'sync_partial', severity: 'critical', source: p.source,
+            message: `Sync "${p.source}" completed with ${p.errors.length} record-level error(s); affected metrics are unavailable.`,
             detail: p.errors,
           });
         }
@@ -377,8 +393,33 @@ Deno.serve(async (req) => {
         .eq('client_id', client.id)
         .eq('date', reportDate);
 
+      const expectedMetaAccounts = new Set(
+        [clientRow?.meta_ad_account_id, ...arr(clientRow?.meta_ad_account_ids)]
+          .filter(Boolean)
+          .map((id) => String(id).replace(/^act_/, '')),
+      ).size;
+      const { data: metaAuditRows } = metaActive
+        ? await sb.from('ad_spend_sync_runs')
+          .select('ad_account_id, status, rows_written, started_at, finished_at, error_message')
+          .eq('client_id', client.id)
+          .eq('sync_date', reportDate)
+          .gte('started_at', attemptStartedAt)
+        : { data: [] as any[] };
+      const auditedMetaAccounts = new Set((metaAuditRows ?? []).map((r: any) => String(r.ad_account_id || '').replace(/^act_/, ''))).size;
+      const metaAuditComplete = !metaActive || (
+        expectedMetaAccounts > 0 &&
+        auditedMetaAccounts >= expectedMetaAccounts &&
+        (metaAuditRows ?? []).every((r: any) => ['success', 'partial'].includes(r.status) && !!r.finished_at)
+      );
+
       const anomalies: any[] = [];
       anomalies.push(...anomalyQueue);
+      if (repairErr) {
+        anomalies.push({ code: 'normalization_failed', severity: 'critical', message: `Reporting row repair failed: ${repairErr.message}` });
+      }
+      if (!recalc.ok) {
+        anomalies.push({ code: 'recalculation_failed', severity: 'critical', message: `daily_metrics recalculation failed (HTTP ${recalc.status}).` });
+      }
       for (const f of syncFailures) {
         anomalies.push({
           code: 'sync_failed', severity: 'critical', source: f.source,
@@ -386,13 +427,20 @@ Deno.serve(async (req) => {
           detail: f.detail,
         });
       }
+      if (metaActive && !metaAuditComplete) {
+        anomalies.push({
+          code: 'meta_sync_audit_incomplete', severity: 'critical', source: 'meta_ad_spend',
+          message: `Meta pull did not produce a clean completed audit row for all ${expectedMetaAccounts} configured account(s).`,
+          detail: { expected_accounts: expectedMetaAccounts, audited_accounts: auditedMetaAccounts },
+        });
+      }
 
       // Freshness is threshold-checked, not merely displayed — but only for the
       // sources this client actually has configured and enabled.
       const freshnessChecks: Array<readonly [string, unknown]> = [];
-      if (metaActive) freshnessChecks.push(['meta_last_synced_at', freshRows?.meta_last_synced_at]);
-      if (configuration.ghl_configured) freshnessChecks.push(['ghl_last_synced_at', freshRows?.ghl_last_synced_at]);
-      if (configuration.calendars_configured) freshnessChecks.push(['calls_last_synced_at', freshRows?.calls_last_synced_at]);
+      if (metaActive) freshnessChecks.push(['meta_last_synced_at', syncEvidence.meta && metaAuditComplete ? attemptStartedAt : freshRows?.meta_last_synced_at]);
+      if (configuration.ghl_configured) freshnessChecks.push(['ghl_last_synced_at', syncEvidence.crm ? attemptStartedAt : freshRows?.ghl_last_synced_at]);
+      if (configuration.calendars_configured) freshnessChecks.push(['calls_last_synced_at', syncEvidence.calendar ? attemptStartedAt : freshRows?.calls_last_synced_at]);
       const staleSources: Array<{ source: string; age_hours: number | null }> = [];
       for (const [name, value] of freshnessChecks) {
         const age = hoursSince(value as string | null);
@@ -405,18 +453,18 @@ Deno.serve(async (req) => {
           detail: staleSources,
         });
       }
-      if (metaActive && freshRows?.meta_last_date && String(freshRows.meta_last_date) < reportDate) {
+      if (metaActive && freshRows?.meta_last_date && String(freshRows.meta_last_date) < reportDate && !(metaAuditComplete && !spendRowCount)) {
         anomalies.push({
           code: 'meta_behind_report_date', severity: 'critical',
           message: `Latest Meta spend date ${freshRows.meta_last_date} is behind the report date ${reportDate}.`,
         });
       }
 
-      if (metaActive && !spendRowCount) {
-        anomalies.push({ code: 'meta_no_rows', severity: 'critical',
-          message: `No ad_spend_daily rows for ${reportDate}; a zero row is not proof the sync completed.` });
+      if (metaActive && !spendRowCount && !metaAuditComplete) {
+        anomalies.push({ code: 'meta_no_rows_unproven', severity: 'critical',
+          message: `No ad_spend_daily rows for ${reportDate}, and the Meta audit does not prove a clean zero-delivery pull.` });
       }
-      if (metaActive && day && Number(day.spend) === 0 && Number(day.leads_total) > 0) {
+      if (metaActive && !metaAuditComplete && day && Number(day.spend) === 0 && Number(day.leads_total) > 0) {
         anomalies.push({ code: 'zero_spend_with_leads', severity: 'warning',
           message: 'Spend is zero while leads exist — Meta sync likely incomplete.' });
       }
@@ -444,6 +492,11 @@ Deno.serve(async (req) => {
         .eq('date', reportDate)
         .maybeSingle();
 
+      const reconciliationChecks = {
+        spend: !metaActive || Number(day?.spend || 0) === Number(dm?.ad_spend || 0),
+        leads: !configuration.ghl_configured || Number(day?.leads_total || 0) === Number(dm?.leads || 0),
+        discovery_showed: !configuration.calendars_configured || Number(day?.discovery_showed || 0) === Number(dm?.showed_calls || 0),
+      };
       const reconciliation = {
         view_spend: Number(day?.spend || 0),
         daily_metrics_spend: Number(dm?.ad_spend || 0),
@@ -451,10 +504,8 @@ Deno.serve(async (req) => {
         daily_metrics_leads: Number(dm?.leads || 0),
         view_discovery_showed: Number(day?.discovery_showed || 0),
         daily_metrics_showed: Number(dm?.showed_calls || 0),
-        matches:
-          Number(day?.spend || 0) === Number(dm?.ad_spend || 0) &&
-          Number(day?.leads_total || 0) === Number(dm?.leads || 0) &&
-          Number(day?.discovery_showed || 0) === Number(dm?.showed_calls || 0),
+        checks: reconciliationChecks,
+        matches: Object.values(reconciliationChecks).every(Boolean),
       };
       if (!reconciliation.matches) {
         anomalies.push({ code: 'reconciliation_mismatch', severity: 'critical',
@@ -478,6 +529,10 @@ Deno.serve(async (req) => {
         window: { start: windowStart, end: reportDate },
         configuration,
         freshness: {
+          current_pull_evidence: syncEvidence,
+          meta_audit_complete: metaAuditComplete,
+          meta_expected_accounts: expectedMetaAccounts,
+          meta_audited_accounts: auditedMetaAccounts,
           meta_last_synced_at: freshRows?.meta_last_synced_at ?? null,
           meta_last_date: freshRows?.meta_last_date ?? null,
           meta_rows_for_report_date: spendRowCount ?? 0,
