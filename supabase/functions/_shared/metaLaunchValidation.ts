@@ -1,7 +1,17 @@
 // Shared validation + Graph version resolution for the Ads Launch Center.
-// Keep this pure: no secrets, no network.
+// Keep this pure: no secrets, no network. Env is read defensively so this
+// module can also be imported by the browser-side test suite.
 
-export const META_VERSION = (Deno.env.get("META_GRAPH_VERSION") || "v21.0").trim();
+function envVar(name: string): string | undefined {
+  const runtime = globalThis as typeof globalThis & {
+    Deno?: { env?: { get?: (n: string) => string | undefined } };
+  };
+  return runtime.Deno?.env?.get?.(name);
+}
+
+export const DEFAULT_META_VERSION = "v24.0";
+/** Environment override always wins; otherwise the pinned default. */
+export const META_VERSION = (envVar("META_GRAPH_VERSION") || DEFAULT_META_VERSION).trim();
 export const GRAPH = `https://graph.facebook.com/${META_VERSION}`;
 
 export const SUPPORTED_CTAS = [
@@ -10,6 +20,58 @@ export const SUPPORTED_CTAS = [
 ] as const;
 
 export const SPECIAL_AD_CATEGORIES = ["NONE", "HOUSING", "EMPLOYMENT", "CREDIT", "ISSUES_ELECTIONS_POLITICS", "FINANCIAL_PRODUCTS_SERVICES"] as const;
+
+/**
+ * Meta forbids narrowed age (and other demographic) targeting for these
+ * categories. For them we omit the operator's age selection entirely and let
+ * Meta apply its own unrestricted floor.
+ */
+export const RESTRICTED_AD_CATEGORIES = ["HOUSING", "EMPLOYMENT", "CREDIT", "ISSUES_ELECTIONS_POLITICS"] as const;
+
+export function isRestrictedCategory(category: unknown): boolean {
+  return RESTRICTED_AD_CATEGORIES.includes(String(category) as typeof RESTRICTED_AD_CATEGORIES[number]);
+}
+
+/** Builds the Meta targeting spec, dropping age fields for restricted categories. */
+export function buildTargeting(launch: {
+  countries?: unknown;
+  age_min?: unknown;
+  age_max?: unknown;
+  special_ad_category?: unknown;
+}): Record<string, unknown> {
+  const countries = Array.isArray(launch.countries) ? launch.countries : [];
+  const targeting: Record<string, unknown> = { geo_locations: { countries } };
+  if (isRestrictedCategory(launch.special_ad_category)) return targeting;
+  const min = Number(launch.age_min);
+  const max = Number(launch.age_max);
+  if (Number.isInteger(min)) targeting.age_min = min;
+  if (Number.isInteger(max)) targeting.age_max = max;
+  return targeting;
+}
+
+export const LAUNCH_STAGES = ["campaign", "adset", "media", "creative", "ad"] as const;
+
+/**
+ * Which publish stages still need to run for a launch row. A retry skips every
+ * stage whose Meta object id was already persisted.
+ */
+export function stagesToRun(launch: {
+  meta_campaign_id?: unknown;
+  meta_adset_id?: unknown;
+  meta_image_hash?: unknown;
+  meta_video_id?: unknown;
+  meta_creative_id?: unknown;
+  meta_ad_id?: unknown;
+}): string[] {
+  const done = {
+    campaign: !!launch.meta_campaign_id,
+    adset: !!launch.meta_adset_id,
+    media: !!launch.meta_image_hash || !!launch.meta_video_id,
+    creative: !!launch.meta_creative_id,
+    ad: !!launch.meta_ad_id,
+  } as Record<string, boolean>;
+  return LAUNCH_STAGES.filter((s) => !done[s]);
+}
 
 export const OBJECTIVES = {
   leads: { obj: "OUTCOME_LEADS", goal: "OFFSITE_CONVERSIONS", billing: "IMPRESSIONS" },
@@ -67,14 +129,18 @@ export function validateLaunch(input: Partial<LaunchInput>): string[] {
   if (!countries.length) errors.push("At least one target country is required");
   if (countries.some((c) => !/^[A-Z]{2}$/.test(String(c)))) errors.push("Countries must be uppercase 2-letter ISO codes");
 
-  const min = Number(input.age_min), max = Number(input.age_max);
-  if (!Number.isInteger(min) || min < 18 || min > 65) errors.push("Minimum age must be between 18 and 65");
-  if (!Number.isInteger(max) || max < 18 || max > 65) errors.push("Maximum age must be between 18 and 65");
-  if (Number.isFinite(min) && Number.isFinite(max) && max < min) errors.push("Maximum age must be greater than or equal to minimum age");
-
   if (!input.special_ad_category || !SPECIAL_AD_CATEGORIES.includes(String(input.special_ad_category) as typeof SPECIAL_AD_CATEGORIES[number])) {
     errors.push("Invalid special ad category");
   }
+
+  // Restricted categories ignore age targeting entirely, so it is not validated.
+  if (!isRestrictedCategory(input.special_ad_category)) {
+    const min = Number(input.age_min), max = Number(input.age_max);
+    if (!Number.isInteger(min) || min < 18 || min > 65) errors.push("Minimum age must be between 18 and 65");
+    if (!Number.isInteger(max) || max < 18 || max > 65) errors.push("Maximum age must be between 18 and 65");
+    if (Number.isFinite(min) && Number.isFinite(max) && max < min) errors.push("Maximum age must be greater than or equal to minimum age");
+  }
+
   if (!isHttpsUrl(input.creative_url)) errors.push("An approved creative asset is required");
   if (input.creative_type !== "image" && input.creative_type !== "video") errors.push("Creative type must be image or video");
 
