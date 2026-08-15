@@ -97,7 +97,9 @@ Deno.serve(async (req) => {
   }
 
   const reportDate = body.report_date || addDays(laDate(), -1);
-  const windowStart = addDays(reportDate, -(TRAILING_DAYS - 1));
+  /** 30-day window: the source of truth for the 1/7/14/30 comparisons. */
+  const windowStart = addDays(reportDate, -(WINDOW_DAYS - 1));
+  const trailing7Start = addDays(reportDate, -(TRAILING_DAYS - 1));
   const dryRun = body.dry_run === true || body.deliver === false;
   const deliver = body.deliver === true && !body.dry_run;
 
