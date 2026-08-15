@@ -42,11 +42,11 @@ async function fetchKpis(supabase: any, clientId: string, start: string, end: st
   const row = (data || []).find((r: any) => r.client_id === clientId) || {};
   const { data: spendRows } = await supabase
     .from("daily_metrics")
-    .select("spend")
+    .select("ad_spend")
     .eq("client_id", clientId)
     .gte("date", start)
     .lte("date", end);
-  const spend = (spendRows || []).reduce((a: number, r: any) => a + Number(r.spend || 0), 0);
+  const spend = (spendRows || []).reduce((a: number, r: any) => a + Number(r.ad_spend || 0), 0);
   const leads = Number(row.total_leads || 0);
   const calls = Number(row.total_calls || 0);
   const showed = Number(row.showed_calls || 0);

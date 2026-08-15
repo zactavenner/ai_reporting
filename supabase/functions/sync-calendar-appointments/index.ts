@@ -179,9 +179,33 @@ async function syncAppointmentToCall(
     if (titleMatch) contactName = titleMatch[1].trim();
   }
   
-  // Use GHL dateAdded as the original creation date
-  const ghlCreatedAt = appt.dateAdded || appt.createdAt || new Date().toISOString();
-  
+  // Booked bucket MUST come from the GHL appointment creation timestamp.
+  // Never substitute scheduled_at (startTime) — flag it instead.
+  const ghlCreatedAtRaw: string | null = appt.dateAdded || appt.createdAt || appt.dateUpdated || null;
+  const bookedAtMissing = !ghlCreatedAtRaw;
+  const ghlCreatedAt = ghlCreatedAtRaw || new Date().toISOString();
+
+  if (bookedAtMissing) {
+    console.warn(`[sync-calendar] missing booked timestamp for appointment ${appointmentId}`);
+    try {
+      await supabase.from('sync_warnings').insert({
+        client_id: clientId,
+        warning_type: 'missing_booked_at',
+        message: `GHL appointment ${appointmentId} has no dateAdded/createdAt; booked_at flagged as missing`,
+        metadata: { appointmentId, contactId, calendarId },
+      });
+    } catch (e) {
+      console.error('Failed to log missing booked_at warning:', e);
+    }
+  }
+
+  // Attendance: only a real showed/completed status sets showed=true. When the CRM
+  // gives us no arrival timestamp we keep scheduled_at as the attendance bucket and
+  // label the source honestly instead of pretending we observed the arrival.
+  const attendanceSource = showed
+    ? (appt.showedAt || appt.attendedAt ? 'crm_attendance_event' : 'crm_status_scheduled_bucket')
+    : null;
+
   const callData = {
     client_id: clientId,
     lead_id: leadId,
@@ -194,7 +218,9 @@ async function syncAppointmentToCall(
     outcome,
     is_reconnect: isReconnect,
     booked_at: ghlCreatedAt,
-    showed_at: showed ? (appt.startTime || new Date().toISOString()) : null,
+    booked_at_missing: bookedAtMissing,
+    showed_at: showed ? (appt.showedAt || appt.attendedAt || appt.startTime || null) : null,
+    attendance_source: attendanceSource,
     ghl_synced_at: new Date().toISOString(),
     contact_name: contactName,
     contact_email: contactEmail,
@@ -228,9 +254,11 @@ async function syncAppointmentToCall(
         appointment_status: callData.appointment_status,
         showed: callData.showed,
         showed_at: callData.showed_at,
+        attendance_source: callData.attendance_source,
         outcome: callData.outcome,
         is_reconnect: callData.is_reconnect,
         booked_at: callData.booked_at,
+        booked_at_missing: callData.booked_at_missing,
         ghl_synced_at: callData.ghl_synced_at,
         contact_name: callData.contact_name || undefined,
         contact_email: callData.contact_email || undefined,
