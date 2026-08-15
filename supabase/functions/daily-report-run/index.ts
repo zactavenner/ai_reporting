@@ -553,6 +553,28 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── 7. AGENCY WHATSAPP DIGEST ─────────────────────────────────────────────
+  // Exactly ONE consolidated message per report date, after every client run
+  // finished. Idempotency lives in agency_digest_sends, so the duplicate DST
+  // cron invocation can never deliver twice.
+  if (!body.client_id && deliver) {
+    const digest = await invoke('whatsapp-agency-digest', {
+      secret: presented,
+      action: 'send_digest',
+      digest_date: reportDate,
+      cadence: 'daily',
+    }, 90_000);
+    const d: any = digest.body;
+    console.log('[daily-report-run] agency digest', JSON.stringify({
+      ok: digest.ok, status: d?.status ?? null, delivered: d?.delivered ?? false,
+      clients_included: d?.clients_included ?? 0, skipped: d?.skipped ?? d?.reason ?? null,
+    }));
+    results.push({ agency_whatsapp_digest: {
+      ok: digest.ok, status: d?.status ?? null, delivered: d?.delivered ?? false,
+      clients_included: d?.clients_included ?? 0, chunks: d?.chunks ?? 0,
+      skipped: d?.skipped ?? d?.reason ?? null, error: d?.error ?? null,
+    } });
+  }
   };
 
   // Long pipelines (cron / all-client runs) execute in the background; a single
