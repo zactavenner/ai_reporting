@@ -9493,6 +9493,8 @@ export type Database = {
       daily_report_runs: {
         Row: {
           anomalies: Json
+          attempt_count: number
+          attempts: Json
           client_id: string
           created_at: string
           delivered_at: string | null
@@ -9515,6 +9517,8 @@ export type Database = {
         }
         Insert: {
           anomalies?: Json
+          attempt_count?: number
+          attempts?: Json
           client_id: string
           created_at?: string
           delivered_at?: string | null
@@ -9537,6 +9541,8 @@ export type Database = {
         }
         Update: {
           anomalies?: Json
+          attempt_count?: number
+          attempts?: Json
           client_id?: string
           created_at?: string
           delivered_at?: string | null
