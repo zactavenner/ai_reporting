@@ -389,6 +389,61 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+// groupsHandler returns the authoritative joined-group list straight from the
+// WhatsApp server: JID + real group subject. This is the ONLY trustworthy way
+// to resolve a group by name — chat display names stored downstream are
+// contaminated with sender push names.
+func groupsHandler(w http.ResponseWriter, r *http.Request) {
+	if !auth(w, r) {
+		return
+	}
+	state.mu.RLock()
+	cli := state.client
+	st := state.status
+	state.mu.RUnlock()
+	if cli == nil || st != "connected" {
+		writeJSON(w, 503, map[string]string{"error": "not connected"})
+		return
+	}
+	groups, err := cli.GetJoinedGroups()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	out := make([]map[string]any, 0, len(groups))
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"jid":               g.JID.String(),
+			"subject":           g.Name,
+			"subject_set_at":    g.NameSetAt.UTC().Format(time.RFC3339),
+			"participant_count": len(g.Participants),
+			"is_announce":       g.IsAnnounce,
+		})
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "session_label": state.sessionLabel, "groups": out})
+}
+
+func legacyLogoutHandler(w http.ResponseWriter, r *http.Request) {
+	if !auth(w, r) {
+		return
+	}
+	state.mu.RLock()
+	cli := state.client
+	state.mu.RUnlock()
+	if cli == nil {
+		writeJSON(w, 200, map[string]any{"ok": true})
+		return
+	}
+	if err := cli.Logout(r.Context()); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
 func resetHandler(w http.ResponseWriter, r *http.Request) {
 	if !auth(w, r) {
 		return
@@ -436,6 +491,13 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/status", statusHandler)
+	mux.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		groupsHandler(w, r)
+	})
 	mux.HandleFunc("/send", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
