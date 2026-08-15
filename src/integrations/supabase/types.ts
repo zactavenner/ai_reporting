@@ -21619,6 +21619,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      rollback_reporting_repair: {
+        Args: { p_repair_key: string }
+        Returns: number
+      }
       set_task_assignees: {
         Args: { _member_ids: string[]; _pod_ids: string[]; _task_id: string }
         Returns: undefined
