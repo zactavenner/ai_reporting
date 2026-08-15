@@ -1246,6 +1246,119 @@ export type Database = {
         }
         Relationships: []
       }
+      agency_report_destinations: {
+        Row: {
+          active: boolean
+          cadences: string[]
+          channel: string
+          created_at: string
+          expected_subject: string
+          id: string
+          last_error: string | null
+          name: string
+          routing_test_message_id: string | null
+          routing_test_sent_at: string | null
+          session_label: string
+          subject_verified_at: string | null
+          updated_at: string
+          whatsapp_jid: string | null
+        }
+        Insert: {
+          active?: boolean
+          cadences?: string[]
+          channel?: string
+          created_at?: string
+          expected_subject: string
+          id?: string
+          last_error?: string | null
+          name: string
+          routing_test_message_id?: string | null
+          routing_test_sent_at?: string | null
+          session_label?: string
+          subject_verified_at?: string | null
+          updated_at?: string
+          whatsapp_jid?: string | null
+        }
+        Update: {
+          active?: boolean
+          cadences?: string[]
+          channel?: string
+          created_at?: string
+          expected_subject?: string
+          id?: string
+          last_error?: string | null
+          name?: string
+          routing_test_message_id?: string | null
+          routing_test_sent_at?: string | null
+          session_label?: string
+          subject_verified_at?: string | null
+          updated_at?: string
+          whatsapp_jid?: string | null
+        }
+        Relationships: []
+      }
+      agency_report_sends: {
+        Row: {
+          cadence: string
+          chunk_count: number
+          created_at: string
+          destination_id: string
+          error: string | null
+          id: string
+          idempotency_key: string
+          payload: Json
+          queued_at: string | null
+          report_date: string
+          sent_at: string | null
+          sent_chunk_count: number
+          status: string
+          updated_at: string
+          wa_message_ids: string[]
+        }
+        Insert: {
+          cadence?: string
+          chunk_count?: number
+          created_at?: string
+          destination_id: string
+          error?: string | null
+          id?: string
+          idempotency_key: string
+          payload?: Json
+          queued_at?: string | null
+          report_date: string
+          sent_at?: string | null
+          sent_chunk_count?: number
+          status?: string
+          updated_at?: string
+          wa_message_ids?: string[]
+        }
+        Update: {
+          cadence?: string
+          chunk_count?: number
+          created_at?: string
+          destination_id?: string
+          error?: string | null
+          id?: string
+          idempotency_key?: string
+          payload?: Json
+          queued_at?: string | null
+          report_date?: string
+          sent_at?: string | null
+          sent_chunk_count?: number
+          status?: string
+          updated_at?: string
+          wa_message_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_report_sends_destination_id_fkey"
+            columns: ["destination_id"]
+            isOneToOne: false
+            referencedRelation: "agency_report_destinations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agency_settings: {
         Row: {
           agent_notification_slack_dm: boolean | null
@@ -15418,6 +15531,107 @@ export type Database = {
           },
         ]
       }
+      meta_ad_recommendations: {
+        Row: {
+          action: string
+          applied_at: string | null
+          claimed_at: string | null
+          client_id: string
+          confidence: number
+          created_at: string
+          decided_by: string | null
+          entity_name: string
+          entity_type: string
+          error_detail: string | null
+          health_score: number | null
+          id: string
+          meta_entity_id: string
+          meta_response: Json | null
+          metrics_snapshot: Json | null
+          proposed_daily_budget: number | null
+          reason: string
+          run_id: string | null
+          status: string
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          applied_at?: string | null
+          claimed_at?: string | null
+          client_id: string
+          confidence?: number
+          created_at?: string
+          decided_by?: string | null
+          entity_name: string
+          entity_type: string
+          error_detail?: string | null
+          health_score?: number | null
+          id?: string
+          meta_entity_id: string
+          meta_response?: Json | null
+          metrics_snapshot?: Json | null
+          proposed_daily_budget?: number | null
+          reason: string
+          run_id?: string | null
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          applied_at?: string | null
+          claimed_at?: string | null
+          client_id?: string
+          confidence?: number
+          created_at?: string
+          decided_by?: string | null
+          entity_name?: string
+          entity_type?: string
+          error_detail?: string | null
+          health_score?: number | null
+          id?: string
+          meta_entity_id?: string
+          meta_response?: Json | null
+          metrics_snapshot?: Json | null
+          proposed_daily_budget?: number | null
+          reason?: string
+          run_id?: string | null
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       meta_ad_sets: {
         Row: {
           attributed_calls: number | null
@@ -15985,6 +16199,150 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_daily_funnel_freshness"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_campaign_launches: {
+        Row: {
+          age_max: number
+          age_min: number
+          client_id: string
+          countries: string[]
+          created_at: string
+          created_by: string | null
+          creative_id: string | null
+          creative_type: string | null
+          creative_url: string | null
+          cta: string
+          daily_budget_cents: number
+          description: string | null
+          destination_url: string | null
+          error_detail: Json | null
+          headline: string
+          id: string
+          meta_ad_id: string | null
+          meta_adset_id: string | null
+          meta_campaign_id: string | null
+          meta_creative_id: string | null
+          meta_image_hash: string | null
+          meta_video_id: string | null
+          name: string
+          objective: string
+          page_id: string | null
+          pixel_id: string | null
+          primary_text: string
+          published_at: string | null
+          retry_count: number
+          special_ad_category: string
+          stage: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          age_max?: number
+          age_min?: number
+          client_id: string
+          countries?: string[]
+          created_at?: string
+          created_by?: string | null
+          creative_id?: string | null
+          creative_type?: string | null
+          creative_url?: string | null
+          cta?: string
+          daily_budget_cents?: number
+          description?: string | null
+          destination_url?: string | null
+          error_detail?: Json | null
+          headline?: string
+          id?: string
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          meta_creative_id?: string | null
+          meta_image_hash?: string | null
+          meta_video_id?: string | null
+          name: string
+          objective?: string
+          page_id?: string | null
+          pixel_id?: string | null
+          primary_text?: string
+          published_at?: string | null
+          retry_count?: number
+          special_ad_category?: string
+          stage?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          age_max?: number
+          age_min?: number
+          client_id?: string
+          countries?: string[]
+          created_at?: string
+          created_by?: string | null
+          creative_id?: string | null
+          creative_type?: string | null
+          creative_url?: string | null
+          cta?: string
+          daily_budget_cents?: number
+          description?: string | null
+          destination_url?: string | null
+          error_detail?: Json | null
+          headline?: string
+          id?: string
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          meta_creative_id?: string | null
+          meta_image_hash?: string | null
+          meta_video_id?: string | null
+          name?: string
+          objective?: string
+          page_id?: string | null
+          pixel_id?: string | null
+          primary_text?: string
+          published_at?: string | null
+          retry_count?: number
+          special_ad_category?: string
+          stage?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "creatives"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -20993,11 +21351,13 @@ export type Database = {
       }
       whatsapp_send_queue: {
         Row: {
+          agency_report_send_id: string | null
           alert_type: string | null
           attempts: number
           client_id: string | null
           created_at: string
           id: string
+          idempotency_key: string | null
           jid: string
           last_attempt_at: string | null
           last_error: string | null
@@ -21014,11 +21374,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agency_report_send_id?: string | null
           alert_type?: string | null
           attempts?: number
           client_id?: string | null
           created_at?: string
           id?: string
+          idempotency_key?: string | null
           jid: string
           last_attempt_at?: string | null
           last_error?: string | null
@@ -21035,11 +21397,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agency_report_send_id?: string | null
           alert_type?: string | null
           attempts?: number
           client_id?: string | null
           created_at?: string
           id?: string
+          idempotency_key?: string | null
           jid?: string
           last_attempt_at?: string | null
           last_error?: string | null
@@ -21056,6 +21420,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_send_queue_agency_report_send_id_fkey"
+            columns: ["agency_report_send_id"]
+            isOneToOne: false
+            referencedRelation: "agency_report_sends"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_send_queue_session_id_fkey"
             columns: ["session_id"]

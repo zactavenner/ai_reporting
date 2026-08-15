@@ -1,0 +1,1 @@
+UPDATE public.agency_agents SET is_active = true WHERE slug = 'media_buyer_jeremy';
