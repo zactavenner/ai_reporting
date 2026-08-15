@@ -949,6 +949,113 @@ export type Database = {
         }
         Relationships: []
       }
+      agency_digest_sends: {
+        Row: {
+          attempts: number
+          cadence: string
+          chunk_count: number
+          created_at: string
+          digest_date: string
+          id: string
+          idempotency_key: string
+          kind: string
+          last_error: string | null
+          payload: Json
+          queued_ids: string[]
+          sent_at: string | null
+          status: string
+          target_id: string | null
+          updated_at: string
+          wa_message_ids: string[]
+        }
+        Insert: {
+          attempts?: number
+          cadence?: string
+          chunk_count?: number
+          created_at?: string
+          digest_date: string
+          id?: string
+          idempotency_key: string
+          kind?: string
+          last_error?: string | null
+          payload?: Json
+          queued_ids?: string[]
+          sent_at?: string | null
+          status?: string
+          target_id?: string | null
+          updated_at?: string
+          wa_message_ids?: string[]
+        }
+        Update: {
+          attempts?: number
+          cadence?: string
+          chunk_count?: number
+          created_at?: string
+          digest_date?: string
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          last_error?: string | null
+          payload?: Json
+          queued_ids?: string[]
+          sent_at?: string | null
+          status?: string
+          target_id?: string | null
+          updated_at?: string
+          wa_message_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_digest_sends_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "agency_digest_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agency_digest_targets: {
+        Row: {
+          cadences: string[]
+          channel: string
+          created_at: string
+          destination: string
+          enabled: boolean
+          id: string
+          name: string
+          notes: string | null
+          resolved_at: string | null
+          session_label: string
+          updated_at: string
+        }
+        Insert: {
+          cadences?: string[]
+          channel?: string
+          created_at?: string
+          destination: string
+          enabled?: boolean
+          id?: string
+          name: string
+          notes?: string | null
+          resolved_at?: string | null
+          session_label?: string
+          updated_at?: string
+        }
+        Update: {
+          cadences?: string[]
+          channel?: string
+          created_at?: string
+          destination?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          notes?: string | null
+          resolved_at?: string | null
+          session_label?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agency_meetings: {
         Row: {
           action_items: Json | null
@@ -20745,6 +20852,53 @@ export type Database = {
           },
           {
             foreignKeyName: "whatsapp_contacts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_groups: {
+        Row: {
+          created_at: string
+          id: string
+          is_announce: boolean | null
+          jid: string
+          participant_count: number | null
+          session_id: string | null
+          session_label: string
+          subject: string
+          subject_set_at: string | null
+          synced_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_announce?: boolean | null
+          jid: string
+          participant_count?: number | null
+          session_id?: string | null
+          session_label?: string
+          subject: string
+          subject_set_at?: string | null
+          synced_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_announce?: boolean | null
+          jid?: string
+          participant_count?: number | null
+          session_id?: string | null
+          session_label?: string
+          subject?: string
+          subject_set_at?: string | null
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_groups_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_sessions"
