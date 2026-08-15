@@ -426,24 +426,6 @@ func groupsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true, "session_label": state.sessionLabel, "groups": out})
 }
 
-func legacyLogoutHandler(w http.ResponseWriter, r *http.Request) {
-	if !auth(w, r) {
-		return
-	}
-	state.mu.RLock()
-	cli := state.client
-	state.mu.RUnlock()
-	if cli == nil {
-		writeJSON(w, 200, map[string]any{"ok": true})
-		return
-	}
-	if err := cli.Logout(r.Context()); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, 200, map[string]any{"ok": true})
-}
-
 func resetHandler(w http.ResponseWriter, r *http.Request) {
 	if !auth(w, r) {
 		return
