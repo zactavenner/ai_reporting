@@ -6,7 +6,7 @@
 // Meta access tokens never leave this function.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyDashboardToken, readDashboardToken } from "../_shared/dashboardToken.ts";
-import { GRAPH, META_VERSION, OBJECTIVES, validateLaunch } from "../_shared/metaLaunchValidation.ts";
+import { buildTargeting, GRAPH, META_VERSION, OBJECTIVES, validateLaunch } from "../_shared/metaLaunchValidation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
