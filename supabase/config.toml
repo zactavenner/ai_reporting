@@ -212,3 +212,12 @@ verify_jwt = false
 
 [functions.jeremy-review-cron]
 verify_jwt = false
+
+# Agency Daily Reporting 5.0: both functions authenticate in code with the
+# daily_report_run secret (authorizeDailyReportRun), so platform JWT
+# verification is off and pg_cron can call the coordinator directly.
+[functions.agency-daily-report-coordinator]
+verify_jwt = false
+
+[functions.agency-ghl-report-send]
+verify_jwt = false
