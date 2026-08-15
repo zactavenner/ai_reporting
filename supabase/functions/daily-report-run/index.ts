@@ -12,19 +12,23 @@
 // Numbers are NEVER computed by the model. The narrative may only summarise
 // already-calculated values. The Google sheet is output-only, after validation.
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { authorizeDailyReportRun } from '../_shared/dailyReportSecret.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-internal-secret',
 };
 
-const INTERNAL_PASSWORD = 'HPA1234$';
 const TZ = 'America/Los_Angeles';
 const RUN_HOUR_LOCAL = 6;
 const TRAILING_DAYS = 7;
+/** A sync timestamp older than this makes the report stale, not merely noisy. */
+const FRESHNESS_MAX_AGE_HOURS = 26;
+/** Bounded incremental lookback for the CRM pulls (matches the daily master sync). */
+const CRM_LOOKBACK_DAYS = 3;
 
 type Body = {
-  password?: string;
+  secret?: string;
   client_id?: string;
   report_date?: string;
   dry_run?: boolean;
@@ -40,6 +44,13 @@ const laDate = (d = new Date()) =>
 
 const laHour = (d = new Date()) =>
   Number(new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: '2-digit', hour12: false }).format(d));
+
+const hoursSince = (iso: string | null | undefined): number | null => {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return (Date.now() - t) / 3_600_000;
+};
 
 const addDays = (iso: string, n: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -57,11 +68,16 @@ Deno.serve(async (req) => {
 
   const body: Body = await req.json().catch(() => ({}));
   const url = new URL(req.url);
-  const password = body.password ?? url.searchParams.get('password') ?? undefined;
-  if (password !== INTERNAL_PASSWORD) return json({ error: 'unauthorized' }, 401);
-
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
   const sb = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+  // Secret-only auth. No credential is present in this source file or in any
+  // cron command: pg_cron reads it inline from the service-role secret store.
+  const presented =
+    body.secret ?? req.headers.get('x-internal-secret') ?? url.searchParams.get('secret') ?? null;
+  if (!(await authorizeDailyReportRun(sb, presented))) return json({ error: 'unauthorized' }, 401);
+
+  const deliveryPassword = Deno.env.get('INTERNAL_FUNCTION_PASSWORD') || '';
 
   // DST-safe gate: cron fires at 13:00 and 14:00 UTC; only the invocation that
   // lands on local hour 06 proceeds.
@@ -118,7 +134,7 @@ Deno.serve(async (req) => {
     // Idempotent run key: one row per (client_id, report_date).
     const { data: existingRun } = await sb
       .from('daily_report_runs')
-      .select('id, delivered_at, status')
+      .select('id, delivered_at, status, attempts, attempt_count')
       .eq('client_id', client.id)
       .eq('report_date', reportDate)
       .maybeSingle();
@@ -127,6 +143,21 @@ Deno.serve(async (req) => {
       results.push({ client: client.name, skipped: 'run already in progress' });
       continue;
     }
+
+    // Never overwrite the audit trail invisibly: every prior attempt is appended
+    // to `attempts` before the row is reused for this attempt.
+    const priorAttempts: any[] = Array.isArray(existingRun?.attempts) ? existingRun!.attempts : [];
+    const attemptHistory = existingRun
+      ? [
+          ...priorAttempts,
+          {
+            attempt: (existingRun.attempt_count ?? priorAttempts.length) + 1,
+            archived_at: new Date().toISOString(),
+            status: existingRun.status,
+            delivered_at: existingRun.delivered_at ?? null,
+          },
+        ].slice(-25)
+      : priorAttempts;
 
     const { data: runRow, error: runErr } = await sb
       .from('daily_report_runs')
@@ -137,6 +168,8 @@ Deno.serve(async (req) => {
         dry_run: dryRun,
         stages: [],
         error: null,
+        attempts: attemptHistory,
+        attempt_count: attemptHistory.length + 1,
         started_at: new Date().toISOString(),
         finished_at: null,
       }, { onConflict: 'client_id,report_date' })
@@ -159,20 +192,57 @@ Deno.serve(async (req) => {
 
     try {
       // ── 1. SYNC ───────────────────────────────────────────────────────────
+      // Every required sync is recorded and hard-fails the run. A sync that
+      // errors, times out or reports internal errors is never silently ignored.
+      const syncFailures: Array<{ source: string; detail: unknown }> = [];
       if (body.skip_sync) {
         stage('sync', 'skipped', { reason: 'skip_sync' });
+        syncFailures.push({ source: 'skip_sync', detail: 'sync stage was skipped; freshness is unverified' });
       } else {
+        const bodyErrors = (b: unknown): string[] => {
+          const out: string[] = [];
+          const walk = (v: any) => {
+            if (!v || typeof v !== 'object') return;
+            if (Array.isArray(v)) { v.forEach(walk); return; }
+            if (typeof v.error === 'string' && v.error) out.push(v.error);
+            if (Array.isArray(v.errors)) out.push(...v.errors.filter((e: unknown) => typeof e === 'string'));
+            if (v.success === false) out.push('reported success:false');
+            Object.values(v).forEach(walk);
+          };
+          walk(b);
+          return [...new Set(out)].slice(0, 5);
+        };
+
         const meta = await invoke('sync-meta-ad-spend', {
           mode: 'manual', client_id: client.id, days_back: TRAILING_DAYS + 1,
         });
-        const ghl = await invoke('sync-ghl-contacts', {
-          client_id: client.id, syncType: 'all', sinceDateDays: 14,
-        });
-        const cal = await invoke('sync-calendar-appointments', { clientId: client.id });
+        // Bounded incremental lead/contact pull (lightweight path), not the
+        // unbounded full-history contact walk.
+        const leads = await invoke('sync-ghl-contacts', {
+          client_id: client.id, syncType: 'contacts', sinceDateDays: CRM_LOOKBACK_DAYS,
+        }, 180_000);
+        const cal = await invoke('sync-calendar-appointments', { clientId: client.id }, 180_000);
         const pipe = await invoke('sync-ghl-pipelines', { client_id: client.id, mode: 'list' });
-        stage('sync', meta.ok ? 'ok' : 'error', {
-          meta: meta.status, ghl: ghl.status, calendar: cal.status, pipelines: pipe.status,
-        });
+
+        const required: Array<[string, typeof meta]> = [
+          ['meta_ad_spend', meta],
+          ['crm_leads_incremental', leads],
+          ['calendar_appointments', cal],
+          ['pipelines', pipe],
+        ];
+        const syncDetail: Record<string, unknown> = {};
+        for (const [name, res] of required) {
+          const errs = res.ok ? bodyErrors(res.body) : [String((res.body as any)?.error ?? res.status)];
+          const failed = !res.ok || errs.length > 0;
+          syncDetail[name] = {
+            ok: !failed,
+            http_status: res.status,
+            timed_out: res.status === 0,
+            errors: errs,
+          };
+          if (failed) syncFailures.push({ source: name, detail: syncDetail[name] });
+        }
+        stage('sync', syncFailures.length === 0 ? 'ok' : 'error', syncDetail);
       }
 
       // ── 2. NORMALIZE / REPAIR ────────────────────────────────────────────
@@ -212,6 +282,39 @@ Deno.serve(async (req) => {
         .eq('date', reportDate);
 
       const anomalies: any[] = [];
+      for (const f of syncFailures) {
+        anomalies.push({
+          code: 'sync_failed', severity: 'critical', source: f.source,
+          message: `Required sync "${f.source}" did not complete successfully; the report is not trustworthy.`,
+          detail: f.detail,
+        });
+      }
+
+      // Freshness is threshold-checked, not merely displayed.
+      const freshnessChecks = [
+        ['meta_last_synced_at', freshRows?.meta_last_synced_at],
+        ['ghl_last_synced_at', freshRows?.ghl_last_synced_at],
+        ['calls_last_synced_at', freshRows?.calls_last_synced_at],
+      ] as const;
+      const staleSources: Array<{ source: string; age_hours: number | null }> = [];
+      for (const [name, value] of freshnessChecks) {
+        const age = hoursSince(value as string | null);
+        if (age === null || age > FRESHNESS_MAX_AGE_HOURS) staleSources.push({ source: name, age_hours: age });
+      }
+      if (staleSources.length > 0) {
+        anomalies.push({
+          code: 'stale_data', severity: 'critical',
+          message: `Source data is older than ${FRESHNESS_MAX_AGE_HOURS}h (or never synced): ${staleSources.map((s) => s.source).join(', ')}.`,
+          detail: staleSources,
+        });
+      }
+      if (freshRows?.meta_last_date && String(freshRows.meta_last_date) < reportDate) {
+        anomalies.push({
+          code: 'meta_behind_report_date', severity: 'critical',
+          message: `Latest Meta spend date ${freshRows.meta_last_date} is behind the report date ${reportDate}.`,
+        });
+      }
+
       if (!spendRowCount) {
         anomalies.push({ code: 'meta_no_rows', severity: 'critical',
           message: `No ad_spend_daily rows for ${reportDate}; a zero row is not proof the sync completed.` });
@@ -376,7 +479,7 @@ Deno.serve(async (req) => {
               .single();
 
             const send = await invoke('send-ghl-message', {
-              password: INTERNAL_PASSWORD, channel,
+              password: deliveryPassword, channel,
               to_email: r.email, to_phone: r.phone_e164, name: r.name,
               subject: `${client.name} · Daily performance · ${reportDate}`,
               html: renderHtml(client.name, report), text,
@@ -397,6 +500,7 @@ Deno.serve(async (req) => {
       await finish(validationPassed ? 'completed' : 'validation_failed', {
         metrics: report.funnel,
         anomalies,
+        error: validationPassed ? null : `validation_failed: ${anomalies.filter((a) => a.severity === 'critical').map((a) => a.code).join(', ')}`,
         freshness: report.freshness,
         reconciliation,
         report_json: report,
