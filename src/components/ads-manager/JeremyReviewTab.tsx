@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Brain, Loader2, Play, Pause, TrendingUp, Check, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Brain, Loader2, Play, Pause, TrendingUp, Check, X, RefreshCw, AlertTriangle, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,25 @@ const ACTION_META: Record<string, { label: string; icon: typeof Play }> = {
   hold: { label: 'Hold — needs more data', icon: AlertTriangle },
 };
 
+const TZ = 'America/Los_Angeles';
+
+/** Next automatic run: 7:00 AM America/Los_Angeles on the next business day. */
+function nextAutomaticRun(): string {
+  const now = new Date();
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(now.getTime() + i * 86_400_000);
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', hour: '2-digit', hour12: false })
+      .formatToParts(day)
+      .reduce<Record<string, string>>((acc, p) => ({ ...acc, [p.type]: p.value }), {});
+    const isWeekend = parts.weekday === 'Sat' || parts.weekday === 'Sun';
+    if (isWeekend) continue;
+    if (i === 0 && Number(parts.hour) >= 7) continue;
+    const label = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric' }).format(day);
+    return `${label}, 7:00 AM PT`;
+  }
+  return 'next business morning, 7:00 AM PT';
+}
+
 export function JeremyReviewTab({ clientId, clientName }: { clientId: string; clientName?: string }) {
   const qc = useQueryClient();
 
@@ -26,6 +45,22 @@ export function JeremyReviewTab({ clientId, clientName }: { clientId: string; cl
         .from('agency_agents')
         .select('name, is_active, default_model')
         .eq('slug', 'media_buyer_jeremy')
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const { data: lastRun } = useQuery({
+    queryKey: ['jeremy-review-run', clientId],
+    enabled: !!clientId,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('jeremy_review_runs')
+        .select('status, source, run_date, error_message, result_summary, created_at, updated_at')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
       return data;
     },
@@ -50,7 +85,10 @@ export function JeremyReviewTab({ clientId, clientName }: { clientId: string; cl
   const pending = useMemo(() => (recs || []).filter((r: Record<string, any>) => r.status === 'pending'), [recs]);
   const resolved = useMemo(() => (recs || []).filter((r: Record<string, any>) => r.status !== 'pending'), [recs]);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['jeremy-recommendations', clientId] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['jeremy-recommendations', clientId] });
+    qc.invalidateQueries({ queryKey: ['jeremy-review-run', clientId] });
+  };
 
   const review = useMutation({
     mutationFn: async () => {
@@ -125,6 +163,37 @@ export function JeremyReviewTab({ clientId, clientName }: { clientId: string; cl
             <p className="text-xs text-muted-foreground">{latest.summary}</p>
           </CardContent>
         )}
+      </Card>
+
+      {/* Automatic cadence status */}
+      <Card>
+        <CardContent className="py-3 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-medium">Automatic review</span>
+            <Badge variant="secondary" className="text-[10px]">Business mornings · 7:00 AM PT</Badge>
+            {lastRun ? (
+              <Badge
+                variant={lastRun.status === 'failed' ? 'destructive' : lastRun.status === 'completed' ? 'default' : 'secondary'}
+                className="capitalize text-[10px]"
+              >
+                Last: {lastRun.status} · {lastRun.run_date}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground">No automatic run recorded yet.</span>
+            )}
+            <span className="text-muted-foreground">Next: {nextAutomaticRun()}</span>
+          </div>
+          {lastRun?.error_message && (
+            <p className="text-[11px] text-destructive">{lastRun.error_message}</p>
+          )}
+          {!!(lastRun?.result_summary as Record<string, any> | null)?.created && (
+            <p className="text-[11px] text-muted-foreground">
+              Raised {(lastRun!.result_summary as Record<string, any>).created} recommendations across{' '}
+              {(lastRun!.result_summary as Record<string, any>).reviewed} entities ({lastRun!.source}).
+            </p>
+          )}
+        </CardContent>
       </Card>
 
       <Card>
