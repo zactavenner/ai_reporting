@@ -22,22 +22,31 @@ function envSecret(): string {
   }
 }
 
+/**
+ * Both the Edge environment secret and the provisioned `integration_secrets`
+ * row are valid schedulers: pg_cron reads the table inline, while manual
+ * platform-side scheduling can use the environment value. Either one alone is
+ * sufficient; neither is ever returned to a caller.
+ */
 // deno-lint-ignore no-explicit-any
-async function resolveSecret(supabase: any): Promise<string | null> {
+async function resolveSecrets(supabase: any): Promise<string[]> {
+  const candidates: string[] = [];
   const env = envSecret();
-  if (env) return env;
+  if (env) candidates.push(env);
   try {
     const { data, error } = await supabase
       .from('integration_secrets')
       .select('secret')
       .eq('provider', JEREMY_CRON_PROVIDER)
       .maybeSingle();
-    if (error) return null;
-    const stored = (data?.secret || '').trim();
-    return stored || null;
+    if (!error) {
+      const stored = (data?.secret || '').trim();
+      if (stored) candidates.push(stored);
+    }
   } catch {
-    return null;
+    // Never surface storage details; absence means fail closed.
   }
+  return candidates.filter((s) => s.length >= 32);
 }
 
 export function timingSafeEqual(a: string, b: string): boolean {
@@ -55,9 +64,13 @@ export async function authorizeJeremyCron(
 ): Promise<boolean> {
   const candidate = (presented || '').trim();
   if (!candidate || candidate.length < 32) return false;
-  const expected = await resolveSecret(supabase);
-  if (!expected || expected.length < 32) return false;
-  return timingSafeEqual(candidate, expected);
+  const expected = await resolveSecrets(supabase);
+  let ok = false;
+  for (const secret of expected) {
+    // Constant-time per candidate; no early exit on match.
+    if (timingSafeEqual(candidate, secret)) ok = true;
+  }
+  return ok;
 }
 
 /** Reads the scheduler secret from the request header only (never the body). */
