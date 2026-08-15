@@ -527,11 +527,27 @@ Deno.serve(async (req) => {
             cost_per_funded: Number(day?.cost_per_funded || 0),
           },
         },
-        trailing_7_days: (funnelRows ?? []).map((r: any) => ({
+        trailing_7_days: (funnelRows ?? []).filter((r: any) => r.date >= trailing7Start).map((r: any) => ({
           date: r.date, spend: Number(r.spend), leads: Number(r.leads_total),
           discovery_booked: Number(r.discovery_booked), discovery_showed: Number(r.discovery_showed),
           show_rate: r.discovery_show_rate, funded_dollars: Number(r.funded_dollars),
         })),
+        // Deterministic 1 / 7 / 14 / 30 day aggregation. Ratios are computed from
+        // summed numerators and denominators, never averaged daily ratios.
+        windows,
+        indicators,
+        metric_availability: {
+          spend: metaActive,
+          leads: configuration.ghl_configured,
+          qualified_rate: configuration.ghl_configured,
+          booked: configuration.calendars_configured,
+          show_rate: configuration.calendars_configured,
+          commitments: configuration.commitment_stages_mapped,
+          funded: configuration.funded_stages_mapped,
+          cpl: metaActive && configuration.ghl_configured,
+          cost_per_booked: metaActive && configuration.calendars_configured,
+          cost_per_show: metaActive && configuration.calendars_configured,
+        },
         anomalies,
         reconciliation,
         validation_passed: validationPassed,
