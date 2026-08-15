@@ -205,6 +205,35 @@ Deno.serve(async (req) => {
       // errors, times out or reports internal errors is never silently ignored.
       const syncFailures: Array<{ source: string; detail: unknown }> = [];
       const anomalyQueue: any[] = [];
+
+      // ── Configuration awareness ──────────────────────────────────────────
+      // Only enabled/configured sources are required or freshness-checked. A
+      // missing source is an explicit configuration warning / unavailable
+      // metric — never a silent zero and never a failure of an unrelated client.
+      const { data: cfgRow } = await sb
+        .from('client_settings')
+        .select('meta_ads_sync_enabled, tracked_calendar_ids, reconnect_calendar_ids, committed_stage_ids, funded_stage_ids, daily_ad_spend_target')
+        .eq('client_id', client.id)
+        .maybeSingle();
+      const { data: clientRow } = await sb
+        .from('clients')
+        .select('meta_ad_account_id, meta_ad_account_ids, ghl_location_id, ghl_api_key')
+        .eq('id', client.id)
+        .maybeSingle();
+
+      const arr = (v: unknown): string[] => (Array.isArray(v) ? v.filter(Boolean).map(String) : []);
+      const configuration = {
+        meta_configured: !!(clientRow?.meta_ad_account_id || arr(clientRow?.meta_ad_account_ids).length),
+        meta_sync_enabled: cfgRow?.meta_ads_sync_enabled !== false,
+        ghl_configured: !!(clientRow?.ghl_location_id && clientRow?.ghl_api_key),
+        calendars_configured:
+          arr(cfgRow?.tracked_calendar_ids).length + arr(cfgRow?.reconnect_calendar_ids).length > 0,
+        commitment_stages_mapped: arr(cfgRow?.committed_stage_ids).length > 0,
+        funded_stages_mapped: arr(cfgRow?.funded_stage_ids).length > 0,
+        daily_ad_spend_target: cfgRow?.daily_ad_spend_target ?? null,
+      };
+      const metaActive = configuration.meta_configured && configuration.meta_sync_enabled;
+
       if (body.skip_sync) {
         stage('sync', 'skipped', { reason: 'skip_sync' });
         syncFailures.push({ source: 'skip_sync', detail: 'sync stage was skipped; freshness is unverified' });
@@ -232,27 +261,64 @@ Deno.serve(async (req) => {
           return [...new Set(out)].slice(0, 5);
         };
 
-        const meta = await invoke('sync-meta-ad-spend', {
-          mode: 'manual', client_id: client.id, days_back: TRAILING_DAYS + 1,
-        });
-        // Bounded incremental lead/contact pull: the recent-conversations path
-        // (window + page cap), NOT the unbounded full-history contact walk which
-        // exceeds the function resource budget.
-        const leads = await invoke('sync-ghl-contacts', {
-          client_id: client.id,
-          mode: 'recent_conversations',
-          sinceMinutes: CRM_LOOKBACK_DAYS * 24 * 60,
-          maxConversations: 100,
-        }, 240_000);
-        const cal = await invoke('sync-calendar-appointments', { clientId: client.id }, 180_000);
-        const pipe = await invoke('sync-ghl-pipelines', { client_id: client.id, mode: 'list' });
+        type Res = { ok: boolean; status: number; body: unknown };
+        const required: Array<[string, Res]> = [];
 
-        const required: Array<[string, typeof meta]> = [
-          ['meta_ad_spend', meta],
-          ['crm_leads_incremental', leads],
-          ['calendar_appointments', cal],
-          ['pipelines', pipe],
-        ];
+        // Meta: EXACT report date only, and only when configured + enabled.
+        if (metaActive) {
+          const meta = await invoke('sync-meta-ad-spend', {
+            mode: 'manual', client_id: client.id, date: reportDate,
+          }, 180_000);
+          required.push(['meta_ad_spend', meta]);
+        } else {
+          anomalyQueue.push({
+            code: 'meta_not_configured', severity: 'warning', source: 'meta_ad_spend',
+            message: configuration.meta_configured
+              ? 'Meta ad spend sync is disabled for this client; spend metrics are unavailable, not zero.'
+              : 'No Meta ad account is configured for this client; spend metrics are unavailable, not zero.',
+          });
+        }
+
+        // GHL contacts/opportunities: the real contact + opportunity pull so the
+        // commitment / funded logic actually runs (2-day incremental lookback).
+        if (configuration.ghl_configured) {
+          const leads = await invoke('sync-ghl-contacts', {
+            client_id: client.id,
+            syncType: 'all',
+            sinceDateDays: Math.max(2, CRM_LOOKBACK_DAYS - 1),
+            syncTimeline: false,
+          }, 300_000);
+          required.push(['crm_contacts_opportunities', leads]);
+        } else {
+          anomalyQueue.push({
+            code: 'ghl_not_configured', severity: 'critical', source: 'crm_contacts_opportunities',
+            message: 'No GHL location/API credentials configured; lead, call, commitment and funded metrics are unavailable.',
+          });
+        }
+
+        // Calendars only when a tracked/reconnect calendar is configured.
+        if (configuration.calendars_configured) {
+          const cal = await invoke('sync-calendar-appointments', { clientId: client.id }, 240_000);
+          required.push(['calendar_appointments', cal]);
+        } else {
+          anomalyQueue.push({
+            code: 'calendars_not_configured', severity: 'warning', source: 'calendar_appointments',
+            message: 'No tracked/reconnect calendars configured; booked/show metrics are unavailable, not zero.',
+          });
+        }
+        if (!configuration.commitment_stages_mapped) {
+          anomalyQueue.push({
+            code: 'commitment_stages_unmapped', severity: 'warning',
+            message: 'No commitment stage mapping configured; commitments are unavailable, not zero.',
+          });
+        }
+        if (!configuration.funded_stages_mapped) {
+          anomalyQueue.push({
+            code: 'funded_stages_unmapped', severity: 'warning',
+            message: 'No funded stage mapping configured; funded metrics are unavailable, not zero.',
+          });
+        }
+
         const syncDetail: Record<string, unknown> = {};
         const syncPartials: Array<{ source: string; errors: string[] }> = [];
         for (const [name, res] of required) {
