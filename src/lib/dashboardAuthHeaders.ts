@@ -1,7 +1,8 @@
 /**
- * Attaches the HMAC dashboard session token (minted by verify-password) to
- * operator-gated edge function calls. Server side re-verifies the signature and
- * the agency-admin role — this header alone grants nothing.
+ * Attaches the HMAC dashboard session token (minted by verify-password, valid
+ * for 12 hours) to operator-gated edge function calls. The server re-verifies
+ * the signature, the expiry and the member record — this header alone grants
+ * nothing, and an expired token returns 401 so the operator signs in again.
  */
 export function dashboardAuthHeaders(): Record<string, string> {
   try {

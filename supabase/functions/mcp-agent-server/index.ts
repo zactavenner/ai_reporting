@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { runJeremyReview, listRecommendations, prepareCampaignDraft } from '../_shared/jeremyReview.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -531,6 +532,46 @@ const TOOLS = [
       required: ['client_id'],
     },
   },
+  // ============ Media Buyer (JEREMY) — read / safe-preparation only ============
+  // There is deliberately NO tool that applies a recommendation or publishes to
+  // Meta. Applying and publishing stay explicit dashboard operator actions.
+  {
+    name: 'jeremy_review_ads',
+    description: 'Run the Media Buyer (JEREMY) funded-outcome review for a client and create reviewable recommendations. Never writes to Meta and never spends.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' } },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'jeremy_list_recommendations',
+    description: 'List JEREMY recommendations for a client (optionally filtered by status: pending, applied, acknowledged, rejected, failed).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        status: { type: 'string' },
+        limit: { type: 'number', default: 25 },
+      },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'jeremy_prepare_campaign_draft',
+    description: 'Validate campaign inputs and create a DRAFT launch only in meta_campaign_launches. Publishing to Meta remains a dashboard operator action.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        inputs: {
+          type: 'object',
+          description: 'name, objective (leads|traffic), daily_budget_cents, cta, destination_url, primary_text, headline, description, page_id, pixel_id, countries (array or comma list), age_min, age_max, special_ad_category, creative_url, creative_type (image|video)',
+        },
+      },
+      required: ['client_id', 'inputs'],
+    },
+  },
 ];
 
 async function handleToolCall(name: string, args: Record<string, any>): Promise<any> {
@@ -775,6 +816,21 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
       return await callDataApi({ action: 'create_task', ...args });
     case 'get_ads_overview':
       return await callDataApi({ action: 'get_ads_overview', ...args });
+
+    // ============ Media Buyer (JEREMY) ============
+    case 'jeremy_review_ads': {
+      if (!args.client_id) return { error: 'client_id required' };
+      return await runJeremyReview(prodDb, args.client_id, 'mcp');
+    }
+    case 'jeremy_list_recommendations': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const recommendations = await listRecommendations(prodDb, args.client_id, args.status, args.limit ?? 25);
+      return { recommendations, count: recommendations.length };
+    }
+    case 'jeremy_prepare_campaign_draft': {
+      if (!args.client_id) return { error: 'client_id required' };
+      return await prepareCampaignDraft(prodDb, args.client_id, args.inputs || {});
+    }
 
     default:
       return { error: `Unknown tool: ${name}` };

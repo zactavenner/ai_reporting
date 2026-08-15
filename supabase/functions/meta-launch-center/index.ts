@@ -6,7 +6,7 @@
 // Meta access tokens never leave this function.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyDashboardToken, readDashboardToken } from "../_shared/dashboardToken.ts";
-import { GRAPH, META_VERSION, OBJECTIVES, validateLaunch } from "../_shared/metaLaunchValidation.ts";
+import { buildTargeting, GRAPH, META_VERSION, OBJECTIVES, validateLaunch } from "../_shared/metaLaunchValidation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,13 +115,10 @@ Deno.serve(async (req) => {
       await save({ meta_campaign_id: campaignId, stage: "campaign" });
     }
 
-    // Stage 2 — ad set
+    // Stage 2 — ad set. Restricted special ad categories reject operator-chosen
+    // age targeting, so buildTargeting omits the age fields for those.
     if (!adsetId) {
-      const targeting = {
-        geo_locations: { countries: launch.countries },
-        age_min: launch.age_min,
-        age_max: launch.age_max,
-      };
+      const targeting = buildTargeting(launch);
       const params: Record<string, string> = {
         name: `${launch.name} — Ad Set`,
         campaign_id: campaignId!,
