@@ -13,11 +13,7 @@
 // already-calculated values. The Google sheet is output-only, after validation.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { authorizeDailyReportRun } from '../_shared/dailyReportSecret.ts';
-import {
-  buildWindows,
-  buildIndicators,
-  addDays as addDaysIso,
-} from '../_shared/agencyReport.ts';
+import { buildWindows, buildIndicators } from '../_shared/agencyReport.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
