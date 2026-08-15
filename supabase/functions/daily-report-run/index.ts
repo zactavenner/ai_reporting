@@ -11,8 +11,12 @@
 //
 // Numbers are NEVER computed by the model. The narrative may only summarise
 // already-calculated values. The Google sheet is output-only, after validation.
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 const INTERNAL_PASSWORD = 'HPA1234$';
 const TZ = 'America/Los_Angeles';
