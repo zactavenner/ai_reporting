@@ -198,3 +198,17 @@ verify_jwt = false
 
 [functions.call-transcription]
 verify_jwt = false
+
+# Ads Launch Center + Media Buyer (JEREMY): each implements its own signed
+# dashboard-session auth in code, so platform JWT verification is off.
+[functions.meta-launch-center]
+verify_jwt = false
+
+[functions.meta-apply-recommendation]
+verify_jwt = false
+
+[functions.jeremy-media-buyer-review]
+verify_jwt = false
+
+[functions.jeremy-review-cron]
+verify_jwt = false
