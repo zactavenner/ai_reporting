@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createDashboardToken } from "../_shared/dashboardTokenCore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,26 +13,6 @@ async function hashPassword(password: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function base64UrlEncode(value: string | ArrayBuffer): string {
-  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value);
-  let binary = '';
-  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-async function createDashboardToken(memberId: string, secret: string): Promise<string> {
-  const payload = base64UrlEncode(JSON.stringify({ memberId, exp: Date.now() + 1000 * 60 * 60 * 24 * 7 }));
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
-  return `${payload}.${base64UrlEncode(signature)}`;
 }
 
 Deno.serve(async (req) => {
@@ -125,6 +106,7 @@ Deno.serve(async (req) => {
         },
       });
 
+    // Signed operator session — valid for 12 hours (see dashboardTokenCore).
     const dashboardToken = await createDashboardToken(member.id, supabaseServiceKey);
 
     return new Response(

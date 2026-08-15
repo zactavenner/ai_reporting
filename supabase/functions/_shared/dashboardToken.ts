@@ -1,23 +1,15 @@
 // Verifies the HMAC dashboard_session_token minted by the verify-password
 // edge function. The token has shape `<base64url(payload)>.<base64url(signature)>`
-// where signature = HMAC-SHA256(payload, SUPABASE_SERVICE_ROLE_KEY).
-// Returns the resolved agency_members row (or null).
+// where signature = HMAC-SHA256(payload, SUPABASE_SERVICE_ROLE_KEY) and it
+// expires 12 hours after it is minted.
+//
+// Who may approve operator actions: any member row that still exists in
+// agency_members. That table has no archived/disabled column today, so
+// de-provisioning happens by deleting the row (which fails verification here).
+// If an `is_archived`/`is_active` column is ever added, the filter below picks
+// it up automatically.
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
-function base64UrlDecode(input: string): Uint8Array {
-  const pad = input.length % 4 === 0 ? '' : '='.repeat(4 - (input.length % 4));
-  const b64 = (input + pad).replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  let bin = '';
-  bytes.forEach((b) => { bin += String.fromCharCode(b); });
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
+import { parseDashboardToken } from './dashboardTokenCore.ts';
 
 export interface DashboardMember {
   id: string;
@@ -27,32 +19,14 @@ export interface DashboardMember {
 }
 
 export async function verifyDashboardToken(token: string | null | undefined): Promise<DashboardMember | null> {
-  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
   const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!secret) return null;
 
-  const [payloadB64, sigB64] = token.split('.');
-  if (!payloadB64 || !sigB64) return null;
-
-  let payload: { memberId?: string; exp?: number };
-  try {
-    payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadB64)));
-  } catch {
+  const parsed = await parseDashboardToken(token, secret);
+  if (!parsed.ok) {
+    console.warn('dashboard token rejected:', parsed.reason);
     return null;
   }
-  if (!payload?.memberId || !payload?.exp || Date.now() > payload.exp) return null;
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const expected = new Uint8Array(
-    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64)),
-  );
-  if (base64UrlEncode(expected) !== sigB64) return null;
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -60,10 +34,15 @@ export async function verifyDashboardToken(token: string | null | undefined): Pr
   );
   const { data, error } = await admin
     .from('agency_members')
-    .select('id, name, email, role')
-    .eq('id', payload.memberId)
+    .select('*')
+    .eq('id', parsed.payload.memberId)
     .maybeSingle();
   if (error || !data) return null;
+
+  // Reject de-provisioned members when the schema tracks that state.
+  const row = data as Record<string, unknown>;
+  if (row.is_archived === true || row.archived_at || row.is_active === false || row.disabled_at) return null;
+
   return data as DashboardMember;
 }
 
