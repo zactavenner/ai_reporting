@@ -474,6 +474,7 @@ Deno.serve(async (req) => {
         report_date: reportDate,
         timezone: TZ,
         window: { start: windowStart, end: reportDate },
+        configuration,
         freshness: {
           meta_last_synced_at: freshRows?.meta_last_synced_at ?? null,
           meta_last_date: freshRows?.meta_last_date ?? null,
