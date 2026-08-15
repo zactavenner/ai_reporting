@@ -151,7 +151,7 @@ export function LaunchCenterTab({ clientId, clientName }: { clientId: string; cl
     [creatives, draft.creative_id],
   );
 
-  const pageId = draft.page_id || clientDefaults?.meta_page_id || '';
+  const pageId = draft.page_id || clientDefaults?.pages?.[0]?.id || '';
   const pixelId = draft.pixel_id || clientDefaults?.meta_pixel_id || '';
 
   const problems = useMemo(() => {
