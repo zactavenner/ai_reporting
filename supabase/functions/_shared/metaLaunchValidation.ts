@@ -22,11 +22,13 @@ export const SUPPORTED_CTAS = [
 export const SPECIAL_AD_CATEGORIES = ["NONE", "HOUSING", "EMPLOYMENT", "CREDIT", "ISSUES_ELECTIONS_POLITICS", "FINANCIAL_PRODUCTS_SERVICES"] as const;
 
 /**
- * Meta forbids narrowed age (and other demographic) targeting for these
- * categories. For them we omit the operator's age selection entirely and let
- * Meta apply its own unrestricted floor.
+ * Every special ad category other than NONE restricts demographic targeting on
+ * Meta. For those we omit the operator's age selection entirely and let Meta
+ * apply its own unrestricted floor, instead of sending values it will reject.
  */
-export const RESTRICTED_AD_CATEGORIES = ["HOUSING", "EMPLOYMENT", "CREDIT", "ISSUES_ELECTIONS_POLITICS"] as const;
+export const RESTRICTED_AD_CATEGORIES = [
+  "HOUSING", "EMPLOYMENT", "CREDIT", "ISSUES_ELECTIONS_POLITICS", "FINANCIAL_PRODUCTS_SERVICES",
+] as const;
 
 export function isRestrictedCategory(category: unknown): boolean {
   return RESTRICTED_AD_CATEGORIES.includes(String(category) as typeof RESTRICTED_AD_CATEGORIES[number]);
