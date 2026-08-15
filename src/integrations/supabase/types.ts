@@ -15531,6 +15531,107 @@ export type Database = {
           },
         ]
       }
+      meta_ad_recommendations: {
+        Row: {
+          action: string
+          applied_at: string | null
+          claimed_at: string | null
+          client_id: string
+          confidence: number
+          created_at: string
+          decided_by: string | null
+          entity_name: string
+          entity_type: string
+          error_detail: string | null
+          health_score: number | null
+          id: string
+          meta_entity_id: string
+          meta_response: Json | null
+          metrics_snapshot: Json | null
+          proposed_daily_budget: number | null
+          reason: string
+          run_id: string | null
+          status: string
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          applied_at?: string | null
+          claimed_at?: string | null
+          client_id: string
+          confidence?: number
+          created_at?: string
+          decided_by?: string | null
+          entity_name: string
+          entity_type: string
+          error_detail?: string | null
+          health_score?: number | null
+          id?: string
+          meta_entity_id: string
+          meta_response?: Json | null
+          metrics_snapshot?: Json | null
+          proposed_daily_budget?: number | null
+          reason: string
+          run_id?: string | null
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          applied_at?: string | null
+          claimed_at?: string | null
+          client_id?: string
+          confidence?: number
+          created_at?: string
+          decided_by?: string | null
+          entity_name?: string
+          entity_type?: string
+          error_detail?: string | null
+          health_score?: number | null
+          id?: string
+          meta_entity_id?: string
+          meta_response?: Json | null
+          metrics_snapshot?: Json | null
+          proposed_daily_budget?: number | null
+          reason?: string
+          run_id?: string | null
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_ad_recommendations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       meta_ad_sets: {
         Row: {
           attributed_calls: number | null
@@ -16098,6 +16199,150 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_daily_funnel_freshness"
             referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      meta_campaign_launches: {
+        Row: {
+          age_max: number
+          age_min: number
+          client_id: string
+          countries: string[]
+          created_at: string
+          created_by: string | null
+          creative_id: string | null
+          creative_type: string | null
+          creative_url: string | null
+          cta: string
+          daily_budget_cents: number
+          description: string | null
+          destination_url: string | null
+          error_detail: Json | null
+          headline: string
+          id: string
+          meta_ad_id: string | null
+          meta_adset_id: string | null
+          meta_campaign_id: string | null
+          meta_creative_id: string | null
+          meta_image_hash: string | null
+          meta_video_id: string | null
+          name: string
+          objective: string
+          page_id: string | null
+          pixel_id: string | null
+          primary_text: string
+          published_at: string | null
+          retry_count: number
+          special_ad_category: string
+          stage: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          age_max?: number
+          age_min?: number
+          client_id: string
+          countries?: string[]
+          created_at?: string
+          created_by?: string | null
+          creative_id?: string | null
+          creative_type?: string | null
+          creative_url?: string | null
+          cta?: string
+          daily_budget_cents?: number
+          description?: string | null
+          destination_url?: string | null
+          error_detail?: Json | null
+          headline?: string
+          id?: string
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          meta_creative_id?: string | null
+          meta_image_hash?: string | null
+          meta_video_id?: string | null
+          name: string
+          objective?: string
+          page_id?: string | null
+          pixel_id?: string | null
+          primary_text?: string
+          published_at?: string | null
+          retry_count?: number
+          special_ad_category?: string
+          stage?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          age_max?: number
+          age_min?: number
+          client_id?: string
+          countries?: string[]
+          created_at?: string
+          created_by?: string | null
+          creative_id?: string | null
+          creative_type?: string | null
+          creative_url?: string | null
+          cta?: string
+          daily_budget_cents?: number
+          description?: string | null
+          destination_url?: string | null
+          error_detail?: Json | null
+          headline?: string
+          id?: string
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          meta_creative_id?: string | null
+          meta_image_hash?: string | null
+          meta_video_id?: string | null
+          name?: string
+          objective?: string
+          page_id?: string | null
+          pixel_id?: string | null
+          primary_text?: string
+          published_at?: string | null
+          retry_count?: number
+          special_ad_category?: string
+          stage?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "meta_campaign_launches_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "creatives"
+            referencedColumns: ["id"]
           },
         ]
       }
