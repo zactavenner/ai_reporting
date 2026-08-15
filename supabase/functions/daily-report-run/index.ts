@@ -31,6 +31,7 @@ type Body = {
   deliver?: boolean;
   force?: boolean;
   skip_sync?: boolean;
+  background?: boolean;
   source?: string;
 };
 
@@ -45,6 +46,8 @@ const addDays = (iso: string, n: number) => {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
+
+declare const EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } | undefined;
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -80,8 +83,12 @@ Deno.serve(async (req) => {
   const { data: clients, error: clientsErr } = await clientsQ;
   if (clientsErr) return json({ error: clientsErr.message }, 500);
 
-  const invoke = async (fn: string, payload: Record<string, unknown>) => {
+  const invoke = async (fn: string, payload: Record<string, unknown>, timeoutMs = 120_000) => {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), timeoutMs);
+    try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+      signal: ac.signal,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -93,10 +100,16 @@ Deno.serve(async (req) => {
     let parsed: unknown = text;
     try { parsed = JSON.parse(text); } catch { /* keep raw */ }
     return { ok: res.ok, status: res.status, body: parsed };
+    } catch (e) {
+      return { ok: false, status: 0, body: { error: String((e as Error)?.message || e) } };
+    } finally {
+      clearTimeout(t);
+    }
   };
 
   const results: any[] = [];
 
+  const runAll = async () => {
   for (const client of clients ?? []) {
     const stages: any[] = [];
     const stage = (name: string, status: string, detail: unknown) =>
@@ -407,6 +420,21 @@ Deno.serve(async (req) => {
     }
   }
 
+  };
+
+  // Long pipelines (cron / all-client runs) execute in the background; a single
+  // client run returns its full deterministic report inline for inspection.
+  const runInBackground = body.background === true || (!body.client_id && (clients?.length ?? 0) > 1);
+  if (runInBackground && typeof EdgeRuntime !== 'undefined') {
+    EdgeRuntime.waitUntil(runAll());
+    return json({
+      ok: true, background: true, report_date: reportDate, tz: TZ,
+      dry_run: dryRun, delivered: deliver, clients: clients?.length ?? 0,
+      note: 'Progress and results are recorded on public.daily_report_runs.',
+    });
+  }
+
+  await runAll();
   return json({ ok: true, report_date: reportDate, tz: TZ, dry_run: dryRun, delivered: deliver, results });
 });
 
