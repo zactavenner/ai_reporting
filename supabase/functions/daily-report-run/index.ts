@@ -391,12 +391,12 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Freshness is threshold-checked, not merely displayed.
-      const freshnessChecks = [
-        ['meta_last_synced_at', freshRows?.meta_last_synced_at],
-        ['ghl_last_synced_at', freshRows?.ghl_last_synced_at],
-        ['calls_last_synced_at', freshRows?.calls_last_synced_at],
-      ] as const;
+      // Freshness is threshold-checked, not merely displayed — but only for the
+      // sources this client actually has configured and enabled.
+      const freshnessChecks: Array<readonly [string, unknown]> = [];
+      if (metaActive) freshnessChecks.push(['meta_last_synced_at', freshRows?.meta_last_synced_at]);
+      if (configuration.ghl_configured) freshnessChecks.push(['ghl_last_synced_at', freshRows?.ghl_last_synced_at]);
+      if (configuration.calendars_configured) freshnessChecks.push(['calls_last_synced_at', freshRows?.calls_last_synced_at]);
       const staleSources: Array<{ source: string; age_hours: number | null }> = [];
       for (const [name, value] of freshnessChecks) {
         const age = hoursSince(value as string | null);
@@ -409,18 +409,18 @@ Deno.serve(async (req) => {
           detail: staleSources,
         });
       }
-      if (freshRows?.meta_last_date && String(freshRows.meta_last_date) < reportDate) {
+      if (metaActive && freshRows?.meta_last_date && String(freshRows.meta_last_date) < reportDate) {
         anomalies.push({
           code: 'meta_behind_report_date', severity: 'critical',
           message: `Latest Meta spend date ${freshRows.meta_last_date} is behind the report date ${reportDate}.`,
         });
       }
 
-      if (!spendRowCount) {
+      if (metaActive && !spendRowCount) {
         anomalies.push({ code: 'meta_no_rows', severity: 'critical',
           message: `No ad_spend_daily rows for ${reportDate}; a zero row is not proof the sync completed.` });
       }
-      if (day && Number(day.spend) === 0 && Number(day.leads_total) > 0) {
+      if (metaActive && day && Number(day.spend) === 0 && Number(day.leads_total) > 0) {
         anomalies.push({ code: 'zero_spend_with_leads', severity: 'warning',
           message: 'Spend is zero while leads exist — Meta sync likely incomplete.' });
       }
