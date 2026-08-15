@@ -199,14 +199,23 @@ Deno.serve(async (req) => {
         stage('sync', 'skipped', { reason: 'skip_sync' });
         syncFailures.push({ source: 'skip_sync', detail: 'sync stage was skipped; freshness is unverified' });
       } else {
-        const bodyErrors = (b: unknown): string[] => {
+        // Top-level refusal → fatal. Per-record errors → recorded, non-fatal.
+        const fatalErrors = (res: { ok: boolean; status: number; body: unknown }): string[] => {
+          const b: any = res.body;
+          const out: string[] = [];
+          if (!res.ok) out.push(res.status === 0 ? 'request aborted / timed out' : `HTTP ${res.status}`);
+          if (b && typeof b === 'object') {
+            if (b.success === false) out.push('function reported success:false');
+            if (typeof b.error === 'string' && b.error) out.push(b.error);
+          }
+          return [...new Set(out)].slice(0, 5);
+        };
+        const recordErrors = (b: unknown): string[] => {
           const out: string[] = [];
           const walk = (v: any) => {
             if (!v || typeof v !== 'object') return;
             if (Array.isArray(v)) { v.forEach(walk); return; }
-            if (typeof v.error === 'string' && v.error) out.push(v.error);
             if (Array.isArray(v.errors)) out.push(...v.errors.filter((e: unknown) => typeof e === 'string'));
-            if (v.success === false) out.push('reported success:false');
             Object.values(v).forEach(walk);
           };
           walk(b);
@@ -216,11 +225,15 @@ Deno.serve(async (req) => {
         const meta = await invoke('sync-meta-ad-spend', {
           mode: 'manual', client_id: client.id, days_back: TRAILING_DAYS + 1,
         });
-        // Bounded incremental lead/contact pull (lightweight path), not the
-        // unbounded full-history contact walk.
+        // Bounded incremental lead/contact pull: the recent-conversations path
+        // (window + page cap), NOT the unbounded full-history contact walk which
+        // exceeds the function resource budget.
         const leads = await invoke('sync-ghl-contacts', {
-          client_id: client.id, syncType: 'contacts', sinceDateDays: CRM_LOOKBACK_DAYS,
-        }, 180_000);
+          client_id: client.id,
+          mode: 'recent_conversations',
+          sinceMinutes: CRM_LOOKBACK_DAYS * 24 * 60,
+          maxConversations: 100,
+        }, 240_000);
         const cal = await invoke('sync-calendar-appointments', { clientId: client.id }, 180_000);
         const pipe = await invoke('sync-ghl-pipelines', { client_id: client.id, mode: 'list' });
 
@@ -231,18 +244,29 @@ Deno.serve(async (req) => {
           ['pipelines', pipe],
         ];
         const syncDetail: Record<string, unknown> = {};
+        const syncPartials: Array<{ source: string; errors: string[] }> = [];
         for (const [name, res] of required) {
-          const errs = res.ok ? bodyErrors(res.body) : [String((res.body as any)?.error ?? res.status)];
-          const failed = !res.ok || errs.length > 0;
+          const errs = fatalErrors(res);
+          const partial = recordErrors(res.body);
+          const failed = errs.length > 0;
           syncDetail[name] = {
             ok: !failed,
             http_status: res.status,
             timed_out: res.status === 0,
             errors: errs,
+            record_errors: partial,
           };
           if (failed) syncFailures.push({ source: name, detail: syncDetail[name] });
+          else if (partial.length > 0) syncPartials.push({ source: name, errors: partial });
         }
-        stage('sync', syncFailures.length === 0 ? 'ok' : 'error', syncDetail);
+        stage('sync', syncFailures.length === 0 ? (syncPartials.length ? 'partial' : 'ok') : 'error', syncDetail);
+        for (const p of syncPartials) {
+          anomalyQueue.push({
+            code: 'sync_partial', severity: 'warning', source: p.source,
+            message: `Sync "${p.source}" completed with ${p.errors.length} record-level error(s).`,
+            detail: p.errors,
+          });
+        }
       }
 
       // ── 2. NORMALIZE / REPAIR ────────────────────────────────────────────
