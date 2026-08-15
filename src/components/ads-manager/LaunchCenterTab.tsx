@@ -106,12 +106,26 @@ export function LaunchCenterTab({ clientId, clientName }: { clientId: string; cl
     queryKey: ['launch-client-defaults', clientId],
     enabled: !!clientId,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data: client } = await supabase
         .from('clients')
-        .select('meta_ad_account_id, meta_pixel_id, meta_page_id')
+        .select('meta_ad_account_id, meta_pixel_id')
         .eq('id', clientId)
         .maybeSingle();
-      return data as { meta_ad_account_id?: string; meta_pixel_id?: string; meta_page_id?: string } | null;
+      const acct = client?.meta_ad_account_id ? String(client.meta_ad_account_id).replace(/^act_/, '') : null;
+      let pages: { id: string; name?: string }[] = [];
+      if (acct) {
+        const { data: cached } = await supabase
+          .from('meta_ad_accounts')
+          .select('pages')
+          .eq('ad_account_id', acct)
+          .maybeSingle();
+        pages = Array.isArray(cached?.pages) ? (cached!.pages as { id: string; name?: string }[]) : [];
+      }
+      return {
+        meta_ad_account_id: client?.meta_ad_account_id ?? null,
+        meta_pixel_id: client?.meta_pixel_id ?? null,
+        pages,
+      };
     },
   });
 
