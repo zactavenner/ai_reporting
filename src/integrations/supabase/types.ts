@@ -949,6 +949,144 @@ export type Database = {
         }
         Relationships: []
       }
+      agency_daily_report_clients: {
+        Row: {
+          agency_run_id: string
+          attempts: number
+          client_id: string
+          client_name: string | null
+          completed_at: string | null
+          created_at: string
+          dispatched_at: string | null
+          id: string
+          last_error: string | null
+          report_date: string
+          status: string
+          updated_at: string
+          validation_passed: boolean | null
+        }
+        Insert: {
+          agency_run_id: string
+          attempts?: number
+          client_id: string
+          client_name?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          id?: string
+          last_error?: string | null
+          report_date: string
+          status?: string
+          updated_at?: string
+          validation_passed?: boolean | null
+        }
+        Update: {
+          agency_run_id?: string
+          attempts?: number
+          client_id?: string
+          client_name?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          id?: string
+          last_error?: string | null
+          report_date?: string
+          status?: string
+          updated_at?: string
+          validation_passed?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_daily_report_clients_agency_run_id_fkey"
+            columns: ["agency_run_id"]
+            isOneToOne: false
+            referencedRelation: "agency_daily_report_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_daily_report_clients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agency_daily_report_clients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_daily_report_clients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "agency_daily_report_clients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      agency_daily_report_runs: {
+        Row: {
+          audit: Json
+          clients_failed: number
+          clients_total: number
+          clients_unavailable: number
+          clients_valid: number
+          created_at: string
+          delivery: Json
+          finalized_at: string | null
+          id: string
+          last_error: string | null
+          report_date: string
+          started_at: string
+          status: string
+          tick_count: number
+          updated_at: string
+        }
+        Insert: {
+          audit?: Json
+          clients_failed?: number
+          clients_total?: number
+          clients_unavailable?: number
+          clients_valid?: number
+          created_at?: string
+          delivery?: Json
+          finalized_at?: string | null
+          id?: string
+          last_error?: string | null
+          report_date: string
+          started_at?: string
+          status?: string
+          tick_count?: number
+          updated_at?: string
+        }
+        Update: {
+          audit?: Json
+          clients_failed?: number
+          clients_total?: number
+          clients_unavailable?: number
+          clients_valid?: number
+          created_at?: string
+          delivery?: Json
+          finalized_at?: string | null
+          id?: string
+          last_error?: string | null
+          report_date?: string
+          started_at?: string
+          status?: string
+          tick_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agency_digest_sends: {
         Row: {
           attempts: number
@@ -1251,11 +1389,13 @@ export type Database = {
           active: boolean
           cadences: string[]
           channel: string
+          contact_name: string | null
           created_at: string
-          expected_subject: string
+          expected_subject: string | null
           id: string
           last_error: string | null
           name: string
+          phone_e164: string | null
           routing_test_message_id: string | null
           routing_test_sent_at: string | null
           session_label: string
@@ -1267,11 +1407,13 @@ export type Database = {
           active?: boolean
           cadences?: string[]
           channel?: string
+          contact_name?: string | null
           created_at?: string
-          expected_subject: string
+          expected_subject?: string | null
           id?: string
           last_error?: string | null
           name: string
+          phone_e164?: string | null
           routing_test_message_id?: string | null
           routing_test_sent_at?: string | null
           session_label?: string
@@ -1283,11 +1425,13 @@ export type Database = {
           active?: boolean
           cadences?: string[]
           channel?: string
+          contact_name?: string | null
           created_at?: string
-          expected_subject?: string
+          expected_subject?: string | null
           id?: string
           last_error?: string | null
           name?: string
+          phone_e164?: string | null
           routing_test_message_id?: string | null
           routing_test_sent_at?: string | null
           session_label?: string
@@ -1296,6 +1440,56 @@ export type Database = {
           whatsapp_jid?: string | null
         }
         Relationships: []
+      }
+      agency_report_send_chunks: {
+        Row: {
+          chars: number
+          chunk_count: number
+          chunk_index: number
+          created_at: string
+          error: string | null
+          id: string
+          provider_message_id: string | null
+          send_id: string
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          chars?: number
+          chunk_count?: number
+          chunk_index: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          provider_message_id?: string | null
+          send_id: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          chars?: number
+          chunk_count?: number
+          chunk_index?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          provider_message_id?: string | null
+          send_id?: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_report_send_chunks_send_id_fkey"
+            columns: ["send_id"]
+            isOneToOne: false
+            referencedRelation: "agency_report_sends"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       agency_report_sends: {
         Row: {
