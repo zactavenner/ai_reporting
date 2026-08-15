@@ -366,13 +366,19 @@ export function chunkSms(text: string, limit = SMS_CHUNK_LIMIT): string[] {
     if (candidate.length <= limit) { buf = candidate; continue; }
     push();
     if (block.length <= limit) { buf = block; continue; }
-    // Oversized single block: fall back to line-level splitting.
+    // Oversized single block: fall back to line-level splitting, and hard-split
+    // any single line that is itself longer than the limit so nothing is lost.
     let lineBuf = '';
     for (const line of block.split('\n')) {
       const c = lineBuf ? `${lineBuf}\n${line}` : line;
       if (c.length <= limit) { lineBuf = c; continue; }
-      if (lineBuf) parts.push(lineBuf);
-      lineBuf = line.slice(0, limit);
+      if (lineBuf) { parts.push(lineBuf); lineBuf = ''; }
+      let rest = line;
+      while (rest.length > limit) {
+        parts.push(rest.slice(0, limit));
+        rest = rest.slice(limit);
+      }
+      lineBuf = rest;
     }
     if (lineBuf) buf = lineBuf;
   }
