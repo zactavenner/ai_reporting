@@ -131,7 +131,7 @@ func postHistoryMessage(chatJID string, wmi *waProto.WebMessageInfo) {
 	isGroup := strings.HasSuffix(chatJID, "@g.us")
 	postWebhook("history_message", map[string]any{
 		"jid":           chatJID,
-		"wa_message_id": wmi.GetKey().GetId(),
+		"wa_message_id": wmi.GetKey().GetID(),
 		"direction":     direction,
 		"body":          body,
 		"message_type":  mtype,
@@ -210,7 +210,7 @@ func handleEvent(evt any) {
 		}
 		count := 0
 		for _, conv := range v.Data.GetConversations() {
-			chatJID := conv.GetId()
+			chatJID := conv.GetID()
 			for _, hm := range conv.GetMessages() {
 				postHistoryMessage(chatJID, hm.GetMessage())
 				count++
@@ -405,7 +405,7 @@ func groupsHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 503, map[string]string{"error": "not connected"})
 		return
 	}
-	groups, err := cli.GetJoinedGroups()
+	groups, err := cli.GetJoinedGroups(r.Context())
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
