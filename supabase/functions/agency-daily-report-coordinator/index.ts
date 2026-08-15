@@ -336,6 +336,14 @@ function buildAgencyMessage(
 
   for (const { row, w, windows } of enriched) {
     const name = row.client_name || 'Unknown client';
+    // `pending` / `dispatched` means the worker has not finished — that is an
+    // explicit unavailable, not a failure and never a zero.
+    if (row.status === 'pending' || row.status === 'dispatched') {
+      counts.unavailable++;
+      audit.push(`${name}: report not complete (${row.status})`);
+      blocks.push(`${name}\n• ⚪ report not complete`);
+      continue;
+    }
     if (row.status === 'error' || row.status === 'timed_out' || !w) {
       counts.failed++;
       audit.push(`${name}: ${row.status}${row.last_error ? ` — ${row.last_error.slice(0, 80)}` : ''}`);
