@@ -1246,6 +1246,119 @@ export type Database = {
         }
         Relationships: []
       }
+      agency_report_destinations: {
+        Row: {
+          active: boolean
+          cadences: string[]
+          channel: string
+          created_at: string
+          expected_subject: string
+          id: string
+          last_error: string | null
+          name: string
+          routing_test_message_id: string | null
+          routing_test_sent_at: string | null
+          session_label: string
+          subject_verified_at: string | null
+          updated_at: string
+          whatsapp_jid: string | null
+        }
+        Insert: {
+          active?: boolean
+          cadences?: string[]
+          channel?: string
+          created_at?: string
+          expected_subject: string
+          id?: string
+          last_error?: string | null
+          name: string
+          routing_test_message_id?: string | null
+          routing_test_sent_at?: string | null
+          session_label?: string
+          subject_verified_at?: string | null
+          updated_at?: string
+          whatsapp_jid?: string | null
+        }
+        Update: {
+          active?: boolean
+          cadences?: string[]
+          channel?: string
+          created_at?: string
+          expected_subject?: string
+          id?: string
+          last_error?: string | null
+          name?: string
+          routing_test_message_id?: string | null
+          routing_test_sent_at?: string | null
+          session_label?: string
+          subject_verified_at?: string | null
+          updated_at?: string
+          whatsapp_jid?: string | null
+        }
+        Relationships: []
+      }
+      agency_report_sends: {
+        Row: {
+          cadence: string
+          chunk_count: number
+          created_at: string
+          destination_id: string
+          error: string | null
+          id: string
+          idempotency_key: string
+          payload: Json
+          queued_at: string | null
+          report_date: string
+          sent_at: string | null
+          sent_chunk_count: number
+          status: string
+          updated_at: string
+          wa_message_ids: string[]
+        }
+        Insert: {
+          cadence?: string
+          chunk_count?: number
+          created_at?: string
+          destination_id: string
+          error?: string | null
+          id?: string
+          idempotency_key: string
+          payload?: Json
+          queued_at?: string | null
+          report_date: string
+          sent_at?: string | null
+          sent_chunk_count?: number
+          status?: string
+          updated_at?: string
+          wa_message_ids?: string[]
+        }
+        Update: {
+          cadence?: string
+          chunk_count?: number
+          created_at?: string
+          destination_id?: string
+          error?: string | null
+          id?: string
+          idempotency_key?: string
+          payload?: Json
+          queued_at?: string | null
+          report_date?: string
+          sent_at?: string | null
+          sent_chunk_count?: number
+          status?: string
+          updated_at?: string
+          wa_message_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_report_sends_destination_id_fkey"
+            columns: ["destination_id"]
+            isOneToOne: false
+            referencedRelation: "agency_report_destinations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agency_settings: {
         Row: {
           agent_notification_slack_dm: boolean | null
@@ -20993,11 +21106,13 @@ export type Database = {
       }
       whatsapp_send_queue: {
         Row: {
+          agency_report_send_id: string | null
           alert_type: string | null
           attempts: number
           client_id: string | null
           created_at: string
           id: string
+          idempotency_key: string | null
           jid: string
           last_attempt_at: string | null
           last_error: string | null
@@ -21014,11 +21129,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agency_report_send_id?: string | null
           alert_type?: string | null
           attempts?: number
           client_id?: string | null
           created_at?: string
           id?: string
+          idempotency_key?: string | null
           jid: string
           last_attempt_at?: string | null
           last_error?: string | null
@@ -21035,11 +21152,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agency_report_send_id?: string | null
           alert_type?: string | null
           attempts?: number
           client_id?: string | null
           created_at?: string
           id?: string
+          idempotency_key?: string | null
           jid?: string
           last_attempt_at?: string | null
           last_error?: string | null
@@ -21056,6 +21175,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_send_queue_agency_report_send_id_fkey"
+            columns: ["agency_report_send_id"]
+            isOneToOne: false
+            referencedRelation: "agency_report_sends"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_send_queue_session_id_fkey"
             columns: ["session_id"]
