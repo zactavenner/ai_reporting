@@ -17,7 +17,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { authorizeDailyReportRun } from '../_shared/dailyReportSecret.ts';
 import {
   TZ, laDate, laHour, laMinutesOfDay, yesterdayLa, inLocalWindow,
-  chunkSms, money, buildWindows, buildIndicators, type Windows,
+  chunkSms, money, buildIndicators, type Windows,
 } from '../_shared/agencyReport.ts';
 
 const corsHeaders = {
@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
 
     const { data: ledger } = await sb
       .from('agency_daily_report_clients')
-      .select('id, client_id, client_name, status, attempts, validation_passed, last_error')
+      .select('id, client_id, client_name, status, attempts, validation_passed, last_error, dispatched_at')
       .eq('agency_run_id', run.id);
     const rows = ledger ?? [];
 
@@ -175,10 +175,19 @@ Deno.serve(async (req) => {
     }
 
     /* ── 4. bounded dispatch ───────────────────────────────────────────────── */
+    // A dispatched client is retryable only once its worker attempt is provably
+    // gone (no run row) or stuck (still `running` well past the stall window).
+    const STALL_MS = 8 * 60_000;
+    const isStuck = (r: any) => {
+      const w = byClient.get(r.client_id);
+      const age = r.dispatched_at ? Date.now() - new Date(r.dispatched_at).getTime() : Infinity;
+      if (!w) return age > 60_000;
+      return w.status === 'running' && age > STALL_MS;
+    };
     const dispatchable = rows.filter((r) =>
       !TERMINAL.includes(r.status) &&
-      (r.status === 'pending' || (r.status === 'dispatched' && !byClient.get(r.client_id))) &&
-      (r.attempts ?? 0) < MAX_ATTEMPTS);
+      (r.attempts ?? 0) < MAX_ATTEMPTS &&
+      (r.status === 'pending' || (r.status === 'dispatched' && isStuck(r))));
 
     const dispatched: string[] = [];
     if (!dryRun && !pastFinalize && dispatchable.length) {
@@ -190,6 +199,7 @@ Deno.serve(async (req) => {
           report_date: reportDate,
           deliver: false,
           background: true,
+          force: (r.attempts ?? 0) > 0,
           source: 'agency_coordinator',
         }, 30_000);
         await sb.from('agency_daily_report_clients').update({
@@ -205,7 +215,7 @@ Deno.serve(async (req) => {
     /* ── 5. status roll-up ─────────────────────────────────────────────────── */
     const { data: fresh } = await sb
       .from('agency_daily_report_clients')
-      .select('id, client_id, client_name, status, attempts, validation_passed, last_error')
+      .select('id, client_id, client_name, status, attempts, validation_passed, last_error, dispatched_at')
       .eq('agency_run_id', run.id);
     let current = fresh ?? rows;
     const outstanding = current.filter((r) => !TERMINAL.includes(r.status));
@@ -362,9 +372,6 @@ function buildAgencyMessage(
     const criticals = (w.anomalies ?? []).filter((a: any) => a.severity === 'critical').map((a: any) => a.code);
     if (criticals.length) audit.push(`${name}: ${criticals.slice(0, 3).join(', ')}`);
   }
-
-  const portfolio = buildWindows([], reportDate); // shape only; totals below are summed
-  void portfolio;
 
   const head = [
     `HPA Agency Daily Report · ${reportDate} (${TZ})`,
