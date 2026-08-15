@@ -1,5 +1,12 @@
 // Automatic Media Buyer (JEREMY) review cadence for Reporting 5.0.
 //
+// SCHEDULER-ONLY endpoint. Every request must present the dedicated
+// high-entropy JEREMY_CRON_SECRET in the `x-jeremy-cron-secret` header; the
+// anon key is not accepted. There is no force bypass: an authenticated request
+// still has to land inside the America/Los_Angeles business-morning window.
+// Operators who want an on-demand review use jeremy-media-buyer-review or the
+// MCP review tool.
+//
 // Runs once each business morning AFTER the Meta/CRM sync, for every eligible
 // active client that has synced Meta entities. DST-safe: pg_cron fires at both
 // 14:00 and 15:00 UTC and only the invocation that lands on local hour 07 in
@@ -9,10 +16,11 @@
 // This job creates recommendations only. It never writes to Meta.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { runJeremyReview } from "../_shared/jeremyReview.ts";
+import { authorizeJeremyCron, readJeremyCronSecret, JEREMY_CRON_HEADER } from "../_shared/jeremyCronSecret.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": `authorization, x-client-info, apikey, content-type, ${JEREMY_CRON_HEADER}`,
 };
 
 const TZ = "America/Los_Angeles";
@@ -47,18 +55,19 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // Authenticate the scheduler BEFORE reading any client rows or writing runs.
+  const authorized = await authorizeJeremyCron(supabase, readJeremyCronSecret(req));
+  if (!authorized) return json({ ok: false, error: "Unauthorized" }, 401);
+
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
-  const force = body.force === true;
   const { date: runDate, hour, weekday } = laParts();
 
-  // DST-safe hour gate + business-morning gate.
-  if (body.source === "cron" && !force) {
-    if (hour !== RUN_HOUR_LOCAL) {
-      return json({ ok: true, skipped: true, reason: `local hour ${hour} != ${RUN_HOUR_LOCAL}`, tz: TZ });
-    }
-    if (weekday === "Sat" || weekday === "Sun") {
-      return json({ ok: true, skipped: true, reason: `weekend (${weekday})`, tz: TZ });
-    }
+  // DST-safe hour gate + business-morning gate. Always enforced — no bypass.
+  if (hour !== RUN_HOUR_LOCAL) {
+    return json({ ok: true, skipped: true, reason: `local hour ${hour} != ${RUN_HOUR_LOCAL}`, tz: TZ });
+  }
+  if (weekday === "Sat" || weekday === "Sun") {
+    return json({ ok: true, skipped: true, reason: `weekend (${weekday})`, tz: TZ });
   }
 
   let clientQuery = supabase.from("clients").select("id, name, status").eq("status", "active");

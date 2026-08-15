@@ -107,7 +107,7 @@ Maximum 12 recommendations, highest impact first.`;
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: agent.default_model || "openrouter/owl-alpha",
+      model: agent.default_model || "openai/gpt-5.4",
       messages: [
         { role: "system", content: agent.system_prompt || "You are Media Buyer (JEREMY)." },
         { role: "user", content: prompt },
