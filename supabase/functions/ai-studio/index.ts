@@ -4742,7 +4742,21 @@ Deno.serve(async (req) => {
               const placeholderLabel = placeholderModels.length > 1
                 ? `Compare: ${placeholderModels.map((m) => VIDEO_MODEL_CAPS[m]?.label?.split(" (")?.[0] || m).join(" vs ")}`
                 : (VIDEO_MODEL_CAPS[placeholderModels[0]]?.label?.split(" (")?.[0] || placeholderModels[0] || "Video");
-              const placeholderDuration = 15;
+              // DURATION HARD-LOCK: the composer slider wins. Fall back to the LLM's
+              // arg, then to 15s only when neither is present. Clamped to the chosen
+              // model's per-clip cap (Seedance 2.5 = 30s, H3 / Seedance 2.0 = 15s).
+              const placeholderCap = placeholderModels[0]
+                ? (VIDEO_MODEL_CAPS[placeholderModels[0]]?.maxDuration || 15)
+                : 15;
+              const placeholderDuration = Math.max(
+                4,
+                Math.min(
+                  requestedVideoDuration && requestedVideoDuration > placeholderCap
+                    ? requestedVideoDuration // total length; dispatch auto-splits into clips
+                    : placeholderCap,
+                  requestedVideoDuration || Number(args.duration) || 15,
+                ),
+              );
               // UI resolution wins; H3 supports 720p or 2k.
               const placeholderResolution = placeholderModels[0]
                 ? clampResForModel(placeholderModels[0])
