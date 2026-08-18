@@ -5133,7 +5133,13 @@ Deno.serve(async (req) => {
                     });
                   }
                 }
-                const baseDuration = 15;
+                // DURATION HARD-LOCK (dispatch): the composer slider is authoritative,
+                // then the (already rewritten) tool arg, then 15s. Values above the
+                // model's per-clip cap are auto-split below into back-to-back clips.
+                const baseDuration = (() => {
+                  const n = Number(requestedVideoDuration || args.duration);
+                  return Number.isFinite(n) && n > 0 ? Math.max(4, Math.min(30, Math.round(n))) : 15;
+                })();
                 // Honor user-selected resolution (clamped per model below); LLM's `args.resolution` overrides.
                 const argRes: VideoResChoice | null = args.resolution ? "2k" : null;
                  // Aspect priority: the LLM's explicit args.aspect_ratio wins
