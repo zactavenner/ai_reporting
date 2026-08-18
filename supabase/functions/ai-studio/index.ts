@@ -4768,9 +4768,13 @@ Deno.serve(async (req) => {
               if (placeholderModels[0]) args.model = placeholderModels[0];
               args.duration = placeholderDuration;
               args.resolution = placeholderResolution;
-              if (!args.image_url && videoFrames?.firstFrameUrl) args.image_url = videoFrames.firstFrameUrl;
-              if (!args.last_frame_url && videoFrames?.lastFrameUrl) args.last_frame_url = videoFrames.lastFrameUrl;
-              if (!args.ingredient_url && videoFrames?.ingredientUrl) args.ingredient_url = videoFrames.ingredientUrl;
+              // FIRST-FRAME HARD-LOCK: a frame pinned in the composer ALWAYS wins over
+              // whatever image the LLM invented/generated for image_url. Previously this
+              // was a `!args.image_url` fallback, so a model-generated keyframe silently
+              // replaced the user's pinned first frame (Seedance "ignored" the image).
+              if (videoFrames?.firstFrameUrl) args.image_url = videoFrames.firstFrameUrl;
+              if (videoFrames?.lastFrameUrl) args.last_frame_url = videoFrames.lastFrameUrl;
+              if (videoFrames?.ingredientUrl && !args.ingredient_url) args.ingredient_url = videoFrames.ingredientUrl;
               send({
                 type: "canvas_placeholder",
                 placeholder_id: canvasPlaceholderId,
@@ -5142,8 +5146,10 @@ Deno.serve(async (req) => {
                    (args && (args.prompt || args.brief)) || userText,
                    adFormat,
                  );
-                const baseImageUrl = args.image_url || videoFrames?.firstFrameUrl || (selectedAvatar ? selectedAvatar.image_url : null);
-                const baseLastFrame = args.last_frame_url || videoFrames?.lastFrameUrl || null;
+                // FIRST-FRAME HARD-LOCK (dispatch): pinned composer frames outrank the
+                // LLM's args so Seedance always starts from the user's image.
+                const baseImageUrl = videoFrames?.firstFrameUrl || args.image_url || (selectedAvatar ? selectedAvatar.image_url : null);
+                const baseLastFrame = videoFrames?.lastFrameUrl || args.last_frame_url || null;
                 const baseIngredient = args.ingredient_url || videoFrames?.ingredientUrl || null;
                 const promptText = String(args.prompt || "") + (videoRefStyleNotes ? `\n\nPacing/style inspiration (emulate, do not copy):${videoRefStyleNotes}` : "");
                  const runOne = async (mdl: string, pid: string | null, segPrompt: string, segDuration: number, segImageUrl: string | null, segLastFrame: string | null) => {
