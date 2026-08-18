@@ -1930,46 +1930,33 @@ async function generateSeedanceVideo(opts: {
         _avatarFallbackAttempt: attempt + 1,
       });
     }
-    // Seedance avatar moderation failures retry once as text-to-video on Seedance
-    // itself — HappyHorse and every other legacy fallback target is retired.
-    if (isSeedance && opts.imageUrl && attempt < 1) {
-      emit({
-        stage: "submitting",
-        label: "Seedance rejected the reference image — retrying as text-to-video…",
-        model,
-        percent: 4,
-        rerouted_from: model,
-        rerouted_to: model,
-        rerouted_reason: reason.slice(0, 160),
-      });
-      await recordVideoModelDecision(supa, "generateSeedanceVideo.fallback", {
+    // NO SILENT IMAGE DROP: when Seedance rejects the user's pinned first frame we must
+    // NOT retry as text-to-video — that is what made the model "invent its own image"
+    // and ignore the uploaded frame. Fail loudly with the provider's own reason so the
+    // user knows the image was blocked and can swap it.
+    if (isSeedance && opts.imageUrl) {
+      await recordVideoModelDecision(supa, "generateSeedanceVideo.first_frame_rejected", {
         conversation_id: opts.conversationId,
         client_id: opts.clientId,
         user_id: opts.userId,
         from_model: model,
         to_model: model,
-        reason: reason.slice(0, 240),
-        requested_duration: opts.duration,
-        fallback_duration: 15,
-        requested_resolution: opts.resolution,
-        fallback_resolution: "720p",
-        fallback_attempt: attempt + 1,
-        fallback_chain: "seedance_text_to_video_retry",
+        reason: reason.slice(0, 500),
+        first_frame_url: opts.imageUrl,
+        fallback_chain: "none_hard_fail",
       });
       if (pendingCanvasItemId) {
         try { await supa.from("ai_studio_canvas_items").delete().eq("id", pendingCanvasItemId); } catch {}
         pendingCanvasItemId = null;
       }
-      return await generateSeedanceVideo({
-        ...opts,
-        model,
-        duration: 15,
-        resolution: "720p",
-        imageUrl: null,
-        lastFrameUrl: null,
-        ingredientUrl: null,
-        _avatarFallbackAttempt: attempt + 1,
-      });
+      const privacy = /sensitivecontent|privacyinformation|privacy_information/i.test(reason);
+      throw new Error(
+        `${modelLabel} refused your pinned first frame, so no video was generated (the image was NOT swapped for a generated one).\n\nProvider error: ${reason.slice(0, 400)}\n\n${
+          privacy
+            ? "Seedance blocks photos it reads as containing a real person's private information (ID cards, documents, faces with text/personal data). Crop out any documents/text, use a cleaner product or scene photo, or generate an AI keyframe and pin that instead."
+            : "Try a different first frame image, or remove the pinned frame to run text-to-video deliberately."
+        }`,
+      );
     }
     return null;
   };
