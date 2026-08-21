@@ -239,12 +239,17 @@ serve(async (req) => {
           platform: record.platform || 'facebook',
           campaign_name: record.campaign_name || record.campaign || '',
           ad_set_name: record.ad_set_name || record.adset || '',
+          ad_account_id: String(record.ad_account_id ?? record.account_id ?? ''),
+          campaign_id: String(record.campaign_id ?? record.campaign_name ?? record.campaign ?? ''),
         };
 
+        // 1 campaign = 1 report per day: keyed on
+        // client_id + ad_account_id + campaign_id + report_date (derived from
+        // reported_at), so re-sends update the existing row.
         const { error: insertError } = await supabase
           .from('ad_spend_reports')
           .upsert(adSpendRecord, {
-            onConflict: 'client_id,reported_at,platform,campaign_name,ad_set_name',
+            onConflict: 'client_id,ad_account_id,campaign_id,report_date',
             ignoreDuplicates: false,
           });
 

@@ -15,6 +15,8 @@ type Body = {
 };
 
 const SHEET_TAB = 'FB Spend';
+// Daily report send hour in America/Los_Angeles (finalized platform spend).
+const SEND_HOUR_LA = 8;
 const HEADER = [
   'Date','Campaign Name','Ad Spend','Impressions','Clicks','Frequency','CTR',
   'Reach','CPM','CPC','Leads','Cost/Lead','Campaign ID','Account ID','Synced At',
@@ -176,8 +178,9 @@ async function upsertDaily(sb: any, acct: AccountRow, date: string, rows: Campai
     cost_per_lead: r.leads > 0 ? r.spend / r.leads : null,
     synced_at: new Date().toISOString(),
   }));
+  // One row per client + ad account + campaign + date: re-runs update in place.
   const { error } = await sb.from('ad_spend_daily')
-    .upsert(payload, { onConflict: 'date,campaign_id' });
+    .upsert(payload, { onConflict: 'client_id,ad_account_id,campaign_id,date' });
   if (error) throw error;
   return payload.length;
 }
@@ -322,6 +325,24 @@ Deno.serve(async (req) => {
   try {
     const body: Body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
     const mode = body.mode ?? 'manual';
+
+    // Scheduled runs only fire at ~08:00 America/Los_Angeles. Platform spend
+    // for "yesterday" is not finalized at 04:00, which caused discrepancies.
+    // pg_cron has no timezone support, so the cron fires hourly around the
+    // window and this DST-safe local-hour gate picks the right one.
+    if (mode === 'daily' && !body.date && !body.days_back) {
+      const laHour = Number(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false,
+        }).format(new Date())
+      );
+      if (laHour !== SEND_HOUR_LA) {
+        return new Response(
+          JSON.stringify({ ok: true, skipped: true, reason: `local hour ${laHour} != ${SEND_HOUR_LA}`, tz: 'America/Los_Angeles' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
     const daysBack = Math.max(0, Math.min(30, Number(body.days_back ?? 0)));
     const dates: string[] = body.date
       ? [body.date]
