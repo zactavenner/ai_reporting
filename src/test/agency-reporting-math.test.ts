@@ -215,35 +215,35 @@ describe('validated-only agency rollup', () => {
 });
 
 describe('DST-safe local-time gating', () => {
-  // 11:30 UTC = 04:30 PDT (summer) but 03:30 PST (winter).
-  it('acts at 04:xx local during daylight time', () => {
-    expect(inLocalWindow(new Date('2026-08-14T11:30:00Z'), 4, 5)).toBe(true);
+  // 15:30 UTC = 08:30 PDT (summer) but 07:30 PST (winter).
+  it('acts at 08:xx local during daylight time', () => {
+    expect(inLocalWindow(new Date('2026-08-14T15:30:00Z'), 8, 9)).toBe(true);
   });
 
   it('does not act at the same UTC hour during standard time', () => {
-    expect(inLocalWindow(new Date('2026-01-14T11:30:00Z'), 4, 5)).toBe(false);
+    expect(inLocalWindow(new Date('2026-01-14T15:30:00Z'), 8, 9)).toBe(false);
   });
 
-  it('acts at 12:30 UTC during standard time', () => {
-    expect(inLocalWindow(new Date('2026-01-14T12:30:00Z'), 4, 5)).toBe(true);
+  it('acts at 16:30 UTC during standard time', () => {
+    expect(inLocalWindow(new Date('2026-01-14T16:30:00Z'), 8, 9)).toBe(true);
   });
 
-  it('excludes 05:00 local (window end is exclusive)', () => {
-    expect(inLocalWindow(new Date('2026-08-14T12:00:00Z'), 4, 5)).toBe(false);
+  it('excludes 09:00 local (window end is exclusive)', () => {
+    expect(inLocalWindow(new Date('2026-08-14T16:00:00Z'), 8, 9)).toBe(false);
   });
 
-  it('exposes local minutes for the 04:50 / 05:00 cutoffs', () => {
-    expect(laMinutesOfDay(new Date('2026-08-14T11:50:00Z'))).toBe(4 * 60 + 50);
-    expect(laMinutesOfDay(new Date('2026-01-14T13:00:00Z'))).toBe(5 * 60);
+  it('exposes local minutes for the 08:50 / 09:00 cutoffs', () => {
+    expect(laMinutesOfDay(new Date('2026-08-14T15:50:00Z'))).toBe(8 * 60 + 50);
+    expect(laMinutesOfDay(new Date('2026-01-14T17:00:00Z'))).toBe(9 * 60);
   });
 
-  it('keeps 05:00-05:04 open for deadline finalization and delivery retry', () => {
-    const deadline = agencyScheduleState(new Date('2026-08-14T12:00:00Z'));
+  it('keeps 09:00-09:04 open for deadline finalization and delivery retry', () => {
+    const deadline = agencyScheduleState(new Date('2026-08-14T16:00:00Z'));
     expect(deadline.can_act).toBe(true);
     expect(deadline.can_dispatch).toBe(false);
     expect(deadline.past_deadline).toBe(true);
-    expect(agencyScheduleState(new Date('2026-08-14T12:04:00Z')).can_act).toBe(true);
-    expect(agencyScheduleState(new Date('2026-08-14T12:05:00Z')).can_act).toBe(false);
+    expect(agencyScheduleState(new Date('2026-08-14T16:04:00Z')).can_act).toBe(true);
+    expect(agencyScheduleState(new Date('2026-08-14T16:05:00Z')).can_act).toBe(false);
   });
 
   it('reports YESTERDAY in LA even when UTC has already rolled over', () => {
