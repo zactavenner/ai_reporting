@@ -18,6 +18,7 @@ import { authorizeDailyReportRun } from '../_shared/dailyReportSecret.ts';
 import {
   TZ, laDate, laHour, yesterdayLa,
   chunkSms, buildAgencyMessage, agencyScheduleState, workerRunIsCurrent,
+  SEND_WINDOW_START_HOUR, SEND_WINDOW_END_HOUR,
 } from '../_shared/agencyReport.ts';
 
 const corsHeaders = {
