@@ -651,6 +651,17 @@ export default function ClientDetail() {
             </SectionErrorBoundary>
           </TabsContent>
 
+          {/* ─── AI CALLER TAB ─── */}
+          {hasAiCaller && (
+            <TabsContent value="ai-caller" className="space-y-6">
+              <SectionErrorBoundary sectionName="AI Caller">
+                <AICallerTab clientId={client.id} clientName={client.name} />
+              </SectionErrorBoundary>
+            </TabsContent>
+          )}
+
+
+
           {/* ─── ACTIVITY TAB ─── */}
           <TabsContent value="activity" className="space-y-6">
             <SectionErrorBoundary sectionName="Activity">
