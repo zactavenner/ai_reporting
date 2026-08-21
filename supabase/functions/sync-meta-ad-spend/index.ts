@@ -323,6 +323,24 @@ Deno.serve(async (req) => {
   try {
     const body: Body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
     const mode = body.mode ?? 'manual';
+
+    // Scheduled runs only fire at ~08:00 America/Los_Angeles. Platform spend
+    // for "yesterday" is not finalized at 04:00, which caused discrepancies.
+    // pg_cron has no timezone support, so the cron fires hourly around the
+    // window and this DST-safe local-hour gate picks the right one.
+    if (mode === 'daily' && !body.date && !body.days_back) {
+      const laHour = Number(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false,
+        }).format(new Date())
+      );
+      if (laHour !== SEND_HOUR_LA) {
+        return new Response(
+          JSON.stringify({ ok: true, skipped: true, reason: `local hour ${laHour} != ${SEND_HOUR_LA}`, tz: 'America/Los_Angeles' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
     const daysBack = Math.max(0, Math.min(30, Number(body.days_back ?? 0)));
     const dates: string[] = body.date
       ? [body.date]
