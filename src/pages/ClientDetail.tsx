@@ -236,6 +236,8 @@ export default function ClientDetail() {
   const thresholds = useMemo(() => getThresholdsFromSettings(settings), [settings]);
   const fundedInvestorLabel = settings?.funded_investor_label || 'Funded Investors';
   const isLeasing = (client as any)?.client_type === 'LEASING' || ((client?.name || '').toLowerCase().includes('lscre') && (client?.name || '').toLowerCase().includes('leasing'));
+  /** AI Caller reporting is currently enabled for HRT. */
+  const hasAiCaller = /^hrt\b/i.test((client?.name || '').trim());
   const defaultTab = isLeasing ? 'properties' : 'tasks';
   const resolvedTab = activeTab || defaultTab;
 
