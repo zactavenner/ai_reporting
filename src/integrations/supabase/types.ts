@@ -18120,9 +18120,14 @@ export type Database = {
       phone_call_records: {
         Row: {
           accredited: string | null
+          ai_agent: string | null
           analyzed_at: string | null
+          answered: boolean | null
           answered_at: string | null
+          appointment_booked: boolean
+          appointment_date: string | null
           appointment_id: string | null
+          appointment_status: string | null
           assigned_user: string | null
           assigned_user_id: string | null
           assigned_user_phone: string | null
@@ -18141,6 +18146,7 @@ export type Database = {
           duration_seconds: number | null
           ended_at: string | null
           follow_up_date: string | null
+          follow_up_required: boolean
           ghl_synced_at: string | null
           id: string
           important_quotes: Json | null
@@ -18148,10 +18154,12 @@ export type Database = {
           investment_amount: number | null
           investment_range: string | null
           investment_timeline: string | null
+          is_ai_caller: boolean
           next_step: string | null
           objections: Json | null
           outcome: string | null
           provider: string | null
+          qualified: boolean | null
           raw_payload: Json | null
           recording_url: string | null
           sentiment: string | null
@@ -18167,9 +18175,14 @@ export type Database = {
         }
         Insert: {
           accredited?: string | null
+          ai_agent?: string | null
           analyzed_at?: string | null
+          answered?: boolean | null
           answered_at?: string | null
+          appointment_booked?: boolean
+          appointment_date?: string | null
           appointment_id?: string | null
+          appointment_status?: string | null
           assigned_user?: string | null
           assigned_user_id?: string | null
           assigned_user_phone?: string | null
@@ -18188,6 +18201,7 @@ export type Database = {
           duration_seconds?: number | null
           ended_at?: string | null
           follow_up_date?: string | null
+          follow_up_required?: boolean
           ghl_synced_at?: string | null
           id?: string
           important_quotes?: Json | null
@@ -18195,10 +18209,12 @@ export type Database = {
           investment_amount?: number | null
           investment_range?: string | null
           investment_timeline?: string | null
+          is_ai_caller?: boolean
           next_step?: string | null
           objections?: Json | null
           outcome?: string | null
           provider?: string | null
+          qualified?: boolean | null
           raw_payload?: Json | null
           recording_url?: string | null
           sentiment?: string | null
@@ -18214,9 +18230,14 @@ export type Database = {
         }
         Update: {
           accredited?: string | null
+          ai_agent?: string | null
           analyzed_at?: string | null
+          answered?: boolean | null
           answered_at?: string | null
+          appointment_booked?: boolean
+          appointment_date?: string | null
           appointment_id?: string | null
+          appointment_status?: string | null
           assigned_user?: string | null
           assigned_user_id?: string | null
           assigned_user_phone?: string | null
@@ -18235,6 +18256,7 @@ export type Database = {
           duration_seconds?: number | null
           ended_at?: string | null
           follow_up_date?: string | null
+          follow_up_required?: boolean
           ghl_synced_at?: string | null
           id?: string
           important_quotes?: Json | null
@@ -18242,10 +18264,12 @@ export type Database = {
           investment_amount?: number | null
           investment_range?: string | null
           investment_timeline?: string | null
+          is_ai_caller?: boolean
           next_step?: string | null
           objections?: Json | null
           outcome?: string | null
           provider?: string | null
+          qualified?: boolean | null
           raw_payload?: Json | null
           recording_url?: string | null
           sentiment?: string | null

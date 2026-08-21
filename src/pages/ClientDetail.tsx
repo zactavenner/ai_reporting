@@ -56,6 +56,7 @@ const ConnectionsTab = lazy(() => import('@/components/client/ConnectionsTab'));
 const ClientDatabaseTab = lazy(() => import('@/components/client/ClientDatabaseTab').then(m => ({ default: m.ClientDatabaseTab })));
 const ClientWorkflowsTab = lazy(() => import('@/components/ghl/ClientWorkflowsTab').then(m => ({ default: m.ClientWorkflowsTab })));
 const AdsManagerTab = lazy(() => import('@/components/ads-manager/AdsManagerTab').then(m => ({ default: m.AdsManagerTab })));
+const AICallerTab = lazy(() => import('@/components/ai-caller/AICallerTab').then(m => ({ default: m.AICallerTab })));
 const FundLaunchReviewTab = lazy(() => import('@/components/client/FundLaunchReviewTab'));
 import { BrandGuideSection } from '@/components/clients/BrandGuideSection';
 import { ClientTeamSection } from '@/components/clients/ClientTeamSection';
@@ -235,6 +236,8 @@ export default function ClientDetail() {
   const thresholds = useMemo(() => getThresholdsFromSettings(settings), [settings]);
   const fundedInvestorLabel = settings?.funded_investor_label || 'Funded Investors';
   const isLeasing = (client as any)?.client_type === 'LEASING' || ((client?.name || '').toLowerCase().includes('lscre') && (client?.name || '').toLowerCase().includes('leasing'));
+  /** AI Caller reporting is currently enabled for HRT. */
+  const hasAiCaller = /^hrt\b/i.test((client?.name || '').trim());
   const defaultTab = isLeasing ? 'properties' : 'tasks';
   const resolvedTab = activeTab || defaultTab;
 
@@ -459,6 +462,12 @@ export default function ClientDetail() {
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
+            {hasAiCaller && (
+              <TabsTrigger value="ai-caller" className="gap-2 whitespace-nowrap">
+                <Phone className="h-4 w-4" />
+                AI Caller
+              </TabsTrigger>
+            )}
             <TabsTrigger value="activity" className="gap-2 whitespace-nowrap">
               <ActivityIcon className="h-4 w-4" />
               Activity
@@ -641,6 +650,17 @@ export default function ClientDetail() {
               <FunnelPreviewTab clientId={client.id} isPublicView={false} />
             </SectionErrorBoundary>
           </TabsContent>
+
+          {/* ─── AI CALLER TAB ─── */}
+          {hasAiCaller && (
+            <TabsContent value="ai-caller" className="space-y-6">
+              <SectionErrorBoundary sectionName="AI Caller">
+                <AICallerTab clientId={client.id} clientName={client.name} />
+              </SectionErrorBoundary>
+            </TabsContent>
+          )}
+
+
 
           {/* ─── ACTIVITY TAB ─── */}
           <TabsContent value="activity" className="space-y-6">
