@@ -52,18 +52,28 @@ export const inLocalWindow = (
   return h >= startHour && h < endHour;
 };
 
-/** Local minutes since midnight — used for the 04:50 cutoff / 05:00 deadline. */
+/**
+ * Daily send window in America/Los_Angeles. Moved from 04:00 to 08:00 because
+ * ad platforms have not finalized the previous day's spend at 4am, which
+ * produced discrepancies against Ads Manager.
+ */
+export const SEND_WINDOW_START_HOUR = 8;
+export const SEND_WINDOW_END_HOUR = 9;
+
+/** Local minutes since midnight — used for the 08:50 cutoff / 09:00 deadline. */
 export const laMinutesOfDay = (d: Date = new Date(), tz = TZ): number =>
   laHour(d, tz) * 60 + laMinute(d, tz);
 
 export const agencyScheduleState = (d: Date = new Date(), tz = TZ) => {
   const minute = laMinutesOfDay(d, tz);
+  const start = SEND_WINDOW_START_HOUR * 60;
+  const end = SEND_WINDOW_END_HOUR * 60;
   return {
     minute,
-    can_act: minute >= 4 * 60 && minute < 5 * 60 + 5,
-    can_dispatch: minute >= 4 * 60 && minute < 4 * 60 + 50,
-    past_finalize_cutoff: minute >= 4 * 60 + 50,
-    past_deadline: minute >= 5 * 60,
+    can_act: minute >= start && minute < end + 5,
+    can_dispatch: minute >= start && minute < end - 10,
+    past_finalize_cutoff: minute >= end - 10,
+    past_deadline: minute >= end,
   };
 };
 
