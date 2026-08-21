@@ -1,15 +1,16 @@
 // Agency Daily Reporting 5.0 — secured coordinator.
 //
-// Runs between 04:00 and 05:00 America/Los_Angeles (DST-safe: the cron fires
-// every 2 minutes across UTC 11–13 and only the local-window ticks act) and
-// reports YESTERDAY in that timezone.
+// Runs between 08:00 and 09:00 America/Los_Angeles (DST-safe: the cron fires
+// every 2 minutes across UTC 15–17 and only the local-window ticks act) and
+// reports YESTERDAY in that timezone. 08:00 is used instead of 04:00 because
+// ad platforms have not finalized the prior day's spend that early.
 //
 // Responsibilities per tick:
 //   1. open / reuse the durable agency_daily_report_runs row for the date
 //   2. enrol every ACTIVE client into agency_daily_report_clients
 //   3. reconcile statuses from public.daily_report_runs
 //   4. dispatch daily-report-run for pending / retryable clients, max 3 at once
-//   5. stop dispatching at 04:50; reconcile until terminal or hard-stop at 05:00
+//   5. stop dispatching at 08:50; reconcile until terminal or hard-stop at 09:00
 //   6. hand ONE consolidated SMS to agency-ghl-report-send (idempotent)
 //
 // No secret, credential or phone number is ever logged or returned.
