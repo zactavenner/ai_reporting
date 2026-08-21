@@ -199,6 +199,9 @@ verify_jwt = false
 [functions.call-transcription]
 verify_jwt = false
 
+[functions.ai-caller-webhook]
+verify_jwt = false
+
 # Ads Launch Center + Media Buyer (JEREMY): each implements its own signed
 # dashboard-session auth in code, so platform JWT verification is off.
 [functions.meta-launch-center]
