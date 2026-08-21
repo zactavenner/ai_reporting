@@ -25,8 +25,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-internal-secret',
 };
 
-const WINDOW_START_HOUR = 4;
-const WINDOW_END_HOUR = 5;
+const WINDOW_START_HOUR = SEND_WINDOW_START_HOUR;
+const WINDOW_END_HOUR = SEND_WINDOW_END_HOUR;
 const MAX_CONCURRENT = 3;
 const MAX_ATTEMPTS = 3; // initial dispatch + at most two retries
 const TERMINAL = ['completed', 'validation_failed', 'error', 'timed_out'];
