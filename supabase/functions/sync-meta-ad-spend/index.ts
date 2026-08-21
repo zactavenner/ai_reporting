@@ -15,6 +15,8 @@ type Body = {
 };
 
 const SHEET_TAB = 'FB Spend';
+// Daily report send hour in America/Los_Angeles (finalized platform spend).
+const SEND_HOUR_LA = 8;
 const HEADER = [
   'Date','Campaign Name','Ad Spend','Impressions','Clicks','Frequency','CTR',
   'Reach','CPM','CPC','Leads','Cost/Lead','Campaign ID','Account ID','Synced At',
