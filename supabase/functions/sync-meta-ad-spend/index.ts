@@ -176,8 +176,9 @@ async function upsertDaily(sb: any, acct: AccountRow, date: string, rows: Campai
     cost_per_lead: r.leads > 0 ? r.spend / r.leads : null,
     synced_at: new Date().toISOString(),
   }));
+  // One row per client + ad account + campaign + date: re-runs update in place.
   const { error } = await sb.from('ad_spend_daily')
-    .upsert(payload, { onConflict: 'date,campaign_id' });
+    .upsert(payload, { onConflict: 'client_id,ad_account_id,campaign_id,date' });
   if (error) throw error;
   return payload.length;
 }
