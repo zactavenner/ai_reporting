@@ -462,6 +462,12 @@ export default function ClientDetail() {
               <Layers className="h-4 w-4" />
               Funnel
             </TabsTrigger>
+            {hasAiCaller && (
+              <TabsTrigger value="ai-caller" className="gap-2 whitespace-nowrap">
+                <Phone className="h-4 w-4" />
+                AI Caller
+              </TabsTrigger>
+            )}
             <TabsTrigger value="activity" className="gap-2 whitespace-nowrap">
               <ActivityIcon className="h-4 w-4" />
               Activity
