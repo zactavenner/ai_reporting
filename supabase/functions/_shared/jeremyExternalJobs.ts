@@ -274,7 +274,7 @@ export async function quoteJob(db: Db, policy: JeremyPolicy, input: QuoteInput):
         .eq("request_fingerprint", fingerprint);
       const winner = ((winners ?? []) as JeremyExternalJob[])
         .filter((r) => !REQUOTABLE_STATUSES.includes(String(r.status)))
-        .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")))[0];
+        .sort((a, b) => String((b as { created_at?: string }).created_at ?? "").localeCompare(String((a as { created_at?: string }).created_at ?? "")))[0];
       if (winner) {
         return { success: true, job: winner, reused: true, reuse_reason: "concurrent_quote", policy_gate: gate };
       }
