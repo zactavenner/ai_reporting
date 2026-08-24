@@ -26,7 +26,101 @@ serve(async (req) => {
       });
     }
 
-    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey, model, lastFrameUrl, ingredientUrl } = requestBody;
+    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey, model, lastFrameUrl, ingredientUrl, exactModel: requestedExactModel, resolution } = requestBody;
+
+    // ── Exact-model path (Jeremy / approved automated callers) ───────────────
+    // The approved model id is validated against the active configured allowlist
+    // and sent to the provider verbatim: no aliasing, no fallback, and the
+    // receipt reports the model that actually ran.
+    if (String(requestedExactModel ?? '').trim()) {
+      if (!OPENROUTER_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+      let exact: string;
+      let providerBody: Record<string, unknown>;
+      try {
+        exact = await resolveExactModel(db, 'video', requestedExactModel);
+        providerBody = buildExactVideoRequest({
+          exactModel: exact,
+          prompt,
+          aspectRatio,
+          durationSeconds: duration,
+          resolution,
+          firstFrameUrl: imageUrl ?? null,
+          lastFrameUrl: lastFrameUrl ?? null,
+          referenceImageUrls: ingredientUrl ? [ingredientUrl] : [],
+        });
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const submit = await fetch('https://openrouter.ai/api/v1/videos', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://reporting.highperformanceads.com',
+          'X-Title': 'Jeremy — exact model video',
+        },
+        body: JSON.stringify(providerBody),
+      });
+      if (!submit.ok) {
+        const t = await submit.text();
+        return new Response(
+          JSON.stringify({ error: `Video submit ${submit.status}`, details: t.slice(0, 400) }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const sj = await submit.json();
+      const reported = String(sj?.model ?? '').trim();
+      if (reported && reported !== exact) {
+        return new Response(
+          JSON.stringify({ error: `Provider accepted ${reported} but ${exact} was requested.`, model: reported }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const pollingUrl: string | undefined = sj.polling_url;
+      if (!pollingUrl) {
+        return new Response(
+          JSON.stringify({ error: 'Provider returned no polling_url', details: JSON.stringify(sj).slice(0, 300) }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      let exactVideoUrl: string | null = null;
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const p = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` } });
+        if (!p.ok) continue;
+        const pj = await p.json();
+        if (pj.status === 'completed') {
+          const urls: string[] = pj.unsigned_urls || pj.urls || (pj.video?.url ? [pj.video.url] : []);
+          exactVideoUrl = urls[0] || null;
+          break;
+        }
+        if (pj.status === 'failed') {
+          return new Response(
+            JSON.stringify({ error: `Video generation failed: ${pj.error || 'unknown'}`, model: exact }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+      if (!exactVideoUrl) {
+        return new Response(
+          JSON.stringify({ error: 'Video generation timed out after 5 minutes', model: exact }),
+          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ status: 'completed', videoUrl: exactVideoUrl, model: exact }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     // For Veo3 (default) imageUrl is required (image-to-video). For Seedance, imageUrl is optional
     // because it also supports text-to-video and ingredient-only (subject reference) modes.
@@ -36,6 +130,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+
 
     // ---------- Seedance 2.0 Pro via OpenRouter (image-to-video, inline poll) ----------
     if (model === 'seedance-pro') {
