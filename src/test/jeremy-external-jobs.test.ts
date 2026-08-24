@@ -79,11 +79,21 @@ function makeDb(tables: Record<string, Row[]> = {}) {
           created_at: new Date().toISOString(),
           ...r,
         }));
+        const NON_REQUOTABLE = ['awaiting_approval', 'approved', 'claimed', 'running', 'succeeded'];
         for (const r of incoming) {
           if (r.idempotency_key && all().some((e) => e.idempotency_key === r.idempotency_key)) {
             return { data: null, error: { message: 'duplicate key value violates unique constraint' } };
           }
+          // Mirrors jeremy_external_jobs_active_fingerprint_uidx.
+          if (
+            r.request_fingerprint &&
+            NON_REQUOTABLE.includes(String(r.status)) &&
+            all().some((e) => e.client_id === r.client_id && e.request_fingerprint === r.request_fingerprint && NON_REQUOTABLE.includes(String(e.status)))
+          ) {
+            return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "jeremy_external_jobs_active_fingerprint_uidx"' } };
+          }
         }
+
         all().push(...incoming);
         return { data: incoming, error: null };
       }
