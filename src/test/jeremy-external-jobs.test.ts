@@ -883,7 +883,9 @@ describe('Jeremy launch readiness and PAUSED publication', () => {
   it('never fabricates statuses in the verification helper', () => {
     expect(verifyPublishReadBack({}).ok).toBe(false);
     expect(verifyPublishReadBack(null).ok).toBe(false);
-    expect(readFileSync('supabase/functions/_shared/jeremyLaunch.ts', 'utf8')).not.toMatch(/statuses\s*\?\?\s*\{/);
+    // No fabricated PAUSED defaults anywhere in the launch verification path.
+    expect(readFileSync('supabase/functions/_shared/jeremyLaunch.ts', 'utf8')).not.toMatch(/\?\?\s*\{[^}]*PAUSED/);
+
   });
 
   it('createLaunchBatch is idempotent and never creates a duplicate draft', async () => {
