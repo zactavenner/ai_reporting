@@ -188,6 +188,28 @@ export async function createLaunchBatch(
       items.push({ candidate_id: candidateId, ready: false, missing: ["Candidate not found for this client."], record: null, launch_id: null, status: null });
       continue;
     }
+    // Idempotency: a candidate owns at most one draft. Repeating the batch
+    // returns the existing launch instead of creating a duplicate draft.
+    const existingRef = nonEmpty(candidate.launch_reference);
+    if (existingRef) {
+      const { data: existing } = await db
+        .from("meta_campaign_launches")
+        .select("id, status, stage")
+        .eq("id", existingRef)
+        .maybeSingle();
+      if (existing?.id) {
+        items.push({
+          candidate_id: candidateId,
+          ready: true,
+          missing: [],
+          record: null,
+          launch_id: String(existing.id),
+          status: existing.status ?? null,
+          reused: true,
+        });
+        continue;
+      }
+    }
     const readiness = buildLaunchRecord(clientId, candidate, config, inputs);
     if (!readiness.ready) {
       items.push({ ...readiness, launch_id: null, status: null });
@@ -201,6 +223,7 @@ export async function createLaunchBatch(
     if (error) throw new Error(`Could not create launch draft: ${error.message}`);
     await db.from("jeremy_creative_candidates").update({ launch_reference: launch?.id ?? null }).eq("id", candidateId);
     items.push({ ...readiness, launch_id: launch?.id ? String(launch.id) : null, status: launch?.status ?? null });
+
   }
 
   return {
