@@ -659,6 +659,37 @@ export function idempotencyKey(clientId: string, entityId: string, action: strin
 }
 
 /**
+ * The single stable claim for a LIVE mutation of a plan. Exactly one row with
+ * this key can ever exist, so a second live attempt is refused by the unique
+ * index rather than mutating the provider twice.
+ */
+export function liveIdempotencyKey(planId: string, clientId: string, entityId: string, action: string, payload: Record<string, unknown>): string {
+  return `${planId}:${idempotencyKey(clientId, entityId, action, payload)}`;
+}
+
+/**
+ * Dry runs must never consume the live claim, and repeated/concurrent dry runs
+ * must never collide with each other, so every dry-run audit row gets its own
+ * namespaced, unique key.
+ */
+export function dryRunIdempotencyKey(
+  planId: string,
+  clientId: string,
+  entityId: string,
+  action: string,
+  payload: Record<string, unknown>,
+  nonce: string = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+): string {
+  return `dryrun:${nonce}:${liveIdempotencyKey(planId, clientId, entityId, action, payload)}`;
+}
+
+/** True when a ledger key belongs to a dry-run audit row rather than a live claim. */
+export function isDryRunIdempotencyKey(key: string): boolean {
+  return key.startsWith("dryrun:");
+}
+
+
+/**
  * The binding fingerprint of a decision. Execution recomputes this from the
  * request and refuses when it differs from the persisted plan, so swapping the
  * entity, the action or the budget amount after approval can never execute.
