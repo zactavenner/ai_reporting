@@ -126,12 +126,14 @@ Deno.serve(async (req) => {
       : `act_${client.meta_ad_account_id}`;
 
     const map = OBJECTIVES[launch.objective as keyof typeof OBJECTIVES];
-    const patch: Record<string, unknown> = {
-      status: "publishing",
-      error_detail: null,
-      retry_count: (launch.retry_count ?? 0) + (launch.status === "failed" ? 1 : 0),
-    };
-    await supabase.from("meta_campaign_launches").update(patch).eq("id", launchId);
+    if (!alreadyPublished) {
+      await supabase.from("meta_campaign_launches").update({
+        status: "publishing",
+        error_detail: null,
+        retry_count: (launch.retry_count ?? 0) + (launch.status === "failed" ? 1 : 0),
+      }).eq("id", launchId);
+    }
+
 
     let campaignId: string | null = launch.meta_campaign_id;
     let adsetId: string | null = launch.meta_adset_id;
