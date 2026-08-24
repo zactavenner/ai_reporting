@@ -370,28 +370,19 @@ export async function publishLaunch(
     if (response?.success === false) {
       throw new Error(String(response.error ?? "Launch center refused the publication."));
     }
-    const published = ((response.launch ?? response) as Record<string, unknown>) ?? {};
-    const metaIds = {
-      campaign: (published.meta_campaign_id as string) ?? (launch.meta_campaign_id as string) ?? null,
-      adset: (published.meta_adset_id as string) ?? (launch.meta_adset_id as string) ?? null,
-      ad: (published.meta_ad_id as string) ?? (launch.meta_ad_id as string) ?? null,
-    };
-    const statuses = (response.statuses as Record<string, string>) ?? {
-      campaign: "PAUSED",
-      adset: "PAUSED",
-      ad: "PAUSED",
-    };
-    const notPaused = Object.entries(statuses).filter(([, v]) => String(v).toUpperCase() !== "PAUSED");
-    if (notPaused.length) {
-      const reason = `Read-back shows a non-PAUSED object (${notPaused.map(([k, v]) => `${k}=${v}`).join(", ")}); this is never acceptable.`;
+    const verified = verifyPublishReadBack(response);
+    const metaIds = verified.meta_ids;
+    const statuses = verified.statuses;
+    if (!verified.ok) {
       await completeJob(db, input.jobId, {
         status: "verification_failed",
         providerResponse: response,
         verification: { statuses, meta_ids: metaIds, all_paused: false },
         resultSummary: { launch_id: input.launchId },
       });
-      return { success: false, reason, job_id: input.jobId, launch_id: input.launchId, meta_ids: metaIds, statuses, gates };
+      return { success: false, reason: verified.reason, job_id: input.jobId, launch_id: input.launchId, meta_ids: metaIds, statuses, gates };
     }
+
 
     await completeJob(db, input.jobId, {
       status: "succeeded",
