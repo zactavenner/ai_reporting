@@ -376,9 +376,20 @@ describe('atomic claim and audit trail', () => {
     const db = makeDb(tables);
     const first = await executeApprovedAction(db, APPROVAL, provider().p, input());
     expect(first.success).toBe(true);
-    // The plan is released to 'approved' after a dry run, so the second attempt
-    // is stopped by the unique idempotency key on the execution ledger.
+    // The plan is released to 'approved' after a dry run, so a replay is stopped
+    // by the cooldown recomputed from the ledger the first run just wrote.
     const second = await executeApprovedAction(db, APPROVAL, provider().p, input());
+    expect(second.success).toBe(false);
+    expect(second.reason).toMatch(/cooldown/i);
+    expect(tables.jeremy_action_executions).toHaveLength(1);
+  });
+
+  it('rejects a duplicate execution ledger entry via the idempotency key', async () => {
+    // With the cooldown disabled, the unique idempotency key is the backstop.
+    const db = makeDb(tables);
+    const noCooldown = { ...APPROVAL, cooldown_hours: 0 };
+    expect((await executeApprovedAction(db, noCooldown, provider().p, input())).success).toBe(true);
+    const second = await executeApprovedAction(db, noCooldown, provider().p, input());
     expect(second.success).toBe(false);
     expect(second.reason).toMatch(/idempotency|already/i);
     expect(tables.jeremy_action_executions).toHaveLength(1);
