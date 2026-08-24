@@ -1091,20 +1091,24 @@ export async function executeApprovedAction(
   }
 }
 
-/** Sum of today's approved budget increases, for the account-level delta cap. */
+/** Sum of today's approved budget increases (live rows only), for the account-level delta cap. */
 async function accountDeltaUsedToday(db: Db, clientId: string): Promise<number> {
   const dayStart = new Date();
   dayStart.setUTCHours(0, 0, 0, 0);
   const { data } = await db
     .from("jeremy_action_executions")
-    .select("requested_change, before_snapshot, action, status")
+    .select("requested_change, before_snapshot, action, status, dry_run, idempotency_key")
     .eq("client_id", clientId)
     .eq("action", "adjust_budget")
     .gte("created_at", dayStart.toISOString());
   if (!data) return 0;
   return round2(
     data
-      .filter((r: Record<string, unknown>) => ["succeeded", "executing", "verification_failed"].includes(String(r.status)))
+      .filter((r: Record<string, unknown>) =>
+        ["succeeded", "executing", "verification_failed"].includes(String(r.status))
+        && r.dry_run !== true
+        && !isDryRunIdempotencyKey(String(r.idempotency_key ?? "")))
+
       .reduce((sum: number, r: Record<string, unknown>) => {
         const req = (r.requested_change ?? {}) as Record<string, unknown>;
         const beforeCents = Number((r.before_snapshot as Record<string, unknown> | null)?.daily_budget);
