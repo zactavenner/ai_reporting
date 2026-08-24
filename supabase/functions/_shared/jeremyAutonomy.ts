@@ -884,21 +884,29 @@ export async function executeApprovedAction(
   gates.push({ gate: "mode", ...mode });
   if (!mode.allowed) return blocked(mode.reason, gates, input.planId);
 
-  // ── 5. Atomic claim on the plan itself: a second call loses the race ──────
-  const { data: claimedPlan } = await db
-    .from("jeremy_action_plans")
-    .update({ status: "claimed", claimed_at: new Date().toISOString() })
-    .eq("id", input.planId)
-    .eq("status", "approved")
-    .select("id")
-    .maybeSingle();
-  if (!claimedPlan) {
-    return blocked("Plan was already claimed or executed by another request (idempotency).", gates, input.planId);
+  // ── 5. Atomic claim on the plan itself: a second LIVE call loses the race ──
+  // A dry run is a read-only rehearsal: it never claims the plan, so repeated or
+  // concurrent dry runs can neither race each other nor block the one permitted
+  // live execution.
+  const dryRun = input.dryRun ?? true;
+  if (!dryRun) {
+    const { data: claimedPlan } = await db
+      .from("jeremy_action_plans")
+      .update({ status: "claimed", claimed_at: new Date().toISOString() })
+      .eq("id", input.planId)
+      .eq("status", "approved")
+      .select("id")
+      .maybeSingle();
+    if (!claimedPlan) {
+      return blocked("Plan was already claimed or executed by another request (idempotency).", gates, input.planId);
+    }
   }
 
   const release = async (status: string, extra: Record<string, unknown> = {}) => {
+    if (dryRun) return;
     await db.from("jeremy_action_plans").update({ status, ...extra }).eq("id", input.planId);
   };
+
 
   try {
     // ── 6. Outcome-data coverage and sample floors, recomputed now ──────────
