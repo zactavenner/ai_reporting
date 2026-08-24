@@ -372,28 +372,33 @@ describe('atomic claim and audit trail', () => {
     expect(tables.jeremy_action_executions.at(-1)!.requested_change.daily_budget_usd).toBe(120);
   });
 
-  it('loses the race on a repeated execution of the same plan', async () => {
+  it('lets repeated dry runs rehearse without claiming the plan or the live key', async () => {
     const db = makeDb(tables);
     const first = await executeApprovedAction(db, APPROVAL, provider().p, input());
     expect(first.success).toBe(true);
-    // The plan is released to 'approved' after a dry run, so a replay is stopped
-    // by the cooldown recomputed from the ledger the first run just wrote.
+    // A dry run is a read-only rehearsal: the plan stays approved and the single
+    // live idempotency key stays unconsumed, so a rehearsal can be repeated.
     const second = await executeApprovedAction(db, APPROVAL, provider().p, input());
-    expect(second.success).toBe(false);
-    expect(second.reason).toMatch(/cooldown/i);
-    expect(tables.jeremy_action_executions).toHaveLength(1);
+    expect(second.success).toBe(true);
+    expect(second.verification_status).toBe('skipped_dry_run');
+    expect(tables.jeremy_action_plans[0].status).toBe('approved');
+    expect(tables.jeremy_action_executions).toHaveLength(2);
+    const keys = tables.jeremy_action_executions.map((r) => String(r.idempotency_key));
+    expect(new Set(keys).size).toBe(2);
+    expect(keys.every((k) => k.startsWith('dryrun:'))).toBe(true);
+    // No provider mutation was ever attempted.
+    expect(provider().calls).toHaveLength(0);
   });
 
-  it('rejects a duplicate execution ledger entry via the idempotency key', async () => {
-    // With the cooldown disabled, the unique idempotency key is the backstop.
+  it('keeps dry-run ledger rows out of the live idempotency namespace', async () => {
     const db = makeDb(tables);
     const noCooldown = { ...APPROVAL, cooldown_hours: 0 };
     expect((await executeApprovedAction(db, noCooldown, provider().p, input())).success).toBe(true);
-    const second = await executeApprovedAction(db, noCooldown, provider().p, input());
-    expect(second.success).toBe(false);
-    expect(second.reason).toMatch(/idempotency|already/i);
-    expect(tables.jeremy_action_executions).toHaveLength(1);
+    const row = tables.jeremy_action_executions.at(-1)!;
+    expect(row.dry_run).toBe(true);
+    expect(String(row.idempotency_key)).toMatch(/^dryrun:[^:]+:plan-1:/);
   });
+
 
   it('refuses a plan already claimed by a concurrent request', async () => {
     tables.jeremy_action_plans = [plan({ status: 'claimed' })];
