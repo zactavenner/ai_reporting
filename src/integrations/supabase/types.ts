@@ -14089,6 +14089,497 @@ export type Database = {
           },
         ]
       }
+      jeremy_action_executions: {
+        Row: {
+          action: string
+          after_snapshot: Json | null
+          before_snapshot: Json | null
+          claimed_at: string
+          client_id: string
+          created_at: string
+          cycle_id: string | null
+          dry_run: boolean
+          entity_type: string
+          error_detail: string | null
+          executed_at: string | null
+          executed_by: string | null
+          id: string
+          idempotency_key: string
+          meta_entity_id: string
+          provider_receipt: Json | null
+          recommendation_id: string | null
+          requested_change: Json
+          status: string
+          updated_at: string
+          verification_status: string
+          verified_at: string | null
+        }
+        Insert: {
+          action: string
+          after_snapshot?: Json | null
+          before_snapshot?: Json | null
+          claimed_at?: string
+          client_id: string
+          created_at?: string
+          cycle_id?: string | null
+          dry_run?: boolean
+          entity_type: string
+          error_detail?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          id?: string
+          idempotency_key: string
+          meta_entity_id: string
+          provider_receipt?: Json | null
+          recommendation_id?: string | null
+          requested_change?: Json
+          status?: string
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Update: {
+          action?: string
+          after_snapshot?: Json | null
+          before_snapshot?: Json | null
+          claimed_at?: string
+          client_id?: string
+          created_at?: string
+          cycle_id?: string | null
+          dry_run?: boolean
+          entity_type?: string
+          error_detail?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          id?: string
+          idempotency_key?: string
+          meta_entity_id?: string
+          provider_receipt?: Json | null
+          recommendation_id?: string | null
+          requested_change?: Json
+          status?: string
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jeremy_action_executions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_executions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_executions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_executions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_executions_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "jeremy_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_executions_recommendation_id_fkey"
+            columns: ["recommendation_id"]
+            isOneToOne: false
+            referencedRelation: "meta_ad_recommendations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jeremy_autonomy_policies: {
+        Row: {
+          ad_account_id: string | null
+          allowed_actions: string[]
+          client_id: string
+          cooldown_hours: number
+          created_at: string
+          id: string
+          max_account_daily_budget_delta_usd: number
+          max_daily_budget_usd: number
+          min_attribution_coverage: number
+          min_funded_count: number
+          min_live_days: number
+          min_qualified_leads: number
+          min_spend_usd: number
+          mode: string
+          notes: string | null
+          paid_discovery_enabled: boolean
+          paid_discovery_monthly_cap_usd: number
+          paid_discovery_per_run_cap_usd: number
+          paid_generation_enabled: boolean
+          paid_generation_monthly_cap_usd: number
+          paid_generation_per_run_cap_usd: number
+          scale_hard_max_pct: number
+          scale_max_pct: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          ad_account_id?: string | null
+          allowed_actions?: string[]
+          client_id: string
+          cooldown_hours?: number
+          created_at?: string
+          id?: string
+          max_account_daily_budget_delta_usd?: number
+          max_daily_budget_usd?: number
+          min_attribution_coverage?: number
+          min_funded_count?: number
+          min_live_days?: number
+          min_qualified_leads?: number
+          min_spend_usd?: number
+          mode?: string
+          notes?: string | null
+          paid_discovery_enabled?: boolean
+          paid_discovery_monthly_cap_usd?: number
+          paid_discovery_per_run_cap_usd?: number
+          paid_generation_enabled?: boolean
+          paid_generation_monthly_cap_usd?: number
+          paid_generation_per_run_cap_usd?: number
+          scale_hard_max_pct?: number
+          scale_max_pct?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          ad_account_id?: string | null
+          allowed_actions?: string[]
+          client_id?: string
+          cooldown_hours?: number
+          created_at?: string
+          id?: string
+          max_account_daily_budget_delta_usd?: number
+          max_daily_budget_usd?: number
+          min_attribution_coverage?: number
+          min_funded_count?: number
+          min_live_days?: number
+          min_qualified_leads?: number
+          min_spend_usd?: number
+          mode?: string
+          notes?: string | null
+          paid_discovery_enabled?: boolean
+          paid_discovery_monthly_cap_usd?: number
+          paid_discovery_per_run_cap_usd?: number
+          paid_generation_enabled?: boolean
+          paid_generation_monthly_cap_usd?: number
+          paid_generation_per_run_cap_usd?: number
+          scale_hard_max_pct?: number
+          scale_max_pct?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jeremy_autonomy_policies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_autonomy_policies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_autonomy_policies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_autonomy_policies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      jeremy_creative_candidates: {
+        Row: {
+          actual_cost_usd: number | null
+          client_id: string
+          created_at: string
+          cycle_id: string | null
+          evidence: Json
+          expected_cost_usd: number | null
+          generation_kind: string | null
+          generation_reference: string | null
+          generation_status: string
+          id: string
+          launch_reference: string | null
+          rank: number | null
+          recreation_brief: Json | null
+          score: number
+          source_reference: string | null
+          source_type: string
+          source_url: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          actual_cost_usd?: number | null
+          client_id: string
+          created_at?: string
+          cycle_id?: string | null
+          evidence?: Json
+          expected_cost_usd?: number | null
+          generation_kind?: string | null
+          generation_reference?: string | null
+          generation_status?: string
+          id?: string
+          launch_reference?: string | null
+          rank?: number | null
+          recreation_brief?: Json | null
+          score?: number
+          source_reference?: string | null
+          source_type: string
+          source_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actual_cost_usd?: number | null
+          client_id?: string
+          created_at?: string
+          cycle_id?: string | null
+          evidence?: Json
+          expected_cost_usd?: number | null
+          generation_kind?: string | null
+          generation_reference?: string | null
+          generation_status?: string
+          id?: string
+          launch_reference?: string | null
+          rank?: number | null
+          recreation_brief?: Json | null
+          score?: number
+          source_reference?: string | null
+          source_type?: string
+          source_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jeremy_creative_candidates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_creative_candidates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_creative_candidates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_creative_candidates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_creative_candidates_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "jeremy_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jeremy_cycles: {
+        Row: {
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          error_state: Json | null
+          evidence: Json
+          id: string
+          kpi_snapshot_id: string | null
+          mode: string
+          stage: string
+          stage_timestamps: Json
+          started_at: string
+          status: string
+          triggered_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_state?: Json | null
+          evidence?: Json
+          id?: string
+          kpi_snapshot_id?: string | null
+          mode?: string
+          stage?: string
+          stage_timestamps?: Json
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_state?: Json | null
+          evidence?: Json
+          id?: string
+          kpi_snapshot_id?: string | null
+          mode?: string
+          stage?: string
+          stage_timestamps?: Json
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jeremy_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_cycles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      jeremy_kpi_snapshots: {
+        Row: {
+          client_id: string
+          contract_version: string
+          coverage: Json
+          created_at: string
+          creative_diagnostics: Json
+          cycle_id: string | null
+          id: string
+          media_diagnostics: Json
+          primary_outcomes: Json
+          reliability: Json
+          window_days: number
+        }
+        Insert: {
+          client_id: string
+          contract_version: string
+          coverage?: Json
+          created_at?: string
+          creative_diagnostics?: Json
+          cycle_id?: string | null
+          id?: string
+          media_diagnostics?: Json
+          primary_outcomes?: Json
+          reliability?: Json
+          window_days?: number
+        }
+        Update: {
+          client_id?: string
+          contract_version?: string
+          coverage?: Json
+          created_at?: string
+          creative_diagnostics?: Json
+          cycle_id?: string | null
+          id?: string
+          media_diagnostics?: Json
+          primary_outcomes?: Json
+          reliability?: Json
+          window_days?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jeremy_kpi_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_kpi_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_kpi_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_kpi_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_kpi_snapshots_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "jeremy_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jeremy_review_runs: {
         Row: {
           client_id: string
