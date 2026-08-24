@@ -478,9 +478,17 @@ serve(async (req) => {
     console.log('Ad generated successfully:', publicUrl);
 
     return new Response(
-      JSON.stringify({ success: true, imageUrl: publicUrl, storagePath: filePath, assetId: asset?.id }),
+      JSON.stringify({
+        success: true,
+        imageUrl: publicUrl,
+        storagePath: filePath,
+        assetId: asset?.id,
+        // Receipt: the model actually invoked.
+        model: ranModel || undefined,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
   } catch (error) {
     console.error('Generate ad error:', error);
     return new Response(
