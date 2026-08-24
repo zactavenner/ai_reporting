@@ -34,6 +34,47 @@ async function graphPost(path: string, params: Record<string, string>) {
   return body;
 }
 
+/**
+ * Authoritative read-back of one created object. The status is whatever Meta
+ * reports — it is never assumed. A failed read is an error, so a caller can
+ * never mistake "unknown" for "PAUSED".
+ */
+async function graphReadBackStatus(id: string, token: string): Promise<{ id: string; status: string; effective_status: string | null }> {
+  const objectId = String(id ?? "").trim();
+  if (!objectId) throw new Error("Read-back requires a concrete Meta object id.");
+  const url = `${GRAPH}/${objectId}?fields=id,status,effective_status&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body?.id) {
+    const detail = body?.error?.error_user_msg || body?.error?.message || JSON.stringify(body).slice(0, 300);
+    throw new Error(`Meta read-back of ${objectId} failed (${res.status}): ${detail}`);
+  }
+  const status = String(body.status ?? "").trim();
+  if (!status) throw new Error(`Meta read-back of ${objectId} returned no status.`);
+  return { id: String(body.id), status, effective_status: body.effective_status ? String(body.effective_status) : null };
+}
+
+/** Read back all three objects and return concrete ids + authoritative statuses. */
+async function readBackHierarchy(
+  ids: { campaign: string | null; adset: string | null; ad: string | null },
+  token: string,
+) {
+  const missing = (["campaign", "adset", "ad"] as const).filter((k) => !String(ids[k] ?? "").trim());
+  if (missing.length) {
+    throw new Error(`Cannot verify the publication: missing Meta id for ${missing.join(", ")}.`);
+  }
+  const [campaign, adset, ad] = await Promise.all([
+    graphReadBackStatus(ids.campaign!, token),
+    graphReadBackStatus(ids.adset!, token),
+    graphReadBackStatus(ids.ad!, token),
+  ]);
+  return {
+    read_back: { campaign, adset, ad },
+    statuses: { campaign: campaign.status, adset: adset.status, ad: ad.status },
+  };
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
