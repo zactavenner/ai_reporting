@@ -619,7 +619,10 @@ describe('Jeremy generation', () => {
       model: 'google/nano-banana-pro', aspectRatio: '1:1', actor: 'operator:zac',
     });
     expect(res.success).toBe(false);
-    expect(res.gates.find((g) => g.gate === 'model_binding')?.allowed).toBe(false);
+    // The approved target itself binds the model, so the swap is caught before
+    // the model_binding backstop is even reached.
+    const blocking = res.gates.filter((g) => !g.allowed).map((g) => g.gate);
+    expect(blocking.some((g) => g === 'payload_binding' || g === 'model_binding')).toBe(true);
     expect(ex.generateImage).not.toHaveBeenCalled();
     expect(db._tables.jeremy_external_jobs[0].status).toBe('approved');
   });
