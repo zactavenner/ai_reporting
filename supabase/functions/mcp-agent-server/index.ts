@@ -633,22 +633,21 @@ const TOOLS = [
   },
   {
     name: 'jeremy_execute_approved_action',
-    description: 'Execute a human-approved pause or budget increase. Requires confirm:true and human_approved:true; defaults to a dry run; refuses in shadow mode; never deletes; always read-back verified against Meta.',
+    description: 'Replay an already-approved, persisted plan (plan_id) as a DRY RUN. Requires confirm:true; every deterministic gate is revalidated server-side; the MCP surface never mutates Meta — live execution is a dashboard operator action.',
     inputSchema: {
       type: 'object',
       properties: {
         client_id: { type: 'string' },
+        plan_id: { type: 'string', description: 'The persisted, approved jeremy_action_plans row to replay.' },
         jeremy_action: { type: 'string', enum: ['pause', 'adjust_budget'] },
         entity_type: { type: 'string', enum: ['campaign', 'adset', 'ad'] },
         meta_entity_id: { type: 'string' },
         proposed_daily_budget: { type: 'number' },
         cycle_id: { type: 'string' },
         recommendation_id: { type: 'string' },
-        human_approved: { type: 'boolean' },
         confirm: { type: 'boolean' },
-        dry_run: { type: 'boolean', default: true },
       },
-      required: ['client_id', 'jeremy_action', 'entity_type', 'meta_entity_id', 'human_approved', 'confirm'],
+      required: ['client_id', 'plan_id', 'jeremy_action', 'entity_type', 'meta_entity_id', 'confirm'],
     },
   },
   {
@@ -975,19 +974,19 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
     case 'jeremy_execute_approved_action': {
       if (!args.client_id) return { error: 'client_id required' };
       if (args.confirm !== true) return { error: 'confirm:true is required' };
-      if (args.human_approved !== true) return { error: 'human_approved:true is required' };
+      if (!args.plan_id) return { error: 'plan_id required: only an approved, persisted plan can be executed' };
       const policy = await loadPolicy(prodDb, args.client_id);
       // The MCP surface never mutates the provider directly: it records the
       // decision as a dry run and the operator executes from the dashboard.
       return await executeApprovedAction(prodDb, policy, dryRunProvider, {
         clientId: args.client_id,
+        planId: String(args.plan_id),
         cycleId: args.cycle_id ?? null,
         recommendationId: args.recommendation_id ?? null,
         action: args.jeremy_action,
         entityType: args.entity_type ?? 'campaign',
         metaEntityId: String(args.meta_entity_id ?? ''),
         proposedDailyBudget: args.proposed_daily_budget ?? null,
-        humanApproved: true,
         executedBy: 'mcp',
         dryRun: true,
       });

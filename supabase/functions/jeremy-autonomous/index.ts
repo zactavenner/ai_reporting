@@ -21,6 +21,9 @@ import {
   executeApprovedAction,
   getCycle,
   planActions,
+  persistPlannedActions,
+  approvePlannedAction,
+  rejectPlannedAction,
   prepareRecreations,
   rankCandidates,
   runCycle,
@@ -146,7 +149,37 @@ Deno.serve(async (req) => {
       case "plan_actions": {
         const analysis = await analyzeAccount(supabase, clientId, policy, Number(body.window_days) || 30);
         const plan = await planActions(supabase, clientId, policy, analysis);
-        return json({ success: true, mode: policy.mode, basis: analysis.basis, coverage: analysis.coverage, plan });
+        // Persisting is what makes a plan executable later; the response itself
+        // is never accepted as authority for an execution.
+        const persisted = body.persist === false
+          ? []
+          : await persistPlannedActions(supabase, clientId, (body.cycle_id as string) ?? null, null, plan);
+        return json({ success: true, mode: policy.mode, basis: analysis.basis, coverage: analysis.coverage, plan, persisted_plans: persisted });
+      }
+      case "list_plans": {
+        let q = supabase
+          .from("jeremy_action_plans")
+          .select("*")
+          .eq("client_id", clientId)
+          .order("created_at", { ascending: false })
+          .limit(Math.min(100, Number(body.limit) || 50));
+        if (typeof body.status === "string") q = q.eq("status", body.status);
+        const { data } = await q;
+        return json({ success: true, plans: data ?? [] });
+      }
+      case "approve_plan": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not approve actions." }, 403);
+        const planId = String(body.plan_id ?? "");
+        if (!planId) return json({ success: false, error: "plan_id required" }, 400);
+        const result = await approvePlannedAction(supabase, planId, actor ?? "operator");
+        return json(result, result.success ? 200 : 400);
+      }
+      case "reject_plan": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not reject actions." }, 403);
+        const planId = String(body.plan_id ?? "");
+        if (!planId) return json({ success: false, error: "plan_id required" }, 400);
+        const result = await rejectPlannedAction(supabase, planId, actor ?? "operator");
+        return json(result, result.success ? 200 : 400);
       }
       case "execute_action": {
         if (actor === "scheduler" && policy.mode !== "autopilot") {
@@ -166,13 +199,13 @@ Deno.serve(async (req) => {
         }
         const result = await executeApprovedAction(supabase, policy, provider, {
           clientId,
+          planId: String(body.plan_id ?? ""),
           cycleId: (body.cycle_id as string) ?? null,
           recommendationId: (body.recommendation_id as string) ?? null,
           action: String(body.jeremy_action ?? "") as "pause" | "adjust_budget",
           entityType: String(body.entity_type ?? "campaign") as "campaign" | "adset" | "ad",
           metaEntityId: String(body.meta_entity_id ?? ""),
           proposedDailyBudget: body.proposed_daily_budget != null ? Number(body.proposed_daily_budget) : null,
-          humanApproved: body.human_approved === true,
           executedBy: actor ?? "unknown",
           dryRun,
         });
