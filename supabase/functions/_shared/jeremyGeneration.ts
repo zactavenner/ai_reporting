@@ -32,20 +32,7 @@ export type GenerationKind = "static_image" | "video";
 
 export const DURABLE_BUCKET = "creatives";
 
-/** Published model costs used for the exact quote. Unknown model ⇒ NaN ⇒ refuse. */
-export const IMAGE_MODEL_COSTS_USD: Record<string, number> = {
-  "google/gemini-2.5-flash-image": 0.04,
-  "google/nano-banana-pro": 0.14,
-};
-
-export const VIDEO_MODEL_COSTS_USD_PER_SECOND: Record<string, number> = {
-  "minimax/hailuo-h3": 0.08,
-  "bytedance/seedance-2.0": 0.06,
-  "bytedance/seedance-2.5": 0.09,
-  "google/veo-3": 0.35,
-};
-
-export const DEFAULT_IMAGE_MODEL = "google/gemini-2.5-flash-image";
+export const DEFAULT_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview";
 export const DEFAULT_VIDEO_MODEL = "bytedance/seedance-2.0";
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -54,16 +41,51 @@ export function jobKindFor(kind: GenerationKind): JeremyJobKind {
   return kind === "video" ? "video_generation" : "image_generation";
 }
 
-/** The exact maximum cost of one generation. NaN for an unknown model. */
-export function quoteGenerationCostUsd(kind: GenerationKind, model: string, durationSeconds = 5): number {
-  if (kind === "static_image") {
-    const unit = IMAGE_MODEL_COSTS_USD[model];
-    return Number.isFinite(unit) ? round2(unit) : NaN;
-  }
-  const perSecond = VIDEO_MODEL_COSTS_USD_PER_SECOND[model];
-  const secs = Math.max(1, Math.min(30, Math.floor(Number(durationSeconds) || 0)));
-  return Number.isFinite(perSecond) ? round2(perSecond * secs) : NaN;
+/**
+ * A configured, versioned model price. Prices live in `jeremy_model_costs`
+ * (agency-owned, service-role writable) — never in code constants — so a quote
+ * always records where its number came from and refuses when it is unknown.
+ */
+export interface ModelRate {
+  kind: GenerationKind;
+  model: string;
+  unit: "per_image" | "per_second";
+  unitCostUsd: number;
+  source: string;
+  version: string;
 }
+
+export async function loadModelRates(db: Db, kind: GenerationKind): Promise<ModelRate[]> {
+  const { data } = await db
+    .from("jeremy_model_costs")
+    .select("kind, model, unit, unit_cost_usd, cost_source, cost_version, is_active")
+    .eq("kind", kind)
+    .eq("is_active", true);
+  return ((data ?? []) as Record<string, unknown>[])
+    .map((r) => ({
+      kind: String(r.kind) as GenerationKind,
+      model: String(r.model),
+      unit: String(r.unit) as ModelRate["unit"],
+      unitCostUsd: Number(r.unit_cost_usd),
+      source: String(r.cost_source || "jeremy_model_costs"),
+      version: String(r.cost_version || "unversioned"),
+    }))
+    .filter((r) => r.model && Number.isFinite(r.unitCostUsd) && r.unitCostUsd > 0);
+}
+
+export async function loadModelRate(db: Db, kind: GenerationKind, model: string): Promise<ModelRate | null> {
+  const rates = await loadModelRates(db, kind);
+  return rates.find((r) => r.model === String(model)) ?? null;
+}
+
+/** The exact maximum cost of one generation from a configured rate. */
+export function quoteGenerationCostUsd(rate: ModelRate | null, durationSeconds = 5): number {
+  if (!rate || !Number.isFinite(rate.unitCostUsd) || rate.unitCostUsd <= 0) return NaN;
+  if (rate.unit === "per_image") return round2(rate.unitCostUsd);
+  const secs = Math.max(1, Math.min(30, Math.floor(Number(durationSeconds) || 0)));
+  return round2(rate.unitCostUsd * secs);
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Client-owned asset resolution
