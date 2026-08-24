@@ -78,8 +78,14 @@ describe('executors send the exact model to the generator endpoints', () => {
 
   beforeEach(() => {
     bodies = [];
-    vi.stubEnv('SUPABASE_URL', 'https://project.example');
-    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role');
+    // Minimal Deno shim: the shared executor module reads its config from Deno.env.
+    (globalThis as any).Deno = {
+      env: {
+        get: (k: string) =>
+          ({ SUPABASE_URL: 'https://project.example', SUPABASE_SERVICE_ROLE_KEY: 'test-service-role' } as Record<string, string>)[k],
+      },
+    };
+
     globalThis.fetch = vi.fn(async (url: any, init: any) => {
       const parsed = JSON.parse(String(init?.body ?? '{}'));
       bodies.push({ url: String(url), body: parsed });
