@@ -385,7 +385,7 @@ export async function prepareRecreations(
   clientId: string,
   cycleId: string | null,
   policy: JeremyPolicy,
-  ranked: Array<Candidate & { score: number; rank: number }>,
+  ranked: Array<Candidate & { score: number; rank: number; basis?: string }>,
   opts: { top?: number; expectedCostPerJobUsd?: number } = {},
 ): Promise<{ prepared: PreparedGeneration[]; candidate_ids: string[] }> {
   const top = Math.min(10, Math.max(1, opts.top ?? 5));
@@ -706,7 +706,9 @@ export async function executeApprovedAction(
   const payload: Record<string, unknown> =
     input.action === "pause" ? { status: "PAUSED" } : { daily_budget: input.proposedDailyBudget };
   const key = idempotencyKey(input.clientId, input.metaEntityId, input.action, payload);
-  const dryRun = input.dryRun !== false ? input.dryRun !== false && input.dryRun !== undefined ? true : policy.mode !== "autopilot" && !input.humanApproved : false;
+  // Default is ALWAYS a dry run: a live provider mutation requires an explicit
+  // dry_run: false from an authorized caller.
+  const dryRun = input.dryRun ?? true;
 
   // Atomic claim: the unique idempotency key means a concurrent or repeated
   // request loses the insert and never re-sends the mutation.
