@@ -98,12 +98,15 @@ Deno.serve(async (req) => {
       .eq("id", launchId)
       .maybeSingle();
     if (loadErr || !launch) return json({ success: false, error: "Launch draft not found" }, 404);
-    if (launch.status === "published") {
-      return json({ success: true, alreadyPublished: true, launch });
-    }
+    // An already published launch is NOT short-circuited with an assumed state:
+    // every object is read back from Meta again so the caller always receives
+    // authoritative statuses. The creation stages below are all id-guarded, so
+    // nothing is recreated.
+    const alreadyPublished = launch.status === "published";
 
     const errors = validateLaunch(launch as never);
     if (errors.length) return json({ success: false, error: "Validation failed", errors }, 400);
+
 
     const { data: client } = await supabase
       .from("clients")
