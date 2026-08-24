@@ -392,6 +392,15 @@ serve(async (req) => {
 
     const aiData = await aiResponse.json();
     const images = aiData.choices?.[0]?.message?.images;
+    // On the exact-model path the provider's own reported model must match, so a
+    // gateway-side substitution can never be accepted as the approved model.
+    const ranModel = String(aiData?.model ?? '').trim() || (exactModel ?? '');
+    if (exactModel && ranModel && ranModel !== exactModel) {
+      return new Response(
+        JSON.stringify({ error: `Provider ran ${ranModel} but ${exactModel} was requested.`, model: ranModel }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     if (!images || images.length === 0) {
       console.error('No image in AI response:', JSON.stringify(aiData).slice(0, 500));
@@ -400,6 +409,7 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
 
     // Extract base64 image data
     const imageDataUrl = images[0].image_url.url;
