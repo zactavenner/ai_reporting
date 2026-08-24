@@ -25,7 +25,12 @@ function getProdDb() {
 async function callFunction(name: string, payload: any, cloudUrl: string, anonKey: string) {
   const resp = await fetch(`${cloudUrl}/functions/v1/${name}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${anonKey}`,
+      // Internal service identity for functions that spend model credits.
+      'x-internal-secret': Deno.env.get('INTERNAL_FUNCTION_PASSWORD') || '',
+    },
     body: JSON.stringify(payload),
   });
   return { ok: resp.ok, status: resp.status, data: await resp.json().catch(() => ({})) };

@@ -28,8 +28,31 @@ import {
   rankCandidates,
   runCycle,
   dryRunProvider,
+  prepareExternalGenerationJobs,
+  launchReadiness,
+  cycleExternalState,
   type MetaProvider,
 } from "../_shared/jeremyAutonomy.ts";
+import {
+  approveJob,
+  rejectJob,
+  getJob,
+  listJobs,
+  quoteJob,
+  costPosture,
+  type JeremyJobKind,
+} from "../_shared/jeremyExternalJobs.ts";
+import {
+  generationTarget,
+  jobKindFor,
+  pickGenerationModel,
+  quoteGenerationCostUsd,
+  runGenerationJob,
+  type GenerationKind,
+} from "../_shared/jeremyGeneration.ts";
+import { publishLaunch, publishTarget } from "../_shared/jeremyLaunch.ts";
+import { makeGenerationExecutors, makePublishExecutor } from "../_shared/jeremyExecutors.ts";
+import { readDashboardToken } from "../_shared/dashboardToken.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -218,6 +241,11 @@ Deno.serve(async (req) => {
           apifyExpectedCostUsd: Number(body.apify_expected_cost_usd),
           topCandidates: Number(body.top) || 5,
           createLaunches: body.create_launches === true,
+          launchInputs: (body.launch_inputs as Record<string, unknown>) ?? {},
+          imageModel: body.image_model as string,
+          videoModel: body.video_model as string,
+          aspectRatio: body.aspect_ratio as string,
+          durationSeconds: Number(body.duration_seconds) || 5,
           triggeredBy: actor ?? "manual",
         });
         return json(result, result.success ? 200 : 500);
@@ -245,6 +273,197 @@ Deno.serve(async (req) => {
           .limit(Math.min(100, Number(body.limit) || 25));
         return json({ success: true, executions: data ?? [] });
       }
+      // ── External job ledger ───────────────────────────────────────────────
+      case "cost_posture":
+        return json({ success: true, cost_posture: await costPosture(supabase, policy, clientId), policy });
+
+      case "list_jobs": {
+        const jobs = await listJobs(supabase, clientId, {
+          kind: (body.kind as JeremyJobKind) ?? undefined,
+          status: (body.status as never) ?? undefined,
+          cycleId: (body.cycle_id as string) ?? undefined,
+          limit: Number(body.limit) || 50,
+        });
+        return json({ success: true, jobs, cost_posture: await costPosture(supabase, policy, clientId) });
+      }
+
+      case "get_job": {
+        const job = await getJob(supabase, String(body.job_id ?? ""));
+        if (!job) return json({ success: false, error: "Job not found" }, 404);
+        if (job.client_id !== clientId) return json({ success: false, error: "Job belongs to a different client" }, 403);
+        return json({ success: true, job });
+      }
+
+      case "approve_job": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not approve paid or external jobs." }, 403);
+        const result = await approveJob(supabase, String(body.job_id ?? ""), actor ?? "operator");
+        return json(result, result.success ? 200 : 400);
+      }
+
+      case "reject_job": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not decide paid or external jobs." }, 403);
+        const result = await rejectJob(supabase, String(body.job_id ?? ""), actor ?? "operator");
+        return json(result, result.success ? 200 : 400);
+      }
+
+      // ── Paid Apify discovery (quote → operator approval → run) ────────────
+      case "quote_discovery":
+      case "run_discovery": {
+        const mode = action === "quote_discovery" ? "quote" : (body.approve_and_run === true ? "approve_and_run" : "run");
+        if (mode !== "quote" && actor === "scheduler") {
+          return json({ success: false, error: "The scheduler may quote discovery but never run paid discovery." }, 403);
+        }
+        const dashToken = readDashboardToken(req, body);
+        const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/run-instagram-scrape`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            ...(dashToken ? { "x-dashboard-token": dashToken } : {}),
+          },
+          body: JSON.stringify({
+            mode,
+            client_id: clientId,
+            cycle_id: body.cycle_id ?? null,
+            job_id: body.job_id ?? null,
+            scrapeType: body.scrape_type ?? body.scrapeType,
+            targets: body.targets,
+            resultsLimit: body.results_limit ?? body.resultsLimit,
+            actor_id: body.actor_id,
+          }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        return json(payload, res.status);
+      }
+
+      // ── Paid generation (quote → operator approval → run) ─────────────────
+      case "quote_generation": {
+        const candidateId = String(body.candidate_id ?? "");
+        if (!candidateId) return json({ success: false, error: "candidate_id required" }, 400);
+        const { data: candidate } = await supabase
+          .from("jeremy_creative_candidates")
+          .select("id, generation_kind, client_id")
+          .eq("id", candidateId)
+          .eq("client_id", clientId)
+          .maybeSingle();
+        if (!candidate) return json({ success: false, error: "Candidate not found for this client" }, 404);
+        const kind = (String(body.kind ?? candidate.generation_kind) === "video" ? "video" : "static_image") as GenerationKind;
+        const model = pickGenerationModel(kind, body.model);
+        const aspectRatio = String(body.aspect_ratio ?? (kind === "video" ? "9:16" : "1:1"));
+        const durationSeconds = Math.max(1, Math.min(30, Number(body.duration_seconds) || 5));
+        const cost = quoteGenerationCostUsd(kind, model, durationSeconds);
+        const quote = await quoteJob(supabase, policy, {
+          clientId,
+          kind: jobKindFor(kind),
+          provider: "openrouter",
+          target: generationTarget({ candidateId, kind, model, aspectRatio, durationSeconds }),
+          estimatedCostUsd: cost,
+          cycleId: (body.cycle_id as string) ?? null,
+          candidateId,
+          requestedBy: actor ?? "operator",
+          quoteDetail: { model, kind, aspect_ratio: aspectRatio, duration_seconds: kind === "video" ? durationSeconds : null },
+        });
+        return json({ success: quote.success, job: quote.job, policy_gate: quote.policy_gate, error: quote.error }, quote.success ? 200 : 400);
+      }
+
+      case "run_generation": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not run paid generation." }, 403);
+        const jobId = String(body.job_id ?? "");
+        const job = jobId ? await getJob(supabase, jobId) : null;
+        if (!job) return json({ success: false, error: "An approved generation job id is required." }, 400);
+        if (body.approve === true && job.status === "awaiting_approval") {
+          const approved = await approveJob(supabase, jobId, actor ?? "operator");
+          if (!approved.success) return json({ success: false, error: approved.error }, 400);
+        }
+        const target = (job.target ?? {}) as Record<string, unknown>;
+        const kind = (String(target.kind) === "video" ? "video" : "static_image") as GenerationKind;
+        const result = await runGenerationJob(supabase, policy, makeGenerationExecutors(supabase), {
+          clientId,
+          jobId,
+          candidateId: String(target.candidate_id ?? job.candidate_id ?? ""),
+          kind,
+          model: String(target.model ?? ""),
+          aspectRatio: String(target.aspect_ratio ?? "1:1"),
+          durationSeconds: Number(target.duration_seconds) || 5,
+          actor: actor ?? "operator",
+          referenceImageUrls: Array.isArray(body.reference_image_urls) ? body.reference_image_urls.map(String) : [],
+        });
+        return json(result, result.success ? 200 : 400);
+      }
+
+      // ── Launch readiness + PAUSED publication ─────────────────────────────
+      case "launch_readiness": {
+        const ids = Array.isArray(body.candidate_ids) ? body.candidate_ids.map(String) : [];
+        if (!ids.length) return json({ success: false, error: "candidate_ids required" }, 400);
+        const readiness = await launchReadiness(supabase, clientId, ids, (body.inputs as Record<string, unknown>) ?? {});
+        return json({ success: true, readiness });
+      }
+
+      case "quote_publish": {
+        const launchId = String(body.launch_id ?? "");
+        if (!launchId) return json({ success: false, error: "launch_id required" }, 400);
+        const { data: launch } = await supabase
+          .from("meta_campaign_launches")
+          .select("id, client_id, status")
+          .eq("id", launchId)
+          .eq("client_id", clientId)
+          .maybeSingle();
+        if (!launch) return json({ success: false, error: "Launch draft not found for this client" }, 404);
+        const quote = await quoteJob(supabase, policy, {
+          clientId,
+          kind: "meta_publish",
+          provider: "meta",
+          target: publishTarget(launchId),
+          estimatedCostUsd: 0,
+          cycleId: (body.cycle_id as string) ?? null,
+          launchId,
+          requestedBy: actor ?? "operator",
+          quoteDetail: { action: "create campaign + ad set + ad, all PAUSED", spends_ad_budget_immediately: false },
+        });
+        return json({ success: quote.success, job: quote.job, error: quote.error }, quote.success ? 200 : 400);
+      }
+
+      case "publish_launch": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not publish Meta objects." }, 403);
+        const jobId = String(body.job_id ?? "");
+        const launchId = String(body.launch_id ?? "");
+        if (!jobId || !launchId) return json({ success: false, error: "job_id and launch_id required" }, 400);
+        if (body.approve === true) {
+          const job = await getJob(supabase, jobId);
+          if (job?.status === "awaiting_approval") {
+            const approved = await approveJob(supabase, jobId, actor ?? "operator");
+            if (!approved.success) return json({ success: false, error: approved.error }, 400);
+          }
+        }
+        const dashToken = readDashboardToken(req, body);
+        const result = await publishLaunch(supabase, policy, makePublishExecutor(dashToken), {
+          clientId,
+          jobId,
+          launchId,
+          actor: actor ?? "operator",
+        });
+        return json(result, result.success ? 200 : 400);
+      }
+
+      case "cycle_external_state": {
+        const cycleId = String(body.cycle_id ?? "");
+        if (!cycleId) return json({ success: false, error: "cycle_id required" }, 400);
+        return json({ success: true, ...(await cycleExternalState(supabase, clientId, cycleId, policy)) });
+      }
+
+      case "prepare_external_jobs": {
+        const ids = Array.isArray(body.candidate_ids) ? body.candidate_ids.map(String) : [];
+        if (!ids.length) return json({ success: false, error: "candidate_ids required" }, 400);
+        const jobs = await prepareExternalGenerationJobs(supabase, clientId, (body.cycle_id as string) ?? null, policy, ids, {
+          imageModel: body.image_model as string,
+          videoModel: body.video_model as string,
+          aspectRatio: body.aspect_ratio as string,
+          durationSeconds: Number(body.duration_seconds) || 5,
+          requestedBy: actor ?? "operator",
+        });
+        return json({ success: true, external_jobs: jobs, note: "Quotes only — every job awaits explicit operator approval." });
+      }
+
       default:
         return json({ success: false, error: `Unknown action: ${action || "(none)"}` }, 400);
     }

@@ -1,11 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { getGeminiApiKey } from '../_shared/get-gemini-key.ts';
+import { authorizeGenerationCaller } from '../_shared/generationAuth.ts';
 
 const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-dashboard-token, x-internal-secret',
 };
 
 serve(async (req) => {
@@ -14,7 +15,18 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey, model, lastFrameUrl, ingredientUrl } = await req.json();
+    const requestBody = await req.json();
+
+    // Model credits are only ever spent for an authenticated caller.
+    const caller = await authorizeGenerationCaller(req, requestBody);
+    if (!caller.ok) {
+      return new Response(JSON.stringify({ error: caller.error }), {
+        status: caller.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { imageUrl, prompt, aspectRatio, duration, apiKey: clientApiKey, model, lastFrameUrl, ingredientUrl } = requestBody;
 
     // For Veo3 (default) imageUrl is required (image-to-video). For Seedance, imageUrl is optional
     // because it also supports text-to-video and ingredient-only (subject reference) modes.

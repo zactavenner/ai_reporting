@@ -20,6 +20,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { JeremyExternalJobsPanel } from './JeremyExternalJobsPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Endpoint plumbing. Every call carries the operator dashboard token; the server
@@ -503,6 +504,9 @@ export function JeremyAutonomyPanel({ clientId, clientName }: { clientId: string
           })}
         </CardContent>
       </Card>
+
+      {/* ── External & paid jobs: quotes, approvals, PAUSED publication ─── */}
+      <JeremyExternalJobsPanel clientId={clientId} />
 
       {/* ── Execution audit trail ────────────────────────────────────────── */}
       <Card>

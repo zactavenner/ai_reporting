@@ -27,6 +27,28 @@ import {
   type KpiSnapshot,
 } from "./jeremyKpiContract.ts";
 import {
+  quoteJob,
+  listJobs,
+  costPosture,
+  type JeremyExternalJob,
+} from "./jeremyExternalJobs.ts";
+import {
+  createLaunchBatch as createLaunchBatchRecord,
+  buildLaunchRecord,
+  loadClientLaunchConfig,
+  LAUNCH_STATUS,
+  type LaunchInputs,
+  type LaunchReadiness,
+} from "./jeremyLaunch.ts";
+import {
+  generationTarget,
+  jobKindFor,
+  pickGenerationModel,
+  quoteGenerationCostUsd,
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_VIDEO_MODEL,
+} from "./jeremyGeneration.ts";
+import {
   loadPolicy,
   checkPaidCapability,
   checkSampleFloors,
@@ -229,12 +251,14 @@ export async function discoverWinners(
   const limit = Math.min(50, Math.max(1, opts.limit ?? 25));
   const candidates: Candidate[] = [];
 
-  const [{ data: ads }, { data: creatives }, { data: scraped }, { data: liveAds }, { data: viral }] = await Promise.all([
+  const [{ data: ads }, { data: creatives }, { data: scraped }, { data: liveAds }, { data: viral }, { data: social }] = await Promise.all([
     db.from("meta_ads").select("*").eq("client_id", clientId).order("spend", { ascending: false }).limit(limit),
     db.from("creatives").select("id, title, file_url, headline, body_copy, cta_text, ai_performance_score, platform, status").eq("client_id", clientId).order("ai_performance_score", { ascending: false, nullsFirst: false }).limit(limit),
     db.from("scraped_ads").select("id, headline, body, image_url, video_url, source, source_url, advertiser_name, reach, views, platform").eq("client_id", clientId).order("scraped_at", { ascending: false }).limit(limit),
     db.from("client_live_ads").select("id, headline, primary_text, thumbnail_url, ad_library_url, page_name, media_type, ai_analysis").eq("client_id", clientId).order("scraped_at", { ascending: false }).limit(limit),
     db.from("viral_videos").select("id, caption, video_url, thumbnail_url, views, likes, platform").eq("client_id", clientId).order("views", { ascending: false, nullsFirst: false }).limit(limit),
+    // Apify-sourced social posts ingested by run-instagram-scrape.
+    db.from("instagram_creatives").select("id, caption, source_url, media_url, video_url, image_url, thumbnail_url, post_type, owner_username, likes_count, comments_count, views_count, created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(limit),
   ]);
 
   for (const a of ads ?? []) {
@@ -297,14 +321,35 @@ export async function discoverWinners(
     });
   }
 
+  for (const p of social ?? []) {
+    candidates.push({
+      source_type: "apify_social",
+      source_reference: String(p.id),
+      source_url: p.source_url ?? null,
+      title: String(p.caption ?? p.owner_username ?? "Instagram post").slice(0, 120),
+      evidence: {
+        owner: p.owner_username,
+        likes: num(p.likes_count),
+        comments: num(p.comments_count),
+        views: num(p.views_count),
+        media_type: p.post_type,
+        media: p.video_url ?? p.media_url ?? p.image_url,
+        thumbnail: p.thumbnail_url,
+        provider: "apify",
+      },
+      kpi: computeKpiSnapshot({ impressions: num(p.views_count), video_3s_views: num(p.likes_count), clicks: num(p.comments_count) }),
+    });
+  }
+
   // Paid Apify social discovery — refuses unless explicitly enabled and capped.
   const requested = opts.includeApify === true;
   let paid = { requested, allowed: false, reason: "not requested" };
   if (requested) {
     const gate = checkPaidCapability(policy, "discovery", opts.apifyExpectedCostUsd ?? NaN, await monthToDatePaidCost(db, clientId, "discovery"));
     paid = { requested, allowed: gate.allowed, reason: gate.reason };
-    // Even when allowed, no paid call is made from this build; the run is
-    // recorded as permitted so the operator can trigger it deliberately.
+    // A paid run is never launched from here: it goes through the external-job
+    // ledger (quote → operator approval → run-instagram-scrape), and its results
+    // are ingested above as `apify_social` candidates on the next discovery.
   }
 
   const sources: Record<string, number> = {};
@@ -434,62 +479,13 @@ export async function prepareRecreations(
 // Launch batches — always PAUSED
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const LAUNCH_STATUS = "PAUSED" as const;
-
-export interface LaunchBatchItem {
-  candidate_id: string;
-  launch_id: string;
-  status: string;
-  stage: string;
-}
-
 /**
- * Creates draft launch rows for prepared candidates. Every row is forced to
- * status "draft"/effective PAUSED; nothing in this system activates a Meta
- * object, and any caller-supplied ACTIVE status is rejected outright.
+ * Launch drafting lives in `jeremyLaunch.ts`: only candidates with a durable
+ * generated creative and a COMPLETE validated configuration become drafts, and
+ * every created Meta object is PAUSED.
  */
-export async function createLaunchBatch(
-  db: Db,
-  clientId: string,
-  candidateIds: string[],
-  inputs: Record<string, unknown> = {},
-): Promise<{ items: LaunchBatchItem[]; launch_status: string }> {
-  if (String(inputs.status ?? "").toUpperCase() === "ACTIVE") {
-    throw new Error("Refusing to create an ACTIVE launch: every Jeremy-created Meta object must be PAUSED.");
-  }
-  const items: LaunchBatchItem[] = [];
-  for (const candidateId of candidateIds) {
-    const { data: candidate } = await db
-      .from("jeremy_creative_candidates")
-      .select("id, title, recreation_brief, source_url, generation_kind")
-      .eq("id", candidateId)
-      .maybeSingle();
-    if (!candidate) continue;
-    const { data: launch, error } = await db
-      .from("meta_campaign_launches")
-      .insert({
-        client_id: clientId,
-        name: `[Jeremy] ${candidate.title}`.slice(0, 120),
-        status: "draft",
-        stage: "draft",
-        objective: String(inputs.objective ?? "leads"),
-        daily_budget_cents: Number(inputs.daily_budget_cents ?? 2000),
-        cta: String(inputs.cta ?? "LEARN_MORE"),
-        destination_url: inputs.destination_url ?? null,
-        primary_text: (candidate.recreation_brief?.mechanism?.angle ?? "").slice(0, 1000) || null,
-        headline: (candidate.recreation_brief?.mechanism?.hook ?? candidate.title).slice(0, 255),
-        creative_type: candidate.generation_kind === "video" ? "video" : "image",
-        created_by: "jeremy_autonomous (PAUSED draft)",
-      })
-      .select("id, status, stage")
-      .maybeSingle();
-    if (error) throw new Error(`Could not create launch draft: ${error.message}`);
-    if (!launch) continue;
-    await db.from("jeremy_creative_candidates").update({ launch_reference: launch.id }).eq("id", candidateId);
-    items.push({ candidate_id: candidateId, launch_id: launch.id, status: launch.status, stage: launch.stage });
-  }
-  return { items, launch_status: LAUNCH_STATUS };
-}
+export { LAUNCH_STATUS, buildLaunchRecord, loadClientLaunchConfig };
+export const createLaunchBatch = createLaunchBatchRecord;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Analysis + action planning
@@ -1134,6 +1130,109 @@ export function verifyReadBack(action: JeremyAction, params: Record<string, stri
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// External job preparation (quotes only — nothing paid runs from a cycle)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PreparedExternalJob {
+  candidate_id: string;
+  kind: "static_image" | "video";
+  model: string;
+  job_id: string | null;
+  status: string;
+  estimated_cost_usd: number | null;
+  policy_gate: { allowed: boolean; reason: string } | null;
+  error?: string;
+}
+
+/**
+ * Quotes one generation job per prepared candidate. Every job is created in
+ * `awaiting_approval` with an exact maximum cost — a cycle (including a
+ * scheduled one) can prepare and quote, but can never approve paid work.
+ */
+export async function prepareExternalGenerationJobs(
+  db: Db,
+  clientId: string,
+  cycleId: string | null,
+  policy: JeremyPolicy,
+  candidateIds: string[],
+  opts: { imageModel?: string; videoModel?: string; aspectRatio?: string; durationSeconds?: number; requestedBy?: string } = {},
+): Promise<PreparedExternalJob[]> {
+  const out: PreparedExternalJob[] = [];
+  for (const candidateId of candidateIds) {
+    const { data: candidate } = await db
+      .from("jeremy_creative_candidates")
+      .select("id, generation_kind, generation_status")
+      .eq("id", candidateId)
+      .maybeSingle();
+    if (!candidate) continue;
+    const kind = String(candidate.generation_kind) === "video" ? "video" : "static_image";
+    const model = pickGenerationModel(kind, kind === "video" ? opts.videoModel ?? DEFAULT_VIDEO_MODEL : opts.imageModel ?? DEFAULT_IMAGE_MODEL);
+    const aspectRatio = String(opts.aspectRatio ?? (kind === "video" ? "9:16" : "1:1"));
+    const durationSeconds = Math.max(1, Math.min(30, Number(opts.durationSeconds) || 5));
+    const cost = quoteGenerationCostUsd(kind, model, durationSeconds);
+    const target = generationTarget({ candidateId, kind, model, aspectRatio, durationSeconds });
+    const quote = await quoteJob(db, policy, {
+      clientId,
+      kind: jobKindFor(kind),
+      provider: "openrouter",
+      target,
+      estimatedCostUsd: cost,
+      cycleId,
+      candidateId,
+      requestedBy: opts.requestedBy ?? "cycle",
+      quoteDetail: { model, kind, aspect_ratio: aspectRatio, duration_seconds: kind === "video" ? durationSeconds : null },
+    });
+    out.push({
+      candidate_id: candidateId,
+      kind,
+      model,
+      job_id: quote.job?.id ?? null,
+      status: quote.job?.status ?? "not_quoted",
+      estimated_cost_usd: quote.job?.estimated_cost_usd ?? (Number.isFinite(cost) ? cost : null),
+      policy_gate: quote.policy_gate ?? null,
+      error: quote.error,
+    });
+  }
+  return out;
+}
+
+/** Launch readiness for candidates, with every missing configuration value named. */
+export async function launchReadiness(
+  db: Db,
+  clientId: string,
+  candidateIds: string[],
+  inputs: LaunchInputs = {},
+): Promise<LaunchReadiness[]> {
+  const config = await loadClientLaunchConfig(db, clientId);
+  const out: LaunchReadiness[] = [];
+  for (const candidateId of candidateIds) {
+    const { data: candidate } = await db
+      .from("jeremy_creative_candidates")
+      .select("*")
+      .eq("id", candidateId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (!candidate) {
+      out.push({ candidate_id: candidateId, ready: false, missing: ["Candidate not found for this client."], record: null });
+      continue;
+    }
+    out.push(buildLaunchRecord(clientId, candidate, config, inputs));
+  }
+  return out;
+}
+
+/** Everything the operator needs to see about a cycle's external/paid work. */
+export async function cycleExternalState(db: Db, clientId: string, cycleId: string, policy: JeremyPolicy) {
+  const jobs = await listJobs(db, clientId, { cycleId, limit: 100 });
+  return {
+    jobs,
+    awaiting_approval: jobs.filter((j: JeremyExternalJob) => j.status === "awaiting_approval"),
+    approved: jobs.filter((j: JeremyExternalJob) => j.status === "approved"),
+    cost_posture: await costPosture(db, policy, clientId),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Whole loop
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1143,6 +1242,11 @@ export interface RunCycleOptions {
   apifyExpectedCostUsd?: number;
   topCandidates?: number;
   createLaunches?: boolean;
+  launchInputs?: LaunchInputs;
+  imageModel?: string;
+  videoModel?: string;
+  aspectRatio?: string;
+  durationSeconds?: number;
   triggeredBy?: string;
 }
 
@@ -1163,10 +1267,23 @@ export async function runCycle(db: Db, clientId: string, opts: RunCycleOptions =
     await advanceCycle(db, cycle.id, "recreation", { evidence: { coverage, top: ranked.slice(0, 5).map((r) => ({ title: r.title, score: r.score, source: r.source_type })) } });
 
     const { prepared, candidate_ids } = await prepareRecreations(db, clientId, cycle.id, policy, ranked, { top: opts.topCandidates ?? 5 });
-    await advanceCycle(db, cycle.id, "launch", { evidence: { prepared } });
 
-    const launches = opts.createLaunches ? await createLaunchBatch(db, clientId, candidate_ids) : { items: [], launch_status: LAUNCH_STATUS };
-    await advanceCycle(db, cycle.id, "analysis", { evidence: { launches } });
+    // Quote every paid generation job. These stay awaiting_approval with an exact
+    // maximum cost: the cycle prepares, an operator approves, then the work runs.
+    const external_jobs = await prepareExternalGenerationJobs(db, clientId, cycle.id, policy, candidate_ids, {
+      imageModel: opts.imageModel,
+      videoModel: opts.videoModel,
+      aspectRatio: opts.aspectRatio,
+      durationSeconds: opts.durationSeconds,
+      requestedBy: opts.triggeredBy ?? "cycle",
+    });
+    await advanceCycle(db, cycle.id, "launch", { evidence: { prepared, external_jobs } });
+
+    const readiness = await launchReadiness(db, clientId, candidate_ids, opts.launchInputs ?? {});
+    const launches = opts.createLaunches
+      ? await createLaunchBatch(db, clientId, candidate_ids, opts.launchInputs ?? {})
+      : { items: [], launch_status: LAUNCH_STATUS, ready_count: readiness.filter((r) => r.ready).length, blocked_count: readiness.filter((r) => !r.ready).length };
+    await advanceCycle(db, cycle.id, "analysis", { evidence: { launches, readiness } });
 
     const analysis = await analyzeAccount(db, clientId, policy, windowDays);
     const snapshotId = await saveKpiSnapshot(db, clientId, cycle.id, aggregateSnapshot(analysis), analysis.coverage, windowDays);
@@ -1189,6 +1306,9 @@ export async function runCycle(db: Db, clientId: string, opts: RunCycleOptions =
       contract: { version: JEREMY_KPI_CONTRACT_VERSION },
       discovery: { sources: discovery.sources, paid_discovery: discovery.paid_discovery, candidates: ranked.length },
       prepared,
+      external_jobs,
+      launch_readiness: readiness,
+      cost_posture: await costPosture(db, policy, clientId),
       launches,
       coverage: analysis.coverage,
       basis: analysis.basis,
@@ -1197,7 +1317,7 @@ export async function runCycle(db: Db, clientId: string, opts: RunCycleOptions =
       executed: [] as unknown[],
       note: policy.mode === "shadow"
         ? "Shadow mode: every decision was recorded, nothing was executed and nothing was published."
-        : "Actions require explicit approval before execution; all launches are PAUSED drafts.",
+        : "Paid discovery/generation and Meta publication pause at awaiting_approval with an exact quote; all launches are PAUSED drafts.",
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -1219,13 +1339,14 @@ function aggregateSnapshot(analysis: AnalysisResult): KpiSnapshot {
 }
 
 export async function getCycle(db: Db, cycleId: string) {
-  const [{ data: cycle }, { data: candidates }, { data: executions }, { data: plans }] = await Promise.all([
+  const [{ data: cycle }, { data: candidates }, { data: executions }, { data: plans }, { data: jobs }] = await Promise.all([
     db.from("jeremy_cycles").select("*").eq("id", cycleId).maybeSingle(),
     db.from("jeremy_creative_candidates").select("*").eq("cycle_id", cycleId).order("rank", { ascending: true }),
     db.from("jeremy_action_executions").select("*").eq("cycle_id", cycleId).order("created_at", { ascending: false }),
     db.from("jeremy_action_plans").select("*").eq("cycle_id", cycleId).order("created_at", { ascending: false }),
+    db.from("jeremy_external_jobs").select("*").eq("cycle_id", cycleId).order("created_at", { ascending: false }),
   ]);
-  return { cycle, candidates: candidates ?? [], executions: executions ?? [], plans: plans ?? [] };
+  return { cycle, candidates: candidates ?? [], executions: executions ?? [], plans: plans ?? [], external_jobs: jobs ?? [] };
 }
 
 export { kpiContract, loadPolicy };

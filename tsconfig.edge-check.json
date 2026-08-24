@@ -7,15 +7,25 @@
     "noEmit": true,
     "skipLibCheck": true,
     "noImplicitAny": false,
-    "lib": ["ES2022", "DOM"]
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
   },
   "files": [
     "src/test/edge-globals.d.ts",
     "supabase/functions/_shared/agencyReport.ts",
+    "supabase/functions/_shared/jeremyAutonomy.ts",
+    "supabase/functions/_shared/jeremyExternalJobs.ts",
+    "supabase/functions/_shared/jeremyApify.ts",
+    "supabase/functions/_shared/jeremyGeneration.ts",
+    "supabase/functions/_shared/jeremyLaunch.ts",
     "supabase/functions/agency-daily-report-coordinator/index.ts",
     "supabase/functions/agency-ghl-report-send/index.ts",
     "supabase/functions/daily-report-run/index.ts",
     "supabase/functions/sync-ghl-contacts/index.ts",
-    "supabase/functions/sync-calendar-appointments/index.ts"
+    "supabase/functions/sync-calendar-appointments/index.ts",
+    "supabase/functions/_shared/jeremyExecutors.ts",
+    "supabase/functions/_shared/generationAuth.ts"
   ]
 }
