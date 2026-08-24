@@ -659,6 +659,37 @@ export function idempotencyKey(clientId: string, entityId: string, action: strin
 }
 
 /**
+ * The single stable claim for a LIVE mutation of a plan. Exactly one row with
+ * this key can ever exist, so a second live attempt is refused by the unique
+ * index rather than mutating the provider twice.
+ */
+export function liveIdempotencyKey(planId: string, clientId: string, entityId: string, action: string, payload: Record<string, unknown>): string {
+  return `${planId}:${idempotencyKey(clientId, entityId, action, payload)}`;
+}
+
+/**
+ * Dry runs must never consume the live claim, and repeated/concurrent dry runs
+ * must never collide with each other, so every dry-run audit row gets its own
+ * namespaced, unique key.
+ */
+export function dryRunIdempotencyKey(
+  planId: string,
+  clientId: string,
+  entityId: string,
+  action: string,
+  payload: Record<string, unknown>,
+  nonce: string = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+): string {
+  return `dryrun:${nonce}:${liveIdempotencyKey(planId, clientId, entityId, action, payload)}`;
+}
+
+/** True when a ledger key belongs to a dry-run audit row rather than a live claim. */
+export function isDryRunIdempotencyKey(key: string): boolean {
+  return key.startsWith("dryrun:");
+}
+
+
+/**
  * The binding fingerprint of a decision. Execution recomputes this from the
  * request and refuses when it differs from the persisted plan, so swapping the
  * entity, the action or the budget amount after approval can never execute.
@@ -853,21 +884,29 @@ export async function executeApprovedAction(
   gates.push({ gate: "mode", ...mode });
   if (!mode.allowed) return blocked(mode.reason, gates, input.planId);
 
-  // ── 5. Atomic claim on the plan itself: a second call loses the race ──────
-  const { data: claimedPlan } = await db
-    .from("jeremy_action_plans")
-    .update({ status: "claimed", claimed_at: new Date().toISOString() })
-    .eq("id", input.planId)
-    .eq("status", "approved")
-    .select("id")
-    .maybeSingle();
-  if (!claimedPlan) {
-    return blocked("Plan was already claimed or executed by another request (idempotency).", gates, input.planId);
+  // ── 5. Atomic claim on the plan itself: a second LIVE call loses the race ──
+  // A dry run is a read-only rehearsal: it never claims the plan, so repeated or
+  // concurrent dry runs can neither race each other nor block the one permitted
+  // live execution.
+  const dryRun = input.dryRun ?? true;
+  if (!dryRun) {
+    const { data: claimedPlan } = await db
+      .from("jeremy_action_plans")
+      .update({ status: "claimed", claimed_at: new Date().toISOString() })
+      .eq("id", input.planId)
+      .eq("status", "approved")
+      .select("id")
+      .maybeSingle();
+    if (!claimedPlan) {
+      return blocked("Plan was already claimed or executed by another request (idempotency).", gates, input.planId);
+    }
   }
 
   const release = async (status: string, extra: Record<string, unknown> = {}) => {
+    if (dryRun) return;
     await db.from("jeremy_action_plans").update({ status, ...extra }).eq("id", input.planId);
   };
+
 
   try {
     // ── 6. Outcome-data coverage and sample floors, recomputed now ──────────
@@ -901,12 +940,13 @@ export async function executeApprovedAction(
       return blocked(sample.reason, gates, input.planId);
     }
 
-    // ── 7. Cooldown, from the persisted execution ledger ────────────────────
+    // ── 7. Cooldown, from the persisted execution ledger (live rows only) ────
     const { data: lastAction } = await db
       .from("jeremy_action_executions")
       .select("executed_at, created_at")
       .eq("client_id", input.clientId)
       .eq("meta_entity_id", metaEntityId)
+      .eq("dry_run", false)
       .not("status", "eq", "blocked")
       .order("created_at", { ascending: false })
       .limit(1)
@@ -953,9 +993,13 @@ export async function executeApprovedAction(
     }
 
     // ── 9. Execution ledger: unique idempotency key, atomic claim ───────────
+    // Live runs take the ONE stable claim key for this plan+payload. Dry runs
+    // take a namespaced unique key so they never consume it.
     const payload: Record<string, unknown> = action === "pause" ? { status: "PAUSED" } : { daily_budget_usd: approvedBudgetUsd };
-    const key = `${input.planId}:${idempotencyKey(input.clientId, metaEntityId, action, payload)}`;
-    const dryRun = input.dryRun ?? true;
+    const key = dryRun
+      ? dryRunIdempotencyKey(input.planId, input.clientId, metaEntityId, action, payload)
+      : liveIdempotencyKey(input.planId, input.clientId, metaEntityId, action, payload);
+
 
     const { data: claim, error: claimErr } = await db
       .from("jeremy_action_executions")
@@ -1047,20 +1091,24 @@ export async function executeApprovedAction(
   }
 }
 
-/** Sum of today's approved budget increases, for the account-level delta cap. */
+/** Sum of today's approved budget increases (live rows only), for the account-level delta cap. */
 async function accountDeltaUsedToday(db: Db, clientId: string): Promise<number> {
   const dayStart = new Date();
   dayStart.setUTCHours(0, 0, 0, 0);
   const { data } = await db
     .from("jeremy_action_executions")
-    .select("requested_change, before_snapshot, action, status")
+    .select("requested_change, before_snapshot, action, status, dry_run, idempotency_key")
     .eq("client_id", clientId)
     .eq("action", "adjust_budget")
     .gte("created_at", dayStart.toISOString());
   if (!data) return 0;
   return round2(
     data
-      .filter((r: Record<string, unknown>) => ["succeeded", "executing", "verification_failed"].includes(String(r.status)))
+      .filter((r: Record<string, unknown>) =>
+        ["succeeded", "executing", "verification_failed"].includes(String(r.status))
+        && r.dry_run !== true
+        && !isDryRunIdempotencyKey(String(r.idempotency_key ?? "")))
+
       .reduce((sum: number, r: Record<string, unknown>) => {
         const req = (r.requested_change ?? {}) as Record<string, unknown>;
         const beforeCents = Number((r.before_snapshot as Record<string, unknown> | null)?.daily_budget);
