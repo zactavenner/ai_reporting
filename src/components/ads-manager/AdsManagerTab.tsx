@@ -27,6 +27,7 @@ import { LaunchReadinessCard } from './LaunchReadinessCard';
 import { LaunchesTab } from './LaunchesTab';
 import { LaunchCenterTab } from './LaunchCenterTab';
 import { JeremyReviewTab } from './JeremyReviewTab';
+import { JeremyAutonomyPanel } from './JeremyAutonomyPanel';
 import { supabase } from '@/integrations/supabase/client';
 import { isWinningAd as sharedIsWinningAd, calcRoas, attributionQualityPct, fatigueLevel } from './shared/healthSignals';
 import { useQuery } from '@tanstack/react-query';
@@ -520,6 +521,7 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
           <TabsTrigger value="launches">Launches</TabsTrigger>
           <TabsTrigger value="launch-center">Launch Center</TabsTrigger>
           <TabsTrigger value="jeremy">Jeremy Review</TabsTrigger>
+          <TabsTrigger value="jeremy-automation">Jeremy Automation</TabsTrigger>
         </TabsList>
 
         <div className="mt-3 space-y-3">
@@ -572,6 +574,9 @@ export function AdsManagerTab({ clientId, clientName = 'Client' }: AdsManagerTab
         </TabsContent>
         <TabsContent value="jeremy">
           <JeremyReviewTab clientId={clientId} clientName={clientName} />
+        </TabsContent>
+        <TabsContent value="jeremy-automation">
+          <JeremyAutonomyPanel clientId={clientId} clientName={clientName} />
         </TabsContent>
       </Tabs>
 
