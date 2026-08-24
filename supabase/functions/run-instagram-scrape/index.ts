@@ -87,8 +87,17 @@ Deno.serve(async (req) => {
 
     const policy = await loadPolicy(supabase, clientId);
     const settings = await resolveApifySettings(supabase, clientId);
-    const unitCost = costPerResultUsd(settings);
-    const estimated = estimateApifyCostUsd(target, unitCost);
+    const unit = configuredCostPerResult(settings);
+    const estimated = estimateApifyCostUsd(target, unit.usd);
+    if (!Number.isFinite(estimated)) {
+      return json(
+        {
+          success: false,
+          error: "No Apify per-result price is configured (apify_settings.config.cost_per_result_usd); refusing to quote or spend without a known cost.",
+        },
+        400,
+      );
+    }
     const apifyGate = checkApifyMonthlyLimit(settings, estimated);
 
     const quoteDetail = {
@@ -99,7 +108,7 @@ Deno.serve(async (req) => {
       targets: target.targets,
       results_limit_per_target: target.resultsLimit,
       maximum_results: target.max_results,
-      cost_per_result_usd: unitCost,
+      cost_per_result_usd: unit.usd,
       apify_monthly_limit_gate: apifyGate,
     };
 
@@ -111,11 +120,14 @@ Deno.serve(async (req) => {
         provider: "apify",
         target: { ...target },
         estimatedCostUsd: estimated,
+        costSource: unit.source,
+        costVersion: unit.version,
         cycleId: (body.cycle_id as string) ?? null,
         requestedBy: actor,
         quoteDetail,
       });
       if (!quote.success) return json({ success: false, error: quote.error }, 400);
+
       return json({
         success: true,
         mode: "quote",

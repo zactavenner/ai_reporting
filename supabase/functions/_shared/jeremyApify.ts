@@ -12,12 +12,11 @@ type Db = any;
 export type ScrapeType = "profile" | "hashtag" | "url";
 
 export const DEFAULT_ACTOR_ID = "apify~instagram-scraper";
-/** Apify's published Instagram scraper price: $2.30 / 1,000 results. */
-export const DEFAULT_COST_PER_RESULT_USD = 0.0023;
 export const MAX_RESULTS_PER_TARGET = 200;
 export const MAX_TARGETS_PER_RUN = 10;
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
+
 
 export interface DiscoveryTarget {
   scrapeType: ScrapeType;
@@ -56,12 +55,17 @@ export function normalizeDiscoveryTarget(input: {
   };
 }
 
-/** Exact maximum cost of a run. Unknown/non-positive unit cost yields NaN so callers refuse. */
-export function estimateApifyCostUsd(target: NormalizedTarget, costPerResultUsd = DEFAULT_COST_PER_RESULT_USD): number {
+/**
+ * Exact maximum cost of a run. The unit price must be passed in from configured
+ * settings — there is no code-constant fallback, so an unconfigured price yields
+ * NaN and every caller refuses to spend.
+ */
+export function estimateApifyCostUsd(target: NormalizedTarget, costPerResultUsd: number): number {
   const unit = Number(costPerResultUsd);
   if (!Number.isFinite(unit) || unit <= 0) return NaN;
   return round2(Math.max(0.01, target.max_results * unit));
 }
+
 
 /** The Apify actor input for this target. */
 export function buildActorInput(target: NormalizedTarget): Record<string, unknown> {
@@ -132,9 +136,30 @@ export function checkApifyMonthlyLimit(settings: ApifySettingsRow | null, estima
   return { allowed: true, reason: "Within the Apify monthly spend limit.", monthly_limit_usd: limitUsd, month_to_date_usd: usedUsd };
 }
 
-export function costPerResultUsd(settings: ApifySettingsRow | null): number {
-  const configured = Number((settings?.config as Record<string, unknown> | null)?.cost_per_result_usd);
-  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_COST_PER_RESULT_USD;
+export interface ConfiguredUnitCost {
+  /** NaN when no positive unit price is configured — callers must refuse. */
+  usd: number;
+  source: string;
+  version: string;
+}
+
+/**
+ * The Apify unit price comes ONLY from configured settings
+ * (`apify_settings.config.cost_per_result_usd`). There is deliberately no
+ * hard-coded published price: an unconfigured price fails closed.
+ */
+export function configuredCostPerResult(settings: ApifySettingsRow | null): ConfiguredUnitCost {
+  const config = (settings?.config ?? {}) as Record<string, unknown>;
+  const configured = Number(config.cost_per_result_usd);
+  const version = String(config.cost_version ?? config.cost_per_result_version ?? "").trim();
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return { usd: NaN, source: "apify_settings.config.cost_per_result_usd", version: version || "unset" };
+  }
+  return {
+    usd: configured,
+    source: "apify_settings.config.cost_per_result_usd",
+    version: version || "unversioned",
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,12 +170,35 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 export const APIFY_BASE = "https://api.apify.com/v2";
 
+/** Apify run statuses that mean the run finished successfully. */
+export const APIFY_SUCCESS_STATUS = "SUCCEEDED";
+export const APIFY_TERMINAL_STATUSES = ["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT", "TIMED_OUT"];
+
 export interface ApifyRunResult {
   runId: string;
   datasetId: string | null;
   status: string;
   usageUsd: number | null;
   raw: Record<string, unknown>;
+}
+
+/**
+ * A run may only be ingested when it reached the terminal SUCCEEDED status AND
+ * exposes a dataset. RUNNING/READY (the wait timed out) and FAILED/ABORTED/
+ * TIMED-OUT are never treated as success.
+ */
+export function assertRunIngestible(run: ApifyRunResult): { ok: true } | { ok: false; error: string } {
+  const status = String(run.status ?? "").toUpperCase();
+  if (status !== APIFY_SUCCESS_STATUS) {
+    const detail = APIFY_TERMINAL_STATUSES.includes(status)
+      ? `Apify run ${run.runId || "(no id)"} finished with status ${status || "UNKNOWN"}.`
+      : `Apify run ${run.runId || "(no id)"} did not finish within the wait window (status ${status || "UNKNOWN"}); refusing to treat it as success.`;
+    return { ok: false, error: detail };
+  }
+  if (!run.datasetId) {
+    return { ok: false, error: `Apify run ${run.runId || "(no id)"} succeeded but returned no dataset id; nothing can be ingested.` };
+  }
+  return { ok: true };
 }
 
 /** Starts the actor synchronously (run-sync) and returns the run + dataset ids. */
@@ -179,6 +227,7 @@ export async function runApifyActor(
     usageUsd: Number.isFinite(usage) ? round2(usage) : null,
     raw: run,
   };
+
 }
 
 /** Reads the run's dataset with real pagination, bounded by the approved limit. */
@@ -284,8 +333,15 @@ export async function ingestCreatives(
 }
 
 /** Records real spend against the Apify monthly limit. */
+/**
+ * Atomic month-to-date spend accounting via the `increment_apify_spend` RPC, so
+ * two concurrent runs can never both write a stale read-modify-write total and
+ * silently blow past the monthly limit.
+ */
 export async function recordApifySpend(db: Db, settings: ApifySettingsRow | null, actualCostUsd: number) {
   if (!settings?.id || !Number.isFinite(actualCostUsd) || actualCostUsd <= 0) return;
-  const next = Math.round(Number(settings.current_month_spend_cents ?? 0) + actualCostUsd * 100);
-  await db.from("apify_settings").update({ current_month_spend_cents: next }).eq("id", settings.id);
+  const cents = Math.round(actualCostUsd * 100);
+  const { error } = await db.rpc("increment_apify_spend", { p_settings_id: settings.id, p_cents: cents });
+  if (error) throw new Error(`Failed to record Apify spend atomically: ${error.message}`);
 }
+
