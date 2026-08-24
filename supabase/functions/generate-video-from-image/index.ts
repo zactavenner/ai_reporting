@@ -1,6 +1,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getGeminiApiKey } from '../_shared/get-gemini-key.ts';
 import { authorizeGenerationCaller } from '../_shared/generationAuth.ts';
+import { buildExactVideoRequest, resolveExactModel } from '../_shared/exactModel.ts';
+
 
 const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
