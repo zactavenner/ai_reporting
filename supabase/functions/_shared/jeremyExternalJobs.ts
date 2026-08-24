@@ -143,7 +143,7 @@ export interface QuoteInput {
   ttlMinutes?: number;
 }
 
-export type QuoteReuseReason = "already_succeeded" | "in_flight" | "active_quote";
+export type QuoteReuseReason = "already_succeeded" | "in_flight" | "active_quote" | "concurrent_quote";
 
 export interface QuoteResult {
   success: boolean;
