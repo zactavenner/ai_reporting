@@ -3,6 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCapitalCreativeDirective } from './capital-creative-style.ts';
 import { enhancePromptWithGpt5 } from '../_shared/enhance-prompt-gpt5.ts';
 import { authorizeGenerationCaller } from '../_shared/generationAuth.ts';
+import { buildExactImageRequest, resolveExactModel } from '../_shared/exactModel.ts';
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
