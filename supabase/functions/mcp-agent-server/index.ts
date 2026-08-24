@@ -1196,6 +1196,8 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         provider: 'meta',
         target: publishTarget(String(args.launch_id)),
         estimatedCostUsd: 0,
+        costSource: 'meta_publish_no_media_spend',
+        costVersion: '1',
         launchId: String(args.launch_id),
         requestedBy: 'mcp',
         quoteDetail: { action: 'create campaign + ad set + ad, all PAUSED' },

@@ -422,6 +422,8 @@ Deno.serve(async (req) => {
           provider: "meta",
           target: publishTarget(launchId),
           estimatedCostUsd: 0,
+          costSource: "meta_publish_no_media_spend",
+          costVersion: "1",
           cycleId: (body.cycle_id as string) ?? null,
           launchId,
           requestedBy: actor ?? "operator",
