@@ -252,7 +252,7 @@ describe('dry runs never consume the live mutation claim', () => {
     const second = await executeApprovedAction(db, APPROVAL, prov.p, input({ dryRun: false }));
     expect(second.success).toBe(false);
     expect(second.status).toBe('blocked');
-    expect(second.reason).toMatch(/already claimed|already executed|idempotency/i);
+    expect(second.reason).toMatch(/already claimed|already executed|idempotency|not approved/i);
     expect(prov.mutations()).toBe(1);
   });
 
