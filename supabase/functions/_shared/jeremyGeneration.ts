@@ -353,6 +353,12 @@ export async function runGenerationJob(
 
     if (!output?.url) throw new Error("Provider returned no asset URL.");
 
+    // The provider receipt must not disclose a different model than the approved one.
+    const reportedModel = String((output.receipt as Record<string, unknown> | undefined)?.model ?? "");
+    if (reportedModel && reportedModel !== String(input.model)) {
+      throw new Error(`Provider ran ${reportedModel} but ${input.model} was approved; refusing to accept the result.`);
+    }
+
     // Durable storage BEFORE anything is marked generated.
     const durableUrl = await executors.persistToDurableStorage({
       url: output.url,
@@ -364,9 +370,25 @@ export async function runGenerationJob(
       throw new Error("Durable storage did not return a permanent URL; refusing to mark the candidate generated.");
     }
 
-    const actualCost = Number.isFinite(Number(output.actual_cost_usd))
-      ? round2(Number(output.actual_cost_usd))
-      : Number(auth.job?.estimated_cost_usd ?? NaN);
+    const authorizedCost = Number(auth.job?.estimated_cost_usd ?? NaN);
+    const reportedCost = Number(output.actual_cost_usd);
+    const actualCost = Number.isFinite(reportedCost) ? round2(reportedCost) : authorizedCost;
+
+    // A provider cost above the approved maximum fails verification: the asset
+    // is kept and the true cost recorded, but the job is never marked succeeded.
+    if (Number.isFinite(reportedCost) && Number.isFinite(authorizedCost) && reportedCost > authorizedCost + 0.01) {
+      await completeJob(db, input.jobId, {
+        status: "verification_failed",
+        actualCostUsd: actualCost,
+        providerJobId: output.provider_job_id ?? null,
+        providerResponse: output.receipt ?? null,
+        verification: { cost_overrun: true, approved_maximum_usd: authorizedCost, provider_reported_usd: reportedCost, durable_url: durableUrl },
+      });
+      await db.from("jeremy_creative_candidates").update({ generation_status: "failed", actual_cost_usd: actualCost }).eq("id", input.candidateId);
+      const reason = `Provider reported $${reportedCost} against an approved maximum of $${authorizedCost}; job marked verification_failed.`;
+      return { success: false, reason, job_id: input.jobId, candidate_id: input.candidateId, gates: [...gates, { gate: "cost_verification", allowed: false, reason }] };
+    }
+
 
     const { data: creative } = await db
       .from("creatives")
