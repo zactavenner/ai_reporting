@@ -1,6 +1,21 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { runJeremyReview, listRecommendations, prepareCampaignDraft } from '../_shared/jeremyReview.ts';
+import { kpiContract } from '../_shared/jeremyKpiContract.ts';
+import { loadPolicy } from '../_shared/jeremyPolicy.ts';
+import {
+  analyzeAccount,
+  buildCoverage,
+  createLaunchBatch,
+  discoverWinners,
+  executeApprovedAction,
+  getCycle,
+  planActions,
+  prepareRecreations,
+  rankCandidates,
+  runCycle,
+  dryRunProvider,
+} from '../_shared/jeremyAutonomy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -572,6 +587,84 @@ const TOOLS = [
       required: ['client_id', 'inputs'],
     },
   },
+  // ===== Jeremy Autonomous Creative & Media Buyer (shadow-first) =====
+  {
+    name: 'jeremy_get_kpi_contract',
+    description: 'Return the versioned Jeremy KPI contract: primary business outcomes, media diagnostics, creative diagnostics, reliability gates and the precedence rules.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'jeremy_discover_winners',
+    description: 'Discover winning creative across the client Meta account, creative library, scraped ads, live-ad intelligence and viral video sources. Paid Apify discovery is refused unless the account policy enables and caps it.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' }, include_apify: { type: 'boolean', default: false }, apify_expected_cost_usd: { type: 'number' } },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'jeremy_rank_candidates',
+    description: 'Rank discovered candidates under the KPI contract. Funded outcomes outrank proxy metrics whenever outcome data is complete; missing data is returned explicitly.',
+    inputSchema: { type: 'object', properties: { client_id: { type: 'string' } }, required: ['client_id'] },
+  },
+  {
+    name: 'jeremy_prepare_recreations',
+    description: 'Create derivative recreation briefs (mechanism only, never copied branding) and prepare image/video generation jobs. Jobs stay prepared/blocked while paid generation is disabled or uncapped.',
+    inputSchema: { type: 'object', properties: { client_id: { type: 'string' }, cycle_id: { type: 'string' }, top: { type: 'number', default: 5 } }, required: ['client_id'] },
+  },
+  {
+    name: 'jeremy_create_launch_batch',
+    description: 'Create launch drafts for prepared candidates. Every created object is PAUSED; publishing and activation remain explicit dashboard operator actions.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' }, candidate_ids: { type: 'array', items: { type: 'string' } }, inputs: { type: 'object' }, confirm: { type: 'boolean', description: 'Must be true.' } },
+      required: ['client_id', 'candidate_ids', 'confirm'],
+    },
+  },
+  {
+    name: 'jeremy_analyze_account',
+    description: 'Analyze the client account under the KPI contract, returning per-entity KPIs, decision basis and attribution coverage.',
+    inputSchema: { type: 'object', properties: { client_id: { type: 'string' }, window_days: { type: 'number', default: 30 } }, required: ['client_id'] },
+  },
+  {
+    name: 'jeremy_plan_actions',
+    description: 'Produce a pause/scale action plan with every deterministic policy gate result (sample floors, cooldown, mode, scale clamp, KPI precedence). Read-only.',
+    inputSchema: { type: 'object', properties: { client_id: { type: 'string' }, window_days: { type: 'number', default: 30 } }, required: ['client_id'] },
+  },
+  {
+    name: 'jeremy_execute_approved_action',
+    description: 'Execute a human-approved pause or budget increase. Requires confirm:true and human_approved:true; defaults to a dry run; refuses in shadow mode; never deletes; always read-back verified against Meta.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        jeremy_action: { type: 'string', enum: ['pause', 'adjust_budget'] },
+        entity_type: { type: 'string', enum: ['campaign', 'adset', 'ad'] },
+        meta_entity_id: { type: 'string' },
+        proposed_daily_budget: { type: 'number' },
+        cycle_id: { type: 'string' },
+        recommendation_id: { type: 'string' },
+        human_approved: { type: 'boolean' },
+        confirm: { type: 'boolean' },
+        dry_run: { type: 'boolean', default: true },
+      },
+      required: ['client_id', 'jeremy_action', 'entity_type', 'meta_entity_id', 'human_approved', 'confirm'],
+    },
+  },
+  {
+    name: 'jeremy_run_cycle',
+    description: 'Run the full durable loop: discovery, selection, recreation, launch preparation, analysis, action planning and verification. Shadow mode records decisions without executing.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' }, window_days: { type: 'number', default: 30 }, top: { type: 'number', default: 5 }, create_launches: { type: 'boolean', default: false }, include_apify: { type: 'boolean', default: false } },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'jeremy_get_cycle',
+    description: 'Return a cycle with its stage timestamps, evidence, candidates and execution audit trail.',
+    inputSchema: { type: 'object', properties: { cycle_id: { type: 'string' } }, required: ['cycle_id'] },
+  },
 ];
 
 async function handleToolCall(name: string, args: Record<string, any>): Promise<any> {
@@ -830,6 +923,89 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
     case 'jeremy_prepare_campaign_draft': {
       if (!args.client_id) return { error: 'client_id required' };
       return await prepareCampaignDraft(prodDb, args.client_id, args.inputs || {});
+    }
+
+    // ===== Jeremy Autonomous loop =====
+    case 'jeremy_get_kpi_contract':
+      return { contract: kpiContract() };
+    case 'jeremy_discover_winners': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const result = await discoverWinners(prodDb, args.client_id, policy, {
+        includeApify: args.include_apify === true,
+        apifyExpectedCostUsd: Number(args.apify_expected_cost_usd),
+      });
+      return { sources: result.sources, paid_discovery: result.paid_discovery, candidates: result.candidates.slice(0, 25), mode: policy.mode };
+    }
+    case 'jeremy_rank_candidates': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const discovery = await discoverWinners(prodDb, args.client_id, policy, {});
+      const { coverage } = await buildCoverage(prodDb, args.client_id, policy);
+      return { coverage, candidates: rankCandidates(discovery.candidates, coverage).slice(0, 25) };
+    }
+    case 'jeremy_prepare_recreations': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const discovery = await discoverWinners(prodDb, args.client_id, policy, {});
+      const { coverage } = await buildCoverage(prodDb, args.client_id, policy);
+      const ranked = rankCandidates(discovery.candidates, coverage);
+      return await prepareRecreations(prodDb, args.client_id, args.cycle_id ?? null, policy, ranked, { top: args.top ?? 5 });
+    }
+    case 'jeremy_create_launch_batch': {
+      if (!args.client_id) return { error: 'client_id required' };
+      if (args.confirm !== true) return { error: 'confirm:true is required to create launch drafts' };
+      const ids = Array.isArray(args.candidate_ids) ? args.candidate_ids.map(String) : [];
+      if (!ids.length) return { error: 'candidate_ids required' };
+      const batch = await createLaunchBatch(prodDb, args.client_id, ids, args.inputs || {});
+      return { ...batch, note: 'All created objects are PAUSED drafts. Publishing stays an operator action.' };
+    }
+    case 'jeremy_analyze_account': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      return await analyzeAccount(prodDb, args.client_id, policy, args.window_days ?? 30);
+    }
+    case 'jeremy_plan_actions': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const analysis = await analyzeAccount(prodDb, args.client_id, policy, args.window_days ?? 30);
+      const plan = await planActions(prodDb, args.client_id, policy, analysis);
+      return { mode: policy.mode, basis: analysis.basis, coverage: analysis.coverage, plan };
+    }
+    case 'jeremy_execute_approved_action': {
+      if (!args.client_id) return { error: 'client_id required' };
+      if (args.confirm !== true) return { error: 'confirm:true is required' };
+      if (args.human_approved !== true) return { error: 'human_approved:true is required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      // The MCP surface never mutates the provider directly: it records the
+      // decision as a dry run and the operator executes from the dashboard.
+      return await executeApprovedAction(prodDb, policy, dryRunProvider, {
+        clientId: args.client_id,
+        cycleId: args.cycle_id ?? null,
+        recommendationId: args.recommendation_id ?? null,
+        action: args.jeremy_action,
+        entityType: args.entity_type ?? 'campaign',
+        metaEntityId: String(args.meta_entity_id ?? ''),
+        proposedDailyBudget: args.proposed_daily_budget ?? null,
+        humanApproved: true,
+        executedBy: 'mcp',
+        dryRun: true,
+      });
+    }
+    case 'jeremy_run_cycle': {
+      if (!args.client_id) return { error: 'client_id required' };
+      return await runCycle(prodDb, args.client_id, {
+        windowDays: args.window_days ?? 30,
+        topCandidates: args.top ?? 5,
+        createLaunches: args.create_launches === true,
+        includeApify: args.include_apify === true,
+        apifyExpectedCostUsd: Number(args.apify_expected_cost_usd),
+        triggeredBy: 'mcp',
+      });
+    }
+    case 'jeremy_get_cycle': {
+      if (!args.cycle_id) return { error: 'cycle_id required' };
+      return await getCycle(prodDb, args.cycle_id);
     }
 
     default:
