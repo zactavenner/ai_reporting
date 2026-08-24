@@ -658,15 +658,93 @@ export function idempotencyKey(clientId: string, entityId: string, action: strin
   return `${clientId}:${entityId}:${action}:${stable}`;
 }
 
+/**
+ * The binding fingerprint of a decision. Execution recomputes this from the
+ * request and refuses when it differs from the persisted plan, so swapping the
+ * entity, the action or the budget amount after approval can never execute.
+ */
+export function planFingerprint(
+  clientId: string,
+  entityType: string,
+  metaEntityId: string,
+  action: string,
+  proposedDailyBudget: number | null,
+): string {
+  const budget = action === "adjust_budget" ? String(Math.floor(Number(proposedDailyBudget) || 0)) : "n/a";
+  return `${clientId}|${entityType}|${metaEntityId}|${action}|${budget}`;
+}
+
+/** Persists a planned action as the immutable decision record for execution. */
+export async function persistPlannedActions(
+  db: Db,
+  clientId: string,
+  cycleId: string | null,
+  kpiSnapshotId: string | null,
+  plans: PlannedAction[],
+  ttlHours = 24,
+): Promise<Array<{ id: string; meta_entity_id: string; action: string; executable: boolean }>> {
+  const rows = plans.map((p) => ({
+    client_id: clientId,
+    cycle_id: cycleId,
+    kpi_snapshot_id: kpiSnapshotId,
+    entity_type: p.entity_type,
+    meta_entity_id: p.meta_entity_id,
+    entity_name: p.entity_name,
+    action: p.action,
+    payload_fingerprint: planFingerprint(clientId, p.entity_type, p.meta_entity_id, p.action, p.proposed_daily_budget),
+    current_daily_budget: p.current_daily_budget,
+    proposed_daily_budget: p.proposed_daily_budget,
+    basis: p.basis,
+    reason: p.reason,
+    evidence: { gates: p.gates, basis: p.basis, reason: p.reason },
+    gates: p.gates as unknown as Record<string, unknown>[],
+    executable: p.executable,
+    status: "pending",
+    expires_at: new Date(Date.now() + ttlHours * 3_600_000).toISOString(),
+  }));
+  if (!rows.length) return [];
+  const { data, error } = await db.from("jeremy_action_plans").insert(rows).select("id, meta_entity_id, action, executable");
+  if (error) throw new Error(`Could not persist action plan: ${error.message}`);
+  return data ?? [];
+}
+
+/** Operator approval of a persisted plan. Only 'pending' rows may be approved. */
+export async function approvePlannedAction(db: Db, planId: string, approvedBy: string) {
+  const { data, error } = await db
+    .from("jeremy_action_plans")
+    .update({ status: "approved", approved_by: approvedBy, approved_at: new Date().toISOString() })
+    .eq("id", planId)
+    .eq("status", "pending")
+    .select("id, status, action, meta_entity_id, executable")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return { success: false as const, error: "Plan not found, already decided, or not in a pending state." };
+  return { success: true as const, plan: data };
+}
+
+export async function rejectPlannedAction(db: Db, planId: string, decidedBy: string) {
+  const { data, error } = await db
+    .from("jeremy_action_plans")
+    .update({ status: "rejected", approved_by: decidedBy, approved_at: new Date().toISOString() })
+    .eq("id", planId)
+    .in("status", ["pending", "approved"])
+    .select("id, status")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? { success: true as const, plan: data } : { success: false as const, error: "Plan not found or already executed." };
+}
+
 export interface ExecuteInput {
   clientId: string;
+  /** REQUIRED: the persisted, approved decision record this execution replays. */
+  planId: string;
   cycleId?: string | null;
   recommendationId?: string | null;
+  /** Echoed by the caller purely so a mismatch against the plan is refused. */
   action: JeremyAction;
   entityType: "campaign" | "adset" | "ad";
   metaEntityId: string;
   proposedDailyBudget?: number | null;
-  humanApproved: boolean;
   executedBy: string;
   dryRun?: boolean;
 }
@@ -677,15 +755,34 @@ export interface ExecuteResult {
   verification_status: string;
   reason: string;
   execution_id?: string;
+  plan_id?: string;
+  gate_evidence?: Array<{ gate: string; allowed: boolean; reason: string }>;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
 }
 
+const blocked = (reason: string, gates?: Array<{ gate: string; allowed: boolean; reason: string }>, planId?: string): ExecuteResult => ({
+  success: false,
+  status: "blocked",
+  verification_status: "skipped_dry_run",
+  reason,
+  plan_id: planId,
+  gate_evidence: gates,
+});
+
 /**
- * The only path that may touch the provider. Order is non-negotiable:
- * policy gates → atomic idempotent claim → before snapshot → mutation →
- * read-back → verification. A mismatch is recorded as verification_failed and
- * is NEVER reported as success.
+ * The ONLY path that may touch the provider, and it fails closed.
+ *
+ * Nothing the caller sends is trusted: the action, entity and budget are taken
+ * from the persisted plan, and every deterministic gate is INDEPENDENTLY
+ * revalidated here from persisted, reproducible evidence plus the provider's
+ * current state. A direct endpoint call therefore cannot bypass a gate.
+ *
+ * Order is non-negotiable:
+ *   plan exists → binding fingerprint matches → approved → not stale →
+ *   atomic claim → mode → outcome coverage → sample floors → cooldown →
+ *   provider current state → increase-only + scale clamp + daily cap +
+ *   account delta cap → mutation → read-back verification.
  */
 export async function executeApprovedAction(
   db: Db,
@@ -693,67 +790,228 @@ export async function executeApprovedAction(
   provider: MetaProvider,
   input: ExecuteInput,
 ): Promise<ExecuteResult> {
-  if (isDestructiveAction(input.action)) {
-    return { success: false, status: "blocked", verification_status: "failed", reason: "Destructive actions are never permitted; pause is the only kill lever." };
+  const gates: Array<{ gate: string; allowed: boolean; reason: string }> = [];
+
+  if (!input.planId) {
+    return blocked("An approved, persisted plan (plan_id) is required; ad-hoc execution is refused.");
   }
-  if (input.action === "hold") {
-    return { success: false, status: "blocked", verification_status: "skipped_dry_run", reason: "Hold is a no-op and is never executed." };
+
+  // ── 1. The immutable decision record ───────────────────────────────────────
+  const { data: plan } = await db
+    .from("jeremy_action_plans")
+    .select("*")
+    .eq("id", input.planId)
+    .maybeSingle();
+  if (!plan) return blocked("Unknown plan_id: no persisted decision record to execute.", gates, input.planId);
+  if (String(plan.client_id) !== input.clientId) {
+    return blocked("Plan belongs to a different client; refusing.", gates, input.planId);
   }
 
-  const mode = checkMode(policy, input.action, input.humanApproved);
-  if (!mode.allowed) return { success: false, status: "blocked", verification_status: "skipped_dry_run", reason: mode.reason };
+  const action = String(plan.action) as JeremyAction;
+  const entityType = String(plan.entity_type) as "campaign" | "adset" | "ad";
+  const metaEntityId = String(plan.meta_entity_id);
+  const plannedBudget = plan.proposed_daily_budget != null ? Number(plan.proposed_daily_budget) : null;
 
-  const payload: Record<string, unknown> =
-    input.action === "pause" ? { status: "PAUSED" } : { daily_budget: input.proposedDailyBudget };
-  const key = idempotencyKey(input.clientId, input.metaEntityId, input.action, payload);
-  // Default is ALWAYS a dry run: a live provider mutation requires an explicit
-  // dry_run: false from an authorized caller.
-  const dryRun = input.dryRun ?? true;
+  if (isDestructiveAction(action)) {
+    return blocked("Destructive actions are never permitted; pause is the only kill lever.", gates, input.planId);
+  }
+  if (action === "hold") {
+    return blocked("Hold is a no-op and is never executed.", gates, input.planId);
+  }
 
-  // Atomic claim: the unique idempotency key means a concurrent or repeated
-  // request loses the insert and never re-sends the mutation.
-  const { data: claim, error: claimErr } = await db
-    .from("jeremy_action_executions")
-    .insert({
-      client_id: input.clientId,
-      cycle_id: input.cycleId ?? null,
-      recommendation_id: input.recommendationId ?? null,
-      idempotency_key: key,
-      action: input.action,
-      entity_type: input.entityType,
-      meta_entity_id: input.metaEntityId,
-      requested_change: payload,
-      status: "claimed",
-      dry_run: Boolean(dryRun),
-      executed_by: input.executedBy,
-    })
+  // ── 2. Binding: the request must describe exactly the approved decision ────
+  const requestFingerprint = planFingerprint(
+    input.clientId,
+    input.entityType,
+    input.metaEntityId,
+    input.action,
+    input.proposedDailyBudget ?? null,
+  );
+  const boundFingerprint = planFingerprint(input.clientId, entityType, metaEntityId, action, plannedBudget);
+  if (requestFingerprint !== boundFingerprint || String(plan.payload_fingerprint) !== boundFingerprint) {
+    gates.push({ gate: "payload_binding", allowed: false, reason: "Request does not match the approved plan (entity, action or amount changed)." });
+    return blocked("Request does not match the approved decision record; refusing.", gates, input.planId);
+  }
+  gates.push({ gate: "payload_binding", allowed: true, reason: "Request matches the approved decision record." });
+
+  // ── 3. Approved, not stale, and still executable ──────────────────────────
+  if (plan.status !== "approved") {
+    return blocked(`Plan is "${plan.status}", not approved; refusing.`, gates, input.planId);
+  }
+  if (plan.executable !== true) {
+    return blocked("Plan was recorded as not executable (a gate blocked it when it was produced).", gates, input.planId);
+  }
+  const expiresAt = plan.expires_at ? Date.parse(String(plan.expires_at)) : NaN;
+  if (Number.isFinite(expiresAt) && Date.now() > expiresAt) {
+    await db.from("jeremy_action_plans").update({ status: "expired" }).eq("id", input.planId).eq("status", "approved");
+    return blocked("Evidence is stale: this plan has expired. Re-run the analysis before executing.", gates, input.planId);
+  }
+  gates.push({ gate: "evidence_freshness", allowed: true, reason: "Plan is approved and within its validity window." });
+
+  // ── 4. Mode (recomputed from the live policy, not the plan) ───────────────
+  const mode = checkMode(policy, action, true);
+  gates.push({ gate: "mode", ...mode });
+  if (!mode.allowed) return blocked(mode.reason, gates, input.planId);
+
+  // ── 5. Atomic claim on the plan itself: a second call loses the race ──────
+  const { data: claimedPlan } = await db
+    .from("jeremy_action_plans")
+    .update({ status: "claimed", claimed_at: new Date().toISOString() })
+    .eq("id", input.planId)
+    .eq("status", "approved")
     .select("id")
     .maybeSingle();
-
-  if (claimErr) {
-    return { success: false, status: "blocked", verification_status: "skipped_dry_run", reason: `Already executed or claimed (idempotency): ${claimErr.message}` };
+  if (!claimedPlan) {
+    return blocked("Plan was already claimed or executed by another request (idempotency).", gates, input.planId);
   }
-  const executionId = claim?.id as string;
+
+  const release = async (status: string, extra: Record<string, unknown> = {}) => {
+    await db.from("jeremy_action_plans").update({ status, ...extra }).eq("id", input.planId);
+  };
 
   try {
-    const before = await provider.read(input.entityType, input.metaEntityId);
-    await db.from("jeremy_action_executions").update({ status: "executing", before_snapshot: before }).eq("id", executionId);
+    // ── 6. Outcome-data coverage and sample floors, recomputed now ──────────
+    const { coverage } = await buildCoverage(db, input.clientId, policy);
+    if (!coverage.outcome_data_complete) {
+      const reason = `Outcome data is incomplete (${coverage.missing.join("; ")}); proxy metrics may not authorise an action.`;
+      gates.push({ gate: "kpi_precedence", allowed: false, reason });
+      await release("approved");
+      return blocked(reason, gates, input.planId);
+    }
+    gates.push({ gate: "kpi_precedence", allowed: true, reason: "Outcome data is complete; the decision rests on funded/qualified outcomes." });
+
+    const analysis = await analyzeAccount(db, input.clientId, policy);
+    const entity = (analysis.entities as Array<AnalysisResult["entities"][number] & { daily_budget?: number | null; live_days?: number }>)
+      .find((e) => e.meta_entity_id === metaEntityId && e.entity_type === entityType);
+    if (!entity) {
+      const reason = "Entity is no longer present in synced account data; refusing to act on stale evidence.";
+      gates.push({ gate: "entity_present", allowed: false, reason });
+      await release("expired");
+      return blocked(reason, gates, input.planId);
+    }
+    const spend = entity.kpi.media_diagnostics.spend ?? 0;
+    const funded = entity.kpi.primary_outcomes.funded_count ?? 0;
+    const qualified = Number(entity.kpi.reliability.qualified_leads ?? 0);
+    const liveDays = Number(entity.live_days ?? entity.kpi.reliability.live_days ?? 0);
+
+    const sample = checkSampleFloors(policy, { spend, live_days: liveDays, qualified_leads: qualified, funded_count: funded }, action);
+    gates.push({ gate: "sample_floors", ...sample });
+    if (!sample.allowed) {
+      await release("approved");
+      return blocked(sample.reason, gates, input.planId);
+    }
+
+    // ── 7. Cooldown, from the persisted execution ledger ────────────────────
+    const { data: lastAction } = await db
+      .from("jeremy_action_executions")
+      .select("executed_at, created_at")
+      .eq("client_id", input.clientId)
+      .eq("meta_entity_id", metaEntityId)
+      .not("status", "eq", "blocked")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const cooldown = checkCooldown(policy, lastAction?.executed_at ?? lastAction?.created_at ?? null);
+    gates.push({ gate: "cooldown", ...cooldown });
+    if (!cooldown.allowed) {
+      await release("approved");
+      return blocked(cooldown.reason, gates, input.planId);
+    }
+
+    // ── 8. Provider current state — the budget math never trusts the caller ─
+    const before = await provider.read(entityType, metaEntityId);
+    let approvedBudgetUsd: number | null = null;
+
+    if (action === "adjust_budget") {
+      // Meta reports daily_budget in minor units (cents).
+      const currentCents = Number(before.daily_budget);
+      const currentUsd = Number.isFinite(currentCents) && currentCents > 0
+        ? currentCents / 100
+        : Number(entity.daily_budget ?? 0) / 100;
+      const accountDeltaUsed = await accountDeltaUsedToday(db, input.clientId);
+      const scale = clampScale(policy, currentUsd, plannedBudget ?? 0, accountDeltaUsed);
+      gates.push({ gate: "scale_clamp", allowed: scale.allowed, reason: scale.reason });
+      if (!scale.allowed || !scale.approved_daily_budget) {
+        await release("approved");
+        return blocked(scale.reason, gates, input.planId);
+      }
+      // The approved plan may not exceed what the gates permit right now.
+      if (plannedBudget != null && Math.floor(plannedBudget) > scale.approved_daily_budget) {
+        const reason = `Approved amount $${Math.floor(plannedBudget)} exceeds what the current caps permit ($${scale.approved_daily_budget}); refusing.`;
+        gates.push({ gate: "budget_caps", allowed: false, reason });
+        await release("approved");
+        return blocked(reason, gates, input.planId);
+      }
+      if (scale.approved_daily_budget > policy.max_daily_budget_usd) {
+        const reason = `Daily budget cap $${policy.max_daily_budget_usd} would be exceeded; refusing.`;
+        gates.push({ gate: "budget_caps", allowed: false, reason });
+        await release("approved");
+        return blocked(reason, gates, input.planId);
+      }
+      approvedBudgetUsd = Math.min(scale.approved_daily_budget, Math.floor(plannedBudget ?? scale.approved_daily_budget));
+      gates.push({ gate: "budget_caps", allowed: true, reason: `Approved daily budget $${approvedBudgetUsd} (increase-only, within all caps).` });
+    }
+
+    // ── 9. Execution ledger: unique idempotency key, atomic claim ───────────
+    const payload: Record<string, unknown> = action === "pause" ? { status: "PAUSED" } : { daily_budget_usd: approvedBudgetUsd };
+    const key = `${input.planId}:${idempotencyKey(input.clientId, metaEntityId, action, payload)}`;
+    const dryRun = input.dryRun ?? true;
+
+    const { data: claim, error: claimErr } = await db
+      .from("jeremy_action_executions")
+      .insert({
+        client_id: input.clientId,
+        cycle_id: input.cycleId ?? plan.cycle_id ?? null,
+        plan_id: input.planId,
+        recommendation_id: input.recommendationId ?? null,
+        idempotency_key: key,
+        action,
+        entity_type: entityType,
+        meta_entity_id: metaEntityId,
+        requested_change: payload,
+        before_snapshot: before,
+        gate_evidence: gates,
+        status: "executing",
+        dry_run: Boolean(dryRun),
+        executed_by: input.executedBy,
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (claimErr || !claim?.id) {
+      await release("approved");
+      return blocked(`Already executed or claimed (idempotency): ${claimErr?.message ?? "no row returned"}`, gates, input.planId);
+    }
+    const executionId = String(claim.id);
 
     if (dryRun) {
       await db
         .from("jeremy_action_executions")
         .update({ status: "succeeded", verification_status: "skipped_dry_run", executed_at: new Date().toISOString(), provider_receipt: { dry_run: true } })
         .eq("id", executionId);
-      return { success: true, status: "succeeded", verification_status: "skipped_dry_run", reason: "Dry run: no provider mutation was sent.", execution_id: executionId, before, after: null };
+      await release("approved", { execution_id: executionId });
+      return {
+        success: true,
+        status: "succeeded",
+        verification_status: "skipped_dry_run",
+        reason: "Dry run: every gate passed and no provider mutation was sent.",
+        execution_id: executionId,
+        plan_id: input.planId,
+        gate_evidence: gates,
+        before,
+        after: null,
+      };
     }
 
-    const params: Record<string, string> =
-      input.action === "pause" ? { status: "PAUSED" } : { daily_budget: String(Math.round(Number(input.proposedDailyBudget) * 100)) };
-    const receipt = await provider.mutate(input.entityType, input.metaEntityId, params);
+    // ── 10. Mutate, then read back and verify ───────────────────────────────
+    const params: Record<string, string> = action === "pause"
+      ? { status: "PAUSED" }
+      : { daily_budget: String(Math.round(Number(approvedBudgetUsd) * 100)) };
+    const receipt = await provider.mutate(entityType, metaEntityId, params);
     await db.from("jeremy_action_executions").update({ provider_receipt: receipt, executed_at: new Date().toISOString() }).eq("id", executionId);
 
-    const after = await provider.read(input.entityType, input.metaEntityId);
-    const verified = verifyReadBack(input.action, params, after);
+    const after = await provider.read(entityType, metaEntityId);
+    const verified = verifyReadBack(action, params, after);
     await db
       .from("jeremy_action_executions")
       .update({
@@ -764,6 +1022,7 @@ export async function executeApprovedAction(
         verified_at: new Date().toISOString(),
       })
       .eq("id", executionId);
+    await release(verified.ok ? "executed" : "failed", { execution_id: executionId, executed_at: new Date().toISOString() });
 
     return {
       success: verified.ok,
@@ -771,14 +1030,45 @@ export async function executeApprovedAction(
       verification_status: verified.ok ? "verified" : "mismatch",
       reason: verified.reason,
       execution_id: executionId,
+      plan_id: input.planId,
+      gate_evidence: gates,
       before,
       after,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await db.from("jeremy_action_executions").update({ status: "failed", verification_status: "failed", error_detail: message }).eq("id", executionId);
-    return { success: false, status: "failed", verification_status: "failed", reason: message, execution_id: executionId };
+    await db
+      .from("jeremy_action_executions")
+      .update({ status: "failed", verification_status: "failed", error_detail: message })
+      .eq("plan_id", input.planId)
+      .eq("status", "executing");
+    await release("failed");
+    return { success: false, status: "failed", verification_status: "failed", reason: message, plan_id: input.planId, gate_evidence: gates };
   }
+}
+
+/** Sum of today's approved budget increases, for the account-level delta cap. */
+async function accountDeltaUsedToday(db: Db, clientId: string): Promise<number> {
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const { data } = await db
+    .from("jeremy_action_executions")
+    .select("requested_change, before_snapshot, action, status")
+    .eq("client_id", clientId)
+    .eq("action", "adjust_budget")
+    .gte("created_at", dayStart.toISOString());
+  if (!data) return 0;
+  return round2(
+    data
+      .filter((r: Record<string, unknown>) => ["succeeded", "executing", "verification_failed"].includes(String(r.status)))
+      .reduce((sum: number, r: Record<string, unknown>) => {
+        const req = (r.requested_change ?? {}) as Record<string, unknown>;
+        const beforeCents = Number((r.before_snapshot as Record<string, unknown> | null)?.daily_budget);
+        const beforeUsd = Number.isFinite(beforeCents) ? beforeCents / 100 : 0;
+        const afterUsd = num(req.daily_budget_usd);
+        return sum + Math.max(0, afterUsd - beforeUsd);
+      }, 0),
+  );
 }
 
 /** Compares the requested change against what Meta actually reports back. */
