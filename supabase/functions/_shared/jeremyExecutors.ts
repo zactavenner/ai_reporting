@@ -7,7 +7,9 @@
  * are copied into durable project storage before anything is marked generated.
  */
 import { DURABLE_BUCKET, type GenerationExecutors, type GenerationKind } from "./jeremyGeneration.ts";
+import { assertReceiptModelMatches } from "./exactModel.ts";
 import type { PublishExecutor } from "./jeremyLaunch.ts";
+
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -47,10 +49,13 @@ export function isDurableProjectUrl(url: string): boolean {
 export function makeGenerationExecutors(db: Db): GenerationExecutors {
   return {
     async generateImage(input) {
+      // The approved model is sent as `exactModel`: the endpoint validates it
+      // against the active configured allowlist and invokes exactly it.
       const payload = await invokeFunction("generate-static-ad", {
         prompt: input.prompt,
         aspectRatio: input.aspectRatio,
         clientId: input.clientId,
+        exactModel: input.model,
         brandColors: input.brandColors,
         brandFonts: input.brandFonts,
         referenceImages: input.referenceImages,
@@ -60,6 +65,7 @@ export function makeGenerationExecutors(db: Db): GenerationExecutors {
       });
       const url = String(payload.imageUrl ?? "");
       if (!url) throw new Error("generate-static-ad returned no imageUrl.");
+      assertReceiptModelMatches(input.model, payload);
       return { url, receipt: payload, provider_job_id: (payload.assetId as string) ?? null };
     },
 
@@ -69,12 +75,15 @@ export function makeGenerationExecutors(db: Db): GenerationExecutors {
         prompt: input.prompt,
         aspectRatio: input.aspectRatio,
         duration: input.durationSeconds,
-        model: input.model.includes("seedance") ? "seedance-pro" : input.model,
+        // No aliasing: the approved model id is what the provider receives.
+        exactModel: input.model,
       });
       const url = String(payload.videoUrl ?? payload.video_url ?? "");
       if (!url) throw new Error("generate-video-from-image returned no videoUrl.");
+      assertReceiptModelMatches(input.model, payload);
       return { url, receipt: payload, provider_job_id: (payload.operationId as string) ?? null };
     },
+
 
     async persistToDurableStorage({ url, clientId, candidateId, kind }) {
       if (isDurableProjectUrl(url)) return url;

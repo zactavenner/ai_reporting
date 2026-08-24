@@ -34,6 +34,47 @@ async function graphPost(path: string, params: Record<string, string>) {
   return body;
 }
 
+/**
+ * Authoritative read-back of one created object. The status is whatever Meta
+ * reports — it is never assumed. A failed read is an error, so a caller can
+ * never mistake "unknown" for "PAUSED".
+ */
+async function graphReadBackStatus(id: string, token: string): Promise<{ id: string; status: string; effective_status: string | null }> {
+  const objectId = String(id ?? "").trim();
+  if (!objectId) throw new Error("Read-back requires a concrete Meta object id.");
+  const url = `${GRAPH}/${objectId}?fields=id,status,effective_status&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body?.id) {
+    const detail = body?.error?.error_user_msg || body?.error?.message || JSON.stringify(body).slice(0, 300);
+    throw new Error(`Meta read-back of ${objectId} failed (${res.status}): ${detail}`);
+  }
+  const status = String(body.status ?? "").trim();
+  if (!status) throw new Error(`Meta read-back of ${objectId} returned no status.`);
+  return { id: String(body.id), status, effective_status: body.effective_status ? String(body.effective_status) : null };
+}
+
+/** Read back all three objects and return concrete ids + authoritative statuses. */
+async function readBackHierarchy(
+  ids: { campaign: string | null; adset: string | null; ad: string | null },
+  token: string,
+) {
+  const missing = (["campaign", "adset", "ad"] as const).filter((k) => !String(ids[k] ?? "").trim());
+  if (missing.length) {
+    throw new Error(`Cannot verify the publication: missing Meta id for ${missing.join(", ")}.`);
+  }
+  const [campaign, adset, ad] = await Promise.all([
+    graphReadBackStatus(ids.campaign!, token),
+    graphReadBackStatus(ids.adset!, token),
+    graphReadBackStatus(ids.ad!, token),
+  ]);
+  return {
+    read_back: { campaign, adset, ad },
+    statuses: { campaign: campaign.status, adset: adset.status, ad: ad.status },
+  };
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -57,12 +98,15 @@ Deno.serve(async (req) => {
       .eq("id", launchId)
       .maybeSingle();
     if (loadErr || !launch) return json({ success: false, error: "Launch draft not found" }, 404);
-    if (launch.status === "published") {
-      return json({ success: true, alreadyPublished: true, launch });
-    }
+    // An already published launch is NOT short-circuited with an assumed state:
+    // every object is read back from Meta again so the caller always receives
+    // authoritative statuses. The creation stages below are all id-guarded, so
+    // nothing is recreated.
+    const alreadyPublished = launch.status === "published";
 
     const errors = validateLaunch(launch as never);
     if (errors.length) return json({ success: false, error: "Validation failed", errors }, 400);
+
 
     const { data: client } = await supabase
       .from("clients")
@@ -82,12 +126,14 @@ Deno.serve(async (req) => {
       : `act_${client.meta_ad_account_id}`;
 
     const map = OBJECTIVES[launch.objective as keyof typeof OBJECTIVES];
-    const patch: Record<string, unknown> = {
-      status: "publishing",
-      error_detail: null,
-      retry_count: (launch.retry_count ?? 0) + (launch.status === "failed" ? 1 : 0),
-    };
-    await supabase.from("meta_campaign_launches").update(patch).eq("id", launchId);
+    if (!alreadyPublished) {
+      await supabase.from("meta_campaign_launches").update({
+        status: "publishing",
+        error_detail: null,
+        retry_count: (launch.retry_count ?? 0) + (launch.status === "failed" ? 1 : 0),
+      }).eq("id", launchId);
+    }
+
 
     let campaignId: string | null = launch.meta_campaign_id;
     let adsetId: string | null = launch.meta_adset_id;
@@ -210,12 +256,32 @@ Deno.serve(async (req) => {
       await save({ meta_ad_id: adId, stage: "ad" });
     }
 
+    // Authoritative verification: read every created object back from Meta.
+    const verified = await readBackHierarchy({ campaign: campaignId, adset: adsetId, ad: adId }, token);
+    const notPaused = Object.entries(verified.statuses).filter(([, v]) => String(v).toUpperCase() !== "PAUSED");
+
     await save({
-      status: "published",
-      stage: "done",
-      published_at: new Date().toISOString(),
-      error_detail: null,
+      status: notPaused.length ? "failed" : "published",
+      stage: notPaused.length ? "verification" : "done",
+      published_at: notPaused.length ? null : new Date().toISOString(),
+      error_detail: notPaused.length
+        ? { message: `Non-PAUSED object(s): ${notPaused.map(([k, v]) => `${k}=${v}`).join(", ")}`, at: new Date().toISOString() }
+        : null,
     });
+
+    if (notPaused.length) {
+      return json({
+        success: false,
+        graphVersion: META_VERSION,
+        launchId,
+        campaignId,
+        adsetId,
+        creativeId: creativeMetaId,
+        adId,
+        ...verified,
+        error: `Meta read-back shows a non-PAUSED object: ${notPaused.map(([k, v]) => `${k}=${v}`).join(", ")}`,
+      }, 409);
+    }
 
     if (launch.creative_id) {
       await supabase.from("creatives").update({ status: "launched" }).eq("id", launch.creative_id);
@@ -225,12 +291,15 @@ Deno.serve(async (req) => {
       success: true,
       graphVersion: META_VERSION,
       launchId,
+      alreadyPublished,
       campaignId,
       adsetId,
       creativeId: creativeMetaId,
       adId,
-      message: "Campaign, ad set, creative and ad created in PAUSED state",
+      ...verified,
+      message: "Campaign, ad set, creative and ad exist in Meta and every object read back as PAUSED",
     });
+
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("meta-launch-center failed:", message);

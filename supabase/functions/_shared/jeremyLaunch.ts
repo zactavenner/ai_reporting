@@ -159,7 +159,9 @@ export function buildLaunchRecord(
 export interface LaunchBatchItem extends LaunchReadiness {
   launch_id: string | null;
   status: string | null;
+  reused?: boolean;
 }
+
 
 /**
  * Creates COMPLETE validated PAUSED drafts. Candidates that are not ready are
@@ -188,6 +190,28 @@ export async function createLaunchBatch(
       items.push({ candidate_id: candidateId, ready: false, missing: ["Candidate not found for this client."], record: null, launch_id: null, status: null });
       continue;
     }
+    // Idempotency: a candidate owns at most one draft. Repeating the batch
+    // returns the existing launch instead of creating a duplicate draft.
+    const existingRef = nonEmpty(candidate.launch_reference);
+    if (existingRef) {
+      const { data: existing } = await db
+        .from("meta_campaign_launches")
+        .select("id, status, stage")
+        .eq("id", existingRef)
+        .maybeSingle();
+      if (existing?.id) {
+        items.push({
+          candidate_id: candidateId,
+          ready: true,
+          missing: [],
+          record: null,
+          launch_id: String(existing.id),
+          status: existing.status ?? null,
+          reused: true,
+        });
+        continue;
+      }
+    }
     const readiness = buildLaunchRecord(clientId, candidate, config, inputs);
     if (!readiness.ready) {
       items.push({ ...readiness, launch_id: null, status: null });
@@ -201,6 +225,7 @@ export async function createLaunchBatch(
     if (error) throw new Error(`Could not create launch draft: ${error.message}`);
     await db.from("jeremy_creative_candidates").update({ launch_reference: launch?.id ?? null }).eq("id", candidateId);
     items.push({ ...readiness, launch_id: launch?.id ? String(launch.id) : null, status: launch?.status ?? null });
+
   }
 
   return {
@@ -229,6 +254,75 @@ export interface PublishResult {
   statuses?: Record<string, string>;
   gates?: Array<{ gate: string; allowed: boolean; reason: string }>;
 }
+
+export interface ReadBackVerification {
+  ok: boolean;
+  reason: string;
+  meta_ids: { campaign: string | null; adset: string | null; ad: string | null };
+  statuses: Record<string, string>;
+}
+
+const OBJECT_KEYS = ["campaign", "adset", "ad"] as const;
+
+const nonEmpty = (v: unknown): string | null => {
+  const s = typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
+  return s.length ? s : null;
+};
+
+/**
+ * Fail-closed verification of a publication response.
+ *
+ * There is NO default status: a publication counts as verified only when the
+ * launch center returned, for each of campaign/adset/ad, a concrete Meta object
+ * id AND an authoritative read-back status, and every one of those statuses is
+ * PAUSED. A missing id, a missing status, an unreadable object or any other
+ * status (ACTIVE included) is a verification failure.
+ */
+export function verifyPublishReadBack(response: Record<string, unknown> | null | undefined): ReadBackVerification {
+  const res = (response ?? {}) as Record<string, unknown>;
+  const readBack = (res.read_back ?? res.readBack ?? {}) as Record<string, unknown>;
+  const flatStatuses = (res.statuses ?? {}) as Record<string, unknown>;
+
+  const metaIds: ReadBackVerification["meta_ids"] = { campaign: null, adset: null, ad: null };
+  const statuses: Record<string, string> = {};
+  const problems: string[] = [];
+
+  for (const key of OBJECT_KEYS) {
+    const entry = (readBack[key] ?? {}) as Record<string, unknown>;
+    const camel = key === "adset" ? "adsetId" : `${key}Id`;
+    const id = nonEmpty(entry.id) ?? nonEmpty(res[camel]) ?? nonEmpty(res[`meta_${key}_id`]);
+    const status = nonEmpty(entry.status) ?? nonEmpty(flatStatuses[key]);
+    metaIds[key] = id;
+    if (!id) {
+      problems.push(`${key}: no Meta object id was returned`);
+      continue;
+    }
+    if (!status) {
+      problems.push(`${key}: no authoritative read-back status was returned`);
+      continue;
+    }
+    statuses[key] = status;
+    if (status.toUpperCase() !== "PAUSED") {
+      problems.push(`${key}=${status} is not PAUSED`);
+    }
+  }
+
+  if (problems.length) {
+    return {
+      ok: false,
+      reason: `Publication could not be verified as PAUSED (${problems.join("; ")}); refusing to record it as succeeded.`,
+      meta_ids: metaIds,
+      statuses,
+    };
+  }
+  return {
+    ok: true,
+    reason: "Campaign, ad set and ad all exist in Meta and every read-back status is PAUSED.",
+    meta_ids: metaIds,
+    statuses,
+  };
+}
+
 
 /**
  * Publishes ONE approved launch as PAUSED Meta objects through the existing
@@ -276,28 +370,19 @@ export async function publishLaunch(
     if (response?.success === false) {
       throw new Error(String(response.error ?? "Launch center refused the publication."));
     }
-    const published = ((response.launch ?? response) as Record<string, unknown>) ?? {};
-    const metaIds = {
-      campaign: (published.meta_campaign_id as string) ?? (launch.meta_campaign_id as string) ?? null,
-      adset: (published.meta_adset_id as string) ?? (launch.meta_adset_id as string) ?? null,
-      ad: (published.meta_ad_id as string) ?? (launch.meta_ad_id as string) ?? null,
-    };
-    const statuses = (response.statuses as Record<string, string>) ?? {
-      campaign: "PAUSED",
-      adset: "PAUSED",
-      ad: "PAUSED",
-    };
-    const notPaused = Object.entries(statuses).filter(([, v]) => String(v).toUpperCase() !== "PAUSED");
-    if (notPaused.length) {
-      const reason = `Read-back shows a non-PAUSED object (${notPaused.map(([k, v]) => `${k}=${v}`).join(", ")}); this is never acceptable.`;
+    const verified = verifyPublishReadBack(response);
+    const metaIds = verified.meta_ids;
+    const statuses = verified.statuses;
+    if (!verified.ok) {
       await completeJob(db, input.jobId, {
         status: "verification_failed",
         providerResponse: response,
         verification: { statuses, meta_ids: metaIds, all_paused: false },
         resultSummary: { launch_id: input.launchId },
       });
-      return { success: false, reason, job_id: input.jobId, launch_id: input.launchId, meta_ids: metaIds, statuses, gates };
+      return { success: false, reason: verified.reason, job_id: input.jobId, launch_id: input.launchId, meta_ids: metaIds, statuses, gates };
     }
+
 
     await completeJob(db, input.jobId, {
       status: "succeeded",

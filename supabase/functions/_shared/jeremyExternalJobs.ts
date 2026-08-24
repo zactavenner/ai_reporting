@@ -143,7 +143,7 @@ export interface QuoteInput {
   ttlMinutes?: number;
 }
 
-export type QuoteReuseReason = "already_succeeded" | "in_flight" | "active_quote";
+export type QuoteReuseReason = "already_succeeded" | "in_flight" | "active_quote" | "concurrent_quote";
 
 export interface QuoteResult {
   success: boolean;
@@ -260,8 +260,30 @@ export async function quoteJob(db: Db, policy: JeremyPolicy, input: QuoteInput):
     })
     .select("*")
     .maybeSingle();
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    // The database enforces one non-requotable quote per client+fingerprint, so
+    // two concurrent quote attempts cannot both create a row. The loser of the
+    // race reads back and reuses the winner instead of failing.
+    const conflict = String((error as { code?: string }).code ?? "") === "23505" ||
+      /duplicate key|unique constraint/i.test(String(error.message ?? ""));
+    if (conflict) {
+      const { data: winners } = await db
+        .from("jeremy_external_jobs")
+        .select("*")
+        .eq("client_id", input.clientId)
+        .eq("request_fingerprint", fingerprint);
+      const winner = ((winners ?? []) as JeremyExternalJob[])
+        .filter((r) => !REQUOTABLE_STATUSES.includes(String(r.status)))
+        .sort((a, b) => String((b as { created_at?: string }).created_at ?? "").localeCompare(String((a as { created_at?: string }).created_at ?? "")))[0];
+      if (winner) {
+        return { success: true, job: winner, reused: true, reuse_reason: "concurrent_quote", policy_gate: gate };
+      }
+    }
+
+    return { success: false, error: error.message };
+  }
   return { success: true, job: data as JeremyExternalJob, reused: false, policy_gate: gate };
+
 }
 
 /**

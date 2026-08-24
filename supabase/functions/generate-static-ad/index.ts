@@ -3,6 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCapitalCreativeDirective } from './capital-creative-style.ts';
 import { enhancePromptWithGpt5 } from '../_shared/enhance-prompt-gpt5.ts';
 import { authorizeGenerationCaller } from '../_shared/generationAuth.ts';
+import { buildExactImageRequest, resolveExactModel } from '../_shared/exactModel.ts';
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +33,16 @@ interface GenerateAdRequest {
   adImageUrls?: string[];
   useGpt5Enhancer?: boolean;
   styleReferenceAvatarIds?: string[];
+  /** Legacy loose selector, still alias-mapped for the dashboard. */
+  imageModel?: string;
+  /**
+   * Exact, approved model id. When present NO aliasing and NO fallback model is
+   * allowed: the id is validated against the active configured allowlist and
+   * invoked verbatim, and the response reports the model actually run.
+   */
+  exactModel?: string;
 }
+
 
 function getImageDimensions(aspectRatio: string): { width: number; height: number } {
   switch (aspectRatio) {
@@ -309,14 +320,23 @@ serve(async (req) => {
       await addImageToContent(imageUrl, 'ad asset image');
     }
 
-    // Call Lovable AI Gateway with image generation model
-    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify((() => {
+    // Exact-model path (Jeremy / any approved automated caller): the requested
+    // model must be an active configured model and is invoked verbatim.
+    let exactModel: string | null = null;
+    if (String(body.exactModel ?? '').trim()) {
+      try {
+        exactModel = await resolveExactModel(getProductionSupabase(), 'static_image', body.exactModel);
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
+    const requestBodyForProvider = exactModel
+      ? buildExactImageRequest({ exactModel, contentParts })
+      : (() => {
         const requested = (body.imageModel || '').trim();
         const MODEL_ALIASES: Record<string, string> = {
           'gpt-image-2': 'openai/gpt-image-2',
@@ -331,18 +351,23 @@ serve(async (req) => {
           : ['openai/gpt-image-2'];
         console.log('[generate-static-ad] image model →', chosen, 'requested:', requested);
         return {
-        model: chosen,
-        models: [chosen, ...fallbacks],
-        messages: [
-          {
-            role: 'user',
-            content: contentParts,
-          },
-        ],
-        modalities: ['image', 'text'],
+          model: chosen,
+          models: [chosen, ...fallbacks],
+          messages: [{ role: 'user', content: contentParts }],
+          modalities: ['image', 'text'],
         };
-      })()),
+      })();
+
+    // Call Lovable AI Gateway with image generation model
+    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBodyForProvider),
     });
+
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
@@ -369,6 +394,15 @@ serve(async (req) => {
 
     const aiData = await aiResponse.json();
     const images = aiData.choices?.[0]?.message?.images;
+    // On the exact-model path the provider's own reported model must match, so a
+    // gateway-side substitution can never be accepted as the approved model.
+    const ranModel = String(aiData?.model ?? '').trim() || (exactModel ?? '');
+    if (exactModel && ranModel && ranModel !== exactModel) {
+      return new Response(
+        JSON.stringify({ error: `Provider ran ${ranModel} but ${exactModel} was requested.`, model: ranModel }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     if (!images || images.length === 0) {
       console.error('No image in AI response:', JSON.stringify(aiData).slice(0, 500));
@@ -377,6 +411,7 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
 
     // Extract base64 image data
     const imageDataUrl = images[0].image_url.url;
@@ -445,9 +480,17 @@ serve(async (req) => {
     console.log('Ad generated successfully:', publicUrl);
 
     return new Response(
-      JSON.stringify({ success: true, imageUrl: publicUrl, storagePath: filePath, assetId: asset?.id }),
+      JSON.stringify({
+        success: true,
+        imageUrl: publicUrl,
+        storagePath: filePath,
+        assetId: asset?.id,
+        // Receipt: the model actually invoked.
+        model: ranModel || undefined,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
   } catch (error) {
     console.error('Generate ad error:', error);
     return new Response(

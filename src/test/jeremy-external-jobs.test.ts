@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import {
   quoteJob,
   approveJob,
@@ -38,6 +38,8 @@ import {
   createLaunchBatch,
   publishLaunch,
   publishTarget,
+  verifyPublishReadBack,
+
 } from '../../supabase/functions/_shared/jeremyLaunch';
 import { defaultPolicy, type JeremyPolicy } from '../../supabase/functions/_shared/jeremyPolicy';
 
@@ -79,11 +81,21 @@ function makeDb(tables: Record<string, Row[]> = {}) {
           created_at: new Date().toISOString(),
           ...r,
         }));
+        const NON_REQUOTABLE = ['awaiting_approval', 'approved', 'claimed', 'running', 'succeeded'];
         for (const r of incoming) {
           if (r.idempotency_key && all().some((e) => e.idempotency_key === r.idempotency_key)) {
             return { data: null, error: { message: 'duplicate key value violates unique constraint' } };
           }
+          // Mirrors jeremy_external_jobs_active_fingerprint_uidx.
+          if (
+            r.request_fingerprint &&
+            NON_REQUOTABLE.includes(String(r.status)) &&
+            all().some((e) => e.client_id === r.client_id && e.request_fingerprint === r.request_fingerprint && NON_REQUOTABLE.includes(String(e.status)))
+          ) {
+            return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "jeremy_external_jobs_active_fingerprint_uidx"' } };
+          }
         }
+
         all().push(...incoming);
         return { data: incoming, error: null };
       }
@@ -188,6 +200,33 @@ describe('Jeremy external job ledger', () => {
     expect(res.error).toMatch(/price source/i);
     expect(db._tables.jeremy_external_jobs ?? []).toHaveLength(0);
   });
+
+  it('is safe under concurrent quotes: the database keeps exactly one active quote', async () => {
+    const db = makeDb();
+    const attempt = () =>
+      quoteJob(db, paidPolicy(), {
+        clientId: CLIENT, kind: 'apify_discovery', provider: 'apify', target: { ...APIFY_TARGET },
+        estimatedCostUsd: 0.5, ...PRICE, requestedBy: 'operator:zac',
+      });
+    const results = await Promise.all([attempt(), attempt(), attempt()]);
+    expect(results.every((r) => r.success)).toBe(true);
+    const ids = new Set(results.map((r) => r.job!.id));
+    expect(ids.size).toBe(1);
+    expect(db._tables.jeremy_external_jobs).toHaveLength(1);
+    expect(results.filter((r) => r.reused).length).toBe(2);
+  });
+
+  it('the database enforces one non-requotable quote per client and fingerprint', () => {
+    const dir = 'supabase/migrations';
+    const sql = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => readFileSync(`${dir}/${f}`, 'utf8'))
+      .join('\n');
+    expect(sql).toMatch(/jeremy_external_jobs_active_fingerprint_uidx/);
+    expect(sql).toMatch(/awaiting_approval'\s*,\s*'approved'\s*,\s*'claimed'\s*,\s*'running'\s*,\s*'succeeded'/);
+  });
+
+
 
   it('re-quotes after a rejection, a failure or an expiry — but never after success', async () => {
     const db = makeDb();
@@ -778,13 +817,18 @@ describe('Jeremy launch readiness and PAUSED publication', () => {
     const executor = {
       publish: vi.fn(async () => ({
         success: true,
-        launch: { meta_campaign_id: 'c1', meta_adset_id: 'a1', meta_ad_id: 'ad1' },
+        read_back: {
+          campaign: { id: 'c1', status: 'PAUSED' },
+          adset: { id: 'a1', status: 'PAUSED' },
+          ad: { id: 'ad1', status: 'PAUSED' },
+        },
         statuses: { campaign: 'PAUSED', adset: 'PAUSED', ad: 'PAUSED' },
       })),
     };
     const res = await publishLaunch(db, paidPolicy(), executor, { clientId: CLIENT, jobId, launchId: 'launch-1', actor: 'operator:zac' });
     expect(res.success).toBe(true);
     expect(executor.publish).toHaveBeenCalledWith('launch-1');
+    expect(res.meta_ids).toEqual({ campaign: 'c1', adset: 'a1', ad: 'ad1' });
     expect(Object.values(res.statuses ?? {}).every((s) => s === 'PAUSED')).toBe(true);
     expect(db._tables.jeremy_external_jobs[0].verification.all_paused).toBe(true);
     // Idempotent: a second publish loses the claim and never calls Meta again.
@@ -797,12 +841,65 @@ describe('Jeremy launch readiness and PAUSED publication', () => {
     const db = makeDb({ meta_campaign_launches: [launchRow()] });
     const jobId = await approvedPublishJob(db);
     const executor = {
-      publish: vi.fn(async () => ({ success: true, launch: { meta_campaign_id: 'c1' }, statuses: { campaign: 'ACTIVE', adset: 'PAUSED', ad: 'PAUSED' } })),
+      publish: vi.fn(async () => ({
+        success: true,
+        read_back: {
+          campaign: { id: 'c1', status: 'ACTIVE' },
+          adset: { id: 'a1', status: 'PAUSED' },
+          ad: { id: 'ad1', status: 'PAUSED' },
+        },
+      })),
     };
     const res = await publishLaunch(db, paidPolicy(), executor, { clientId: CLIENT, jobId, launchId: 'launch-1', actor: 'operator:zac' });
     expect(res.success).toBe(false);
-    expect(res.reason).toMatch(/non-PAUSED/i);
+    expect(res.reason).toMatch(/not PAUSED/i);
     expect(db._tables.jeremy_external_jobs[0].status).toBe('verification_failed');
+  });
+
+  it('fails verification when the launch path returns no statuses at all', async () => {
+    const db = makeDb({ meta_campaign_launches: [launchRow()] });
+    const jobId = await approvedPublishJob(db);
+    const executor = { publish: vi.fn(async () => ({ success: true, campaignId: 'c1', adsetId: 'a1', adId: 'ad1' })) };
+    const res = await publishLaunch(db, paidPolicy(), executor, { clientId: CLIENT, jobId, launchId: 'launch-1', actor: 'operator:zac' });
+    expect(res.success).toBe(false);
+    expect(res.reason).toMatch(/no authoritative read-back status/i);
+    expect(db._tables.jeremy_external_jobs[0].status).toBe('verification_failed');
+  });
+
+  it('fails verification when a Meta object id is missing', async () => {
+    const db = makeDb({ meta_campaign_launches: [launchRow()] });
+    const jobId = await approvedPublishJob(db);
+    const executor = {
+      publish: vi.fn(async () => ({
+        success: true,
+        read_back: { campaign: { id: 'c1', status: 'PAUSED' }, adset: { status: 'PAUSED' }, ad: { id: 'ad1', status: 'PAUSED' } },
+      })),
+    };
+    const res = await publishLaunch(db, paidPolicy(), executor, { clientId: CLIENT, jobId, launchId: 'launch-1', actor: 'operator:zac' });
+    expect(res.success).toBe(false);
+    expect(res.reason).toMatch(/no Meta object id/i);
+  });
+
+  it('never fabricates statuses in the verification helper', () => {
+    expect(verifyPublishReadBack({}).ok).toBe(false);
+    expect(verifyPublishReadBack(null).ok).toBe(false);
+    // No fabricated PAUSED defaults anywhere in the launch verification path.
+    expect(readFileSync('supabase/functions/_shared/jeremyLaunch.ts', 'utf8')).not.toMatch(/\?\?\s*\{[^}]*PAUSED/);
+
+  });
+
+  it('createLaunchBatch is idempotent and never creates a duplicate draft', async () => {
+    const db = makeDb({
+      jeremy_creative_candidates: [generatedCandidate()],
+      clients: [{ id: CLIENT, website_url: 'https://client.example/apply', meta_pixel_id: '987654321', meta_ad_account_id: 'act_1' }],
+      client_settings: [{ client_id: CLIENT, ads_library_page_id: '123456789' }],
+      meta_campaign_launches: [],
+    });
+    const first = await createLaunchBatch(db, CLIENT, ['cand-1'], fullInputs);
+    const second = await createLaunchBatch(db, CLIENT, ['cand-1'], fullInputs);
+    expect(db._tables.meta_campaign_launches.length).toBe(1);
+    expect(second.items[0].launch_id).toBe(first.items[0].launch_id);
+    expect(second.items[0].reused).toBe(true);
   });
 
   it('refuses an incomplete launch record even with an approved job', async () => {
@@ -813,6 +910,7 @@ describe('Jeremy launch readiness and PAUSED publication', () => {
     expect(res.success).toBe(false);
     expect(executor.publish).not.toHaveBeenCalled();
   });
+
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
