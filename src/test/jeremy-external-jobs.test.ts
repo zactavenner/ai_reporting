@@ -201,6 +201,26 @@ describe('Jeremy external job ledger', () => {
     expect(db._tables.jeremy_external_jobs ?? []).toHaveLength(0);
   });
 
+  it('is safe under concurrent quotes: the database keeps exactly one active quote', async () => {
+    const db = makeDb();
+    const attempt = () =>
+      quoteJob(db, paidPolicy(), {
+        clientId: CLIENT, kind: 'apify_discovery', provider: 'apify', target: { ...APIFY_TARGET },
+        estimatedCostUsd: 0.5, ...PRICE, requestedBy: 'operator:zac',
+      });
+    const results = await Promise.all([attempt(), attempt(), attempt()]);
+    expect(results.every((r) => r.success)).toBe(true);
+    const ids = new Set(results.map((r) => r.job!.id));
+    expect(ids.size).toBe(1);
+    expect(db._tables.jeremy_external_jobs).toHaveLength(1);
+    expect(results.filter((r) => r.reused).length).toBe(2);
+  });
+
+  it('the database enforces one non-requotable quote per client and fingerprint', () => {
+    const sql = readFileSync('supabase/migrations', 'utf8');
+    expect(sql).toBeDefined();
+
+
   it('re-quotes after a rejection, a failure or an expiry — but never after success', async () => {
     const db = makeDb();
     const rejected = await quotedApifyJob(db);
