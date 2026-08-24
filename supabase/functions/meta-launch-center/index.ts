@@ -256,12 +256,32 @@ Deno.serve(async (req) => {
       await save({ meta_ad_id: adId, stage: "ad" });
     }
 
+    // Authoritative verification: read every created object back from Meta.
+    const verified = await readBackHierarchy({ campaign: campaignId, adset: adsetId, ad: adId }, token);
+    const notPaused = Object.entries(verified.statuses).filter(([, v]) => String(v).toUpperCase() !== "PAUSED");
+
     await save({
-      status: "published",
-      stage: "done",
-      published_at: new Date().toISOString(),
-      error_detail: null,
+      status: notPaused.length ? "failed" : "published",
+      stage: notPaused.length ? "verification" : "done",
+      published_at: notPaused.length ? null : new Date().toISOString(),
+      error_detail: notPaused.length
+        ? { message: `Non-PAUSED object(s): ${notPaused.map(([k, v]) => `${k}=${v}`).join(", ")}`, at: new Date().toISOString() }
+        : null,
     });
+
+    if (notPaused.length) {
+      return json({
+        success: false,
+        graphVersion: META_VERSION,
+        launchId,
+        campaignId,
+        adsetId,
+        creativeId: creativeMetaId,
+        adId,
+        ...verified,
+        error: `Meta read-back shows a non-PAUSED object: ${notPaused.map(([k, v]) => `${k}=${v}`).join(", ")}`,
+      }, 409);
+    }
 
     if (launch.creative_id) {
       await supabase.from("creatives").update({ status: "launched" }).eq("id", launch.creative_id);
@@ -271,12 +291,15 @@ Deno.serve(async (req) => {
       success: true,
       graphVersion: META_VERSION,
       launchId,
+      alreadyPublished,
       campaignId,
       adsetId,
       creativeId: creativeMetaId,
       adId,
-      message: "Campaign, ad set, creative and ad created in PAUSED state",
+      ...verified,
+      message: "Campaign, ad set, creative and ad exist in Meta and every object read back as PAUSED",
     });
+
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("meta-launch-center failed:", message);
