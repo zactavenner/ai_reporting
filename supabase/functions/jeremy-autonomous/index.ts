@@ -45,6 +45,7 @@ import {
 import {
   generationTarget,
   jobKindFor,
+  loadModelRate,
   pickGenerationModel,
   quoteGenerationCostUsd,
   runGenerationJob,

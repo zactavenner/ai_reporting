@@ -43,6 +43,7 @@ import {
 import {
   generationTarget,
   jobKindFor,
+  loadModelRate,
   pickGenerationModel,
   quoteGenerationCostUsd,
   DEFAULT_IMAGE_MODEL,
