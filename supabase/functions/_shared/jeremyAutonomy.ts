@@ -992,9 +992,13 @@ export async function executeApprovedAction(
     }
 
     // ── 9. Execution ledger: unique idempotency key, atomic claim ───────────
+    // Live runs take the ONE stable claim key for this plan+payload. Dry runs
+    // take a namespaced unique key so they never consume it.
     const payload: Record<string, unknown> = action === "pause" ? { status: "PAUSED" } : { daily_budget_usd: approvedBudgetUsd };
-    const key = `${input.planId}:${idempotencyKey(input.clientId, metaEntityId, action, payload)}`;
-    const dryRun = input.dryRun ?? true;
+    const key = dryRun
+      ? dryRunIdempotencyKey(input.planId, input.clientId, metaEntityId, action, payload)
+      : liveIdempotencyKey(input.planId, input.clientId, metaEntityId, action, payload);
+
 
     const { data: claim, error: claimErr } = await db
       .from("jeremy_action_executions")
