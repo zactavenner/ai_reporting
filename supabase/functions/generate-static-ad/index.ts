@@ -318,14 +318,23 @@ serve(async (req) => {
       await addImageToContent(imageUrl, 'ad asset image');
     }
 
-    // Call Lovable AI Gateway with image generation model
-    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify((() => {
+    // Exact-model path (Jeremy / any approved automated caller): the requested
+    // model must be an active configured model and is invoked verbatim.
+    let exactModel: string | null = null;
+    if (String(body.exactModel ?? '').trim()) {
+      try {
+        exactModel = await resolveExactModel(getProductionSupabase(), 'static_image', body.exactModel);
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
+    const requestBodyForProvider = exactModel
+      ? buildExactImageRequest({ exactModel, contentParts })
+      : (() => {
         const requested = (body.imageModel || '').trim();
         const MODEL_ALIASES: Record<string, string> = {
           'gpt-image-2': 'openai/gpt-image-2',
@@ -340,18 +349,23 @@ serve(async (req) => {
           : ['openai/gpt-image-2'];
         console.log('[generate-static-ad] image model →', chosen, 'requested:', requested);
         return {
-        model: chosen,
-        models: [chosen, ...fallbacks],
-        messages: [
-          {
-            role: 'user',
-            content: contentParts,
-          },
-        ],
-        modalities: ['image', 'text'],
+          model: chosen,
+          models: [chosen, ...fallbacks],
+          messages: [{ role: 'user', content: contentParts }],
+          modalities: ['image', 'text'],
         };
-      })()),
+      })();
+
+    // Call Lovable AI Gateway with image generation model
+    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBodyForProvider),
     });
+
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
