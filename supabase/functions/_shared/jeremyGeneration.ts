@@ -426,8 +426,13 @@ export function generationTarget(input: {
   };
 }
 
-export function pickGenerationModel(kind: GenerationKind, requested?: unknown): string {
-  const model = String(requested ?? "");
-  if (kind === "static_image") return IMAGE_MODEL_COSTS_USD[model] ? model : DEFAULT_IMAGE_MODEL;
-  return VIDEO_MODEL_COSTS_USD_PER_SECOND[model] ? model : DEFAULT_VIDEO_MODEL;
+/** Only a model with a configured, active price may be selected. */
+export async function pickGenerationModel(db: Db, kind: GenerationKind, requested?: unknown): Promise<string | null> {
+  const rates = await loadModelRates(db, kind);
+  if (!rates.length) return null;
+  const wanted = String(requested ?? "");
+  if (rates.some((r) => r.model === wanted)) return wanted;
+  const fallback = kind === "static_image" ? DEFAULT_IMAGE_MODEL : DEFAULT_VIDEO_MODEL;
+  return rates.some((r) => r.model === fallback) ? fallback : rates[0].model;
 }
+
