@@ -751,7 +751,7 @@ describe('Jeremy launch readiness and PAUSED publication', () => {
   async function approvedPublishJob(db: any) {
     const q = await quoteJob(db, paidPolicy(), {
       clientId: CLIENT, kind: 'meta_publish', provider: 'meta', target: publishTarget('launch-1'),
-      estimatedCostUsd: 0, launchId: 'launch-1', requestedBy: 'operator:zac',
+      estimatedCostUsd: 0, costSource: 'meta_publish_no_media_spend', costVersion: '1', launchId: 'launch-1', requestedBy: 'operator:zac',
     });
     await approveJob(db, q.job!.id, 'operator:zac');
     return q.job!.id;
@@ -761,7 +761,7 @@ describe('Jeremy launch readiness and PAUSED publication', () => {
     const db = makeDb({ meta_campaign_launches: [launchRow()] });
     const q = await quoteJob(db, paidPolicy(), {
       clientId: CLIENT, kind: 'meta_publish', provider: 'meta', target: publishTarget('launch-1'),
-      estimatedCostUsd: 0, launchId: 'launch-1', requestedBy: 'operator:zac',
+      estimatedCostUsd: 0, costSource: 'meta_publish_no_media_spend', costVersion: '1', launchId: 'launch-1', requestedBy: 'operator:zac',
     });
     const executor = { publish: vi.fn() };
     const res = await publishLaunch(db, paidPolicy(), executor, { clientId: CLIENT, jobId: q.job!.id, launchId: 'launch-1', actor: 'operator:zac' });
