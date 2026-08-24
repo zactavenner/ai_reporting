@@ -230,6 +230,75 @@ export interface PublishResult {
   gates?: Array<{ gate: string; allowed: boolean; reason: string }>;
 }
 
+export interface ReadBackVerification {
+  ok: boolean;
+  reason: string;
+  meta_ids: { campaign: string | null; adset: string | null; ad: string | null };
+  statuses: Record<string, string>;
+}
+
+const OBJECT_KEYS = ["campaign", "adset", "ad"] as const;
+
+const nonEmpty = (v: unknown): string | null => {
+  const s = typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
+  return s.length ? s : null;
+};
+
+/**
+ * Fail-closed verification of a publication response.
+ *
+ * There is NO default status: a publication counts as verified only when the
+ * launch center returned, for each of campaign/adset/ad, a concrete Meta object
+ * id AND an authoritative read-back status, and every one of those statuses is
+ * PAUSED. A missing id, a missing status, an unreadable object or any other
+ * status (ACTIVE included) is a verification failure.
+ */
+export function verifyPublishReadBack(response: Record<string, unknown> | null | undefined): ReadBackVerification {
+  const res = (response ?? {}) as Record<string, unknown>;
+  const readBack = (res.read_back ?? res.readBack ?? {}) as Record<string, unknown>;
+  const flatStatuses = (res.statuses ?? {}) as Record<string, unknown>;
+
+  const metaIds: ReadBackVerification["meta_ids"] = { campaign: null, adset: null, ad: null };
+  const statuses: Record<string, string> = {};
+  const problems: string[] = [];
+
+  for (const key of OBJECT_KEYS) {
+    const entry = (readBack[key] ?? {}) as Record<string, unknown>;
+    const camel = key === "adset" ? "adsetId" : `${key}Id`;
+    const id = nonEmpty(entry.id) ?? nonEmpty(res[camel]) ?? nonEmpty(res[`meta_${key}_id`]);
+    const status = nonEmpty(entry.status) ?? nonEmpty(flatStatuses[key]);
+    metaIds[key] = id;
+    if (!id) {
+      problems.push(`${key}: no Meta object id was returned`);
+      continue;
+    }
+    if (!status) {
+      problems.push(`${key}: no authoritative read-back status was returned`);
+      continue;
+    }
+    statuses[key] = status;
+    if (status.toUpperCase() !== "PAUSED") {
+      problems.push(`${key}=${status} is not PAUSED`);
+    }
+  }
+
+  if (problems.length) {
+    return {
+      ok: false,
+      reason: `Publication could not be verified as PAUSED (${problems.join("; ")}); refusing to record it as succeeded.`,
+      meta_ids: metaIds,
+      statuses,
+    };
+  }
+  return {
+    ok: true,
+    reason: "Campaign, ad set and ad all exist in Meta and every read-back status is PAUSED.",
+    meta_ids: metaIds,
+    statuses,
+  };
+}
+
+
 /**
  * Publishes ONE approved launch as PAUSED Meta objects through the existing
  * launch center. Idempotent: an already published launch is read back rather
