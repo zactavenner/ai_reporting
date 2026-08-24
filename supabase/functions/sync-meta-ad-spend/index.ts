@@ -224,20 +224,28 @@ async function gwFetch(path: string, init: RequestInit & { qs?: Record<string, s
   throw new Error('sheets: exhausted retries');
 }
 
+// Cache of the "FB Spend" tab gid per spreadsheet (needed to delete rows).
+const tabGidCache = new Map<string, number>();
+
 async function ensureTab(spreadsheetId: string) {
   const meta = await gwFetch(`/spreadsheets/${spreadsheetId}`);
-  const has = (meta.sheets ?? []).some((s: any) => s.properties?.title === SHEET_TAB);
-  if (!has) {
-    await gwFetch(`/spreadsheets/${spreadsheetId}:batchUpdate`, {
+  const tab = (meta.sheets ?? []).find((s: any) => s.properties?.title === SHEET_TAB);
+  if (!tab) {
+    const created = await gwFetch(`/spreadsheets/${spreadsheetId}:batchUpdate`, {
       method: 'POST',
       body: JSON.stringify({ requests: [{ addSheet: { properties: { title: SHEET_TAB } } }] }),
     });
+    const gid = created?.replies?.[0]?.addSheet?.properties?.sheetId;
+    if (typeof gid === 'number') tabGidCache.set(spreadsheetId, gid);
     await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:${LAST_COL}1`, {
       method: 'PUT',
       qs: { valueInputOption: 'RAW' },
       body: JSON.stringify({ values: [HEADER] }),
     });
     return;
+  }
+  if (typeof tab.properties?.sheetId === 'number') {
+    tabGidCache.set(spreadsheetId, tab.properties.sheetId);
   }
   // ensure header
   const cur = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A1:${LAST_COL}1`);
@@ -253,23 +261,67 @@ async function ensureTab(spreadsheetId: string) {
 
 type SheetIndex = { rowIndexByKey: Map<string, number>; nextRow: number };
 
+const rowKey = (r: any[]) => `${r?.[0] ?? ''}|${r?.[12] ?? ''}|${r?.[13] ?? ''}`;
+
+// Removes pre-existing duplicate rows for the same date+campaign+account,
+// keeping the most recent (last) occurrence. Deletions run bottom-up so the
+// row numbers of the pending deletes stay valid.
+async function dedupeSheetRows(spreadsheetId: string, values: any[][]): Promise<any[][]> {
+  const gid = tabGidCache.get(spreadsheetId);
+  const lastByKey = new Map<string, number>();
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
+    if (!r || !r[0]) continue;
+    lastByKey.set(rowKey(r), i);
+  }
+  const dupIdx: number[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
+    if (!r || !r[0]) continue;
+    if (lastByKey.get(rowKey(r)) !== i) dupIdx.push(i);
+  }
+  if (!dupIdx.length) return values;
+  if (typeof gid !== 'number') {
+    console.warn(`dedupe skipped for ${spreadsheetId}: tab gid unknown`);
+    return values;
+  }
+  const requests = dupIdx
+    .slice()
+    .sort((a, b) => b - a)
+    .map((i) => ({
+      deleteDimension: {
+        range: { sheetId: gid, dimension: 'ROWS', startIndex: i + 1, endIndex: i + 2 },
+      },
+    }));
+  for (let i = 0; i < requests.length; i += 200) {
+    await gwFetch(`/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ requests: requests.slice(i, i + 200) }),
+    });
+  }
+  console.log(`dedupe: removed ${dupIdx.length} duplicate FB Spend rows from ${spreadsheetId}`);
+  const drop = new Set(dupIdx);
+  return values.filter((_, i) => !drop.has(i));
+}
+
 // One read per spreadsheet per run instead of one read per client/date —
 // the repeated A2:N reads were what tripped the Sheets read quota (429).
 async function loadSheetIndex(spreadsheetId: string, cache: Map<string, SheetIndex>): Promise<SheetIndex> {
   const hit = cache.get(spreadsheetId);
   if (hit) return hit;
   const existing = await gwFetch(`/spreadsheets/${spreadsheetId}/values/${SHEET_TAB}!A2:N`);
+  // Collapse any historical duplicates first so the index below is 1:1.
+  const values = await dedupeSheetRows(spreadsheetId, existing.values ?? []);
   const rowIndexByKey = new Map<string, number>(); // 1-based row number
-  const values = existing.values ?? [];
   for (let i = 0; i < values.length; i++) {
-    const r = values[i];
     // columns: A=date(0) ... M=campaign_id(12) N=account_id(13)
-    rowIndexByKey.set(`${r[0]}|${r[12] ?? ''}|${r[13] ?? ''}`, i + 2);
+    rowIndexByKey.set(rowKey(values[i]), i + 2);
   }
   const idx: SheetIndex = { rowIndexByKey, nextRow: values.length + 2 };
   cache.set(spreadsheetId, idx);
   return idx;
 }
+
 
 async function mirrorToSheet(
   spreadsheetId: string,
