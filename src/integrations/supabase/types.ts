@@ -14103,9 +14103,11 @@ export type Database = {
           error_detail: string | null
           executed_at: string | null
           executed_by: string | null
+          gate_evidence: Json | null
           id: string
           idempotency_key: string
           meta_entity_id: string
+          plan_id: string | null
           provider_receipt: Json | null
           recommendation_id: string | null
           requested_change: Json
@@ -14127,9 +14129,11 @@ export type Database = {
           error_detail?: string | null
           executed_at?: string | null
           executed_by?: string | null
+          gate_evidence?: Json | null
           id?: string
           idempotency_key: string
           meta_entity_id: string
+          plan_id?: string | null
           provider_receipt?: Json | null
           recommendation_id?: string | null
           requested_change?: Json
@@ -14151,9 +14155,11 @@ export type Database = {
           error_detail?: string | null
           executed_at?: string | null
           executed_by?: string | null
+          gate_evidence?: Json | null
           id?: string
           idempotency_key?: string
           meta_entity_id?: string
+          plan_id?: string | null
           provider_receipt?: Json | null
           recommendation_id?: string | null
           requested_change?: Json
@@ -14199,10 +14205,151 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "jeremy_action_executions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "jeremy_action_plans"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "jeremy_action_executions_recommendation_id_fkey"
             columns: ["recommendation_id"]
             isOneToOne: false
             referencedRelation: "meta_ad_recommendations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jeremy_action_plans: {
+        Row: {
+          action: string
+          approved_at: string | null
+          approved_by: string | null
+          basis: string
+          claimed_at: string | null
+          client_id: string
+          created_at: string
+          current_daily_budget: number | null
+          cycle_id: string | null
+          entity_name: string | null
+          entity_type: string
+          evidence: Json
+          executable: boolean
+          executed_at: string | null
+          execution_id: string | null
+          expires_at: string
+          gates: Json
+          id: string
+          kpi_snapshot_id: string | null
+          meta_entity_id: string
+          payload_fingerprint: string
+          proposed_daily_budget: number | null
+          reason: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          approved_at?: string | null
+          approved_by?: string | null
+          basis?: string
+          claimed_at?: string | null
+          client_id: string
+          created_at?: string
+          current_daily_budget?: number | null
+          cycle_id?: string | null
+          entity_name?: string | null
+          entity_type: string
+          evidence?: Json
+          executable?: boolean
+          executed_at?: string | null
+          execution_id?: string | null
+          expires_at?: string
+          gates?: Json
+          id?: string
+          kpi_snapshot_id?: string | null
+          meta_entity_id: string
+          payload_fingerprint: string
+          proposed_daily_budget?: number | null
+          reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          basis?: string
+          claimed_at?: string | null
+          client_id?: string
+          created_at?: string
+          current_daily_budget?: number | null
+          cycle_id?: string | null
+          entity_name?: string | null
+          entity_type?: string
+          evidence?: Json
+          executable?: boolean
+          executed_at?: string | null
+          execution_id?: string | null
+          expires_at?: string
+          gates?: Json
+          id?: string
+          kpi_snapshot_id?: string | null
+          meta_entity_id?: string
+          payload_fingerprint?: string
+          proposed_daily_budget?: number | null
+          reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jeremy_action_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_plans_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "jeremy_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_plans_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "jeremy_action_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jeremy_action_plans_kpi_snapshot_id_fkey"
+            columns: ["kpi_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "jeremy_kpi_snapshots"
             referencedColumns: ["id"]
           },
         ]
