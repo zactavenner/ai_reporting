@@ -159,7 +159,9 @@ export function buildLaunchRecord(
 export interface LaunchBatchItem extends LaunchReadiness {
   launch_id: string | null;
   status: string | null;
+  reused?: boolean;
 }
+
 
 /**
  * Creates COMPLETE validated PAUSED drafts. Candidates that are not ready are
