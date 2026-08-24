@@ -940,12 +940,13 @@ export async function executeApprovedAction(
       return blocked(sample.reason, gates, input.planId);
     }
 
-    // ── 7. Cooldown, from the persisted execution ledger ────────────────────
+    // ── 7. Cooldown, from the persisted execution ledger (live rows only) ────
     const { data: lastAction } = await db
       .from("jeremy_action_executions")
       .select("executed_at, created_at")
       .eq("client_id", input.clientId)
       .eq("meta_entity_id", metaEntityId)
+      .eq("dry_run", false)
       .not("status", "eq", "blocked")
       .order("created_at", { ascending: false })
       .limit(1)
