@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 
 export function useApifySettings() {
   return useQuery({
@@ -55,7 +56,9 @@ export function useSaveApifySettings() {
 export function useTestApifyConnection() {
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('test-apify-connection');
+      const { data, error } = await supabase.functions.invoke('test-apify-connection', {
+        headers: dashboardAuthHeaders(),
+      });
       if (error) throw error;
       return data as { success: boolean; username?: string; plan?: string; error?: string };
     },
@@ -82,35 +85,76 @@ export function useInstagramScrapeJobs() {
   });
 }
 
+/**
+ * Paid Apify discovery is a two-step, server-enforced flow: the run is QUOTED
+ * (exact target count, result limit and maximum cost, spends nothing), then the
+ * operator's click approves that persisted quote and the server runs it inside
+ * both the Jeremy policy caps and the Apify monthly spend limit.
+ */
+export function useQuoteInstagramScrape() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      clientId: string;
+      scrapeType: 'profile' | 'hashtag' | 'url';
+      targets: string[];
+      resultsLimit: number;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('run-instagram-scrape', {
+        body: {
+          mode: 'quote',
+          client_id: params.clientId,
+          scrapeType: params.scrapeType,
+          targets: params.targets,
+          resultsLimit: params.resultsLimit,
+        },
+        headers: dashboardAuthHeaders(),
+      });
+      if (error) throw error;
+      if (data?.success === false) throw new Error(data.error);
+      return data as {
+        job: { id: string; status: string; estimated_cost_usd: number; quote: Record<string, unknown> };
+        policy_gate?: { allowed: boolean; reason: string };
+        apify_gate?: { allowed: boolean; reason: string };
+      };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['instagram-scrape-jobs'] }),
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
 export function useRunInstagramScrape() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (params: {
+      clientId: string;
+      jobId: string;
       scrapeType: 'profile' | 'hashtag' | 'url';
       targets: string[];
       resultsLimit: number;
-      idempotencyKey: string;
     }) => {
       const { data, error } = await supabase.functions.invoke('run-instagram-scrape', {
-        body: params,
+        body: {
+          mode: 'approve_and_run',
+          client_id: params.clientId,
+          job_id: params.jobId,
+          scrapeType: params.scrapeType,
+          targets: params.targets,
+          resultsLimit: params.resultsLimit,
+        },
+        headers: dashboardAuthHeaders(),
       });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data as { jobId: string; status: string; resultsCount: number; costUsd?: number; deduplicated?: boolean };
+      if (data?.success === false) throw new Error(data.error);
+      return data as { jobId: string; status: string; resultsCount: number; duplicates?: number; costUsd?: number };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['instagram-scrape-jobs'] });
       qc.invalidateQueries({ queryKey: ['instagram-creatives'] });
       qc.invalidateQueries({ queryKey: ['apify-settings'] });
-      if (data.deduplicated) {
-        toast.info('This scrape was already run');
-      } else {
-        toast.success(`Scrape ${data.status}: ${data.resultsCount} results`);
-      }
+      toast.success(`Scrape ${data.status}: ${data.resultsCount} new posts ($${(data.costUsd ?? 0).toFixed(2)})`);
     },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
+    onError: (err: Error) => toast.error(err.message),
   });
 }
 

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApiRateLimiter } from './useApiRateLimiter';
+import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 
 interface GenerationResult {
   status: 'processing' | 'completed' | 'failed';
@@ -79,6 +80,7 @@ export function useImageToVideoGeneration() {
       console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
 
       const { data, error } = await supabase.functions.invoke('generate-video-from-image', {
+        headers: dashboardAuthHeaders(),
         body: {
           prompt,
           imageUrl,

@@ -7,12 +7,18 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Search, Hash, Link, Play } from 'lucide-react';
-import { useRunInstagramScrape } from '@/hooks/useInstagramScraper';
+import { useQuoteInstagramScrape, useRunInstagramScrape } from '@/hooks/useInstagramScraper';
+import { useClients } from '@/hooks/useClients';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function InstagramScrapeForm() {
   const [scrapeType, setScrapeType] = useState<'profile' | 'hashtag' | 'url'>('profile');
   const [targets, setTargets] = useState('');
   const [resultsLimit, setResultsLimit] = useState(50);
+  const [clientId, setClientId] = useState('');
+  const [quote, setQuote] = useState<{ id: string; estimated_cost_usd: number } | null>(null);
+  const { data: clients } = useClients();
+  const quoteScrape = useQuoteInstagramScrape();
   const runScrape = useRunInstagramScrape();
 
   const targetList = targets
@@ -20,17 +26,16 @@ export function InstagramScrapeForm() {
     .map(t => t.trim())
     .filter(Boolean);
 
-  const estimatedCost = (targetList.length * resultsLimit * 0.002).toFixed(2);
+  const handleQuote = async () => {
+    if (!clientId || targetList.length === 0) return;
+    const result = await quoteScrape.mutateAsync({ clientId, scrapeType, targets: targetList, resultsLimit });
+    setQuote({ id: result.job.id, estimated_cost_usd: Number(result.job.estimated_cost_usd) });
+  };
 
   const handleRun = () => {
-    if (targetList.length === 0) return;
-    const idempotencyKey = `${scrapeType}-${targetList.sort().join(',')}-${resultsLimit}-${Date.now()}`;
-    runScrape.mutate({
-      scrapeType,
-      targets: targetList,
-      resultsLimit,
-      idempotencyKey,
-    });
+    if (!quote || !clientId) return;
+    runScrape.mutate({ clientId, jobId: quote.id, scrapeType, targets: targetList, resultsLimit });
+    setQuote(null);
   };
 
   return (
@@ -39,6 +44,18 @@ export function InstagramScrapeForm() {
         <CardTitle className="text-base">New Scrape</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>Client (discovery spend is attributed to this client)</Label>
+          <Select value={clientId} onValueChange={(v) => { setClientId(v); setQuote(null); }}>
+            <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
+            <SelectContent>
+              {(clients ?? []).map((c: any) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <Tabs value={scrapeType} onValueChange={(v) => setScrapeType(v as any)}>
           <TabsList className="w-full">
             <TabsTrigger value="profile" className="flex-1 gap-1">
@@ -88,22 +105,39 @@ export function InstagramScrapeForm() {
           />
         </div>
 
-        <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 text-sm">
-          <span className="text-muted-foreground">Est. cost</span>
-          <Badge variant="outline">~${estimatedCost}</Badge>
-        </div>
-
-        <Button
-          onClick={handleRun}
-          disabled={runScrape.isPending || targetList.length === 0 || targetList.length > 20}
-          className="w-full"
-        >
-          {runScrape.isPending ? (
-            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Running...</>
-          ) : (
-            <><Play className="h-4 w-4 mr-2" /> Run Scrape</>
-          )}
-        </Button>
+        {quote ? (
+          <div className="space-y-2 p-3 rounded-lg border bg-muted/50 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Exact maximum cost</span>
+              <Badge variant="outline">${quote.estimated_cost_usd.toFixed(2)}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {targetList.length} target(s) × {resultsLimit} results. Approving runs the scrape and spends up to this amount.
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={handleRun} disabled={runScrape.isPending} className="flex-1">
+                {runScrape.isPending ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Running...</>
+                ) : (
+                  <><Play className="h-4 w-4 mr-2" /> Approve & run</>
+                )}
+              </Button>
+              <Button variant="ghost" onClick={() => setQuote(null)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            onClick={handleQuote}
+            disabled={quoteScrape.isPending || !clientId || targetList.length === 0 || targetList.length > 20}
+            className="w-full"
+          >
+            {quoteScrape.isPending ? (
+              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Quoting...</>
+            ) : (
+              <><Play className="h-4 w-4 mr-2" /> Get exact quote</>
+            )}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

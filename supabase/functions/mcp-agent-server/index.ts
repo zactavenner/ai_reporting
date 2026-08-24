@@ -15,7 +15,32 @@ import {
   rankCandidates,
   runCycle,
   dryRunProvider,
+  launchReadiness,
 } from '../_shared/jeremyAutonomy.ts';
+import {
+  quoteJob,
+  approveJob,
+  authorizeJobExecution,
+  getJob,
+  listJobs,
+  costPosture,
+} from '../_shared/jeremyExternalJobs.ts';
+import {
+  generationTarget,
+  jobKindFor,
+  pickGenerationModel,
+  quoteGenerationCostUsd,
+  runGenerationJob,
+} from '../_shared/jeremyGeneration.ts';
+import { publishTarget } from '../_shared/jeremyLaunch.ts';
+import { makeGenerationExecutors } from '../_shared/jeremyExecutors.ts';
+import {
+  normalizeDiscoveryTarget,
+  resolveApifySettings,
+  costPerResultUsd,
+  estimateApifyCostUsd,
+  checkApifyMonthlyLimit,
+} from '../_shared/jeremyApify.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -661,8 +686,81 @@ const TOOLS = [
   },
   {
     name: 'jeremy_get_cycle',
-    description: 'Return a cycle with its stage timestamps, evidence, candidates and execution audit trail.',
+    description: 'Return a cycle with its stage timestamps, evidence, candidates, external jobs and execution audit trail.',
     inputSchema: { type: 'object', properties: { cycle_id: { type: 'string' } }, required: ['cycle_id'] },
+  },
+  {
+    name: 'jeremy_quote_apify_discovery',
+    description: 'Quote a paid Apify Instagram discovery run. Returns an awaiting_approval external job with the exact target count, result limit and MAXIMUM cost. Spends nothing and cannot approve itself.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        scrape_type: { type: 'string', enum: ['profile', 'hashtag', 'url'] },
+        targets: { type: 'array', items: { type: 'string' } },
+        results_limit: { type: 'number', description: 'Results per target (bounded server-side).' },
+        cycle_id: { type: 'string' },
+      },
+      required: ['client_id', 'scrape_type', 'targets', 'results_limit'],
+    },
+  },
+  {
+    name: 'jeremy_quote_generation',
+    description: 'Quote a paid image or video generation for a persisted candidate. Returns an awaiting_approval external job with the exact model and MAXIMUM cost. Spends nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string' },
+        candidate_id: { type: 'string' },
+        kind: { type: 'string', enum: ['static_image', 'video'] },
+        model: { type: 'string' },
+        aspect_ratio: { type: 'string' },
+        duration_seconds: { type: 'number' },
+        cycle_id: { type: 'string' },
+      },
+      required: ['client_id', 'candidate_id'],
+    },
+  },
+  {
+    name: 'jeremy_quote_paused_publication',
+    description: 'Quote creating PAUSED Meta objects (campaign + ad set + ad) for a complete launch draft. Returns an awaiting_approval external job; nothing is created and nothing is ever activated.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' }, launch_id: { type: 'string' } },
+      required: ['client_id', 'launch_id'],
+    },
+  },
+  {
+    name: 'jeremy_run_external_job',
+    description: 'Run an external job (Apify discovery, generation, or PAUSED publication). Refused unless an authenticated OPERATOR approval record already exists on the job — MCP never self-approves, so an unapproved job returns the exact blocking gate instead of spending.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' }, job_id: { type: 'string' }, confirm: { type: 'boolean' } },
+      required: ['client_id', 'job_id', 'confirm'],
+    },
+  },
+  {
+    name: 'jeremy_get_external_job',
+    description: 'Return one external job: status, exact target/model, quoted maximum cost, actual cost, approval actor/time, provider job id, verification read-back and any error.',
+    inputSchema: { type: 'object', properties: { client_id: { type: 'string' }, job_id: { type: 'string' } }, required: ['client_id', 'job_id'] },
+  },
+  {
+    name: 'jeremy_list_external_jobs',
+    description: 'List external jobs for a client with cost caps and month-to-date paid usage for discovery and generation.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' }, kind: { type: 'string' }, status: { type: 'string' }, cycle_id: { type: 'string' }, limit: { type: 'number' } },
+      required: ['client_id'],
+    },
+  },
+  {
+    name: 'jeremy_launch_readiness',
+    description: 'Return the exact launch readiness list for candidates: every missing creative URL, page id, pixel, destination, targeting or compliance value. Nothing is defaulted.',
+    inputSchema: {
+      type: 'object',
+      properties: { client_id: { type: 'string' }, candidate_ids: { type: 'array', items: { type: 'string' } }, inputs: { type: 'object' } },
+      required: ['client_id', 'candidate_ids'],
+    },
   },
 ];
 
@@ -1005,6 +1103,157 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
     case 'jeremy_get_cycle': {
       if (!args.cycle_id) return { error: 'cycle_id required' };
       return await getCycle(prodDb, args.cycle_id);
+    }
+
+    // ===== Jeremy external jobs: quote / status / approved-only execution =====
+    case 'jeremy_quote_apify_discovery': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const normalized = normalizeDiscoveryTarget({
+        scrapeType: args.scrape_type,
+        targets: args.targets,
+        resultsLimit: args.results_limit,
+      });
+      if (!normalized.ok) return { error: normalized.error };
+      const settings = await resolveApifySettings(prodDb, args.client_id);
+      const unit = costPerResultUsd(settings);
+      const estimated = estimateApifyCostUsd(normalized.target, unit);
+      const apifyGate = checkApifyMonthlyLimit(settings, estimated);
+      const quote = await quoteJob(prodDb, policy, {
+        clientId: args.client_id,
+        kind: 'apify_discovery',
+        provider: 'apify',
+        target: { ...normalized.target },
+        estimatedCostUsd: estimated,
+        cycleId: args.cycle_id ?? null,
+        requestedBy: 'mcp',
+        quoteDetail: {
+          provider: 'apify',
+          scrape_type: normalized.target.scrapeType,
+          target_count: normalized.target.targets.length,
+          targets: normalized.target.targets,
+          results_limit_per_target: normalized.target.resultsLimit,
+          maximum_results: normalized.target.max_results,
+          cost_per_result_usd: unit,
+          apify_monthly_limit_gate: apifyGate,
+        },
+      });
+      return { ...quote, apify_gate: apifyGate, note: 'Awaiting operator approval. No Apify credits were spent.' };
+    }
+    case 'jeremy_quote_generation': {
+      if (!args.client_id || !args.candidate_id) return { error: 'client_id and candidate_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const { data: candidate } = await prodDb
+        .from('jeremy_creative_candidates')
+        .select('id, generation_kind')
+        .eq('id', args.candidate_id)
+        .eq('client_id', args.client_id)
+        .maybeSingle();
+      if (!candidate) return { error: 'Candidate not found for this client' };
+      const kind = String(args.kind ?? candidate.generation_kind) === 'video' ? 'video' : 'static_image';
+      const model = pickGenerationModel(kind as any, args.model);
+      const aspectRatio = String(args.aspect_ratio ?? (kind === 'video' ? '9:16' : '1:1'));
+      const durationSeconds = Math.max(1, Math.min(30, Number(args.duration_seconds) || 5));
+      const cost = quoteGenerationCostUsd(kind as any, model, durationSeconds);
+      const quote = await quoteJob(prodDb, policy, {
+        clientId: args.client_id,
+        kind: jobKindFor(kind as any),
+        provider: 'openrouter',
+        target: generationTarget({ candidateId: String(args.candidate_id), kind: kind as any, model, aspectRatio, durationSeconds }),
+        estimatedCostUsd: cost,
+        cycleId: args.cycle_id ?? null,
+        candidateId: String(args.candidate_id),
+        requestedBy: 'mcp',
+        quoteDetail: { model, kind, aspect_ratio: aspectRatio, duration_seconds: kind === 'video' ? durationSeconds : null },
+      });
+      return { ...quote, note: 'Awaiting operator approval. No model credits were spent.' };
+    }
+    case 'jeremy_quote_paused_publication': {
+      if (!args.client_id || !args.launch_id) return { error: 'client_id and launch_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const { data: launch } = await prodDb
+        .from('meta_campaign_launches')
+        .select('id, client_id')
+        .eq('id', args.launch_id)
+        .eq('client_id', args.client_id)
+        .maybeSingle();
+      if (!launch) return { error: 'Launch draft not found for this client' };
+      const quote = await quoteJob(prodDb, policy, {
+        clientId: args.client_id,
+        kind: 'meta_publish',
+        provider: 'meta',
+        target: publishTarget(String(args.launch_id)),
+        estimatedCostUsd: 0,
+        launchId: String(args.launch_id),
+        requestedBy: 'mcp',
+        quoteDetail: { action: 'create campaign + ad set + ad, all PAUSED' },
+      });
+      return { ...quote, note: 'Awaiting operator approval. Nothing was created in Meta and nothing is ever activated.' };
+    }
+    case 'jeremy_run_external_job': {
+      if (!args.client_id || !args.job_id) return { error: 'client_id and job_id required' };
+      if (args.confirm !== true) return { error: 'confirm:true is required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      const job = await getJob(prodDb, String(args.job_id));
+      if (!job) return { error: 'Job not found' };
+      if (String(job.client_id) !== String(args.client_id)) return { error: 'Job belongs to a different client' };
+      // MCP never self-approves: without an operator approval record this is a
+      // dry-run gate report, and the gate refusal is returned verbatim.
+      const auth = await authorizeJobExecution(prodDb, policy, String(args.job_id), {
+        clientId: args.client_id,
+        kind: job.kind,
+        target: (job.target ?? {}) as Record<string, unknown>,
+        actor: 'mcp',
+      });
+      if (!auth.allowed) {
+        return { success: false, dry_run: true, blocked_reason: auth.reason, gates: auth.gates, job };
+      }
+      if (job.kind === 'meta_publish') {
+        return {
+          success: false,
+          dry_run: true,
+          blocked_reason: 'PAUSED Meta publication is executed from the dashboard by the approving operator, not from MCP.',
+          gates: auth.gates,
+          job,
+        };
+      }
+      const target = (job.target ?? {}) as Record<string, any>;
+      const kind = String(target.kind) === 'video' ? 'video' : 'static_image';
+      return await runGenerationJob(prodDb, policy, makeGenerationExecutors(prodDb), {
+        clientId: args.client_id,
+        jobId: String(args.job_id),
+        candidateId: String(target.candidate_id ?? job.candidate_id ?? ''),
+        kind: kind as any,
+        model: String(target.model ?? ''),
+        aspectRatio: String(target.aspect_ratio ?? '1:1'),
+        durationSeconds: Number(target.duration_seconds) || 5,
+        actor: 'mcp',
+      });
+    }
+    case 'jeremy_get_external_job': {
+      if (!args.client_id || !args.job_id) return { error: 'client_id and job_id required' };
+      const job = await getJob(prodDb, String(args.job_id));
+      if (!job || String(job.client_id) !== String(args.client_id)) return { error: 'Job not found for this client' };
+      return { job };
+    }
+    case 'jeremy_list_external_jobs': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const policy = await loadPolicy(prodDb, args.client_id);
+      return {
+        jobs: await listJobs(prodDb, args.client_id, {
+          kind: args.kind,
+          status: args.status,
+          cycleId: args.cycle_id,
+          limit: Number(args.limit) || 50,
+        }),
+        cost_posture: await costPosture(prodDb, policy, args.client_id),
+      };
+    }
+    case 'jeremy_launch_readiness': {
+      if (!args.client_id) return { error: 'client_id required' };
+      const ids = Array.isArray(args.candidate_ids) ? args.candidate_ids.map(String) : [];
+      if (!ids.length) return { error: 'candidate_ids required' };
+      return { readiness: await launchReadiness(prodDb, args.client_id, args.client_id ? ids : [], args.inputs || {}) };
     }
 
     default:

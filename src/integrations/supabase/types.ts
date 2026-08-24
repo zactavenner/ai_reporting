@@ -14649,6 +14649,102 @@ export type Database = {
           },
         ]
       }
+      jeremy_external_jobs: {
+        Row: {
+          actual_cost_usd: number | null
+          approved_at: string | null
+          approved_by: string | null
+          candidate_id: string | null
+          claimed_at: string | null
+          claimed_by: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          cycle_id: string | null
+          error: string | null
+          estimated_cost_usd: number | null
+          id: string
+          idempotency_key: string
+          kind: string
+          launch_id: string | null
+          provider: string
+          provider_job_id: string | null
+          provider_response: Json | null
+          quote: Json
+          quote_expires_at: string | null
+          request_fingerprint: string
+          requested_by: string | null
+          result_summary: Json | null
+          started_at: string | null
+          status: string
+          target: Json
+          updated_at: string
+          verification: Json | null
+        }
+        Insert: {
+          actual_cost_usd?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          candidate_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          cycle_id?: string | null
+          error?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          idempotency_key: string
+          kind: string
+          launch_id?: string | null
+          provider?: string
+          provider_job_id?: string | null
+          provider_response?: Json | null
+          quote?: Json
+          quote_expires_at?: string | null
+          request_fingerprint: string
+          requested_by?: string | null
+          result_summary?: Json | null
+          started_at?: string | null
+          status?: string
+          target?: Json
+          updated_at?: string
+          verification?: Json | null
+        }
+        Update: {
+          actual_cost_usd?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          candidate_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          cycle_id?: string | null
+          error?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          launch_id?: string | null
+          provider?: string
+          provider_job_id?: string | null
+          provider_response?: Json | null
+          quote?: Json
+          quote_expires_at?: string | null
+          request_fingerprint?: string
+          requested_by?: string | null
+          result_summary?: Json | null
+          started_at?: string | null
+          status?: string
+          target?: Json
+          updated_at?: string
+          verification?: Json | null
+        }
+        Relationships: []
+      }
       jeremy_kpi_snapshots: {
         Row: {
           client_id: string
@@ -22890,6 +22986,46 @@ export type Database = {
         Returns: boolean
       }
       call_is_showed: { Args: { p_status: string }; Returns: boolean }
+      claim_jeremy_external_job: {
+        Args: { p_claimed_by: string; p_job_id: string }
+        Returns: {
+          actual_cost_usd: number | null
+          approved_at: string | null
+          approved_by: string | null
+          candidate_id: string | null
+          claimed_at: string | null
+          claimed_by: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          cycle_id: string | null
+          error: string | null
+          estimated_cost_usd: number | null
+          id: string
+          idempotency_key: string
+          kind: string
+          launch_id: string | null
+          provider: string
+          provider_job_id: string | null
+          provider_response: Json | null
+          quote: Json
+          quote_expires_at: string | null
+          request_fingerprint: string
+          requested_by: string | null
+          result_summary: Json | null
+          started_at: string | null
+          status: string
+          target: Json
+          updated_at: string
+          verification: Json | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "jeremy_external_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       find_unenriched_leads: {
         Args: { p_client_id: string; p_limit?: number }
         Returns: {

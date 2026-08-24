@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { StaticBatchConfig, GeneratedAd, AdStyle, Client } from '@/types';
 import { toast } from 'sonner';
+import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 
 interface UseStaticBatchGenerationOptions {
   projectId: string;
@@ -99,6 +100,7 @@ export function useStaticBatchGeneration({
       try {
         // Call the edge function with Nano Banana Pro
         const { data, error } = await supabase.functions.invoke('generate-static-ad', {
+        headers: dashboardAuthHeaders(),
           body: {
             prompt: style.prompt_template,
             stylePrompt: style.prompt_template,

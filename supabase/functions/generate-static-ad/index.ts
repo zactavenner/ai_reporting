@@ -2,10 +2,11 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCapitalCreativeDirective } from './capital-creative-style.ts';
 import { enhancePromptWithGpt5 } from '../_shared/enhance-prompt-gpt5.ts';
+import { authorizeGenerationCaller } from '../_shared/generationAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-dashboard-token, x-internal-secret',
 };
 
 interface GenerateAdRequest {
@@ -182,6 +183,16 @@ serve(async (req) => {
 
   try {
     const body: GenerateAdRequest = await req.json();
+
+    // Model credits are only ever spent for an authenticated caller.
+    const caller = await authorizeGenerationCaller(req, body);
+    if (!caller.ok) {
+      return new Response(JSON.stringify({ error: caller.error }), {
+        status: caller.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { styleName, aspectRatio, projectId, clientId, referenceImages = [], idempotency_key } = body;
 
     const LOVABLE_API_KEY = Deno.env.get('OPENROUTER_API_KEY');

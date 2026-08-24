@@ -19,6 +19,7 @@ import type {
 import { ANGLE_PRESETS } from '@/hooks/useAvatarGeneration';
 import { getStoredKeys } from '@/hooks/useApiRateLimiter';
 import { toast } from 'sonner';
+import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 
 const DEFAULT_GEMINI_KEY = 'AIzaSyCbOTwdc8c8YGYpl63BKSNPvU2Xd29t_4o';
 
@@ -52,7 +53,7 @@ async function generateVideoForModel(
   }
   // Default: Veo3
   const fnName = body.imageUrl ? 'generate-video-from-image' : 'generate-broll';
-  const { data, error } = await supabase.functions.invoke(fnName, { body });
+  const { data, error } = await supabase.functions.invoke(fnName, { body, headers: dashboardAuthHeaders() });
   if (error) throw error;
   if (data.error) throw new Error(data.message || data.error);
   return data;
@@ -614,6 +615,7 @@ export function useFlowExecution({ nodes, edges, updateNodeData }: UseFlowExecut
       ].filter(Boolean).join(' ');
 
       const { data: result, error } = await supabase.functions.invoke('generate-static-ad', {
+        headers: dashboardAuthHeaders(),
         body: {
           prompt: combinePrompt,
           aspectRatio: data.aspectRatio,

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { ScrapedAd } from '@/hooks/useAdScraping';
 import { toast } from 'sonner';
+import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
 
 export interface RegenerationOptions {
   rewriteCopy: boolean;
@@ -63,6 +64,7 @@ export function useAdRegeneration() {
           const prompt = `${baseText}\n\nCreate a professional, high-converting advertisement image that captures the essence and style of the original ad.`;
 
           const { data, error } = await supabase.functions.invoke('generate-static-ad', {
+        headers: dashboardAuthHeaders(),
             body: {
               prompt,
               referenceImages: ad.image_url ? [ad.image_url] : [],
