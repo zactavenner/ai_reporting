@@ -43,6 +43,7 @@ import {
 import {
   generationTarget,
   jobKindFor,
+  loadModelRate,
   pickGenerationModel,
   quoteGenerationCostUsd,
   DEFAULT_IMAGE_MODEL,
@@ -1166,10 +1167,24 @@ export async function prepareExternalGenerationJobs(
       .maybeSingle();
     if (!candidate) continue;
     const kind = String(candidate.generation_kind) === "video" ? "video" : "static_image";
-    const model = pickGenerationModel(kind, kind === "video" ? opts.videoModel ?? DEFAULT_VIDEO_MODEL : opts.imageModel ?? DEFAULT_IMAGE_MODEL);
+    const model = await pickGenerationModel(db, kind, kind === "video" ? opts.videoModel ?? DEFAULT_VIDEO_MODEL : opts.imageModel ?? DEFAULT_IMAGE_MODEL);
     const aspectRatio = String(opts.aspectRatio ?? (kind === "video" ? "9:16" : "1:1"));
     const durationSeconds = Math.max(1, Math.min(30, Number(opts.durationSeconds) || 5));
-    const cost = quoteGenerationCostUsd(kind, model, durationSeconds);
+    const rate = model ? await loadModelRate(db, kind, model) : null;
+    const cost = quoteGenerationCostUsd(rate, durationSeconds);
+    if (!model || !rate || !Number.isFinite(cost)) {
+      out.push({
+        candidate_id: candidateId,
+        kind,
+        model: model ?? "unconfigured",
+        job_id: null,
+        status: "not_quoted",
+        estimated_cost_usd: null,
+        policy_gate: null,
+        error: "No active configured price for this model in jeremy_model_costs; refusing to quote generation without a known cost.",
+      });
+      continue;
+    }
     const target = generationTarget({ candidateId, kind, model, aspectRatio, durationSeconds });
     const quote = await quoteJob(db, policy, {
       clientId,
@@ -1177,6 +1192,8 @@ export async function prepareExternalGenerationJobs(
       provider: "openrouter",
       target,
       estimatedCostUsd: cost,
+      costSource: rate.source,
+      costVersion: rate.version,
       cycleId,
       candidateId,
       requestedBy: opts.requestedBy ?? "cycle",
@@ -1192,6 +1209,7 @@ export async function prepareExternalGenerationJobs(
       policy_gate: quote.policy_gate ?? null,
       error: quote.error,
     });
+
   }
   return out;
 }

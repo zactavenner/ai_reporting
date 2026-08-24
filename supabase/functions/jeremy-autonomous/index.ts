@@ -45,6 +45,7 @@ import {
 import {
   generationTarget,
   jobKindFor,
+  loadModelRate,
   pickGenerationModel,
   quoteGenerationCostUsd,
   runGenerationJob,
@@ -294,17 +295,21 @@ Deno.serve(async (req) => {
         return json({ success: true, job });
       }
 
-      case "approve_job": {
-        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not approve paid or external jobs." }, 403);
-        const result = await approveJob(supabase, String(body.job_id ?? ""), actor ?? "operator");
+      case "approve_job":
+      case "reject_job": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not decide paid or external jobs." }, 403);
+        const jobId = String(body.job_id ?? "");
+        // Scope the decision to the caller's client: a job may only ever be
+        // decided through its own client context.
+        const target = jobId ? await getJob(supabase, jobId) : null;
+        if (!target) return json({ success: false, error: "Job not found" }, 404);
+        if (target.client_id !== clientId) return json({ success: false, error: "Job belongs to a different client" }, 403);
+        const result = action === "approve_job"
+          ? await approveJob(supabase, jobId, actor ?? "operator")
+          : await rejectJob(supabase, jobId, actor ?? "operator");
         return json(result, result.success ? 200 : 400);
       }
 
-      case "reject_job": {
-        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not decide paid or external jobs." }, 403);
-        const result = await rejectJob(supabase, String(body.job_id ?? ""), actor ?? "operator");
-        return json(result, result.success ? 200 : 400);
-      }
 
       // ── Paid Apify discovery (quote → operator approval → run) ────────────
       case "quote_discovery":
@@ -348,16 +353,22 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (!candidate) return json({ success: false, error: "Candidate not found for this client" }, 404);
         const kind = (String(body.kind ?? candidate.generation_kind) === "video" ? "video" : "static_image") as GenerationKind;
-        const model = pickGenerationModel(kind, body.model);
+        const model = await pickGenerationModel(supabase, kind, body.model);
         const aspectRatio = String(body.aspect_ratio ?? (kind === "video" ? "9:16" : "1:1"));
         const durationSeconds = Math.max(1, Math.min(30, Number(body.duration_seconds) || 5));
-        const cost = quoteGenerationCostUsd(kind, model, durationSeconds);
+        const rate = model ? await loadModelRate(supabase, kind, model) : null;
+        const cost = quoteGenerationCostUsd(rate, durationSeconds);
+        if (!model || !rate || !Number.isFinite(cost)) {
+          return json({ success: false, error: "No active configured price for this model in jeremy_model_costs; refusing to quote generation without a known cost." }, 400);
+        }
         const quote = await quoteJob(supabase, policy, {
           clientId,
           kind: jobKindFor(kind),
           provider: "openrouter",
           target: generationTarget({ candidateId, kind, model, aspectRatio, durationSeconds }),
           estimatedCostUsd: cost,
+          costSource: rate.source,
+          costVersion: rate.version,
           cycleId: (body.cycle_id as string) ?? null,
           candidateId,
           requestedBy: actor ?? "operator",
@@ -415,6 +426,8 @@ Deno.serve(async (req) => {
           provider: "meta",
           target: publishTarget(launchId),
           estimatedCostUsd: 0,
+          costSource: "meta_publish_no_media_spend",
+          costVersion: "1",
           cycleId: (body.cycle_id as string) ?? null,
           launchId,
           requestedBy: actor ?? "operator",

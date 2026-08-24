@@ -28,6 +28,7 @@ import {
 import {
   generationTarget,
   jobKindFor,
+  loadModelRate,
   pickGenerationModel,
   quoteGenerationCostUsd,
   runGenerationJob,
@@ -37,7 +38,7 @@ import { makeGenerationExecutors } from '../_shared/jeremyExecutors.ts';
 import {
   normalizeDiscoveryTarget,
   resolveApifySettings,
-  costPerResultUsd,
+  configuredCostPerResult,
   estimateApifyCostUsd,
   checkApifyMonthlyLimit,
 } from '../_shared/jeremyApify.ts';
@@ -1116,8 +1117,11 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
       });
       if (!normalized.ok) return { error: normalized.error };
       const settings = await resolveApifySettings(prodDb, args.client_id);
-      const unit = costPerResultUsd(settings);
-      const estimated = estimateApifyCostUsd(normalized.target, unit);
+      const unit = configuredCostPerResult(settings);
+      const estimated = estimateApifyCostUsd(normalized.target, unit.usd);
+      if (!Number.isFinite(estimated)) {
+        return { error: 'No Apify per-result price is configured; refusing to quote discovery without a known cost.' };
+      }
       const apifyGate = checkApifyMonthlyLimit(settings, estimated);
       const quote = await quoteJob(prodDb, policy, {
         clientId: args.client_id,
@@ -1125,6 +1129,8 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         provider: 'apify',
         target: { ...normalized.target },
         estimatedCostUsd: estimated,
+        costSource: unit.source,
+        costVersion: unit.version,
         cycleId: args.cycle_id ?? null,
         requestedBy: 'mcp',
         quoteDetail: {
@@ -1134,7 +1140,7 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
           targets: normalized.target.targets,
           results_limit_per_target: normalized.target.resultsLimit,
           maximum_results: normalized.target.max_results,
-          cost_per_result_usd: unit,
+          cost_per_result_usd: unit.usd,
           apify_monthly_limit_gate: apifyGate,
         },
       });
@@ -1151,16 +1157,22 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         .maybeSingle();
       if (!candidate) return { error: 'Candidate not found for this client' };
       const kind = String(args.kind ?? candidate.generation_kind) === 'video' ? 'video' : 'static_image';
-      const model = pickGenerationModel(kind as any, args.model);
+      const model = await pickGenerationModel(prodDb, kind as any, args.model);
       const aspectRatio = String(args.aspect_ratio ?? (kind === 'video' ? '9:16' : '1:1'));
       const durationSeconds = Math.max(1, Math.min(30, Number(args.duration_seconds) || 5));
-      const cost = quoteGenerationCostUsd(kind as any, model, durationSeconds);
+      const rate = model ? await loadModelRate(prodDb, kind as any, model) : null;
+      const cost = quoteGenerationCostUsd(rate, durationSeconds);
+      if (!model || !rate || !Number.isFinite(cost)) {
+        return { error: 'No active configured price for this model in jeremy_model_costs; refusing to quote generation without a known cost.' };
+      }
       const quote = await quoteJob(prodDb, policy, {
         clientId: args.client_id,
         kind: jobKindFor(kind as any),
         provider: 'openrouter',
         target: generationTarget({ candidateId: String(args.candidate_id), kind: kind as any, model, aspectRatio, durationSeconds }),
         estimatedCostUsd: cost,
+        costSource: rate.source,
+        costVersion: rate.version,
         cycleId: args.cycle_id ?? null,
         candidateId: String(args.candidate_id),
         requestedBy: 'mcp',
@@ -1184,6 +1196,8 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         provider: 'meta',
         target: publishTarget(String(args.launch_id)),
         estimatedCostUsd: 0,
+        costSource: 'meta_publish_no_media_spend',
+        costVersion: '1',
         launchId: String(args.launch_id),
         requestedBy: 'mcp',
         quoteDetail: { action: 'create campaign + ad set + ad, all PAUSED' },

@@ -32,20 +32,7 @@ export type GenerationKind = "static_image" | "video";
 
 export const DURABLE_BUCKET = "creatives";
 
-/** Published model costs used for the exact quote. Unknown model ⇒ NaN ⇒ refuse. */
-export const IMAGE_MODEL_COSTS_USD: Record<string, number> = {
-  "google/gemini-2.5-flash-image": 0.04,
-  "google/nano-banana-pro": 0.14,
-};
-
-export const VIDEO_MODEL_COSTS_USD_PER_SECOND: Record<string, number> = {
-  "minimax/hailuo-h3": 0.08,
-  "bytedance/seedance-2.0": 0.06,
-  "bytedance/seedance-2.5": 0.09,
-  "google/veo-3": 0.35,
-};
-
-export const DEFAULT_IMAGE_MODEL = "google/gemini-2.5-flash-image";
+export const DEFAULT_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview";
 export const DEFAULT_VIDEO_MODEL = "bytedance/seedance-2.0";
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -54,16 +41,51 @@ export function jobKindFor(kind: GenerationKind): JeremyJobKind {
   return kind === "video" ? "video_generation" : "image_generation";
 }
 
-/** The exact maximum cost of one generation. NaN for an unknown model. */
-export function quoteGenerationCostUsd(kind: GenerationKind, model: string, durationSeconds = 5): number {
-  if (kind === "static_image") {
-    const unit = IMAGE_MODEL_COSTS_USD[model];
-    return Number.isFinite(unit) ? round2(unit) : NaN;
-  }
-  const perSecond = VIDEO_MODEL_COSTS_USD_PER_SECOND[model];
-  const secs = Math.max(1, Math.min(30, Math.floor(Number(durationSeconds) || 0)));
-  return Number.isFinite(perSecond) ? round2(perSecond * secs) : NaN;
+/**
+ * A configured, versioned model price. Prices live in `jeremy_model_costs`
+ * (agency-owned, service-role writable) — never in code constants — so a quote
+ * always records where its number came from and refuses when it is unknown.
+ */
+export interface ModelRate {
+  kind: GenerationKind;
+  model: string;
+  unit: "per_image" | "per_second";
+  unitCostUsd: number;
+  source: string;
+  version: string;
 }
+
+export async function loadModelRates(db: Db, kind: GenerationKind): Promise<ModelRate[]> {
+  const { data } = await db
+    .from("jeremy_model_costs")
+    .select("kind, model, unit, unit_cost_usd, cost_source, cost_version, is_active")
+    .eq("kind", kind)
+    .eq("is_active", true);
+  return ((data ?? []) as Record<string, unknown>[])
+    .map((r) => ({
+      kind: String(r.kind) as GenerationKind,
+      model: String(r.model),
+      unit: String(r.unit) as ModelRate["unit"],
+      unitCostUsd: Number(r.unit_cost_usd),
+      source: String(r.cost_source || "jeremy_model_costs"),
+      version: String(r.cost_version || "unversioned"),
+    }))
+    .filter((r) => r.model && Number.isFinite(r.unitCostUsd) && r.unitCostUsd > 0);
+}
+
+export async function loadModelRate(db: Db, kind: GenerationKind, model: string): Promise<ModelRate | null> {
+  const rates = await loadModelRates(db, kind);
+  return rates.find((r) => r.model === String(model)) ?? null;
+}
+
+/** The exact maximum cost of one generation from a configured rate. */
+export function quoteGenerationCostUsd(rate: ModelRate | null, durationSeconds = 5): number {
+  if (!rate || !Number.isFinite(rate.unitCostUsd) || rate.unitCostUsd <= 0) return NaN;
+  if (rate.unit === "per_image") return round2(rate.unitCostUsd);
+  const secs = Math.max(1, Math.min(30, Math.floor(Number(durationSeconds) || 0)));
+  return round2(rate.unitCostUsd * secs);
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Client-owned asset resolution
@@ -288,7 +310,18 @@ export async function runGenerationJob(
     });
   }
 
+  // Provider truthfulness: the model actually invoked must be the model the
+  // operator approved. A cheaper approval can never authorize a costlier model.
+  const approvedTarget = (auth.job?.target ?? {}) as Record<string, unknown>;
+  const approvedModel = String(approvedTarget.model ?? "");
+  if (approvedModel && approvedModel !== String(input.model)) {
+    const reason = `Approved model ${approvedModel} does not match the requested model ${input.model}; a new quote and approval are required.`;
+    return { success: false, reason, job_id: input.jobId, candidate_id: input.candidateId, gates: [...gates, { gate: "model_binding", allowed: false, reason }] };
+  }
+  gates.push({ gate: "model_binding", allowed: true, reason: `Invoking the approved model ${input.model}.` });
+
   const claimed = await claimJob(db, input.jobId, input.actor);
+
   if (!claimed) {
     return { success: false, reason: "Job was already claimed or executed by another request (idempotency).", job_id: input.jobId, candidate_id: input.candidateId, gates };
   }
@@ -320,6 +353,12 @@ export async function runGenerationJob(
 
     if (!output?.url) throw new Error("Provider returned no asset URL.");
 
+    // The provider receipt must not disclose a different model than the approved one.
+    const reportedModel = String((output.receipt as Record<string, unknown> | undefined)?.model ?? "");
+    if (reportedModel && reportedModel !== String(input.model)) {
+      throw new Error(`Provider ran ${reportedModel} but ${input.model} was approved; refusing to accept the result.`);
+    }
+
     // Durable storage BEFORE anything is marked generated.
     const durableUrl = await executors.persistToDurableStorage({
       url: output.url,
@@ -331,9 +370,25 @@ export async function runGenerationJob(
       throw new Error("Durable storage did not return a permanent URL; refusing to mark the candidate generated.");
     }
 
-    const actualCost = Number.isFinite(Number(output.actual_cost_usd))
-      ? round2(Number(output.actual_cost_usd))
-      : Number(auth.job?.estimated_cost_usd ?? NaN);
+    const authorizedCost = Number(auth.job?.estimated_cost_usd ?? NaN);
+    const reportedCost = Number(output.actual_cost_usd);
+    const actualCost = Number.isFinite(reportedCost) ? round2(reportedCost) : authorizedCost;
+
+    // A provider cost above the approved maximum fails verification: the asset
+    // is kept and the true cost recorded, but the job is never marked succeeded.
+    if (Number.isFinite(reportedCost) && Number.isFinite(authorizedCost) && reportedCost > authorizedCost + 0.01) {
+      await completeJob(db, input.jobId, {
+        status: "verification_failed",
+        actualCostUsd: actualCost,
+        providerJobId: output.provider_job_id ?? null,
+        providerResponse: output.receipt ?? null,
+        verification: { cost_overrun: true, approved_maximum_usd: authorizedCost, provider_reported_usd: reportedCost, durable_url: durableUrl },
+      });
+      await db.from("jeremy_creative_candidates").update({ generation_status: "failed", actual_cost_usd: actualCost }).eq("id", input.candidateId);
+      const reason = `Provider reported $${reportedCost} against an approved maximum of $${authorizedCost}; job marked verification_failed.`;
+      return { success: false, reason, job_id: input.jobId, candidate_id: input.candidateId, gates: [...gates, { gate: "cost_verification", allowed: false, reason }] };
+    }
+
 
     const { data: creative } = await db
       .from("creatives")
@@ -404,8 +459,13 @@ export function generationTarget(input: {
   };
 }
 
-export function pickGenerationModel(kind: GenerationKind, requested?: unknown): string {
-  const model = String(requested ?? "");
-  if (kind === "static_image") return IMAGE_MODEL_COSTS_USD[model] ? model : DEFAULT_IMAGE_MODEL;
-  return VIDEO_MODEL_COSTS_USD_PER_SECOND[model] ? model : DEFAULT_VIDEO_MODEL;
+/** Only a model with a configured, active price may be selected. */
+export async function pickGenerationModel(db: Db, kind: GenerationKind, requested?: unknown): Promise<string | null> {
+  const rates = await loadModelRates(db, kind);
+  if (!rates.length) return null;
+  const wanted = String(requested ?? "");
+  if (rates.some((r) => r.model === wanted)) return wanted;
+  const fallback = kind === "static_image" ? DEFAULT_IMAGE_MODEL : DEFAULT_VIDEO_MODEL;
+  return rates.some((r) => r.model === fallback) ? fallback : rates[0].model;
 }
+

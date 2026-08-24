@@ -14661,6 +14661,8 @@ export type Database = {
           completed_at: string | null
           created_at: string
           cycle_id: string | null
+          decided_at: string | null
+          decided_by: string | null
           error: string | null
           estimated_cost_usd: number | null
           id: string
@@ -14692,6 +14694,8 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           cycle_id?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
           error?: string | null
           estimated_cost_usd?: number | null
           id?: string
@@ -14723,6 +14727,8 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           cycle_id?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
           error?: string | null
           estimated_cost_usd?: number | null
           id?: string
@@ -14822,6 +14828,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      jeremy_model_costs: {
+        Row: {
+          cost_source: string
+          cost_version: string
+          created_at: string
+          id: string
+          is_active: boolean
+          kind: string
+          model: string
+          notes: string | null
+          provider: string
+          unit: string
+          unit_cost_usd: number
+          updated_at: string
+        }
+        Insert: {
+          cost_source: string
+          cost_version: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind: string
+          model: string
+          notes?: string | null
+          provider: string
+          unit: string
+          unit_cost_usd: number
+          updated_at?: string
+        }
+        Update: {
+          cost_source?: string
+          cost_version?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          model?: string
+          notes?: string | null
+          provider?: string
+          unit?: string
+          unit_cost_usd?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       jeremy_review_runs: {
         Row: {
@@ -22999,6 +23050,8 @@ export type Database = {
           completed_at: string | null
           created_at: string
           cycle_id: string | null
+          decided_at: string | null
+          decided_by: string | null
           error: string | null
           estimated_cost_usd: number | null
           id: string
@@ -23171,6 +23224,10 @@ export type Database = {
           spend: number
           thumbnail_url: string
         }[]
+      }
+      increment_apify_spend: {
+        Args: { p_cents: number; p_settings_id: string }
+        Returns: number
       }
       is_reporting_operator: { Args: never; Returns: boolean }
       lead_quality_normalize: {

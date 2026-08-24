@@ -25,8 +25,9 @@ import {
   quoteJob,
 } from "../_shared/jeremyExternalJobs.ts";
 import {
+  assertRunIngestible,
   checkApifyMonthlyLimit,
-  costPerResultUsd,
+  configuredCostPerResult,
   estimateApifyCostUsd,
   fetchDatasetItems,
   ingestCreatives,
@@ -87,8 +88,17 @@ Deno.serve(async (req) => {
 
     const policy = await loadPolicy(supabase, clientId);
     const settings = await resolveApifySettings(supabase, clientId);
-    const unitCost = costPerResultUsd(settings);
-    const estimated = estimateApifyCostUsd(target, unitCost);
+    const unit = configuredCostPerResult(settings);
+    const estimated = estimateApifyCostUsd(target, unit.usd);
+    if (!Number.isFinite(estimated)) {
+      return json(
+        {
+          success: false,
+          error: "No Apify per-result price is configured (apify_settings.config.cost_per_result_usd); refusing to quote or spend without a known cost.",
+        },
+        400,
+      );
+    }
     const apifyGate = checkApifyMonthlyLimit(settings, estimated);
 
     const quoteDetail = {
@@ -99,7 +109,7 @@ Deno.serve(async (req) => {
       targets: target.targets,
       results_limit_per_target: target.resultsLimit,
       maximum_results: target.max_results,
-      cost_per_result_usd: unitCost,
+      cost_per_result_usd: unit.usd,
       apify_monthly_limit_gate: apifyGate,
     };
 
@@ -111,11 +121,14 @@ Deno.serve(async (req) => {
         provider: "apify",
         target: { ...target },
         estimatedCostUsd: estimated,
+        costSource: unit.source,
+        costVersion: unit.version,
         cycleId: (body.cycle_id as string) ?? null,
         requestedBy: actor,
         quoteDetail,
       });
       if (!quote.success) return json({ success: false, error: quote.error }, 400);
+
       return json({
         success: true,
         mode: "quote",
@@ -171,11 +184,50 @@ Deno.serve(async (req) => {
       const run = await runApifyActor(fetch, token, target, { timeoutSecs: Number(body.timeout_secs) || 120 });
       await markJobRunning(supabase, jobId, run.runId || null);
 
-      const items = run.datasetId ? await fetchDatasetItems(fetch, token, run.datasetId, target.max_results) : [];
+      // Provider truthfulness: only a terminal SUCCEEDED run with a dataset may
+      // be ingested. Spend is still recorded, since Apify bills started runs.
+      const ingestible = assertRunIngestible(run);
+      if (!ingestible.ok) {
+        const spent = Number.isFinite(Number(run.usageUsd)) ? Number(run.usageUsd) : 0;
+        if (spent > 0) await recordApifySpend(supabase, settings, spent);
+        throw new Error(ingestible.error);
+      }
+
+      const items = await fetchDatasetItems(fetch, token, run.datasetId!, target.max_results);
       const ingest = await ingestCreatives(supabase, clientId, items);
 
-      const actualCost = Number.isFinite(Number(run.usageUsd)) ? Number(run.usageUsd) : Number(auth.job?.estimated_cost_usd ?? estimated);
+      const authorized = Number(auth.job?.estimated_cost_usd ?? estimated);
+      const reported = Number(run.usageUsd);
+      const actualCost = Number.isFinite(reported) ? reported : authorized;
       await recordApifySpend(supabase, settings, actualCost);
+
+      // A provider-reported cost above the approved maximum is a verification
+      // failure: the spend is recorded truthfully, but the job is not "clean".
+      if (Number.isFinite(reported) && reported > authorized + 0.01) {
+        await completeJob(supabase, jobId, {
+          status: "verification_failed",
+          actualCostUsd: actualCost,
+          providerJobId: run.runId || null,
+          providerResponse: { run_id: run.runId, dataset_id: run.datasetId, status: run.status },
+          verification: {
+            cost_overrun: true,
+            approved_maximum_usd: authorized,
+            provider_reported_usd: reported,
+            fetched: ingest.fetched,
+            ingested: ingest.ingested,
+          },
+        });
+        return json(
+          {
+            success: false,
+            error: `Apify reported $${reported} against an approved maximum of $${authorized}; job marked verification_failed.`,
+            job_id: jobId,
+            ingested: ingest.ingested,
+          },
+          409,
+        );
+      }
+
 
       if (jobRow?.id) {
         await supabase

@@ -128,6 +128,13 @@ export interface QuoteInput {
   target: Record<string, unknown>;
   /** Exact maximum cost of the run in USD. NaN/unknown is refused. */
   estimatedCostUsd: number;
+  /**
+   * Where the price came from (e.g. `jeremy_model_costs`, `apify_settings.config`)
+   * and which configured version was used. A quote with no traceable price source
+   * is refused, so no cost can be silently asserted from code constants.
+   */
+  costSource: string;
+  costVersion: string;
   cycleId?: string | null;
   candidateId?: string | null;
   launchId?: string | null;
@@ -136,22 +143,55 @@ export interface QuoteInput {
   ttlMinutes?: number;
 }
 
+export type QuoteReuseReason = "already_succeeded" | "in_flight" | "active_quote";
+
 export interface QuoteResult {
   success: boolean;
   job?: JeremyExternalJob;
   error?: string;
+  /** True when an existing job was returned instead of creating a new quote. */
+  reused?: boolean;
+  reuse_reason?: QuoteReuseReason;
   /** Why the paid capability gate would allow/refuse this job right now. */
   policy_gate?: { allowed: boolean; reason: string };
 }
 
+/** Statuses that still block a fresh quote for the same exact target. */
+const ACTIVE_STATUSES = ["awaiting_approval", "approved"];
+const IN_FLIGHT_STATUSES = ["claimed", "running"];
+/** Statuses after which re-quoting the same target is legitimate. */
+export const REQUOTABLE_STATUSES = ["rejected", "failed", "verification_failed", "expired"];
+
+const isTimeExpired = (row: Record<string, unknown>, now: number): boolean => {
+  const at = row.quote_expires_at ? Date.parse(String(row.quote_expires_at)) : NaN;
+  return Number.isFinite(at) && now > at;
+};
+
 /**
- * Creates (or returns the existing) awaiting_approval job for this exact target.
- * A quote NEVER runs anything and never takes the live key.
+ * Creates an awaiting_approval quote for this exact target.
+ *
+ * A quote NEVER spends and NEVER takes the single live execution key — its
+ * idempotency key is quote-namespaced. De-duplication is by
+ * (client, fingerprint, status), so:
+ *  - a succeeded job is returned as-is (no duplicate execution of the same target);
+ *  - an in-flight (claimed/running) job is returned rather than re-quoted;
+ *  - an unexpired awaiting/approved quote is returned rather than duplicated;
+ *  - a rejected, failed, verification_failed or expired job does NOT block a
+ *    fresh quote with a fresh expiry, and any time-expired active quote is first
+ *    marked expired so it stops blocking forever.
  */
 export async function quoteJob(db: Db, policy: JeremyPolicy, input: QuoteInput): Promise<QuoteResult> {
   const cost = Number(input.estimatedCostUsd);
   if (!Number.isFinite(cost) || cost < 0) {
     return { success: false, error: "Exact cost is unknown; refusing to quote a job that could spend an unbounded amount." };
+  }
+  const costSource = String(input.costSource ?? "").trim();
+  const costVersion = String(input.costVersion ?? "").trim();
+  if (!costSource || !costVersion) {
+    return {
+      success: false,
+      error: "Refusing to quote without a configured price source and version; a cost may never be asserted from code constants.",
+    };
   }
   const capability = capabilityForKind(input.kind);
   let gate = { allowed: true, reason: "No model/provider credits are spent by this job kind." };
@@ -162,15 +202,31 @@ export async function quoteJob(db: Db, policy: JeremyPolicy, input: QuoteInput):
   }
 
   const fingerprint = jobFingerprint(input.kind, input.clientId, input.target);
-  const key = jobLiveIdempotencyKey(fingerprint);
+  const now = Date.now();
 
-  const { data: existing } = await db
+  const { data: siblings } = await db
     .from("jeremy_external_jobs")
     .select("*")
-    .eq("idempotency_key", key)
-    .maybeSingle();
-  if (existing) {
-    return { success: true, job: existing as JeremyExternalJob, policy_gate: gate };
+    .eq("client_id", input.clientId)
+    .eq("request_fingerprint", fingerprint);
+  const rows = (siblings ?? []) as JeremyExternalJob[];
+
+  const succeeded = rows.find((r) => String(r.status) === "succeeded");
+  if (succeeded) {
+    return { success: true, job: succeeded, reused: true, reuse_reason: "already_succeeded", policy_gate: gate };
+  }
+  const inFlight = rows.find((r) => IN_FLIGHT_STATUSES.includes(String(r.status)));
+  if (inFlight) {
+    return { success: true, job: inFlight, reused: true, reuse_reason: "in_flight", policy_gate: gate };
+  }
+  const active = rows.find((r) => ACTIVE_STATUSES.includes(String(r.status)) && !isTimeExpired(r as never, now));
+  if (active) {
+    return { success: true, job: active, reused: true, reuse_reason: "active_quote", policy_gate: gate };
+  }
+  // Any remaining active-status row is past its expiry: retire it so a fresh,
+  // correctly priced quote can be issued.
+  for (const stale of rows.filter((r) => ACTIVE_STATUSES.includes(String(r.status)))) {
+    await db.from("jeremy_external_jobs").update({ status: "expired" }).eq("id", stale.id).in("status", ACTIVE_STATUSES);
   }
 
   const ttl = Math.max(1, input.ttlMinutes ?? QUOTE_TTL_MINUTES);
@@ -185,37 +241,43 @@ export async function quoteJob(db: Db, policy: JeremyPolicy, input: QuoteInput):
       provider: input.provider,
       target: input.target,
       request_fingerprint: fingerprint,
-      idempotency_key: key,
+      idempotency_key: jobQuoteIdempotencyKey(fingerprint),
       status: "awaiting_approval",
       estimated_cost_usd: cost,
-      quote_expires_at: new Date(Date.now() + ttl * 60_000).toISOString(),
+      quote_expires_at: new Date(now + ttl * 60_000).toISOString(),
       requested_by: input.requestedBy,
       quote: {
         ...(input.quoteDetail ?? {}),
         maximum_cost_usd: cost,
+        cost_source: costSource,
+        cost_version: costVersion,
         capability,
         policy_gate: gate,
-        quoted_at: new Date().toISOString(),
+        quoted_at: new Date(now).toISOString(),
         quote_ttl_minutes: ttl,
+        live_execution_key: jobLiveIdempotencyKey(fingerprint),
       },
     })
     .select("*")
     .maybeSingle();
   if (error) return { success: false, error: error.message };
-  return { success: true, job: data as JeremyExternalJob, policy_gate: gate };
+  return { success: true, job: data as JeremyExternalJob, reused: false, policy_gate: gate };
 }
 
 /**
- * Operator approval. The scheduler is refused here as well as at the endpoint,
- * so a self-approving automated caller cannot exist.
+ * Operator approval. Only status/approved_by/approved_at are written — every
+ * binding column is immutable in the database, so an approval can never carry a
+ * changed target, price or expiry. The scheduler is refused here as well as at
+ * the endpoint, so a self-approving automated caller cannot exist.
  */
 export async function approveJob(db: Db, jobId: string, approvedBy: string) {
-  if (!approvedBy || /^scheduler/i.test(approvedBy) || approvedBy === "mcp") {
+  const actor = String(approvedBy ?? "").trim();
+  if (!actor || /^scheduler/i.test(actor) || actor === "mcp" || actor === "service_role") {
     return { success: false as const, error: "Only an authenticated operator may approve a paid or external job." };
   }
   const { data, error } = await db
     .from("jeremy_external_jobs")
-    .update({ status: "approved", approved_by: approvedBy, approved_at: new Date().toISOString() })
+    .update({ status: "approved", approved_by: actor, approved_at: new Date().toISOString() })
     .eq("id", jobId)
     .eq("status", "awaiting_approval")
     .select("*")
@@ -225,10 +287,11 @@ export async function approveJob(db: Db, jobId: string, approvedBy: string) {
   return { success: true as const, job: data as JeremyExternalJob };
 }
 
+/** Rejection is recorded in decided_by/decided_at: the approval actor is write-once. */
 export async function rejectJob(db: Db, jobId: string, decidedBy: string) {
   const { data, error } = await db
     .from("jeremy_external_jobs")
-    .update({ status: "rejected", approved_by: decidedBy, approved_at: new Date().toISOString() })
+    .update({ status: "rejected", decided_by: String(decidedBy ?? "operator"), decided_at: new Date().toISOString() })
     .eq("id", jobId)
     .in("status", ["awaiting_approval", "approved"])
     .select("id, status")
@@ -236,6 +299,7 @@ export async function rejectJob(db: Db, jobId: string, decidedBy: string) {
   if (error) return { success: false as const, error: error.message };
   return data ? { success: true as const, job: data } : { success: false as const, error: "Job not found or already started." };
 }
+
 
 export interface AuthorizeJobInput {
   clientId: string;
@@ -280,6 +344,23 @@ export async function authorizeJobExecution(
     return deny("Request does not match the approved quote (target, limit, model or candidate changed).", job);
   }
   gates.push({ gate: "payload_binding", allowed: true, reason: "Request matches the approved quote exactly." });
+
+  // Exactly-once per target: a different job that already SUCCEEDED for this
+  // fingerprint means the work is done. A second execution requires a genuinely
+  // different (newly quoted and approved) target.
+  const { data: siblings } = await db
+    .from("jeremy_external_jobs")
+    .select("id, status")
+    .eq("client_id", input.clientId)
+    .eq("request_fingerprint", fingerprint)
+    .eq("status", "succeeded");
+  const done = (siblings ?? []).find((r: Record<string, unknown>) => String(r.id) !== String(jobId));
+  if (done) {
+    gates.push({ gate: "single_execution", allowed: false, reason: `Job ${done.id} already completed this exact target.` });
+    return deny("This exact target has already been executed successfully; change the target or duration to run new work.", job);
+  }
+  gates.push({ gate: "single_execution", allowed: true, reason: "No prior successful execution of this exact target." });
+
 
   if (job.status !== "approved") {
     gates.push({ gate: "approval", allowed: false, reason: `Job status is "${job.status}", not approved.` });
