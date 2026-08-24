@@ -310,7 +310,18 @@ export async function runGenerationJob(
     });
   }
 
+  // Provider truthfulness: the model actually invoked must be the model the
+  // operator approved. A cheaper approval can never authorize a costlier model.
+  const approvedTarget = (auth.job?.target ?? {}) as Record<string, unknown>;
+  const approvedModel = String(approvedTarget.model ?? "");
+  if (approvedModel && approvedModel !== String(input.model)) {
+    const reason = `Approved model ${approvedModel} does not match the requested model ${input.model}; a new quote and approval are required.`;
+    return { success: false, reason, job_id: input.jobId, candidate_id: input.candidateId, gates: [...gates, { gate: "model_binding", allowed: false, reason }] };
+  }
+  gates.push({ gate: "model_binding", allowed: true, reason: `Invoking the approved model ${input.model}.` });
+
   const claimed = await claimJob(db, input.jobId, input.actor);
+
   if (!claimed) {
     return { success: false, reason: "Job was already claimed or executed by another request (idempotency).", job_id: input.jobId, candidate_id: input.candidateId, gates };
   }
