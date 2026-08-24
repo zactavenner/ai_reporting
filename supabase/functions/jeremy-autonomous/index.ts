@@ -295,17 +295,21 @@ Deno.serve(async (req) => {
         return json({ success: true, job });
       }
 
-      case "approve_job": {
-        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not approve paid or external jobs." }, 403);
-        const result = await approveJob(supabase, String(body.job_id ?? ""), actor ?? "operator");
+      case "approve_job":
+      case "reject_job": {
+        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not decide paid or external jobs." }, 403);
+        const jobId = String(body.job_id ?? "");
+        // Scope the decision to the caller's client: a job may only ever be
+        // decided through its own client context.
+        const target = jobId ? await getJob(supabase, jobId) : null;
+        if (!target) return json({ success: false, error: "Job not found" }, 404);
+        if (target.client_id !== clientId) return json({ success: false, error: "Job belongs to a different client" }, 403);
+        const result = action === "approve_job"
+          ? await approveJob(supabase, jobId, actor ?? "operator")
+          : await rejectJob(supabase, jobId, actor ?? "operator");
         return json(result, result.success ? 200 : 400);
       }
 
-      case "reject_job": {
-        if (actor === "scheduler") return json({ success: false, error: "The scheduler may not decide paid or external jobs." }, 403);
-        const result = await rejectJob(supabase, String(body.job_id ?? ""), actor ?? "operator");
-        return json(result, result.success ? 200 : 400);
-      }
 
       // ── Paid Apify discovery (quote → operator approval → run) ────────────
       case "quote_discovery":
