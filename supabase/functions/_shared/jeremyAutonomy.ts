@@ -1125,6 +1125,9 @@ export async function runCycle(db: Db, clientId: string, opts: RunCycleOptions =
     await advanceCycle(db, cycle.id, "action", { kpi_snapshot_id: snapshotId, evidence: { basis: analysis.basis } });
 
     const plan = await planActions(db, clientId, policy, analysis);
+    // Persist every proposal as an immutable decision record. Execution can only
+    // ever replay one of these rows after an explicit operator approval.
+    const persisted = await persistPlannedActions(db, clientId, cycle.id, snapshotId, plan);
     await advanceCycle(db, cycle.id, "verification", {
       status: "completed",
       completed_at: new Date().toISOString(),
@@ -1142,6 +1145,7 @@ export async function runCycle(db: Db, clientId: string, opts: RunCycleOptions =
       coverage: analysis.coverage,
       basis: analysis.basis,
       plan,
+      persisted_plans: persisted,
       executed: [] as unknown[],
       note: policy.mode === "shadow"
         ? "Shadow mode: every decision was recorded, nothing was executed and nothing was published."
@@ -1167,12 +1171,13 @@ function aggregateSnapshot(analysis: AnalysisResult): KpiSnapshot {
 }
 
 export async function getCycle(db: Db, cycleId: string) {
-  const [{ data: cycle }, { data: candidates }, { data: executions }] = await Promise.all([
+  const [{ data: cycle }, { data: candidates }, { data: executions }, { data: plans }] = await Promise.all([
     db.from("jeremy_cycles").select("*").eq("id", cycleId).maybeSingle(),
     db.from("jeremy_creative_candidates").select("*").eq("cycle_id", cycleId).order("rank", { ascending: true }),
     db.from("jeremy_action_executions").select("*").eq("cycle_id", cycleId).order("created_at", { ascending: false }),
+    db.from("jeremy_action_plans").select("*").eq("cycle_id", cycleId).order("created_at", { ascending: false }),
   ]);
-  return { cycle, candidates: candidates ?? [], executions: executions ?? [] };
+  return { cycle, candidates: candidates ?? [], executions: executions ?? [], plans: plans ?? [] };
 }
 
 export { kpiContract, loadPolicy };
