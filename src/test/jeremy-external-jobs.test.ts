@@ -217,8 +217,15 @@ describe('Jeremy external job ledger', () => {
   });
 
   it('the database enforces one non-requotable quote per client and fingerprint', () => {
-    const sql = readFileSync('supabase/migrations', 'utf8');
-    expect(sql).toBeDefined();
+    const dir = 'supabase/migrations';
+    const sql = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => readFileSync(`${dir}/${f}`, 'utf8'))
+      .join('\n');
+    expect(sql).toMatch(/jeremy_external_jobs_active_fingerprint_uidx/);
+    expect(sql).toMatch(/awaiting_approval'\s*,\s*'approved'\s*,\s*'claimed'\s*,\s*'running'\s*,\s*'succeeded'/);
+  });
+
 
 
   it('re-quotes after a rejection, a failure or an expiry — but never after success', async () => {
