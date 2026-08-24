@@ -267,19 +267,19 @@ export async function quoteJob(db: Db, policy: JeremyPolicy, input: QuoteInput):
     const conflict = String((error as { code?: string }).code ?? "") === "23505" ||
       /duplicate key|unique constraint/i.test(String(error.message ?? ""));
     if (conflict) {
-      const { data: winner } = await db
+      const { data: winners } = await db
         .from("jeremy_external_jobs")
         .select("*")
         .eq("client_id", input.clientId)
-        .eq("request_fingerprint", fingerprint)
-        .not("status", "in", `(${REQUOTABLE_STATUSES.join(",")})`)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq("request_fingerprint", fingerprint);
+      const winner = ((winners ?? []) as JeremyExternalJob[])
+        .filter((r) => !REQUOTABLE_STATUSES.includes(String(r.status)))
+        .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")))[0];
       if (winner) {
-        return { success: true, job: winner as JeremyExternalJob, reused: true, reuse_reason: "concurrent_quote", policy_gate: gate };
+        return { success: true, job: winner, reused: true, reuse_reason: "concurrent_quote", policy_gate: gate };
       }
     }
+
     return { success: false, error: error.message };
   }
   return { success: true, job: data as JeremyExternalJob, reused: false, policy_gate: gate };
