@@ -479,6 +479,7 @@ describe('Jeremy generation', () => {
     client_settings: [{ client_id: CLIENT, brand_colors: ['#0B2B26'], brand_fonts: ['Playfair Display'] }],
     creatives: [{ id: 'own-1', client_id: CLIENT, file_url: 'https://owned.example/asset.png', status: 'approved' }],
     client_assets: [],
+    jeremy_model_costs: MODEL_COSTS.map((r) => ({ ...r })),
   });
 
   const executors = (over: Partial<GenerationExecutors> = {}): GenerationExecutors => ({
@@ -496,11 +497,20 @@ describe('Jeremy generation', () => {
     expect(good.ok).toBe(true);
   });
 
-  it('quotes exact model cost and refuses unknown models', () => {
-    expect(quoteGenerationCostUsd('static_image', 'google/gemini-2.5-flash-image')).toBe(0.04);
-    expect(Number.isNaN(quoteGenerationCostUsd('static_image', 'made/up'))).toBe(true);
-    expect(quoteGenerationCostUsd('video', 'bytedance/seedance-2.0', 5)).toBe(0.3);
-    expect(pickGenerationModel('video', 'made/up')).toBe('bytedance/seedance-2.0');
+  it('quotes from the configured price table and refuses unpriced models', async () => {
+    const db = genDb();
+    const imageRate = await loadModelRate(db, 'static_image', IMAGE_MODEL);
+    expect(quoteGenerationCostUsd(imageRate, 5)).toBe(0.04);
+    expect(imageRate?.source).toBe('jeremy_model_costs');
+    expect(imageRate?.version).toBe('2026-08-24');
+    // An unpriced model has no rate at all, so the cost is unknown and refused.
+    expect(await loadModelRate(db, 'static_image', 'made/up')).toBeNull();
+    expect(Number.isNaN(quoteGenerationCostUsd(null, 5))).toBe(true);
+    const videoRate = await loadModelRate(db, 'video', 'bytedance/seedance-2.0');
+    expect(quoteGenerationCostUsd(videoRate, 5)).toBe(0.3);
+    // Only a priced model may be selected.
+    expect(await pickGenerationModel(db, 'video', 'made/up')).toBe('bytedance/seedance-2.0');
+    expect(await pickGenerationModel(makeDb({ jeremy_model_costs: [] }), 'video', 'bytedance/seedance-2.0')).toBeNull();
   });
 
   it('never calls a provider without an approved job', async () => {
@@ -508,12 +518,12 @@ describe('Jeremy generation', () => {
     const ex = executors();
     const job = await quoteJob(db, paidPolicy(), {
       clientId: CLIENT, kind: 'image_generation', provider: 'openrouter',
-      target: generationTarget({ candidateId: 'cand-1', kind: 'static_image', model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1' }),
-      estimatedCostUsd: 0.04, candidateId: 'cand-1', requestedBy: 'operator:zac',
+      target: generationTarget({ candidateId: 'cand-1', kind: 'static_image', model: IMAGE_MODEL, aspectRatio: '1:1' }),
+      estimatedCostUsd: 0.04, ...PRICE, candidateId: 'cand-1', requestedBy: 'operator:zac',
     });
     const res = await runGenerationJob(db, paidPolicy(), ex, {
       clientId: CLIENT, jobId: job.job!.id, candidateId: 'cand-1', kind: 'static_image',
-      model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1', actor: 'operator:zac',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
     });
     expect(res.success).toBe(false);
     expect(ex.generateImage).not.toHaveBeenCalled();
@@ -521,10 +531,10 @@ describe('Jeremy generation', () => {
   });
 
   async function approvedImageJob(db: any, policy = paidPolicy()) {
-    const target = generationTarget({ candidateId: 'cand-1', kind: 'static_image', model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1' });
+    const target = generationTarget({ candidateId: 'cand-1', kind: 'static_image', model: IMAGE_MODEL, aspectRatio: '1:1' });
     const q = await quoteJob(db, policy, {
       clientId: CLIENT, kind: 'image_generation', provider: 'openrouter', target,
-      estimatedCostUsd: 0.04, candidateId: 'cand-1', requestedBy: 'operator:zac',
+      estimatedCostUsd: 0.04, ...PRICE, candidateId: 'cand-1', requestedBy: 'operator:zac',
     });
     await approveJob(db, q.job!.id, 'operator:zac');
     return q.job!.id;
@@ -536,7 +546,7 @@ describe('Jeremy generation', () => {
     const jobId = await approvedImageJob(db);
     const res = await runGenerationJob(db, paidPolicy(), ex, {
       clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
-      model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1', actor: 'operator:zac',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
       referenceImageUrls: ['https://owned.example/asset.png'],
     });
     expect(res.success).toBe(true);
@@ -560,7 +570,7 @@ describe('Jeremy generation', () => {
     const jobId = await approvedImageJob(db);
     const res = await runGenerationJob(db, paidPolicy(), ex, {
       clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
-      model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1', actor: 'operator:zac',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
     });
     expect(res.success).toBe(false);
     expect(res.reason).toMatch(/durable/i);
@@ -574,7 +584,7 @@ describe('Jeremy generation', () => {
     const jobId = await approvedImageJob(db);
     const res = await runGenerationJob(db, paidPolicy(), ex, {
       clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
-      model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1', actor: 'operator:zac',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
       referenceImageUrls: ['https://competitor.example/ad.mp4'],
     });
     expect(res.success).toBe(false);
@@ -587,7 +597,7 @@ describe('Jeremy generation', () => {
     const target = generationTarget({ candidateId: 'cand-1', kind: 'video', model: 'bytedance/seedance-2.0', aspectRatio: '9:16', durationSeconds: 5 });
     const q = await quoteJob(db, paidPolicy(), {
       clientId: CLIENT, kind: 'video_generation', provider: 'openrouter', target,
-      estimatedCostUsd: 0.3, candidateId: 'cand-1', requestedBy: 'operator:zac',
+      estimatedCostUsd: 0.3, ...PRICE, candidateId: 'cand-1', requestedBy: 'operator:zac',
     });
     await approveJob(db, q.job!.id, 'operator:zac');
     const res = await runGenerationJob(db, paidPolicy(), ex, {
@@ -600,17 +610,65 @@ describe('Jeremy generation', () => {
     expect(call.sourceFrameUrl).not.toBe('https://competitor.example/ad.mp4');
   });
 
+  it('refuses to invoke a model other than the approved one', async () => {
+    const db = genDb();
+    const ex = executors();
+    const jobId = await approvedImageJob(db);
+    const res = await runGenerationJob(db, paidPolicy(), ex, {
+      clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
+      model: 'google/nano-banana-pro', aspectRatio: '1:1', actor: 'operator:zac',
+    });
+    expect(res.success).toBe(false);
+    expect(res.gates.find((g) => g.gate === 'model_binding')?.allowed).toBe(false);
+    expect(ex.generateImage).not.toHaveBeenCalled();
+    expect(db._tables.jeremy_external_jobs[0].status).toBe('approved');
+  });
+
+  it('fails verification when the provider ran a different model', async () => {
+    const db = genDb();
+    const ex = executors({
+      generateImage: vi.fn(async () => ({ url: 'https://provider.example/tmp.png', receipt: { model: 'google/nano-banana-pro' }, actual_cost_usd: 0.04 })),
+    });
+    const jobId = await approvedImageJob(db);
+    const res = await runGenerationJob(db, paidPolicy(), ex, {
+      clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
+    });
+    expect(res.success).toBe(false);
+    expect(res.reason).toMatch(/nano-banana-pro/);
+    expect(db._tables.jeremy_external_jobs[0].status).toBe('failed');
+    expect(db._tables.jeremy_creative_candidates[0].generation_status).toBe('failed');
+  });
+
+  it('fails verification on a provider cost overrun and records the true cost', async () => {
+    const db = genDb();
+    const ex = executors({
+      generateImage: vi.fn(async () => ({ url: 'https://provider.example/tmp.png', receipt: { ok: true }, actual_cost_usd: 1.5 })),
+    });
+    const jobId = await approvedImageJob(db);
+    const res = await runGenerationJob(db, paidPolicy(), ex, {
+      clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
+    });
+    expect(res.success).toBe(false);
+    expect(res.reason).toMatch(/approved maximum/i);
+    const job = db._tables.jeremy_external_jobs[0];
+    expect(job.status).toBe('verification_failed');
+    expect(job.actual_cost_usd).toBe(1.5);
+    expect(db._tables.jeremy_creative_candidates[0].generation_status).toBe('failed');
+  });
+
   it('is idempotent: a second run of the same job is refused', async () => {
     const db = genDb();
     const ex = executors();
     const jobId = await approvedImageJob(db);
     const first = await runGenerationJob(db, paidPolicy(), ex, {
       clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
-      model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1', actor: 'operator:zac',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
     });
     const second = await runGenerationJob(db, paidPolicy(), ex, {
       clientId: CLIENT, jobId, candidateId: 'cand-1', kind: 'static_image',
-      model: 'google/gemini-2.5-flash-image', aspectRatio: '1:1', actor: 'operator:zac',
+      model: IMAGE_MODEL, aspectRatio: '1:1', actor: 'operator:zac',
     });
     expect(first.success).toBe(true);
     expect(second.success).toBe(false);
