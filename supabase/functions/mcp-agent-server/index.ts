@@ -1157,16 +1157,22 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         .maybeSingle();
       if (!candidate) return { error: 'Candidate not found for this client' };
       const kind = String(args.kind ?? candidate.generation_kind) === 'video' ? 'video' : 'static_image';
-      const model = pickGenerationModel(kind as any, args.model);
+      const model = await pickGenerationModel(prodDb, kind as any, args.model);
       const aspectRatio = String(args.aspect_ratio ?? (kind === 'video' ? '9:16' : '1:1'));
       const durationSeconds = Math.max(1, Math.min(30, Number(args.duration_seconds) || 5));
-      const cost = quoteGenerationCostUsd(kind as any, model, durationSeconds);
+      const rate = model ? await loadModelRate(prodDb, kind as any, model) : null;
+      const cost = quoteGenerationCostUsd(rate, durationSeconds);
+      if (!model || !rate || !Number.isFinite(cost)) {
+        return { error: 'No active configured price for this model in jeremy_model_costs; refusing to quote generation without a known cost.' };
+      }
       const quote = await quoteJob(prodDb, policy, {
         clientId: args.client_id,
         kind: jobKindFor(kind as any),
         provider: 'openrouter',
         target: generationTarget({ candidateId: String(args.candidate_id), kind: kind as any, model, aspectRatio, durationSeconds }),
         estimatedCostUsd: cost,
+        costSource: rate.source,
+        costVersion: rate.version,
         cycleId: args.cycle_id ?? null,
         candidateId: String(args.candidate_id),
         requestedBy: 'mcp',

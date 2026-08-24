@@ -349,16 +349,22 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (!candidate) return json({ success: false, error: "Candidate not found for this client" }, 404);
         const kind = (String(body.kind ?? candidate.generation_kind) === "video" ? "video" : "static_image") as GenerationKind;
-        const model = pickGenerationModel(kind, body.model);
+        const model = await pickGenerationModel(supabase, kind, body.model);
         const aspectRatio = String(body.aspect_ratio ?? (kind === "video" ? "9:16" : "1:1"));
         const durationSeconds = Math.max(1, Math.min(30, Number(body.duration_seconds) || 5));
-        const cost = quoteGenerationCostUsd(kind, model, durationSeconds);
+        const rate = model ? await loadModelRate(supabase, kind, model) : null;
+        const cost = quoteGenerationCostUsd(rate, durationSeconds);
+        if (!model || !rate || !Number.isFinite(cost)) {
+          return json({ success: false, error: "No active configured price for this model in jeremy_model_costs; refusing to quote generation without a known cost." }, 400);
+        }
         const quote = await quoteJob(supabase, policy, {
           clientId,
           kind: jobKindFor(kind),
           provider: "openrouter",
           target: generationTarget({ candidateId, kind, model, aspectRatio, durationSeconds }),
           estimatedCostUsd: cost,
+          costSource: rate.source,
+          costVersion: rate.version,
           cycleId: (body.cycle_id as string) ?? null,
           candidateId,
           requestedBy: actor ?? "operator",
