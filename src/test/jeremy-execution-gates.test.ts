@@ -297,7 +297,7 @@ describe('direct execution cannot bypass any deterministic gate', () => {
 
   it('refuses inside the cooldown window', async () => {
     const db = makeDb(baseTables({
-      jeremy_action_executions: [{ id: 'x', client_id: CLIENT, meta_entity_id: ENTITY, action: 'pause', status: 'succeeded', created_at: new Date(NOW - 3600000).toISOString(), executed_at: new Date(NOW - 3600000).toISOString() }],
+      jeremy_action_executions: [{ id: 'x', client_id: CLIENT, meta_entity_id: ENTITY, action: 'pause', status: 'succeeded', dry_run: false, created_at: new Date(NOW - 3600000).toISOString(), executed_at: new Date(NOW - 3600000).toISOString() }],
     }));
     const r = await executeApprovedAction(db, APPROVAL, provider().p, input());
     expect(r.success).toBe(false);
