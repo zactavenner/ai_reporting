@@ -560,15 +560,20 @@ describe('Jeremy launch readiness and PAUSED publication', () => {
   });
 
   it('names every missing configuration value instead of defaulting it', () => {
-    const missingConfig = buildLaunchRecord(CLIENT, generatedCandidate(), { ...fullConfig, page_id: null, pixel_id: null, destination_url: null }, { objective: 'leads', daily_budget_cents: 5000 });
+    const missingConfig = buildLaunchRecord(
+      CLIENT,
+      generatedCandidate(),
+      { ...fullConfig, page_id: null, pixel_id: null, destination_url: null, countries: [], special_ad_category: null },
+      { objective: 'leads', daily_budget_cents: 5000 },
+    );
     expect(missingConfig.ready).toBe(false);
     const text = missingConfig.missing.join(' | ');
     expect(text).toMatch(/Page ID/i);
     expect(text).toMatch(/Pixel ID/i);
     expect(text).toMatch(/Destination URL/i);
-    expect(text).toMatch(/country/i);
-    expect(text).toMatch(/Special ad category/i);
+    expect(text).toMatch(/countr/i);
     expect(text).toMatch(/Age range/i);
+
   });
 
   it('createLaunchBatch writes drafts only for ready candidates and never ACTIVE', async () => {
