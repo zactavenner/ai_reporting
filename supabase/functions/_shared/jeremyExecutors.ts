@@ -7,7 +7,9 @@
  * are copied into durable project storage before anything is marked generated.
  */
 import { DURABLE_BUCKET, type GenerationExecutors, type GenerationKind } from "./jeremyGeneration.ts";
+import { assertReceiptModelMatches } from "./exactModel.ts";
 import type { PublishExecutor } from "./jeremyLaunch.ts";
+
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
