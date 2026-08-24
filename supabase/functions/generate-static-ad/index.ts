@@ -31,7 +31,16 @@ interface GenerateAdRequest {
   adImageUrls?: string[];
   useGpt5Enhancer?: boolean;
   styleReferenceAvatarIds?: string[];
+  /** Legacy loose selector, still alias-mapped for the dashboard. */
+  imageModel?: string;
+  /**
+   * Exact, approved model id. When present NO aliasing and NO fallback model is
+   * allowed: the id is validated against the active configured allowlist and
+   * invoked verbatim, and the response reports the model actually run.
+   */
+  exactModel?: string;
 }
+
 
 function getImageDimensions(aspectRatio: string): { width: number; height: number } {
   switch (aspectRatio) {
