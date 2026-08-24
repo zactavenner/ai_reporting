@@ -103,7 +103,7 @@ describe('executors send the exact model to the generator endpoints', () => {
 
   afterEach(() => {
     globalThis.fetch = original;
-    vi.unstubAllEnvs();
+    delete (globalThis as any).Deno;
   });
 
   it('image generation sends exactModel with byte-exact equality', async () => {
