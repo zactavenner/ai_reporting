@@ -25,8 +25,9 @@ import {
   quoteJob,
 } from "../_shared/jeremyExternalJobs.ts";
 import {
+  assertRunIngestible,
   checkApifyMonthlyLimit,
-  costPerResultUsd,
+  configuredCostPerResult,
   estimateApifyCostUsd,
   fetchDatasetItems,
   ingestCreatives,

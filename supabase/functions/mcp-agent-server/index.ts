@@ -37,7 +37,7 @@ import { makeGenerationExecutors } from '../_shared/jeremyExecutors.ts';
 import {
   normalizeDiscoveryTarget,
   resolveApifySettings,
-  costPerResultUsd,
+  configuredCostPerResult,
   estimateApifyCostUsd,
   checkApifyMonthlyLimit,
 } from '../_shared/jeremyApify.ts';
@@ -1116,8 +1116,11 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
       });
       if (!normalized.ok) return { error: normalized.error };
       const settings = await resolveApifySettings(prodDb, args.client_id);
-      const unit = costPerResultUsd(settings);
-      const estimated = estimateApifyCostUsd(normalized.target, unit);
+      const unit = configuredCostPerResult(settings);
+      const estimated = estimateApifyCostUsd(normalized.target, unit.usd);
+      if (!Number.isFinite(estimated)) {
+        return { error: 'No Apify per-result price is configured; refusing to quote discovery without a known cost.' };
+      }
       const apifyGate = checkApifyMonthlyLimit(settings, estimated);
       const quote = await quoteJob(prodDb, policy, {
         clientId: args.client_id,
@@ -1125,6 +1128,8 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
         provider: 'apify',
         target: { ...normalized.target },
         estimatedCostUsd: estimated,
+        costSource: unit.source,
+        costVersion: unit.version,
         cycleId: args.cycle_id ?? null,
         requestedBy: 'mcp',
         quoteDetail: {
@@ -1134,7 +1139,7 @@ async function handleToolCall(name: string, args: Record<string, any>): Promise<
           targets: normalized.target.targets,
           results_limit_per_target: normalized.target.resultsLimit,
           maximum_results: normalized.target.max_results,
-          cost_per_result_usd: unit,
+          cost_per_result_usd: unit.usd,
           apify_monthly_limit_gate: apifyGate,
         },
       });
