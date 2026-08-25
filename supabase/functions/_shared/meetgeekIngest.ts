@@ -89,8 +89,14 @@ export interface IngestDeps {
     activityId?: string;
     duplicate?: boolean;
   }>;
-  /** Returns true when an event with this dedupe key was already processed. */
+  /**
+   * Returns the existing ingest event for this dedupe key (any status), so the
+   * caller can distinguish a terminal success (exactly-once) from a recoverable
+   * failure that must be retried.
+   */
   findProcessedEvent(dedupeKey: string): Promise<{ id: string; status: string } | null>;
+  /** Re-opens a non-terminal event for another attempt (idempotent). */
+  reopenEvent?(id: string, payload: unknown): Promise<void>;
   recordEvent(input: {
     dedupeKey: string;
     eventId: string | null;
