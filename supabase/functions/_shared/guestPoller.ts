@@ -722,6 +722,15 @@ export async function runGuestInvitePolling(args: {
 
       if (!job?.id) continue;
 
+      // Link the coverage row to its invite job so the watchdog can read the
+      // authoritative invite state (idempotent).
+      await supabase
+        .from('notetaker_coverage')
+        .update({ invite_job_id: job.id, invite_state: job.status || null })
+        .eq('client_id', config.clientId)
+        .eq('ghl_appointment_id', appointment.appointmentId);
+
+
       if (shadow) {
         // Queue the send for concurrent execution; the actual SMTP handshakes are
         // the bottleneck, so this keeps the overall runtime under the edge-fn
