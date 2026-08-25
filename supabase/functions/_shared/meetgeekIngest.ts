@@ -89,8 +89,14 @@ export interface IngestDeps {
     activityId?: string;
     duplicate?: boolean;
   }>;
-  /** Returns true when an event with this dedupe key was already processed. */
+  /**
+   * Returns the existing ingest event for this dedupe key (any status), so the
+   * caller can distinguish a terminal success (exactly-once) from a recoverable
+   * failure that must be retried.
+   */
   findProcessedEvent(dedupeKey: string): Promise<{ id: string; status: string } | null>;
+  /** Re-opens a non-terminal event for another attempt (idempotent). */
+  reopenEvent?(id: string, payload: unknown): Promise<void>;
   recordEvent(input: {
     dedupeKey: string;
     eventId: string | null;
@@ -340,7 +346,15 @@ export function hydrateMeetingFromProvider(
   }
 
   const participants = normalizeParticipants(body);
-  const joinUrl = firstString(body?.meeting_url, body?.join_url, body?.source_url, body?.meetgeek_url);
+  const joinUrl = firstString(
+    body?.join_link,
+    body?.meeting_link,
+    body?.conference_url,
+    body?.meeting_url,
+    body?.join_url,
+    body?.source_url,
+    body?.meetgeek_url,
+  );
 
   return {
     ...meeting,
@@ -357,9 +371,51 @@ export function hydrateMeetingFromProvider(
     sourceUrl: joinUrl || `https://app.meetgeek.ai/meetings/${meeting.meetingExternalId}`,
     recordingUrl: firstString(body?.recording_url, body?.video_url) ?? meeting.recordingUrl,
     transcriptUrl: firstString(body?.transcript_url) ?? meeting.transcriptUrl,
+    transcriptText: extractTranscriptText(body?.transcript ?? body?.sentences ?? null) ?? meeting.transcriptText ?? null,
     isCompleted: true,
     hydrationRequired: false,
   };
+}
+
+/**
+ * Ingest-event statuses that are FINAL. Anything else is recoverable and may be
+ * retried by a later webhook delivery or an operator replay.
+ */
+export const TERMINAL_INGEST_STATUSES = new Set(['processed', 'ignored']);
+export const RETRYABLE_INGEST_STATUSES = new Set(['received', 'processing', 'rejected', 'failed']);
+
+export function isTerminalIngestStatus(status: string | null | undefined): boolean {
+  return TERMINAL_INGEST_STATUSES.has(String(status || '').toLowerCase());
+}
+
+/**
+ * Extracts transcript text from any MeetGeek transcript shape:
+ * a plain string, `sentences[].transcript` (current API), `sentences[].text`,
+ * or `segments[].text`. Sentences may be paginated; callers concatenate pages.
+ */
+export function extractTranscriptText(body: unknown): string | null {
+  if (!body) return null;
+  if (typeof body === 'string') return body.trim() || null;
+  const b = body as Record<string, any>;
+  if (typeof b.transcript === 'string' && b.transcript.trim()) return b.transcript.trim();
+  const list = Array.isArray(b.sentences)
+    ? b.sentences
+    : Array.isArray(b.segments)
+      ? b.segments
+      : Array.isArray(b.data)
+        ? b.data
+        : null;
+  if (!list) return null;
+  const lines = list
+    .map((s: any) => {
+      if (typeof s === 'string') return s.trim();
+      const text = firstString(s?.transcript, s?.text, s?.sentence, s?.content);
+      if (!text) return '';
+      const speaker = firstString(s?.speaker, s?.speaker_name, s?.participant_name);
+      return speaker ? `${speaker}: ${text}` : text;
+    })
+    .filter((l: string) => !!l);
+  return lines.length ? lines.join('\n') : null;
 }
 
 /** Stable idempotency key: prefer provider event id, otherwise meeting id + status. */
@@ -507,19 +563,29 @@ export async function ingestMeetgeekWebhook(args: {
 
   const dedupeKey = computeDedupeKey(meeting);
   const existing = await deps.findProcessedEvent(dedupeKey);
-  if (existing) {
+  // Exactly-once for terminal outcomes; recoverable failures (a provider
+  // hydration blip, a transient CRM error, an interrupted run) are retried so a
+  // meeting is never permanently lost to a transient error.
+  if (existing && isTerminalIngestStatus(existing.status)) {
     return { ok: true, status: 200, duplicate: true, reason: 'duplicate_event' };
   }
 
-  const event = await deps.recordEvent({
-    dedupeKey,
-    eventId: meeting.eventId,
-    meetingExternalId: meeting.meetingExternalId,
-    clientId: null,
-    signatureValid: true,
-    status: 'processing',
-    payload,
-  });
+  let event: { id: string };
+  if (existing) {
+    if (deps.reopenEvent) await deps.reopenEvent(existing.id, payload);
+    else await deps.updateEvent(existing.id, { status: 'processing', errorMessage: null });
+    event = { id: existing.id };
+  } else {
+    event = await deps.recordEvent({
+      dedupeKey,
+      eventId: meeting.eventId,
+      meetingExternalId: meeting.meetingExternalId,
+      clientId: null,
+      signatureValid: true,
+      status: 'processing',
+      payload,
+    });
+  }
 
   try {
     if (meeting.analysisFailed) {

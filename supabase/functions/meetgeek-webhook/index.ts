@@ -8,6 +8,7 @@ import {
   normalizeEmail,
   buildMeetingNote,
   hydrateMeetingFromProvider,
+  extractTranscriptText,
   type IngestDeps,
   type LeadRow,
   type NormalizedMeeting,
@@ -208,19 +209,27 @@ async function enrichFromProvider(
   const api = await resolveMeetgeekApi(supabase, clientId);
   if (!api) return meeting;
   const id = encodeURIComponent(meeting.meetingExternalId);
-  const [insightsRaw, summaryRaw, transcriptRaw] = await Promise.all([
+  const [insightsRaw, summaryRaw] = await Promise.all([
     mgGet(api.apiKey, api.baseUrl, `/v1/meetings/${id}/insights`),
     mgGet(api.apiKey, api.baseUrl, `/v1/meetings/${id}/summary`),
-    mgGet(api.apiKey, api.baseUrl, `/v1/meetings/${id}/transcript`),
   ]);
 
   const insights = parseMeetgeekInsights(insightsRaw) ?? meeting.insights ?? null;
   const summaryText = typeof summaryRaw?.summary === 'string' ? summaryRaw.summary : null;
-  const transcriptText = typeof transcriptRaw?.transcript === 'string'
-    ? transcriptRaw.transcript
-    : Array.isArray(transcriptRaw?.sentences)
-      ? transcriptRaw.sentences.map((s: any) => String(s?.text || '')).filter(Boolean).join('\n')
-      : null;
+
+  // Transcript: MeetGeek paginates `sentences` and names the text field
+  // `transcript` (older payloads used `text`). Pages are concatenated.
+  const pages: string[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 20; page += 1) {
+    const path = `/v1/meetings/${id}/transcript${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const raw = await mgGet(api.apiKey, api.baseUrl, path);
+    const text = extractTranscriptText(raw);
+    if (text) pages.push(text);
+    cursor = typeof raw?.cursor === 'string' && raw.cursor ? raw.cursor : null;
+    if (!cursor) break;
+  }
+  const transcriptText = pages.length ? pages.join('\n') : null;
 
   const providerActionItems = Array.isArray(insightsRaw?.action_items)
     ? insightsRaw.action_items
@@ -425,6 +434,14 @@ function buildIngestDeps(supabase: any): IngestDeps {
       if (patch.errorMessage !== undefined) update.error_message = patch.errorMessage;
       if (patch.clientId !== undefined) update.client_id = patch.clientId;
       await supabase.from('meeting_ingest_events').update(update).eq('id', id);
+    },
+    // Recovery path: a non-terminal event (transient hydration/CRM failure) is
+    // re-opened with the freshest payload instead of being permanently dropped.
+    async reopenEvent(id, payload) {
+      await supabase
+        .from('meeting_ingest_events')
+        .update({ status: 'processing', error_message: null, payload: payload as any })
+        .eq('id', id);
     },
     async resolveClientId(_meeting: NormalizedMeeting) {
       // The calendar gate is the only tenant authority. There is no title-based

@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { MeetGeekCalendarSection } from './MeetGeekCalendarSection';
 import { MeetGeekRolloutPanel } from './MeetGeekRolloutPanel';
+import { NotetakerCoveragePanel } from './NotetakerCoveragePanel';
 
 interface MeetGeekIntegrationSectionProps {
   clientId: string;
@@ -230,6 +231,7 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
           </div>
 
           <MeetGeekRolloutPanel />
+          <NotetakerCoveragePanel clientId={clientId} />
           <MeetGeekCalendarSection clientId={clientId} />
         </div>
       )}
