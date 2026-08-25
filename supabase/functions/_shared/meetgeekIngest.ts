@@ -73,7 +73,7 @@ export interface IngestDeps {
    * BEFORE the calendar gate. Returning null fails closed for payloads that
    * carried no authoritative meeting data.
    */
-  hydrateFromProvider?(meeting: NormalizedMeeting): Promise<NormalizedMeeting | null>;
+  hydrateFromProvider?(meeting: NormalizedMeeting): Promise<HydrationAttempt>;
   /**
    * Optional per-client calendar gate. When provided it is the sole authority for
    * which client a meeting belongs to and whether it may be ingested at all.
