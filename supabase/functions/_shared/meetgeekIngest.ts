@@ -142,6 +142,8 @@ export interface IngestResult {
   ghlNoteStatus?: string;
   activityId?: string;
   clientId?: string | null;
+  /** Present only when authoritative provider hydration failed. */
+  hydrationDiagnostic?: HydrationDiagnostic;
 }
 
 export const MEETGEEK_SIGNATURE_HEADER = 'x-mg-signature';
