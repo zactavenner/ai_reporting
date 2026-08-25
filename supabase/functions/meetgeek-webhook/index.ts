@@ -426,6 +426,14 @@ function buildIngestDeps(supabase: any): IngestDeps {
       if (patch.clientId !== undefined) update.client_id = patch.clientId;
       await supabase.from('meeting_ingest_events').update(update).eq('id', id);
     },
+    // Recovery path: a non-terminal event (transient hydration/CRM failure) is
+    // re-opened with the freshest payload instead of being permanently dropped.
+    async reopenEvent(id, payload) {
+      await supabase
+        .from('meeting_ingest_events')
+        .update({ status: 'processing', error_message: null, payload: payload as any })
+        .eq('id', id);
+    },
     async resolveClientId(_meeting: NormalizedMeeting) {
       // The calendar gate is the only tenant authority. There is no title-based
       // or heuristic fallback: if the gate did not resolve a client, nothing is
