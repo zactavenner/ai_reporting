@@ -367,13 +367,23 @@ function buildIngestDeps(supabase: any): IngestDeps {
     // that response as the sole authority for timing/title/host/attendees.
     async hydrateFromProvider(meeting: NormalizedMeeting) {
       const api = await resolveAgencyMeetgeekApi(supabase);
-      if (!api) return null;
-      const raw = await mgGet(
+      if (!api) {
+        return { meeting: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: false }) };
+      }
+      const attempt = await mgGetDiagnostic(
         api.apiKey,
         api.baseUrl,
         `/v1/meetings/${encodeURIComponent(meeting.meetingExternalId)}`,
       );
-      return hydrateMeetingFromProvider(meeting, raw);
+      if (!attempt.body) {
+        return { meeting: null, diagnostic: attempt.diagnostic };
+      }
+      const hydrated = hydrateMeetingFromProvider(meeting, attempt.body);
+      if (hydrated) return { meeting: hydrated };
+      return {
+        meeting: null,
+        diagnostic: { code: 'incomplete_response' as const, detail: 'Provider meeting lacked authoritative start time' },
+      };
     },
     // Production path: per-client calendar gating + client-scoped call activity.
     async calendarGate(meeting: NormalizedMeeting) {
