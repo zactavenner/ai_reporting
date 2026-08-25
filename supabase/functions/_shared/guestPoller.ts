@@ -40,6 +40,7 @@ import {
   type AttributionCache,
 } from './ghlAttribution.ts';
 import { normalizeAttendance } from './ghlAttendance.ts';
+import { recordCoverage } from './notetakerCoverage.ts';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const SHADOW_INVITE_CONCURRENCY = 5;
