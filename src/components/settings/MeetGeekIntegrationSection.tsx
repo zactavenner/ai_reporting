@@ -230,6 +230,7 @@ export function MeetGeekIntegrationSection({ clientId, settings }: MeetGeekInteg
           </div>
 
           <MeetGeekRolloutPanel />
+          <NotetakerCoveragePanel clientId={clientId} />
           <MeetGeekCalendarSection clientId={clientId} />
         </div>
       )}
