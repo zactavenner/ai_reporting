@@ -371,6 +371,7 @@ export function hydrateMeetingFromProvider(
     sourceUrl: joinUrl || `https://app.meetgeek.ai/meetings/${meeting.meetingExternalId}`,
     recordingUrl: firstString(body?.recording_url, body?.video_url) ?? meeting.recordingUrl,
     transcriptUrl: firstString(body?.transcript_url) ?? meeting.transcriptUrl,
+    transcriptText: extractTranscriptText(body?.transcript ?? body?.sentences ?? null) ?? meeting.transcriptText ?? null,
     isCompleted: true,
     hydrationRequired: false,
   };
