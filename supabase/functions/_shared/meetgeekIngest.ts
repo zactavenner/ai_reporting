@@ -513,19 +513,29 @@ export async function ingestMeetgeekWebhook(args: {
 
   const dedupeKey = computeDedupeKey(meeting);
   const existing = await deps.findProcessedEvent(dedupeKey);
-  if (existing) {
+  // Exactly-once for terminal outcomes; recoverable failures (a provider
+  // hydration blip, a transient CRM error, an interrupted run) are retried so a
+  // meeting is never permanently lost to a transient error.
+  if (existing && isTerminalIngestStatus(existing.status)) {
     return { ok: true, status: 200, duplicate: true, reason: 'duplicate_event' };
   }
 
-  const event = await deps.recordEvent({
-    dedupeKey,
-    eventId: meeting.eventId,
-    meetingExternalId: meeting.meetingExternalId,
-    clientId: null,
-    signatureValid: true,
-    status: 'processing',
-    payload,
-  });
+  let event: { id: string };
+  if (existing) {
+    if (deps.reopenEvent) await deps.reopenEvent(existing.id, payload);
+    else await deps.updateEvent(existing.id, { status: 'processing', errorMessage: null });
+    event = { id: existing.id };
+  } else {
+    event = await deps.recordEvent({
+      dedupeKey,
+      eventId: meeting.eventId,
+      meetingExternalId: meeting.meetingExternalId,
+      clientId: null,
+      signatureValid: true,
+      status: 'processing',
+      payload,
+    });
+  }
 
   try {
     if (meeting.analysisFailed) {
