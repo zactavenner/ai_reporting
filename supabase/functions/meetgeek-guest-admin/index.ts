@@ -134,6 +134,102 @@ Deno.serve(async (req) => {
         return json({ ok: true, ...result });
       }
 
+      // ---- Durable coverage ledger (booking → transcript) ----
+      // Read-only rollup + open exceptions for the operator UI.
+      case 'coverage_overview': {
+        const lookbackDays = Math.min(Math.max(Number(body?.lookback_days) || 14, 1), 90);
+        const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+        let q = supabase
+          .from('notetaker_coverage')
+          .select(
+            'id, client_id, ghl_appointment_id, ghl_calendar_name, contact_name, contact_email, assigned_user_name, scheduled_start, scheduled_end, meeting_url, expected_provider, appointment_state, coverage_state, outcome, invite_state, transcript_source, transcript_chars, exception_code, exception_message, overdue_at, last_checked_at',
+          )
+          .gte('scheduled_start', since)
+          .order('scheduled_start', { ascending: false })
+          .limit(2000);
+        if (clientId) q = q.eq('client_id', clientId);
+        const { data: rows, error } = await q;
+        if (error) return json({ error: error.message }, 500);
+
+        const { data: clientRows } = await supabase.from('clients').select('id, name');
+        const clientNames = new Map((clientRows || []).map((c: any) => [c.id, c.name]));
+        const all = rows || [];
+        const byClient = new Map<string, any[]>();
+        for (const r of all) {
+          const list = byClient.get(r.client_id) || [];
+          list.push(r);
+          byClient.set(r.client_id, list);
+        }
+        const lastPoll = all.reduce<string | null>(
+          (acc, r: any) => (r.last_checked_at && (!acc || r.last_checked_at > acc) ? r.last_checked_at : acc),
+          null,
+        );
+        return json({
+          generated_at: new Date().toISOString(),
+          window_days: lookbackDays,
+          last_reconciled_at: lastPoll,
+          summary: summarizeCoverage(all),
+          by_client: Array.from(byClient.entries())
+            .map(([cid, list]) => ({
+              client_id: cid,
+              client_name: clientNames.get(cid) || 'Unassigned',
+              ...summarizeCoverage(list),
+            }))
+            .sort((a, b) => b.exceptions - a.exceptions || b.total - a.total),
+          exceptions: all
+            .filter((r: any) => r.coverage_state === 'exception')
+            .slice(0, 200)
+            .map((r: any) => ({ ...r, client_name: clientNames.get(r.client_id) || 'Unassigned' })),
+        });
+      }
+
+      // On-demand watchdog run (same code path as the 10-minute cron).
+      case 'coverage_reconcile': {
+        const result = await reconcileCoverage({
+          supabase,
+          clientId,
+          lookbackDays: Number(body?.lookback_days) > 0 ? Number(body.lookback_days) : 30,
+        });
+        return json({ ok: true, ...result });
+      }
+
+      // Operator replay for MeetGeek ingest events that failed non-terminally.
+      // Terminal (processed / ignored) events are never touched, so replay can
+      // never duplicate an already-ingested meeting.
+      case 'coverage_replay_ingest': {
+        let q = supabase
+          .from('meeting_ingest_events')
+          .select('id, status, meeting_external_id, client_id, error_message, created_at')
+          .eq('provider', 'meetgeek')
+          .in('status', ['rejected', 'failed', 'processing'])
+          .order('created_at', { ascending: false })
+          .limit(200);
+        if (clientId) q = q.eq('client_id', clientId);
+        const { data: stuck, error } = await q;
+        if (error) return json({ error: error.message }, 500);
+        const ids = (stuck || []).map((r: any) => r.id);
+        if (body?.apply && ids.length) {
+          await supabase
+            .from('meeting_ingest_events')
+            .update({ status: 'received', error_message: null })
+            .in('id', ids);
+        }
+        return json({
+          applied: !!body?.apply,
+          retryable: ids.length,
+          events: (stuck || []).map((r: any) => ({
+            id: r.id,
+            status: r.status,
+            meeting_external_id: r.meeting_external_id,
+            error_message: r.error_message,
+            created_at: r.created_at,
+          })),
+          note:
+            'Re-opened events are reprocessed on the next MeetGeek delivery for that meeting; already-processed events are never replayed.',
+        });
+      }
+
+
       case 'gc_list_connections': {
         // (see ai_meetings_overview below for the read-only analytics feed)
         const { data } = await supabase
