@@ -176,6 +176,35 @@ async function mgGet(apiKey: string, baseUrl: string, path: string): Promise<any
 }
 
 /**
+ * Same as `mgGet` but returns a safe diagnostic (no keys, no PII, no body text)
+ * so hydration failures can be persisted and shown to operators.
+ */
+async function mgGetDiagnostic(
+  apiKey: string,
+  baseUrl: string,
+  path: string,
+): Promise<{ body: any | null; diagnostic: HydrationDiagnostic }> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+  } catch {
+    return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true, errorKind: 'network' }) };
+  }
+  if (!res.ok) {
+    return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true, httpStatus: res.status }) };
+  }
+  try {
+    const body = await res.json();
+    if (!body || typeof body !== 'object') {
+      return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true }) };
+    }
+    return { body, diagnostic: { code: 'empty_response' } };
+  } catch {
+    return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true, errorKind: 'parse' }) };
+  }
+}
+
+/**
  * Resolves the provider webhook signing secret for the raw-body HMAC check ONLY.
  * Prefers the Deno env secret; falls back to `public.integration_secrets`
  * (service-role only, RLS enabled, no grants/policies for anon/authenticated).
