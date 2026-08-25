@@ -368,6 +368,47 @@ export function hydrateMeetingFromProvider(
   };
 }
 
+/**
+ * Ingest-event statuses that are FINAL. Anything else is recoverable and may be
+ * retried by a later webhook delivery or an operator replay.
+ */
+export const TERMINAL_INGEST_STATUSES = new Set(['processed', 'ignored']);
+export const RETRYABLE_INGEST_STATUSES = new Set(['received', 'processing', 'rejected', 'failed']);
+
+export function isTerminalIngestStatus(status: string | null | undefined): boolean {
+  return TERMINAL_INGEST_STATUSES.has(String(status || '').toLowerCase());
+}
+
+/**
+ * Extracts transcript text from any MeetGeek transcript shape:
+ * a plain string, `sentences[].transcript` (current API), `sentences[].text`,
+ * or `segments[].text`. Sentences may be paginated; callers concatenate pages.
+ */
+export function extractTranscriptText(body: unknown): string | null {
+  if (!body) return null;
+  if (typeof body === 'string') return body.trim() || null;
+  const b = body as Record<string, any>;
+  if (typeof b.transcript === 'string' && b.transcript.trim()) return b.transcript.trim();
+  const list = Array.isArray(b.sentences)
+    ? b.sentences
+    : Array.isArray(b.segments)
+      ? b.segments
+      : Array.isArray(b.data)
+        ? b.data
+        : null;
+  if (!list) return null;
+  const lines = list
+    .map((s: any) => {
+      if (typeof s === 'string') return s.trim();
+      const text = firstString(s?.transcript, s?.text, s?.sentence, s?.content);
+      if (!text) return '';
+      const speaker = firstString(s?.speaker, s?.speaker_name, s?.participant_name);
+      return speaker ? `${speaker}: ${text}` : text;
+    })
+    .filter((l: string) => !!l);
+  return lines.length ? lines.join('\n') : null;
+}
+
 /** Stable idempotency key: prefer provider event id, otherwise meeting id + status. */
 export function computeDedupeKey(meeting: NormalizedMeeting): string {
   if (meeting.eventId) return `event:${meeting.eventId}`;
