@@ -599,6 +599,40 @@ export async function runGuestInvitePolling(args: {
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
 
+      // Durable coverage ledger: EVERY observed booking is recorded, including
+      // ones that are skipped below (already invited, cancelled, gate-rejected,
+      // phone-only). The watchdog later proves or fails each row, so a capture
+      // gap can never pass silently.
+      try {
+        await recordCoverage(supabase, {
+          clientId: config.clientId,
+          ghlAppointmentId: appointment.appointmentId,
+          ghlCalendarId: appointment.calendarId,
+          ghlCalendarName: appointment.calendarName || null,
+          ghlLocationId: config.ghlLocationId,
+          ghlContactId: appointment.attribution?.contactId || null,
+          contactName: appointment.attribution?.contactName || null,
+          contactEmail: appointment.attribution?.contactEmail || null,
+          contactPhone: appointment.attribution?.contactPhone || null,
+          assignedUserId: appointment.attribution?.assignedUserId || null,
+          assignedUserName: appointment.attribution?.assignedUserName || null,
+          scheduledStart: appointment.startTime,
+          scheduledEnd: appointment.endTime,
+          scheduleSignature: scheduleSignature(
+            appointment.startTime,
+            appointment.endTime,
+            extractVideoLink(appointment.meetingUrl),
+          ),
+          meetingUrl: extractVideoLink(appointment.meetingUrl),
+          rawStatus: appointment.appointmentStatus || null,
+          cancelled: !!appointment.cancelled,
+          inviteJobId: existing?.id || null,
+          inviteState: existing?.status || null,
+        });
+      } catch (e) {
+        result.errors.push(`coverage ${appointment.appointmentId}: ${String((e as Error).message).slice(0, 120)}`);
+      }
+
       // Dedupe across webhook + poller. In shadow mode an already-invited job is
       // still revisited so reschedules and cancellations stay in sync; only the
       // signature check decides whether anything is actually re-sent.
