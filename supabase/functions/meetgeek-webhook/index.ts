@@ -8,6 +8,7 @@ import {
   normalizeEmail,
   buildMeetingNote,
   hydrateMeetingFromProvider,
+  extractTranscriptText,
   type IngestDeps,
   type LeadRow,
   type NormalizedMeeting,
