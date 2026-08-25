@@ -346,7 +346,15 @@ export function hydrateMeetingFromProvider(
   }
 
   const participants = normalizeParticipants(body);
-  const joinUrl = firstString(body?.meeting_url, body?.join_url, body?.source_url, body?.meetgeek_url);
+  const joinUrl = firstString(
+    body?.join_link,
+    body?.meeting_link,
+    body?.conference_url,
+    body?.meeting_url,
+    body?.join_url,
+    body?.source_url,
+    body?.meetgeek_url,
+  );
 
   return {
     ...meeting,
