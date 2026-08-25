@@ -667,13 +667,25 @@ export async function ingestMeetgeekWebhook(args: {
     // Authoritative provider hydration BEFORE any client/calendar matching.
     // The webhook is never trusted for tenant, calendar, timing or title.
     if (deps.hydrateFromProvider) {
-      const hydrated = await deps.hydrateFromProvider(meeting);
+      const { meeting: hydrated, diagnostic } = normalizeHydrationAttempt(
+        await deps.hydrateFromProvider(meeting),
+      );
       if (hydrated) {
         meeting = hydrated;
       } else if (meeting.hydrationRequired) {
-        // Fail closed: nothing authoritative to gate on.
-        await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_failed' });
-        return { ok: false, status: 422, reason: 'provider_hydration_failed' };
+        // Fail closed: nothing authoritative to gate on. The event stays
+        // RETRYABLE (`rejected`) so a later delivery or operator replay retries.
+        const diag = diagnostic ?? classifyHydrationFailure({});
+        await deps.updateEvent(event.id, {
+          status: 'rejected',
+          errorMessage: `provider_hydration_failed:${diag.code}${diag.detail ? ` (${diag.detail})` : ''}`.slice(0, 400),
+        });
+        return {
+          ok: false,
+          status: 422,
+          reason: 'provider_hydration_failed',
+          hydrationDiagnostic: diag,
+        } as IngestResult;
       }
     } else if (meeting.hydrationRequired) {
       await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_unavailable' });
