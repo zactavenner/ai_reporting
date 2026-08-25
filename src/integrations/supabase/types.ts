@@ -18578,6 +18578,170 @@ export type Database = {
           },
         ]
       }
+      notetaker_coverage: {
+        Row: {
+          appointment_state: string
+          assigned_user_id: string | null
+          assigned_user_name: string | null
+          client_id: string
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          coverage_state: string
+          created_at: string
+          exception_code: string | null
+          exception_message: string | null
+          expected_provider: string
+          ghl_appointment_id: string
+          ghl_calendar_id: string | null
+          ghl_calendar_name: string | null
+          ghl_contact_id: string | null
+          ghl_location_id: string | null
+          id: string
+          invite_job_id: string | null
+          invite_state: string | null
+          last_checked_at: string | null
+          match_method: string | null
+          meeting_record_id: string | null
+          meeting_url: string | null
+          outcome: string | null
+          overdue_at: string | null
+          phone_call_record_id: string | null
+          reconcile_count: number
+          schedule_signature: string | null
+          scheduled_end: string | null
+          scheduled_start: string | null
+          transcript_chars: number
+          transcript_complete_at: string | null
+          transcript_source: string | null
+          updated_at: string
+        }
+        Insert: {
+          appointment_state?: string
+          assigned_user_id?: string | null
+          assigned_user_name?: string | null
+          client_id: string
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          coverage_state?: string
+          created_at?: string
+          exception_code?: string | null
+          exception_message?: string | null
+          expected_provider?: string
+          ghl_appointment_id: string
+          ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_contact_id?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          invite_job_id?: string | null
+          invite_state?: string | null
+          last_checked_at?: string | null
+          match_method?: string | null
+          meeting_record_id?: string | null
+          meeting_url?: string | null
+          outcome?: string | null
+          overdue_at?: string | null
+          phone_call_record_id?: string | null
+          reconcile_count?: number
+          schedule_signature?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          transcript_chars?: number
+          transcript_complete_at?: string | null
+          transcript_source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          appointment_state?: string
+          assigned_user_id?: string | null
+          assigned_user_name?: string | null
+          client_id?: string
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          coverage_state?: string
+          created_at?: string
+          exception_code?: string | null
+          exception_message?: string | null
+          expected_provider?: string
+          ghl_appointment_id?: string
+          ghl_calendar_id?: string | null
+          ghl_calendar_name?: string | null
+          ghl_contact_id?: string | null
+          ghl_location_id?: string | null
+          id?: string
+          invite_job_id?: string | null
+          invite_state?: string | null
+          last_checked_at?: string | null
+          match_method?: string | null
+          meeting_record_id?: string | null
+          meeting_url?: string | null
+          outcome?: string | null
+          overdue_at?: string | null
+          phone_call_record_id?: string | null
+          reconcile_count?: number
+          schedule_signature?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          transcript_chars?: number
+          transcript_complete_at?: string | null
+          transcript_source?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notetaker_coverage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notetaker_coverage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notetaker_coverage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notetaker_coverage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "notetaker_coverage_invite_job_id_fkey"
+            columns: ["invite_job_id"]
+            isOneToOne: false
+            referencedRelation: "meetgeek_guest_invite_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notetaker_coverage_meeting_record_id_fkey"
+            columns: ["meeting_record_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notetaker_coverage_phone_call_record_id_fkey"
+            columns: ["phone_call_record_id"]
+            isOneToOne: false
+            referencedRelation: "phone_call_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onboarding_notifications: {
         Row: {
           channel: string
