@@ -4,6 +4,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import { runGuestInvitePolling } from '../_shared/guestPoller.ts';
+import { reconcileCoverage } from '../_shared/notetakerCoverage.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
