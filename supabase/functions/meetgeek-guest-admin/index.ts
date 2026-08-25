@@ -13,6 +13,7 @@ import { getMappedGhl } from '../_shared/ghlMapping.ts';
 import { runGuestInvitePolling } from '../_shared/guestPoller.ts';
 import { resolveInviteSender } from '../_shared/shadowInviteSender.ts';
 import { rollupAttendance, syncGhlAttendance } from '../_shared/ghlAttendance.ts';
+import { reconcileCoverage, summarizeCoverage } from '../_shared/notetakerCoverage.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
