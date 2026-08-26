@@ -498,6 +498,28 @@ export function extractTranscriptText(body: unknown): string | null {
   return lines.length ? lines.join('\n') : null;
 }
 
+/**
+ * Next transcript page cursor. The current MeetGeek API returns
+ * `pagination.next_cursor`; older/alternate shapes used a top-level
+ * `next_cursor` or `cursor`. An empty/absent value ends pagination.
+ */
+export function extractTranscriptCursor(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, any>;
+  const candidates = [
+    b.pagination?.next_cursor,
+    b.pagination?.cursor,
+    b.meta?.next_cursor,
+    b.next_cursor,
+    b.cursor,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim();
+  }
+  return null;
+}
+
+
 /** Stable idempotency key: prefer provider event id, otherwise meeting id + status. */
 export function computeDedupeKey(meeting: NormalizedMeeting): string {
   if (meeting.eventId) return `event:${meeting.eventId}`;
