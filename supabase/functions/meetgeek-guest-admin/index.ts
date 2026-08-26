@@ -230,6 +230,51 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Operator-only replay scoped to hydration failures. Reports the safe
+      // diagnostic breakdown (missing key / 401-403 / 404 / 429 / parse /
+      // network) and re-opens the rows so the next delivery re-hydrates them.
+      // Terminal (processed / ignored) events are never eligible.
+      case 'hydration_replay': {
+        let q = supabase
+          .from('meeting_ingest_events')
+          .select('id, status, meeting_external_id, client_id, error_message, created_at')
+          .eq('provider', 'meetgeek')
+          .in('status', ['rejected', 'failed'])
+          .like('error_message', 'provider_hydration_%')
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (clientId) q = q.eq('client_id', clientId);
+        const { data: rows, error } = await q;
+        if (error) return json({ error: error.message }, 500);
+        const byCode: Record<string, number> = {};
+        for (const r of rows || []) {
+          const code = String(r.error_message || '').split(':')[1]?.split(' ')[0] || 'unknown';
+          byCode[code] = (byCode[code] || 0) + 1;
+        }
+        const ids = (rows || []).map((r: any) => r.id);
+        if (body?.apply && ids.length) {
+          await supabase
+            .from('meeting_ingest_events')
+            .update({ status: 'received', error_message: null })
+            .in('id', ids);
+        }
+        return json({
+          applied: !!body?.apply,
+          retryable: ids.length,
+          by_diagnostic: byCode,
+          events: (rows || []).slice(0, 100).map((r: any) => ({
+            id: r.id,
+            status: r.status,
+            meeting_external_id: r.meeting_external_id,
+            error_message: r.error_message,
+            created_at: r.created_at,
+          })),
+          note: 'Re-opened hydration failures are retried on the next MeetGeek delivery; processed meetings are never replayed.',
+        });
+      }
+
+
+
 
       case 'gc_list_connections': {
         // (see ai_meetings_overview below for the read-only analytics feed)

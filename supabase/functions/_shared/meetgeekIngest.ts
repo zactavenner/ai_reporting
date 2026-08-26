@@ -73,7 +73,7 @@ export interface IngestDeps {
    * BEFORE the calendar gate. Returning null fails closed for payloads that
    * carried no authoritative meeting data.
    */
-  hydrateFromProvider?(meeting: NormalizedMeeting): Promise<NormalizedMeeting | null>;
+  hydrateFromProvider?(meeting: NormalizedMeeting): Promise<HydrationAttempt>;
   /**
    * Optional per-client calendar gate. When provided it is the sole authority for
    * which client a meeting belongs to and whether it may be ingested at all.
@@ -142,6 +142,8 @@ export interface IngestResult {
   ghlNoteStatus?: string;
   activityId?: string;
   clientId?: string | null;
+  /** Present only when authoritative provider hydration failed. */
+  hydrationDiagnostic?: HydrationDiagnostic;
 }
 
 export const MEETGEEK_SIGNATURE_HEADER = 'x-mg-signature';
@@ -389,6 +391,73 @@ export function isTerminalIngestStatus(status: string | null | undefined): boole
 }
 
 /**
+ * Safe, PII-free and key-free diagnostic codes for a failed authoritative
+ * `GET /v1/meetings/{id}` hydration. These are persisted on the ingest event and
+ * returned to operators so a hydration outage is diagnosable without exposing
+ * credentials, regions secrets or meeting content.
+ */
+export type HydrationDiagnosticCode =
+  | 'missing_api_key'
+  | 'unauthorized'
+  | 'not_found'
+  | 'rate_limited'
+  | 'server_error'
+  | 'http_error'
+  | 'parse_error'
+  | 'network_error'
+  | 'empty_response'
+  | 'incomplete_response';
+
+export interface HydrationDiagnostic {
+  code: HydrationDiagnosticCode;
+  /** Short, non-sensitive hint (never a key, token, email or transcript). */
+  detail?: string | null;
+}
+
+/** Result shape a hydration dependency may return. */
+export type HydrationAttempt =
+  | NormalizedMeeting
+  | null
+  | { meeting: NormalizedMeeting | null; diagnostic?: HydrationDiagnostic | null };
+
+export function classifyHydrationFailure(input: {
+  apiKeyPresent?: boolean;
+  httpStatus?: number | null;
+  errorKind?: 'network' | 'parse' | null;
+}): HydrationDiagnostic {
+  if (input.apiKeyPresent === false) {
+    return { code: 'missing_api_key', detail: 'No agency MeetGeek API key is configured' };
+  }
+  if (input.errorKind === 'network') {
+    return { code: 'network_error', detail: 'Provider request could not be completed' };
+  }
+  if (input.errorKind === 'parse') {
+    return { code: 'parse_error', detail: 'Provider response was not valid JSON' };
+  }
+  const s = Number(input.httpStatus || 0);
+  if (s === 401 || s === 403) {
+    return { code: 'unauthorized', detail: `Provider rejected the credential (HTTP ${s}) — wrong key or region` };
+  }
+  if (s === 404) return { code: 'not_found', detail: 'Meeting not found for this workspace' };
+  if (s === 429) return { code: 'rate_limited', detail: 'Provider rate limit hit (HTTP 429)' };
+  if (s >= 500) return { code: 'server_error', detail: `Provider error (HTTP ${s})` };
+  if (s >= 400) return { code: 'http_error', detail: `Provider error (HTTP ${s})` };
+  return { code: 'empty_response', detail: 'Provider returned no meeting body' };
+}
+
+/** Normalizes any hydration dependency return value. */
+export function normalizeHydrationAttempt(
+  attempt: HydrationAttempt,
+): { meeting: NormalizedMeeting | null; diagnostic: HydrationDiagnostic | null } {
+  if (!attempt) return { meeting: null, diagnostic: null };
+  if ('meeting' in (attempt as any) && !('meetingExternalId' in (attempt as any))) {
+    const a = attempt as { meeting: NormalizedMeeting | null; diagnostic?: HydrationDiagnostic | null };
+    return { meeting: a.meeting ?? null, diagnostic: a.diagnostic ?? null };
+  }
+  return { meeting: attempt as NormalizedMeeting, diagnostic: null };
+}
+
+/**
  * Extracts transcript text from any MeetGeek transcript shape:
  * a plain string, `sentences[].transcript` (current API), `sentences[].text`,
  * or `segments[].text`. Sentences may be paginated; callers concatenate pages.
@@ -600,13 +669,25 @@ export async function ingestMeetgeekWebhook(args: {
     // Authoritative provider hydration BEFORE any client/calendar matching.
     // The webhook is never trusted for tenant, calendar, timing or title.
     if (deps.hydrateFromProvider) {
-      const hydrated = await deps.hydrateFromProvider(meeting);
+      const { meeting: hydrated, diagnostic } = normalizeHydrationAttempt(
+        await deps.hydrateFromProvider(meeting),
+      );
       if (hydrated) {
         meeting = hydrated;
       } else if (meeting.hydrationRequired) {
-        // Fail closed: nothing authoritative to gate on.
-        await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_failed' });
-        return { ok: false, status: 422, reason: 'provider_hydration_failed' };
+        // Fail closed: nothing authoritative to gate on. The event stays
+        // RETRYABLE (`rejected`) so a later delivery or operator replay retries.
+        const diag = diagnostic ?? classifyHydrationFailure({});
+        await deps.updateEvent(event.id, {
+          status: 'rejected',
+          errorMessage: `provider_hydration_failed:${diag.code}${diag.detail ? ` (${diag.detail})` : ''}`.slice(0, 400),
+        });
+        return {
+          ok: false,
+          status: 422,
+          reason: 'provider_hydration_failed',
+          hydrationDiagnostic: diag,
+        } as IngestResult;
       }
     } else if (meeting.hydrationRequired) {
       await deps.updateEvent(event.id, { status: 'rejected', errorMessage: 'provider_hydration_unavailable' });

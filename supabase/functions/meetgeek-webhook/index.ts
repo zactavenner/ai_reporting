@@ -9,6 +9,8 @@ import {
   buildMeetingNote,
   hydrateMeetingFromProvider,
   extractTranscriptText,
+  classifyHydrationFailure,
+  type HydrationDiagnostic,
   type IngestDeps,
   type LeadRow,
   type NormalizedMeeting,
@@ -172,6 +174,35 @@ async function mgGet(apiKey: string, baseUrl: string, path: string): Promise<any
     return await res.json();
   } catch {
     return null;
+  }
+}
+
+/**
+ * Same as `mgGet` but returns a safe diagnostic (no keys, no PII, no body text)
+ * so hydration failures can be persisted and shown to operators.
+ */
+async function mgGetDiagnostic(
+  apiKey: string,
+  baseUrl: string,
+  path: string,
+): Promise<{ body: any | null; diagnostic: HydrationDiagnostic }> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+  } catch {
+    return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true, errorKind: 'network' }) };
+  }
+  if (!res.ok) {
+    return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true, httpStatus: res.status }) };
+  }
+  try {
+    const body = await res.json();
+    if (!body || typeof body !== 'object') {
+      return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true }) };
+    }
+    return { body, diagnostic: { code: 'empty_response' } };
+  } catch {
+    return { body: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: true, errorKind: 'parse' }) };
   }
 }
 
@@ -367,13 +398,23 @@ function buildIngestDeps(supabase: any): IngestDeps {
     // that response as the sole authority for timing/title/host/attendees.
     async hydrateFromProvider(meeting: NormalizedMeeting) {
       const api = await resolveAgencyMeetgeekApi(supabase);
-      if (!api) return null;
-      const raw = await mgGet(
+      if (!api) {
+        return { meeting: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: false }) };
+      }
+      const attempt = await mgGetDiagnostic(
         api.apiKey,
         api.baseUrl,
         `/v1/meetings/${encodeURIComponent(meeting.meetingExternalId)}`,
       );
-      return hydrateMeetingFromProvider(meeting, raw);
+      if (!attempt.body) {
+        return { meeting: null, diagnostic: attempt.diagnostic };
+      }
+      const hydrated = hydrateMeetingFromProvider(meeting, attempt.body);
+      if (hydrated) return { meeting: hydrated };
+      return {
+        meeting: null,
+        diagnostic: { code: 'incomplete_response' as const, detail: 'Provider meeting lacked authoritative start time' },
+      };
     },
     // Production path: per-client calendar gating + client-scoped call activity.
     async calendarGate(meeting: NormalizedMeeting) {
