@@ -474,8 +474,18 @@ function buildIngestDeps(supabase: any): IngestDeps {
       if (patch.status !== undefined) update.status = patch.status;
       if (patch.errorMessage !== undefined) update.error_message = patch.errorMessage;
       if (patch.clientId !== undefined) update.client_id = patch.clientId;
+      // Safe provider diagnostics only: a stable code plus a short, PII-free and
+      // credential-free detail string.
+      if (patch.hydrationCode !== undefined) {
+        update.hydration_code = patch.hydrationCode;
+        update.hydration_failed_at = patch.hydrationCode ? new Date().toISOString() : null;
+      }
+      if (patch.hydrationDetail !== undefined) {
+        update.hydration_detail = patch.hydrationDetail ? String(patch.hydrationDetail).slice(0, 200) : null;
+      }
       await supabase.from('meeting_ingest_events').update(update).eq('id', id);
     },
+
     // Recovery path: a non-terminal event (transient hydration/CRM failure) is
     // re-opened with the freshest payload instead of being permanently dropped.
     async reopenEvent(id, payload) {
