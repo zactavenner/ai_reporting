@@ -425,24 +425,32 @@ export interface CoverageSummary {
   transcript_complete: number;
   awaiting: number;
   pending: number;
+  no_answer: number;
   not_required: number;
   exceptions: number;
   by_exception: Record<string, number>;
   by_provider: Record<string, number>;
+  by_no_answer_reason: Record<string, number>;
   capture_rate: number | null;
 }
 
-/** Rollup for the operator UI. `capture_rate` ignores not-required rows. */
+/**
+ * Rollup for the operator UI. `capture_rate` scores only rows where capture was
+ * genuinely expected and possible: not-required rows and completed no-answer
+ * dials are excluded from both numerator and denominator.
+ */
 export function summarizeCoverage(rows: any[]): CoverageSummary {
   const summary: CoverageSummary = {
     total: rows.length,
     transcript_complete: 0,
     awaiting: 0,
     pending: 0,
+    no_answer: 0,
     not_required: 0,
     exceptions: 0,
     by_exception: {},
     by_provider: {},
+    by_no_answer_reason: {},
     capture_rate: null,
   };
   for (const r of rows) {
@@ -459,6 +467,12 @@ export function summarizeCoverage(rows: any[]): CoverageSummary {
       case 'pending':
         summary.pending += 1;
         break;
+      case 'no_answer': {
+        summary.no_answer += 1;
+        const reason = String(r?.no_answer_reason || 'no_answer');
+        summary.by_no_answer_reason[reason] = (summary.by_no_answer_reason[reason] || 0) + 1;
+        break;
+      }
       case 'not_required':
         summary.not_required += 1;
         break;
@@ -475,6 +489,7 @@ export function summarizeCoverage(rows: any[]): CoverageSummary {
   summary.capture_rate = scored ? Math.round((summary.transcript_complete / scored) * 1000) / 10 : null;
   return summary;
 }
+
 
 /**
  * Watchdog: re-evaluate open coverage rows against the authoritative capture
