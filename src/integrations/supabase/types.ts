@@ -16219,6 +16219,9 @@ export type Database = {
           dedupe_key: string
           error_message: string | null
           event_id: string | null
+          hydration_code: string | null
+          hydration_detail: string | null
+          hydration_failed_at: string | null
           id: string
           meeting_external_id: string | null
           payload: Json
@@ -16233,6 +16236,9 @@ export type Database = {
           dedupe_key: string
           error_message?: string | null
           event_id?: string | null
+          hydration_code?: string | null
+          hydration_detail?: string | null
+          hydration_failed_at?: string | null
           id?: string
           meeting_external_id?: string | null
           payload?: Json
@@ -16247,6 +16253,9 @@ export type Database = {
           dedupe_key?: string
           error_message?: string | null
           event_id?: string | null
+          hydration_code?: string | null
+          hydration_detail?: string | null
+          hydration_failed_at?: string | null
           id?: string
           meeting_external_id?: string | null
           payload?: Json
@@ -18583,6 +18592,7 @@ export type Database = {
           appointment_state: string
           assigned_user_id: string | null
           assigned_user_name: string | null
+          call_record_id: string | null
           client_id: string
           contact_email: string | null
           contact_name: string | null
@@ -18604,6 +18614,7 @@ export type Database = {
           match_method: string | null
           meeting_record_id: string | null
           meeting_url: string | null
+          no_answer_reason: string | null
           outcome: string | null
           overdue_at: string | null
           phone_call_record_id: string | null
@@ -18620,6 +18631,7 @@ export type Database = {
           appointment_state?: string
           assigned_user_id?: string | null
           assigned_user_name?: string | null
+          call_record_id?: string | null
           client_id: string
           contact_email?: string | null
           contact_name?: string | null
@@ -18641,6 +18653,7 @@ export type Database = {
           match_method?: string | null
           meeting_record_id?: string | null
           meeting_url?: string | null
+          no_answer_reason?: string | null
           outcome?: string | null
           overdue_at?: string | null
           phone_call_record_id?: string | null
@@ -18657,6 +18670,7 @@ export type Database = {
           appointment_state?: string
           assigned_user_id?: string | null
           assigned_user_name?: string | null
+          call_record_id?: string | null
           client_id?: string
           contact_email?: string | null
           contact_name?: string | null
@@ -18678,6 +18692,7 @@ export type Database = {
           match_method?: string | null
           meeting_record_id?: string | null
           meeting_url?: string | null
+          no_answer_reason?: string | null
           outcome?: string | null
           overdue_at?: string | null
           phone_call_record_id?: string | null
@@ -18691,6 +18706,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notetaker_coverage_call_record_id_fkey"
+            columns: ["call_record_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notetaker_coverage_client_id_fkey"
             columns: ["client_id"]

@@ -9,6 +9,8 @@ import {
   buildMeetingNote,
   hydrateMeetingFromProvider,
   extractTranscriptText,
+  extractTranscriptCursor,
+
   classifyHydrationFailure,
   type HydrationDiagnostic,
   type IngestDeps,
@@ -227,6 +229,41 @@ async function resolveWebhookSecret(supabase: any): Promise<string> {
   }
 }
 
+
+/**
+ * Persists a safe provider diagnostic (stable code + short PII/credential-free
+ * detail) on the newest ingest event for this meeting. Enrichment gaps are not
+ * fatal, so this is best-effort and never throws into the ingest path.
+ */
+async function recordEnrichmentDiagnostic(
+  supabase: any,
+  meeting: NormalizedMeeting,
+  diagnostic: HydrationDiagnostic,
+): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from('meeting_ingest_events')
+      .select('id')
+      .eq('meeting_external_id', meeting.meetingExternalId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const id = data?.[0]?.id;
+    if (!id) return;
+    await supabase
+      .from('meeting_ingest_events')
+      .update({
+        hydration_code: diagnostic.code,
+        hydration_detail: diagnostic.detail ? String(diagnostic.detail).slice(0, 200) : null,
+        hydration_failed_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+  } catch {
+    // Diagnostics are observability only — never block ingestion.
+  }
+}
+
+
+
 /**
  * Fetches the real insights KPIs, transcript and summary for a meeting whose
  * calendar mapping has already been validated. Quality scoring consumes ONLY
@@ -237,30 +274,45 @@ async function enrichFromProvider(
   clientId: string,
   meeting: NormalizedMeeting,
 ): Promise<NormalizedMeeting> {
+  const diagnostics: HydrationDiagnostic[] = [];
   const api = await resolveMeetgeekApi(supabase, clientId);
-  if (!api) return meeting;
+  if (!api) {
+    await recordEnrichmentDiagnostic(supabase, meeting, classifyHydrationFailure({ apiKeyPresent: false }));
+    return meeting;
+  }
   const id = encodeURIComponent(meeting.meetingExternalId);
-  const [insightsRaw, summaryRaw] = await Promise.all([
-    mgGet(api.apiKey, api.baseUrl, `/v1/meetings/${id}/insights`),
-    mgGet(api.apiKey, api.baseUrl, `/v1/meetings/${id}/summary`),
+  const [insightsAttempt, summaryAttempt] = await Promise.all([
+    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/insights`),
+    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/summary`),
   ]);
+  const insightsRaw = insightsAttempt.body;
+  const summaryRaw = summaryAttempt.body;
+  if (!insightsRaw) diagnostics.push(insightsAttempt.diagnostic);
+  if (!summaryRaw) diagnostics.push(summaryAttempt.diagnostic);
 
   const insights = parseMeetgeekInsights(insightsRaw) ?? meeting.insights ?? null;
   const summaryText = typeof summaryRaw?.summary === 'string' ? summaryRaw.summary : null;
 
   // Transcript: MeetGeek paginates `sentences` and names the text field
-  // `transcript` (older payloads used `text`). Pages are concatenated.
+  // `transcript` (older payloads used `text`). The next page token is
+  // `pagination.next_cursor` in the current API.
   const pages: string[] = [];
   let cursor: string | null = null;
   for (let page = 0; page < 20; page += 1) {
     const path = `/v1/meetings/${id}/transcript${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const raw = await mgGet(api.apiKey, api.baseUrl, path);
-    const text = extractTranscriptText(raw);
+    const attempt = await mgGetDiagnostic(api.apiKey, api.baseUrl, path);
+    if (!attempt.body) {
+      diagnostics.push(attempt.diagnostic);
+      break;
+    }
+    const text = extractTranscriptText(attempt.body);
     if (text) pages.push(text);
-    cursor = typeof raw?.cursor === 'string' && raw.cursor ? raw.cursor : null;
+    cursor = extractTranscriptCursor(attempt.body);
     if (!cursor) break;
   }
   const transcriptText = pages.length ? pages.join('\n') : null;
+  if (diagnostics.length) await recordEnrichmentDiagnostic(supabase, meeting, diagnostics[0]);
+
 
   const providerActionItems = Array.isArray(insightsRaw?.action_items)
     ? insightsRaw.action_items
@@ -474,8 +526,18 @@ function buildIngestDeps(supabase: any): IngestDeps {
       if (patch.status !== undefined) update.status = patch.status;
       if (patch.errorMessage !== undefined) update.error_message = patch.errorMessage;
       if (patch.clientId !== undefined) update.client_id = patch.clientId;
+      // Safe provider diagnostics only: a stable code plus a short, PII-free and
+      // credential-free detail string.
+      if (patch.hydrationCode !== undefined) {
+        update.hydration_code = patch.hydrationCode;
+        update.hydration_failed_at = patch.hydrationCode ? new Date().toISOString() : null;
+      }
+      if (patch.hydrationDetail !== undefined) {
+        update.hydration_detail = patch.hydrationDetail ? String(patch.hydrationDetail).slice(0, 200) : null;
+      }
       await supabase.from('meeting_ingest_events').update(update).eq('id', id);
     },
+
     // Recovery path: a non-terminal event (transient hydration/CRM failure) is
     // re-opened with the freshest payload instead of being permanently dropped.
     async reopenEvent(id, payload) {

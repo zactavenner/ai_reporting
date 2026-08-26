@@ -26,14 +26,25 @@ export type CoverageState =
   | 'invited'
   | 'awaiting_transcript'
   | 'transcript_complete'
+  | 'no_answer'
   | 'not_required'
   | 'exception';
 export type CoverageOutcome =
   | 'transcript_complete'
   | 'no_transcript'
+  | 'no_answer'
   | 'cancelled'
   | 'not_required'
   | 'pending';
+
+/** Where a proven transcript came from. */
+export type TranscriptSource = 'meetgeek' | 'ghl_phone' | 'ghl_calls';
+/** How the capture record was linked to the booking. */
+export type CoverageMatchMethod =
+  | 'ghl_appointment_id'
+  | 'phone_appointment_id'
+  | 'calls_appointment_id'
+  | 'contact_time_window';
 
 /** Minutes after the scheduled end before a missing transcript is an exception. */
 export const TRANSCRIPT_GRACE_MINUTES = 90;
@@ -41,6 +52,9 @@ export const TRANSCRIPT_GRACE_MINUTES = 90;
 export const INVITE_LEAD_MINUTES = 10;
 /** A transcript shorter than this is treated as not usable. */
 export const MIN_TRANSCRIPT_CHARS = 200;
+/** Bounded window for the same-client contact/time fallback match. */
+export const CONTACT_MATCH_WINDOW_MINUTES = 180;
+
 
 const CANCELLED_RE = /cancel|deleted|removed/i;
 const NOSHOW_RE = /no[\s_-]*show|noshow/i;
@@ -97,6 +111,46 @@ export function classifyExpectedProvider(args: {
   return 'none';
 }
 
+/**
+ * Authoritative CRM call disposition. A genuine no-answer / busy / failed /
+ * voicemail dial is a COMPLETED non-transcript outcome: there was never any
+ * speech to transcribe, so it must never be reported as a missing transcript
+ * and no transcript text is ever invented for it.
+ *
+ * Only authoritative CRM fields are consulted (`connected`, `answered`,
+ * `call_status`, `outcome`). Duration alone is never sufficient.
+ */
+export interface CallDisposition {
+  noAnswer: boolean;
+  reason: string | null;
+}
+
+const NO_ANSWER_PATTERNS: [RegExp, string][] = [
+  [/voice[\s_-]*mail|voicemail|left[\s_-]*message|machine/i, 'voicemail'],
+  [/busy/i, 'busy'],
+  [/no[\s_-]*answer|unanswered|no[\s_-]*response|missed/i, 'no_answer'],
+  [/fail|error|canceled_by_caller|cancelled_by_caller|declin|reject|unreachable|invalid[\s_-]*number/i, 'failed'],
+];
+
+export function classifyCallDisposition(args: {
+  connected?: boolean | null;
+  answered?: boolean | null;
+  callStatus?: string | null;
+  outcome?: string | null;
+  transcriptChars?: number | null;
+}): CallDisposition {
+  // A real transcript always wins: never downgrade a captured conversation.
+  if ((args.transcriptChars || 0) >= MIN_TRANSCRIPT_CHARS) return { noAnswer: false, reason: null };
+
+  const text = `${args.callStatus || ''} ${args.outcome || ''}`;
+  for (const [re, reason] of NO_ANSWER_PATTERNS) {
+    if (re.test(text)) return { noAnswer: true, reason };
+  }
+  if (args.connected === false) return { noAnswer: true, reason: 'not_connected' };
+  if (args.answered === false) return { noAnswer: true, reason: 'not_answered' };
+  return { noAnswer: false, reason: null };
+}
+
 /** Deterministic deadline by which capture must be proven. */
 export function computeOverdueAt(
   scheduledEnd: string | null | undefined,
@@ -117,8 +171,12 @@ export interface CoverageEvaluationInput {
   transcriptChars?: number | null;
   meetingRecordId?: string | null;
   phoneCallRecordId?: string | null;
+  callRecordId?: string | null;
+  /** Authoritative CRM disposition for the dialed call, when one exists. */
+  callDisposition?: CallDisposition | null;
   now?: Date;
 }
+
 
 export interface CoverageEvaluation {
   coverage_state: CoverageState;
@@ -137,7 +195,7 @@ export function evaluateCoverage(input: CoverageEvaluationInput): CoverageEvalua
   const overdueAt = computeOverdueAt(input.scheduledEnd, input.expectedProvider);
   const hasTranscript =
     (input.transcriptChars || 0) >= MIN_TRANSCRIPT_CHARS &&
-    !!(input.meetingRecordId || input.phoneCallRecordId);
+    !!(input.meetingRecordId || input.phoneCallRecordId || input.callRecordId);
 
   if (hasTranscript) {
     return {
@@ -168,6 +226,20 @@ export function evaluateCoverage(input: CoverageEvaluationInput): CoverageEvalua
       overdue_at: null,
     };
   }
+
+  // Completed non-transcript outcome: the CRM proves the dial never connected.
+  // This closes the row without an exception and without fabricating text.
+  if (input.callDisposition?.noAnswer) {
+    return {
+      coverage_state: 'no_answer',
+      outcome: 'no_answer',
+      exception_code: null,
+      exception_message: null,
+      overdue_at: overdueAt,
+    };
+  }
+
+
 
   const start = iso(input.scheduledStart);
   const overdue = !!overdueAt && new Date(overdueAt).getTime() < now.getTime();
@@ -353,24 +425,32 @@ export interface CoverageSummary {
   transcript_complete: number;
   awaiting: number;
   pending: number;
+  no_answer: number;
   not_required: number;
   exceptions: number;
   by_exception: Record<string, number>;
   by_provider: Record<string, number>;
+  by_no_answer_reason: Record<string, number>;
   capture_rate: number | null;
 }
 
-/** Rollup for the operator UI. `capture_rate` ignores not-required rows. */
+/**
+ * Rollup for the operator UI. `capture_rate` scores only rows where capture was
+ * genuinely expected and possible: not-required rows and completed no-answer
+ * dials are excluded from both numerator and denominator.
+ */
 export function summarizeCoverage(rows: any[]): CoverageSummary {
   const summary: CoverageSummary = {
     total: rows.length,
     transcript_complete: 0,
     awaiting: 0,
     pending: 0,
+    no_answer: 0,
     not_required: 0,
     exceptions: 0,
     by_exception: {},
     by_provider: {},
+    by_no_answer_reason: {},
     capture_rate: null,
   };
   for (const r of rows) {
@@ -387,6 +467,12 @@ export function summarizeCoverage(rows: any[]): CoverageSummary {
       case 'pending':
         summary.pending += 1;
         break;
+      case 'no_answer': {
+        summary.no_answer += 1;
+        const reason = String(r?.no_answer_reason || 'no_answer');
+        summary.by_no_answer_reason[reason] = (summary.by_no_answer_reason[reason] || 0) + 1;
+        break;
+      }
       case 'not_required':
         summary.not_required += 1;
         break;
@@ -404,6 +490,7 @@ export function summarizeCoverage(rows: any[]): CoverageSummary {
   return summary;
 }
 
+
 /**
  * Watchdog: re-evaluate open coverage rows against the authoritative capture
  * tables (meeting records for video, phone call records for dialer calls) and
@@ -419,6 +506,7 @@ export async function reconcileCoverage(args: {
   scanned: number;
   updated: number;
   completed: number;
+  no_answer: number;
   exceptions: number;
   errors: string[];
 }> {
@@ -427,7 +515,8 @@ export async function reconcileCoverage(args: {
   const lookbackDays = args.lookbackDays && args.lookbackDays > 0 ? args.lookbackDays : 30;
   const limit = Math.min(Math.max(args.limit || 1000, 1), 5000);
   const since = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-  const out = { scanned: 0, updated: 0, completed: 0, exceptions: 0, errors: [] as string[] };
+  const out = { scanned: 0, updated: 0, completed: 0, no_answer: 0, exceptions: 0, errors: [] as string[] };
+
 
   let q = supabase
     .from('notetaker_coverage')
@@ -467,12 +556,14 @@ export async function reconcileCoverage(args: {
     }
   }
 
-  // Authoritative phone capture: phone_call_records keyed by appointment id.
+  // Authoritative phone capture #1: phone_call_records keyed by appointment id.
   const phoneByAppointment = new Map<string, any>();
   for (const part of chunk(appointmentIds)) {
     const { data } = await supabase
       .from('phone_call_records')
-      .select('id, client_id, appointment_id, transcript, summary, connected, call_status')
+      .select(
+        'id, client_id, appointment_id, transcript, connected, answered, call_status, outcome, started_at, contact_phone, contact_email, contact_id',
+      )
       .in('appointment_id', part);
     for (const p of data || []) {
       if (!p?.appointment_id) continue;
@@ -480,6 +571,26 @@ export async function reconcileCoverage(args: {
       const prev = phoneByAppointment.get(key);
       const len = String(p.transcript || '').length;
       if (!prev || len > String(prev.transcript || '').length) phoneByAppointment.set(key, p);
+    }
+  }
+
+  // Authoritative phone capture #2: public.calls, which is where the existing
+  // GHL post-call worker writes transcripts. Reading it is what clears the
+  // false `phone_transcript_missing` exceptions.
+  const callByAppointment = new Map<string, any>();
+  for (const part of chunk(appointmentIds)) {
+    const { data } = await supabase
+      .from('calls')
+      .select(
+        'id, client_id, ghl_appointment_id, transcript, outcome, appointment_status, call_connected, call_duration_seconds, scheduled_at, contact_phone, contact_email',
+      )
+      .in('ghl_appointment_id', part);
+    for (const c of data || []) {
+      if (!c?.ghl_appointment_id) continue;
+      const key = `${c.client_id}:${c.ghl_appointment_id}`;
+      const prev = callByAppointment.get(key);
+      const len = String(c.transcript || '').length;
+      if (!prev || len > String(prev.transcript || '').length) callByAppointment.set(key, c);
     }
   }
 
@@ -493,24 +604,77 @@ export async function reconcileCoverage(args: {
     for (const j of data || []) jobById.set(String(j.id), j);
   }
 
+  let fallbackLookups = 0;
+  const FALLBACK_BUDGET = 300;
+
   for (const row of open) {
     const key = `${row.client_id}:${row.ghl_appointment_id}`;
     const job = row.invite_job_id ? jobById.get(String(row.invite_job_id)) : null;
     const meeting = meetingByAppointment.get(key);
     const phone = phoneByAppointment.get(key);
+    let call = callByAppointment.get(key);
 
-    const transcriptChars = Math.max(
-      String(meeting?.transcript_text || '').length,
-      String(phone?.transcript || '').length,
-    );
-    const transcriptSource = meeting?.transcript_text
-      ? 'meetgeek'
-      : phone?.transcript
-        ? 'ghl_phone'
-        : null;
+    // Bounded same-client contact/time fallback, used ONLY when the exact
+    // appointment id matched nothing. Never crosses tenants and never widens
+    // beyond CONTACT_MATCH_WINDOW_MINUTES around the booking.
+    let usedFallback = false;
+    if (!meeting && !phone && !call && fallbackLookups < FALLBACK_BUDGET && row.scheduled_start) {
+      const contactKey = clean(row.contact_phone) || clean(row.contact_email);
+      if (contactKey) {
+        fallbackLookups += 1;
+        const from = new Date(
+          new Date(row.scheduled_start).getTime() - CONTACT_MATCH_WINDOW_MINUTES * 60000,
+        ).toISOString();
+        const to = new Date(
+          new Date(row.scheduled_end || row.scheduled_start).getTime() + CONTACT_MATCH_WINDOW_MINUTES * 60000,
+        ).toISOString();
+        const column = clean(row.contact_phone) ? 'contact_phone' : 'contact_email';
+        const { data: near } = await supabase
+          .from('calls')
+          .select('id, client_id, transcript, outcome, appointment_status, call_connected, scheduled_at')
+          .eq('client_id', row.client_id)
+          .eq(column, contactKey)
+          .gte('scheduled_at', from)
+          .lte('scheduled_at', to)
+          .limit(5);
+        const best = (near || [])
+          .slice()
+          .sort((a: any, b: any) => String(b.transcript || '').length - String(a.transcript || '').length)[0];
+        if (best) {
+          call = best;
+          usedFallback = true;
+        }
+      }
+    }
+
+    const meetingChars = String(meeting?.transcript_text || '').length;
+    const phoneChars = String(phone?.transcript || '').length;
+    const callChars = String(call?.transcript || '').length;
+    const transcriptChars = Math.max(meetingChars, phoneChars, callChars);
+
+    // Which source actually proved the capture (transcript bodies are NEVER
+    // copied into the coverage ledger — only the length and the linkage).
+    const transcriptSource: TranscriptSource | null =
+      meetingChars >= MIN_TRANSCRIPT_CHARS
+        ? 'meetgeek'
+        : phoneChars >= MIN_TRANSCRIPT_CHARS
+          ? 'ghl_phone'
+          : callChars >= MIN_TRANSCRIPT_CHARS
+            ? 'ghl_calls'
+            : null;
+
+    const matchMethod: CoverageMatchMethod | null = meeting
+      ? 'ghl_appointment_id'
+      : phone
+        ? 'phone_appointment_id'
+        : call
+          ? usedFallback
+            ? 'contact_time_window'
+            : 'calls_appointment_id'
+          : null;
 
     const appointmentState = classifyAppointmentState({
-      rawStatus: job?.ghl_appointment_status || row.appointment_state,
+      rawStatus: job?.ghl_appointment_status || call?.appointment_status || row.appointment_state,
       cancelled: row.appointment_state === 'cancelled' || job?.status === 'cancelled',
       scheduledEnd: row.scheduled_end,
       now,
@@ -523,6 +687,18 @@ export async function reconcileCoverage(args: {
         })
       : row.expected_provider) as ExpectedProvider;
 
+    // Authoritative CRM disposition, only when a dialed record exists.
+    const disposition =
+      phone || call
+        ? classifyCallDisposition({
+            connected: phone ? phone.connected : call?.call_connected,
+            answered: phone ? phone.answered : null,
+            callStatus: phone?.call_status ?? null,
+            outcome: phone?.outcome ?? call?.outcome ?? null,
+            transcriptChars,
+          })
+        : null;
+
     const evaluation = evaluateCoverage({
       expectedProvider,
       appointmentState,
@@ -530,8 +706,10 @@ export async function reconcileCoverage(args: {
       scheduledStart: row.scheduled_start,
       scheduledEnd: row.scheduled_end,
       transcriptChars,
-      meetingRecordId: meeting?.id || job?.meeting_record_id || row.meeting_record_id,
-      phoneCallRecordId: phone?.id || row.phone_call_record_id,
+      meetingRecordId: meetingChars >= MIN_TRANSCRIPT_CHARS ? meeting?.id : null,
+      phoneCallRecordId: phoneChars >= MIN_TRANSCRIPT_CHARS ? phone?.id : null,
+      callRecordId: callChars >= MIN_TRANSCRIPT_CHARS ? call?.id : null,
+      callDisposition: disposition,
       now,
     });
 
@@ -541,13 +719,15 @@ export async function reconcileCoverage(args: {
       invite_state: job?.status || row.invite_state || null,
       meeting_record_id: meeting?.id || job?.meeting_record_id || row.meeting_record_id || null,
       phone_call_record_id: phone?.id || row.phone_call_record_id || null,
+      call_record_id: call?.id || row.call_record_id || null,
       transcript_source: transcriptSource || row.transcript_source || null,
       transcript_chars: transcriptChars,
       transcript_complete_at:
         evaluation.coverage_state === 'transcript_complete'
           ? row.transcript_complete_at || now.toISOString()
           : row.transcript_complete_at,
-      match_method: meeting ? 'ghl_appointment_id' : phone ? 'appointment_id' : row.match_method,
+      match_method: matchMethod || row.match_method || null,
+      no_answer_reason: evaluation.coverage_state === 'no_answer' ? disposition?.reason || 'no_answer' : null,
       coverage_state: evaluation.coverage_state,
       outcome: evaluation.outcome,
       exception_code: evaluation.exception_code,
@@ -564,8 +744,10 @@ export async function reconcileCoverage(args: {
     }
     out.updated += 1;
     if (evaluation.coverage_state === 'transcript_complete') out.completed += 1;
+    if (evaluation.coverage_state === 'no_answer') out.no_answer += 1;
     if (evaluation.coverage_state === 'exception') out.exceptions += 1;
   }
 
   return out;
 }
+
