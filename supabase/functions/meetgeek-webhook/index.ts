@@ -237,30 +237,45 @@ async function enrichFromProvider(
   clientId: string,
   meeting: NormalizedMeeting,
 ): Promise<NormalizedMeeting> {
+  const diagnostics: HydrationDiagnostic[] = [];
   const api = await resolveMeetgeekApi(supabase, clientId);
-  if (!api) return meeting;
+  if (!api) {
+    await recordEnrichmentDiagnostic(supabase, meeting, classifyHydrationFailure({ apiKeyPresent: false }));
+    return meeting;
+  }
   const id = encodeURIComponent(meeting.meetingExternalId);
-  const [insightsRaw, summaryRaw] = await Promise.all([
-    mgGet(api.apiKey, api.baseUrl, `/v1/meetings/${id}/insights`),
-    mgGet(api.apiKey, api.baseUrl, `/v1/meetings/${id}/summary`),
+  const [insightsAttempt, summaryAttempt] = await Promise.all([
+    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/insights`),
+    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/summary`),
   ]);
+  const insightsRaw = insightsAttempt.body;
+  const summaryRaw = summaryAttempt.body;
+  if (!insightsRaw) diagnostics.push(insightsAttempt.diagnostic);
+  if (!summaryRaw) diagnostics.push(summaryAttempt.diagnostic);
 
   const insights = parseMeetgeekInsights(insightsRaw) ?? meeting.insights ?? null;
   const summaryText = typeof summaryRaw?.summary === 'string' ? summaryRaw.summary : null;
 
   // Transcript: MeetGeek paginates `sentences` and names the text field
-  // `transcript` (older payloads used `text`). Pages are concatenated.
+  // `transcript` (older payloads used `text`). The next page token is
+  // `pagination.next_cursor` in the current API.
   const pages: string[] = [];
   let cursor: string | null = null;
   for (let page = 0; page < 20; page += 1) {
     const path = `/v1/meetings/${id}/transcript${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const raw = await mgGet(api.apiKey, api.baseUrl, path);
-    const text = extractTranscriptText(raw);
+    const attempt = await mgGetDiagnostic(api.apiKey, api.baseUrl, path);
+    if (!attempt.body) {
+      diagnostics.push(attempt.diagnostic);
+      break;
+    }
+    const text = extractTranscriptText(attempt.body);
     if (text) pages.push(text);
-    cursor = typeof raw?.cursor === 'string' && raw.cursor ? raw.cursor : null;
+    cursor = extractTranscriptCursor(attempt.body);
     if (!cursor) break;
   }
   const transcriptText = pages.length ? pages.join('\n') : null;
+  if (diagnostics.length) await recordEnrichmentDiagnostic(supabase, meeting, diagnostics[0]);
+
 
   const providerActionItems = Array.isArray(insightsRaw?.action_items)
     ? insightsRaw.action_items
