@@ -226,8 +226,41 @@ async function resolveWebhookSecret(supabase: any): Promise<string> {
     return typeof data?.secret === 'string' ? data.secret : '';
   } catch {
     return '';
+}
+
+/**
+ * Persists a safe provider diagnostic (stable code + short PII/credential-free
+ * detail) on the newest ingest event for this meeting. Enrichment gaps are not
+ * fatal, so this is best-effort and never throws into the ingest path.
+ */
+async function recordEnrichmentDiagnostic(
+  supabase: any,
+  meeting: NormalizedMeeting,
+  diagnostic: HydrationDiagnostic,
+): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from('meeting_ingest_events')
+      .select('id')
+      .eq('meeting_external_id', meeting.meetingExternalId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const id = data?.[0]?.id;
+    if (!id) return;
+    await supabase
+      .from('meeting_ingest_events')
+      .update({
+        hydration_code: diagnostic.code,
+        hydration_detail: diagnostic.detail ? String(diagnostic.detail).slice(0, 200) : null,
+        hydration_failed_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+  } catch {
+    // Diagnostics are observability only — never block ingestion.
   }
 }
+
+
 
 /**
  * Fetches the real insights KPIs, transcript and summary for a meeting whose
