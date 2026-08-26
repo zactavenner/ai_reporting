@@ -107,7 +107,18 @@ export interface IngestDeps {
     errorMessage?: string | null;
     payload: unknown;
   }): Promise<{ id: string }>;
-  updateEvent(id: string, patch: { status?: string; errorMessage?: string | null; clientId?: string | null }): Promise<void>;
+  updateEvent(
+    id: string,
+    patch: {
+      status?: string;
+      errorMessage?: string | null;
+      clientId?: string | null;
+      /** Safe hydration diagnostic code (no keys, no PII). */
+      hydrationCode?: string | null;
+      hydrationDetail?: string | null;
+    },
+  ): Promise<void>;
+
   /** Server-side only client resolution. Never accepts caller-supplied tenant ids. */
   resolveClientId(meeting: NormalizedMeeting): Promise<string | null>;
   upsertMeetingRecord(meeting: NormalizedMeeting, clientId: string | null): Promise<{ id: string }>;
