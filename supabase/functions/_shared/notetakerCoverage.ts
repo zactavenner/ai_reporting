@@ -393,20 +393,39 @@ export function buildCoverageRow(input: CoverageUpsertInput) {
 /**
  * Upsert one appointment's coverage row. Idempotent on (client, appointment):
  * re-running the poller never creates a duplicate and never regresses a row
- * that already proved a transcript.
+ * that reconciliation already closed as terminal. The poller owns schedule and
+ * attribution metadata; reconciliation owns transcript/no-answer outcomes.
  */
 export async function recordCoverage(supabase: any, input: CoverageUpsertInput) {
   const row = buildCoverageRow(input);
   const { data: existing } = await supabase
     .from('notetaker_coverage')
-    .select('id, coverage_state, transcript_chars, meeting_record_id, phone_call_record_id')
+    .select(
+      'id, coverage_state, outcome, transcript_chars, meeting_record_id, phone_call_record_id, call_record_id, transcript_source, match_method, transcript_complete_at, no_answer_reason',
+    )
     .eq('client_id', input.clientId)
     .eq('ghl_appointment_id', input.ghlAppointmentId)
     .maybeSingle();
 
-  // Never downgrade a proven capture.
-  if (existing?.coverage_state === 'transcript_complete') {
-    const { coverage_state: _s, outcome: _o, exception_code: _c, exception_message: _m, ...rest } = row;
+  // Never let the scheduled poller downgrade a terminal reconciliation result.
+  // It may refresh schedule/contact/invite metadata, but cannot erase the
+  // terminal state, source links, no-answer reason, or completion evidence.
+  if (existing?.coverage_state === 'transcript_complete' || existing?.coverage_state === 'no_answer') {
+    const {
+      coverage_state: _s,
+      outcome: _o,
+      exception_code: _c,
+      exception_message: _m,
+      meeting_record_id: _mr,
+      phone_call_record_id: _pr,
+      call_record_id: _cr,
+      transcript_source: _ts,
+      transcript_chars: _tc,
+      transcript_complete_at: _tca,
+      match_method: _mm,
+      no_answer_reason: _nar,
+      ...rest
+    } = row as Record<string, unknown>;
     await supabase.from('notetaker_coverage').update(rest).eq('id', existing.id);
     return { id: existing.id as string, created: false };
   }
@@ -522,6 +541,7 @@ export async function reconcileCoverage(args: {
     .from('notetaker_coverage')
     .select('*')
     .neq('coverage_state', 'transcript_complete')
+    .neq('coverage_state', 'no_answer')
     .gte('scheduled_start', since)
     .order('scheduled_start', { ascending: true })
     .limit(limit);
