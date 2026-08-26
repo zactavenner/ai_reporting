@@ -4,6 +4,8 @@ import {
   normalizeHydrationAttempt,
   isTerminalIngestStatus,
   extractTranscriptText,
+  extractTranscriptCursor,
+
   hydrateMeetingFromProvider,
   normalizeMeetgeekPayload,
 } from '../../supabase/functions/_shared/meetgeekIngest';
