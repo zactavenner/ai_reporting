@@ -541,7 +541,6 @@ export async function reconcileCoverage(args: {
     .from('notetaker_coverage')
     .select('*')
     .neq('coverage_state', 'transcript_complete')
-    .neq('coverage_state', 'no_answer')
     .gte('scheduled_start', since)
     .order('scheduled_start', { ascending: true })
     .limit(limit);
