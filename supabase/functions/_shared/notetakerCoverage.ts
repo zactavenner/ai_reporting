@@ -506,6 +506,7 @@ export async function reconcileCoverage(args: {
   scanned: number;
   updated: number;
   completed: number;
+  no_answer: number;
   exceptions: number;
   errors: string[];
 }> {
@@ -514,7 +515,8 @@ export async function reconcileCoverage(args: {
   const lookbackDays = args.lookbackDays && args.lookbackDays > 0 ? args.lookbackDays : 30;
   const limit = Math.min(Math.max(args.limit || 1000, 1), 5000);
   const since = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-  const out = { scanned: 0, updated: 0, completed: 0, exceptions: 0, errors: [] as string[] };
+  const out = { scanned: 0, updated: 0, completed: 0, no_answer: 0, exceptions: 0, errors: [] as string[] };
+
 
   let q = supabase
     .from('notetaker_coverage')
