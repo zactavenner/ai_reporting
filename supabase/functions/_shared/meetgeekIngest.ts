@@ -692,7 +692,10 @@ export async function ingestMeetgeekWebhook(args: {
         await deps.updateEvent(event.id, {
           status: 'rejected',
           errorMessage: `provider_hydration_failed:${diag.code}${diag.detail ? ` (${diag.detail})` : ''}`.slice(0, 400),
+          hydrationCode: diag.code,
+          hydrationDetail: diag.detail || null,
         });
+
         return {
           ok: false,
           status: 422,
