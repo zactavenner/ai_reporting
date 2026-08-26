@@ -106,3 +106,18 @@ describe('coverage routing + idempotency', () => {
     expect(cancelled).toEqual(cancelledAgain);
   });
 });
+
+describe('transcript pagination cursor', () => {
+  it('prefers pagination.next_cursor per the current MeetGeek API', () => {
+    expect(extractTranscriptCursor({ pagination: { next_cursor: 'abc' }, cursor: 'legacy' })).toBe('abc');
+  });
+  it('falls back to legacy cursor shapes', () => {
+    expect(extractTranscriptCursor({ next_cursor: 'n1' })).toBe('n1');
+    expect(extractTranscriptCursor({ cursor: 'c1' })).toBe('c1');
+  });
+  it('ends pagination on empty or absent cursors', () => {
+    expect(extractTranscriptCursor({ pagination: { next_cursor: '' } })).toBeNull();
+    expect(extractTranscriptCursor({ sentences: [] })).toBeNull();
+    expect(extractTranscriptCursor(null)).toBeNull();
+  });
+});
