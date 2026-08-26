@@ -111,6 +111,46 @@ export function classifyExpectedProvider(args: {
   return 'none';
 }
 
+/**
+ * Authoritative CRM call disposition. A genuine no-answer / busy / failed /
+ * voicemail dial is a COMPLETED non-transcript outcome: there was never any
+ * speech to transcribe, so it must never be reported as a missing transcript
+ * and no transcript text is ever invented for it.
+ *
+ * Only authoritative CRM fields are consulted (`connected`, `answered`,
+ * `call_status`, `outcome`). Duration alone is never sufficient.
+ */
+export interface CallDisposition {
+  noAnswer: boolean;
+  reason: string | null;
+}
+
+const NO_ANSWER_PATTERNS: [RegExp, string][] = [
+  [/voice[\s_-]*mail|voicemail|left[\s_-]*message|machine/i, 'voicemail'],
+  [/busy/i, 'busy'],
+  [/no[\s_-]*answer|unanswered|no[\s_-]*response|missed/i, 'no_answer'],
+  [/fail|error|canceled_by_caller|cancelled_by_caller|declin|reject|unreachable|invalid[\s_-]*number/i, 'failed'],
+];
+
+export function classifyCallDisposition(args: {
+  connected?: boolean | null;
+  answered?: boolean | null;
+  callStatus?: string | null;
+  outcome?: string | null;
+  transcriptChars?: number | null;
+}): CallDisposition {
+  // A real transcript always wins: never downgrade a captured conversation.
+  if ((args.transcriptChars || 0) >= MIN_TRANSCRIPT_CHARS) return { noAnswer: false, reason: null };
+
+  const text = `${args.callStatus || ''} ${args.outcome || ''}`;
+  for (const [re, reason] of NO_ANSWER_PATTERNS) {
+    if (re.test(text)) return { noAnswer: true, reason };
+  }
+  if (args.connected === false) return { noAnswer: true, reason: 'not_connected' };
+  if (args.answered === false) return { noAnswer: true, reason: 'not_answered' };
+  return { noAnswer: false, reason: null };
+}
+
 /** Deterministic deadline by which capture must be proven. */
 export function computeOverdueAt(
   scheduledEnd: string | null | undefined,
@@ -131,8 +171,12 @@ export interface CoverageEvaluationInput {
   transcriptChars?: number | null;
   meetingRecordId?: string | null;
   phoneCallRecordId?: string | null;
+  callRecordId?: string | null;
+  /** Authoritative CRM disposition for the dialed call, when one exists. */
+  callDisposition?: CallDisposition | null;
   now?: Date;
 }
+
 
 export interface CoverageEvaluation {
   coverage_state: CoverageState;
