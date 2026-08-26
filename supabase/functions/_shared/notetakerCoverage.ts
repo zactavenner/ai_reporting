@@ -195,7 +195,7 @@ export function evaluateCoverage(input: CoverageEvaluationInput): CoverageEvalua
   const overdueAt = computeOverdueAt(input.scheduledEnd, input.expectedProvider);
   const hasTranscript =
     (input.transcriptChars || 0) >= MIN_TRANSCRIPT_CHARS &&
-    !!(input.meetingRecordId || input.phoneCallRecordId);
+    !!(input.meetingRecordId || input.phoneCallRecordId || input.callRecordId);
 
   if (hasTranscript) {
     return {
@@ -226,6 +226,20 @@ export function evaluateCoverage(input: CoverageEvaluationInput): CoverageEvalua
       overdue_at: null,
     };
   }
+
+  // Completed non-transcript outcome: the CRM proves the dial never connected.
+  // This closes the row without an exception and without fabricating text.
+  if (input.callDisposition?.noAnswer) {
+    return {
+      coverage_state: 'no_answer',
+      outcome: 'no_answer',
+      exception_code: null,
+      exception_message: null,
+      overdue_at: overdueAt,
+    };
+  }
+
+
 
   const start = iso(input.scheduledStart);
   const overdue = !!overdueAt && new Date(overdueAt).getTime() < now.getTime();
