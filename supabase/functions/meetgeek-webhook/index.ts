@@ -9,6 +9,8 @@ import {
   buildMeetingNote,
   hydrateMeetingFromProvider,
   extractTranscriptText,
+  extractTranscriptCursor,
+
   classifyHydrationFailure,
   type HydrationDiagnostic,
   type IngestDeps,
