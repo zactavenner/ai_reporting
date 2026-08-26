@@ -26,14 +26,25 @@ export type CoverageState =
   | 'invited'
   | 'awaiting_transcript'
   | 'transcript_complete'
+  | 'no_answer'
   | 'not_required'
   | 'exception';
 export type CoverageOutcome =
   | 'transcript_complete'
   | 'no_transcript'
+  | 'no_answer'
   | 'cancelled'
   | 'not_required'
   | 'pending';
+
+/** Where a proven transcript came from. */
+export type TranscriptSource = 'meetgeek' | 'ghl_phone' | 'ghl_calls';
+/** How the capture record was linked to the booking. */
+export type CoverageMatchMethod =
+  | 'ghl_appointment_id'
+  | 'phone_appointment_id'
+  | 'calls_appointment_id'
+  | 'contact_time_window';
 
 /** Minutes after the scheduled end before a missing transcript is an exception. */
 export const TRANSCRIPT_GRACE_MINUTES = 90;
@@ -41,6 +52,9 @@ export const TRANSCRIPT_GRACE_MINUTES = 90;
 export const INVITE_LEAD_MINUTES = 10;
 /** A transcript shorter than this is treated as not usable. */
 export const MIN_TRANSCRIPT_CHARS = 200;
+/** Bounded window for the same-client contact/time fallback match. */
+export const CONTACT_MATCH_WINDOW_MINUTES = 180;
+
 
 const CANCELLED_RE = /cancel|deleted|removed/i;
 const NOSHOW_RE = /no[\s_-]*show|noshow/i;
