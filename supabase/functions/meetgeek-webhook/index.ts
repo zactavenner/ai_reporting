@@ -226,7 +226,9 @@ async function resolveWebhookSecret(supabase: any): Promise<string> {
     return typeof data?.secret === 'string' ? data.secret : '';
   } catch {
     return '';
+  }
 }
+
 
 /**
  * Persists a safe provider diagnostic (stable code + short PII/credential-free
