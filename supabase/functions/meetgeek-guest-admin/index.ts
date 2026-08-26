@@ -13,7 +13,7 @@ import { getMappedGhl } from '../_shared/ghlMapping.ts';
 import { runGuestInvitePolling } from '../_shared/guestPoller.ts';
 import { resolveInviteSender } from '../_shared/shadowInviteSender.ts';
 import { rollupAttendance, syncGhlAttendance } from '../_shared/ghlAttendance.ts';
-import { reconcileCoverage, summarizeCoverage } from '../_shared/notetakerCoverage.ts';
+import { reconcileCoverage, recordCoverage, summarizeCoverage } from '../_shared/notetakerCoverage.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -192,6 +192,74 @@ Deno.serve(async (req) => {
           lookbackDays: Number(body?.lookback_days) > 0 ? Number(body.lookback_days) : 30,
         });
         return json({ ok: true, ...result });
+      }
+
+      // Non-sending poller simulation: replays only the coverage upsert step
+      // against existing terminal rows. It never creates/updates invite jobs and
+      // never sends or updates external calendar invitations.
+      case 'coverage_simulate_poller_upsert': {
+        const limit = Math.min(Math.max(Number(body?.limit) || 200, 1), 1000);
+        let q = supabase
+          .from('notetaker_coverage')
+          .select(
+            'id, client_id, ghl_appointment_id, ghl_calendar_id, ghl_calendar_name, ghl_location_id, ghl_contact_id, contact_name, contact_email, contact_phone, assigned_user_id, assigned_user_name, scheduled_start, scheduled_end, schedule_signature, meeting_url, appointment_state, invite_job_id, invite_state, coverage_state, outcome, no_answer_reason, transcript_complete_at, meeting_record_id, phone_call_record_id, call_record_id',
+          )
+          .in('coverage_state', ['transcript_complete', 'no_answer'])
+          .order('scheduled_start', { ascending: false })
+          .limit(limit);
+        if (clientId) q = q.eq('client_id', clientId);
+        const { data: rows, error } = await q;
+        if (error) return json({ error: error.message }, 500);
+
+        let preserved = 0;
+        const mismatches: any[] = [];
+        for (const row of rows || []) {
+          const before = {
+            coverage_state: row.coverage_state,
+            outcome: row.outcome,
+            no_answer_reason: row.no_answer_reason,
+            transcript_complete_at: row.transcript_complete_at,
+            meeting_record_id: row.meeting_record_id,
+            phone_call_record_id: row.phone_call_record_id,
+            call_record_id: row.call_record_id,
+          };
+          await recordCoverage(supabase, {
+            clientId: row.client_id,
+            ghlAppointmentId: row.ghl_appointment_id,
+            ghlCalendarId: row.ghl_calendar_id,
+            ghlCalendarName: row.ghl_calendar_name,
+            ghlLocationId: row.ghl_location_id,
+            ghlContactId: row.ghl_contact_id,
+            contactName: row.contact_name,
+            contactEmail: row.contact_email,
+            contactPhone: row.contact_phone,
+            assignedUserId: row.assigned_user_id,
+            assignedUserName: row.assigned_user_name,
+            scheduledStart: row.scheduled_start,
+            scheduledEnd: row.scheduled_end,
+            scheduleSignature: row.schedule_signature,
+            meetingUrl: row.meeting_url,
+            rawStatus: row.appointment_state,
+            inviteJobId: row.invite_job_id,
+            inviteState: row.invite_state,
+          });
+          const { data: after, error: readErr } = await supabase
+            .from('notetaker_coverage')
+            .select(
+              'coverage_state, outcome, no_answer_reason, transcript_complete_at, meeting_record_id, phone_call_record_id, call_record_id',
+            )
+            .eq('id', row.id)
+            .maybeSingle();
+          if (readErr || !after) {
+            mismatches.push({ id: row.id, error: readErr?.message || 'missing_after_upsert' });
+            continue;
+          }
+          const stable = Object.entries(before).every(([key, value]) => after[key] === value);
+          if (stable) preserved += 1;
+          else mismatches.push({ id: row.id, before, after });
+        }
+
+        return json({ ok: mismatches.length === 0, simulated: (rows || []).length, preserved, mismatches });
       }
 
       // Operator replay for MeetGeek ingest events that failed non-terminally.
