@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   buildCoverageRow,
   classifyAppointmentState,
+  classifyCallDisposition,
   classifyExpectedProvider,
   computeOverdueAt,
   evaluateCoverage,
+  recordCoverage,
   summarizeCoverage,
   TRANSCRIPT_GRACE_MINUTES,
 } from '../../supabase/functions/_shared/notetakerCoverage';
@@ -18,6 +20,45 @@ import {
 const NOW = new Date('2026-03-02T18:00:00Z');
 const past = (min: number) => new Date(NOW.getTime() - min * 60000).toISOString();
 const future = (min: number) => new Date(NOW.getTime() + min * 60000).toISOString();
+
+function makeCoverageClient(seed: Record<string, unknown>) {
+  let row = { ...seed };
+  let lastUpdate: Record<string, unknown> | null = null;
+
+  return {
+    get row() {
+      return row;
+    },
+    get lastUpdate() {
+      return lastUpdate;
+    },
+    from(table: string) {
+      expect(table).toBe('notetaker_coverage');
+      const selectChain = {
+        eq: () => selectChain,
+        maybeSingle: async () => ({ data: row, error: null }),
+      };
+      return {
+        select: () => selectChain,
+        update: (patch: Record<string, unknown>) => {
+          lastUpdate = patch;
+          return {
+            eq: async () => {
+              row = { ...row, ...patch };
+              return { data: row, error: null };
+            },
+          };
+        },
+        upsert: (patch: Record<string, unknown>) => {
+          row = { ...row, ...patch };
+          return {
+            select: () => ({ maybeSingle: async () => ({ data: { id: row.id }, error: null }) }),
+          };
+        },
+      };
+    },
+  };
+}
 
 describe('appointment state classification', () => {
   it('lets the CRM status win over timing', () => {
@@ -192,6 +233,97 @@ describe('coverage row build + rollup', () => {
     expect(summary.exceptions).toBe(1);
     expect(summary.by_exception.invite_never_sent).toBe(1);
     expect(summary.capture_rate).toBe(66.7);
+  });
+
+  it('preserves reconciled no_answer when the scheduled poller upserts the appointment again', async () => {
+    const supabase = makeCoverageClient({
+      id: 'cov_1',
+      client_id: 'c1',
+      ghl_appointment_id: 'appt_no_answer',
+      coverage_state: 'no_answer',
+      outcome: 'no_answer',
+      no_answer_reason: 'not_connected',
+      call_record_id: 'call_1',
+      transcript_source: null,
+      transcript_chars: 0,
+      match_method: 'calls_appointment_id',
+      transcript_complete_at: '2026-03-02T17:10:00.000Z',
+    });
+
+    await recordCoverage(supabase, {
+      clientId: 'c1',
+      ghlAppointmentId: 'appt_no_answer',
+      contactPhone: '+19167097345',
+      scheduledStart: future(120),
+      scheduledEnd: future(150),
+      rawStatus: 'confirmed',
+      now: NOW,
+    });
+
+    expect(supabase.row.coverage_state).toBe('no_answer');
+    expect(supabase.row.outcome).toBe('no_answer');
+    expect(supabase.row.no_answer_reason).toBe('not_connected');
+    expect(supabase.row.call_record_id).toBe('call_1');
+    expect(supabase.lastUpdate).not.toHaveProperty('coverage_state');
+    expect(supabase.lastUpdate).not.toHaveProperty('no_answer_reason');
+  });
+
+  it('preserves transcript_complete when the scheduled poller upserts the appointment again', async () => {
+    const supabase = makeCoverageClient({
+      id: 'cov_2',
+      client_id: 'c1',
+      ghl_appointment_id: 'appt_complete',
+      coverage_state: 'transcript_complete',
+      outcome: 'transcript_complete',
+      meeting_record_id: 'meeting_1',
+      transcript_source: 'meetgeek',
+      transcript_chars: 1800,
+      match_method: 'ghl_appointment_id',
+      transcript_complete_at: '2026-03-02T17:20:00.000Z',
+    });
+
+    await recordCoverage(supabase, {
+      clientId: 'c1',
+      ghlAppointmentId: 'appt_complete',
+      meetingUrl: 'https://zoom.us/j/123',
+      scheduledStart: future(120),
+      scheduledEnd: future(150),
+      rawStatus: 'confirmed',
+      inviteState: 'pending',
+      now: NOW,
+    });
+
+    expect(supabase.row.coverage_state).toBe('transcript_complete');
+    expect(supabase.row.outcome).toBe('transcript_complete');
+    expect(supabase.row.meeting_record_id).toBe('meeting_1');
+    expect(supabase.row.transcript_source).toBe('meetgeek');
+    expect(supabase.row.transcript_chars).toBe(1800);
+    expect(supabase.row.transcript_complete_at).toBe('2026-03-02T17:20:00.000Z');
+    expect(supabase.lastUpdate).not.toHaveProperty('coverage_state');
+    expect(supabase.lastUpdate).not.toHaveProperty('transcript_complete_at');
+  });
+});
+
+describe('call disposition classification', () => {
+  it('keeps a short voicemail as no_answer without inventing transcript completion', () => {
+    const disposition = classifyCallDisposition({
+      connected: false,
+      outcome: 'voicemail',
+      transcriptChars: 42,
+    });
+
+    expect(disposition).toEqual({ noAnswer: true, reason: 'voicemail' });
+    const evaluated = evaluateCoverage({
+      expectedProvider: 'ghl_phone',
+      appointmentState: 'completed',
+      scheduledEnd: past(TRANSCRIPT_GRACE_MINUTES + 30),
+      transcriptChars: 42,
+      callRecordId: 'call_1',
+      callDisposition: disposition,
+      now: NOW,
+    });
+    expect(evaluated.coverage_state).toBe('no_answer');
+    expect(evaluated.outcome).toBe('no_answer');
   });
 });
 
