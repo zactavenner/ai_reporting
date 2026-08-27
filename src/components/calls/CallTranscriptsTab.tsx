@@ -74,13 +74,14 @@ export function CallTranscriptsTab() {
     [calls, assignedUser, outcome, sentiment, intentBand, minDuration],
   );
 
-  /** Show only one row per contact — the most informative, most recent call. */
+  /** Show only one row per contact per media type — the most informative, most recent. */
   const filtered = useMemo(() => {
     const score = (c: CallTranscriptRecord) =>
       (c.transcript ? 4 : 0) + (c.summary ? 2 : 0) + (c.outcome ? 1 : 0);
     const best = new Map<string, CallTranscriptRecord>();
     for (const c of matching) {
-      const key = c.contact_id || c.contact_phone || c.contact_email || c.id;
+      const key = `${c.media_kind}:${c.contact_id || c.contact_phone || c.contact_email || c.id}`;
+
       const prev = best.get(key);
       if (!prev) { best.set(key, c); continue; }
       const cScore = score(c);
