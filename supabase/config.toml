@@ -224,3 +224,7 @@ verify_jwt = false
 
 [functions.agency-ghl-report-send]
 verify_jwt = false
+
+# Password-authenticated in code (INTERNAL_PASSWORD) like send-ghl-message.
+[functions.ghl-tag-contact]
+verify_jwt = false
