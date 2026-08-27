@@ -65,12 +65,13 @@ export function useCallTranscripts(filters: Filters = {}) {
   return useQuery({
     queryKey: ['call-transcripts', filters],
     queryFn: async () => {
-      let query = (supabase.from('phone_call_records' as any) as any)
+      let query = (supabase.from('v_unified_call_transcripts' as any) as any)
         .select('*')
         .order('started_at', { ascending: false, nullsFirst: false })
         .limit(1000);
 
       if (filters.clientId) query = query.eq('client_id', filters.clientId);
+      if (filters.mediaKind) query = query.eq('media_kind', filters.mediaKind);
       if (filters.startDate) query = query.gte('started_at', `${filters.startDate}T00:00:00.000Z`);
       if (filters.endDate) {
         const next = new Date(`${filters.endDate}T00:00:00.000Z`);
@@ -80,9 +81,10 @@ export function useCallTranscripts(filters: Filters = {}) {
       if (filters.search?.trim()) {
         const term = filters.search.trim().replace(/[%,]/g, ' ');
         query = query.or(
-          `transcript.ilike.%${term}%,summary.ilike.%${term}%,contact_name.ilike.%${term}%,next_step.ilike.%${term}%`,
+          `transcript.ilike.%${term}%,summary.ilike.%${term}%,contact_name.ilike.%${term}%,next_step.ilike.%${term}%,title.ilike.%${term}%`,
         );
       }
+
 
       const { data, error } = await query;
       if (error) throw error;
