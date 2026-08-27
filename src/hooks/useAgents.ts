@@ -198,7 +198,20 @@ export const AVAILABLE_CONNECTORS = [
   { key: 'claude_code', label: 'Claude Code', description: 'Connect to Claude Code Desktop for automations via MCP' },
 ];
 
-export const AGENT_TEMPLATES = [
+export interface AgentTemplate {
+  key: string;
+  name: string;
+  icon: string;
+  description: string;
+  connectors: string[];
+  schedule_cron: string;
+  model: string;
+  prompt_template: string;
+  /** Optional override; agents default to 0.3, which is too cold for copywriting. */
+  temperature?: number;
+}
+
+export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     key: 'ai_coo',
     name: 'AI COO (JARVIS)',
@@ -258,6 +271,17 @@ export const AGENT_TEMPLATES = [
     schedule_cron: '10 * * * *',
     model: 'google/gemini-2.5-flash',
     prompt_template: 'You are BROOKLYN for {{client_name}}.\n\n## Data ({{yesterday}})\n{{data}}\n\nAnalyze marketing. Return JSON: { "performance_summary": { ad_spend, cpl, ctr_pct, impressions }, "creative_insights": [], "ad_copy_suggestions": [{ headline, body, cta, angle }], "escalations": [], "slack_message" }',
+  },
+  {
+    key: 'hermes',
+    name: 'Copywriter Agent (HERMES)',
+    icon: '✍️',
+    description: 'Writes compliant capital raising ad copy — Meta primary text, headlines, hook cards — and rewrites what BROOKLYN flags as fatigued.',
+    connectors: ['database', 'meta_ads', 'slack'],
+    schedule_cron: '0 14 * * 1',
+    model: 'google/gemini-3.1-pro-preview',
+    temperature: 0.85,
+    prompt_template: 'You are HERMES, the capital raising ad copywriter for {{client_name}}.\n\n## Data ({{yesterday}})\n{{data}}\n\nRead the offers, ad spend, and creative performance in the data above. Identify the angles that are working, the ones that have fatigued, and the investor motivations nobody is writing to yet. Then write this week\'s ad copy.\n\nRules: one angle per variation, six angles available, vary the hook type not the wording. Use only numbers present in the data — never estimate a return, a track record, or a subscription percentage. If a fact is missing, leave the bracketed variable in place and list it in missing_inputs. If the offering is 506(b), write no offering ads at all and say so in compliance_notes.\n\nReturn JSON: { "read": { "working_angles": [], "fatigued_angles": [], "untapped_motivations": [] }, "variations": [{ angle, hook_type, primary_text, headline, description, cta, hook_card, target_investor, why_it_works }], "compliance_notes": [], "missing_inputs": [], "test_plan", "escalations": [{ severity, title, description, category }], "slack_message" }',
   },
   {
     key: 'data_qa',

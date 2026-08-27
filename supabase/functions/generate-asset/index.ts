@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCopySystemContext } from "./copy-system.ts";
+import { buildHermesSystemPrompt, isHermesAssetType } from "../_shared/souls/hermes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -203,7 +204,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { client_id, asset_type, client_data, existing_research, existing_angles, offer_id } = await req.json();
+    const { client_id, asset_type, client_data, existing_research, existing_angles, offer_id, soul } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
@@ -213,7 +214,16 @@ serve(async (req) => {
 
     // Prepend the AI Capital Raising Copy System context for compliance + templates
     const copySystemContext = getCopySystemContext(asset_type);
-    const systemPrompt = copySystemContext + '\n' + baseSystemPrompt;
+
+    // Opt-in persona layer. `soul: "hermes"` puts the capital raising ad
+    // copywriter's judgment in front of the templates for ad-facing assets.
+    const useHermes = soul === "hermes" && isHermesAssetType(asset_type);
+    if (soul === "hermes" && !useHermes) {
+      console.warn(`soul "hermes" ignored for asset_type "${asset_type}" (not an ad-facing asset)`);
+    }
+    const soulContext = useHermes ? buildHermesSystemPrompt() + '\n' : '';
+
+    const systemPrompt = soulContext + copySystemContext + '\n' + baseSystemPrompt;
 
     const userPrompt = buildUserPrompt(client_data, asset_type, existing_research, existing_angles);
 

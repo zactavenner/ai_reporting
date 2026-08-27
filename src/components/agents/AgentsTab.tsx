@@ -69,6 +69,7 @@ export function AgentsTab({ clients }: Props) {
       connectors: template.connectors as any,
       enabled: false,
       template_key: template.key,
+      ...(template.temperature !== undefined ? { temperature: template.temperature } : {}),
     } as any);
     setShowTemplates(false);
   };
