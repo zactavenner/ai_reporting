@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, RefreshCw, Play, FileText, Download, Copy } from 'lucide-react';
+import { Search, RefreshCw, Play, FileText, Download, Copy, Video, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useClients } from '@/hooks/useClients';
 import { exportToCSV } from '@/lib/exportUtils';
@@ -32,6 +32,7 @@ export function CallTranscriptsTab() {
   const [sentiment, setSentiment] = useState('all');
   const [intentBand, setIntentBand] = useState('all');
   const [minDuration, setMinDuration] = useState('all');
+  const [mediaKind, setMediaKind] = useState('all');
   const [selected, setSelected] = useState<CallTranscriptRecord | null>(null);
 
   const { data: calls = [], isLoading, refetch, isFetching } = useCallTranscripts({
@@ -39,7 +40,9 @@ export function CallTranscriptsTab() {
     endDate: endDate || undefined,
     clientId: clientId === 'all' ? undefined : clientId,
     search: appliedSearch || undefined,
+    mediaKind: mediaKind === 'all' ? undefined : (mediaKind as 'audio' | 'video'),
   });
+
   const processPending = useProcessPendingCalls();
 
   const users = useMemo(
@@ -71,13 +74,14 @@ export function CallTranscriptsTab() {
     [calls, assignedUser, outcome, sentiment, intentBand, minDuration],
   );
 
-  /** Show only one row per contact — the most informative, most recent call. */
+  /** Show only one row per contact per media type — the most informative, most recent. */
   const filtered = useMemo(() => {
     const score = (c: CallTranscriptRecord) =>
       (c.transcript ? 4 : 0) + (c.summary ? 2 : 0) + (c.outcome ? 1 : 0);
     const best = new Map<string, CallTranscriptRecord>();
     for (const c of matching) {
-      const key = c.contact_id || c.contact_phone || c.contact_email || c.id;
+      const key = `${c.media_kind}:${c.contact_id || c.contact_phone || c.contact_email || c.id}`;
+
       const prev = best.get(key);
       if (!prev) { best.set(key, c); continue; }
       const cScore = score(c);
@@ -124,6 +128,9 @@ export function CallTranscriptsTab() {
     exportToCSV(
       filtered.map((c) => ({
         date: c.started_at,
+        type: c.media_kind === 'video' ? 'Video meeting' : 'Phone call',
+        source: c.source,
+
         client: c.client_id ? clientNames[c.client_id] || '' : '',
         contact: c.contact_name,
         phone: c.contact_phone,
@@ -231,7 +238,7 @@ export function CallTranscriptsTab() {
                 { value: 'low', label: 'Low (0-49)' },
               ]} />
           </div>
-          <div className="w-full md:w-56">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:max-w-md gap-2">
             <FilterSelect value={minDuration} onChange={setMinDuration} placeholder="Min duration"
               options={[
                 { value: 'all', label: 'Any duration' },
@@ -240,7 +247,14 @@ export function CallTranscriptsTab() {
                 { value: '600', label: '10+ minutes' },
                 { value: '1200', label: '20+ minutes' },
               ]} />
+            <FilterSelect value={mediaKind} onChange={setMediaKind} placeholder="Source"
+              options={[
+                { value: 'all', label: 'All sources' },
+                { value: 'audio', label: 'Phone calls' },
+                { value: 'video', label: 'Video meetings' },
+              ]} />
           </div>
+
         </CardContent>
       </Card>
 
@@ -251,6 +265,7 @@ export function CallTranscriptsTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Assigned user</TableHead>
@@ -264,12 +279,13 @@ export function CallTranscriptsTab() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">Loading calls…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-10 text-muted-foreground">Loading calls…</TableCell></TableRow>
               ) : !filtered.length ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
                     No calls yet. Point your call provider webhook at the URL above — completed calls with a
-                    recording are transcribed and analyzed automatically.
+                    recording are transcribed and analyzed automatically. Video meetings appear here once the
+                    notetaker returns a recording or transcript.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -278,6 +294,14 @@ export function CallTranscriptsTab() {
                     <TableCell className="whitespace-nowrap">
                       {c.started_at ? new Date(c.started_at).toLocaleString() : '—'}
                     </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={c.media_kind === 'video' ? 'default' : 'secondary'} className="gap-1 font-normal">
+                        {c.media_kind === 'video'
+                          ? <><Video className="h-3 w-3" /> Video</>
+                          : <><Phone className="h-3 w-3" /> Phone</>}
+                      </Badge>
+                    </TableCell>
+
                     <TableCell className="whitespace-nowrap">
                       {c.client_id ? clientNames[c.client_id] || 'Unknown client' : '—'}
                     </TableCell>

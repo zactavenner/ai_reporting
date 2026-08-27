@@ -23215,6 +23215,58 @@ export type Database = {
           },
         ]
       }
+      v_unified_call_transcripts: {
+        Row: {
+          accredited: string | null
+          action_items: Json | null
+          analyzed_at: string | null
+          answered_at: string | null
+          appointment_id: string | null
+          assigned_user: string | null
+          assigned_user_phone: string | null
+          call_id: string | null
+          call_status: string | null
+          campaign: string | null
+          client_id: string | null
+          commitment_level: string | null
+          connected: boolean | null
+          contact_email: string | null
+          contact_id: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string | null
+          direction: string | null
+          duration_seconds: number | null
+          ended_at: string | null
+          follow_up_date: string | null
+          ghl_synced_at: string | null
+          id: string | null
+          important_quotes: Json | null
+          intent_score: number | null
+          investment_amount: number | null
+          investment_range: string | null
+          investment_timeline: string | null
+          media_kind: string | null
+          next_step: string | null
+          objections: Json | null
+          outcome: string | null
+          participants: Json | null
+          provider: string | null
+          recording_url: string | null
+          sentiment: string | null
+          source: string | null
+          source_url: string | null
+          speaker_segments: Json | null
+          started_at: string | null
+          summary: string | null
+          tags: Json | null
+          title: string | null
+          transcript: string | null
+          transcription_error: string | null
+          transcription_status: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       agent_cost_mtd: { Args: { p_agent_id: string }; Returns: number }

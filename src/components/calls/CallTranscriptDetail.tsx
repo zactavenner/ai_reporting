@@ -2,7 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Play, RefreshCw, Sparkles, Quote } from 'lucide-react';
+import { Play, RefreshCw, Sparkles, Quote, Video, Phone } from 'lucide-react';
 import { CallTranscriptRecord, useReprocessCall } from '@/hooks/useCallTranscripts';
 import { intentLabel, sentimentTone, formatDuration } from './callTranscriptUtils';
 
@@ -29,18 +29,30 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
             : { speaker: 'User', text: line };
         });
 
+  const isVideo = record.media_kind === 'video';
+  const actionItems = Array.isArray(record.action_items)
+    ? record.action_items
+        .map((item: any) =>
+          typeof item === 'string' ? item : String(item?.text || item?.title || item?.item || '').trim(),
+        )
+        .filter(Boolean)
+    : [];
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="text-left">
-            {record.contact_name || record.contact_phone || 'Unknown contact'}
+            {record.contact_name || record.contact_phone || record.title || 'Unknown contact'}
           </SheetTitle>
         </SheetHeader>
 
         <div className="mt-4 space-y-6">
           {/* Header stats */}
           <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={isVideo ? 'default' : 'secondary'} className="gap-1 font-normal">
+              {isVideo ? <><Video className="h-3 w-3" /> Video meeting</> : <><Phone className="h-3 w-3" /> Phone call</>}
+            </Badge>
             {record.intent_score !== null && (
               <Badge variant="outline" className="font-semibold">
                 Intent {record.intent_score}/100 — {intentLabel(record.intent_score)}
@@ -52,6 +64,15 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
             <Badge variant="outline">{record.direction || 'outbound'}</Badge>
             <Badge variant="outline">{record.transcription_status}</Badge>
           </div>
+
+          {isVideo && record.recording_url && (
+            <video
+              src={record.recording_url}
+              controls
+              className="w-full rounded-md border border-border bg-black"
+            />
+          )}
+
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Assigned user" value={record.assigned_user} />
@@ -72,15 +93,17 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
                 <Play className="h-4 w-4 mr-2" /> Recording
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={reprocess.isPending}
-              onClick={() => reprocess.mutate({ recordId: record.id })}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${reprocess.isPending ? 'animate-spin' : ''}`} /> Re-transcribe
-            </Button>
-            {record.transcript && (
+            {!isVideo && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={reprocess.isPending}
+                onClick={() => reprocess.mutate({ recordId: record.id })}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${reprocess.isPending ? 'animate-spin' : ''}`} /> Re-transcribe
+              </Button>
+            )}
+            {!isVideo && record.transcript && (
               <Button
                 size="sm"
                 variant="outline"
@@ -97,8 +120,16 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
           )}
 
           {record.summary && (
-            <Section title="AI Summary">
+            <Section title={isVideo ? 'Meeting Summary' : 'AI Summary'}>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{record.summary}</p>
+            </Section>
+          )}
+
+          {!!actionItems.length && (
+            <Section title="Action Items">
+              <ul className="space-y-1 text-sm list-disc pl-5">
+                {actionItems.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
             </Section>
           )}
 
@@ -107,6 +138,7 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
               <p className="text-sm">{record.next_step}</p>
             </Section>
           )}
+
 
           {!!record.objections?.length && (
             <Section title="Objections">
