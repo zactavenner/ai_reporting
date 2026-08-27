@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getSoulSystemPrompt } from '../_shared/souls/index.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -248,11 +249,17 @@ serve(async (req) => {
 
         const inputSummary = `Client: ${client.name}. Connectors: ${connectors.join(', ')}. Data: ${Object.keys(dataContext).join(', ')}`;
 
+        // Agents with a registered soul get their persona layer ahead of the
+        // task instructions; the JSON contract stays last so it always wins.
+        const soulPrompt = getSoulSystemPrompt(agent.template_key);
+        const baseSystemPrompt = 'You are an AI agent executing a scheduled task for a capital raising agency. Analyze the provided data thoroughly and respond ONLY with valid JSON (no markdown fences). Be specific with numbers and actionable with recommendations.';
+        const systemPrompt = soulPrompt ? `${soulPrompt}\n\n${baseSystemPrompt}` : baseSystemPrompt;
+
         // Call AI via Lovable AI Gateway
         const aiBody: any = {
           model: agent.model || 'google/gemini-2.5-flash',
           messages: [
-            { role: 'system', content: 'You are an AI agent executing a scheduled task for a capital raising agency. Analyze the provided data thoroughly and respond ONLY with valid JSON (no markdown fences). Be specific with numbers and actionable with recommendations.' },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: prompt },
           ],
           temperature: Number(agent.temperature) || 0.3,
