@@ -93,15 +93,17 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
                 <Play className="h-4 w-4 mr-2" /> Recording
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={reprocess.isPending}
-              onClick={() => reprocess.mutate({ recordId: record.id })}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${reprocess.isPending ? 'animate-spin' : ''}`} /> Re-transcribe
-            </Button>
-            {record.transcript && (
+            {!isVideo && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={reprocess.isPending}
+                onClick={() => reprocess.mutate({ recordId: record.id })}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${reprocess.isPending ? 'animate-spin' : ''}`} /> Re-transcribe
+              </Button>
+            )}
+            {!isVideo && record.transcript && (
               <Button
                 size="sm"
                 variant="outline"
@@ -118,8 +120,16 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
           )}
 
           {record.summary && (
-            <Section title="AI Summary">
+            <Section title={isVideo ? 'Meeting Summary' : 'AI Summary'}>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{record.summary}</p>
+            </Section>
+          )}
+
+          {!!actionItems.length && (
+            <Section title="Action Items">
+              <ul className="space-y-1 text-sm list-disc pl-5">
+                {actionItems.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
             </Section>
           )}
 
@@ -128,6 +138,7 @@ export function CallTranscriptDetail({ record, timeline, open, onOpenChange }: P
               <p className="text-sm">{record.next_step}</p>
             </Section>
           )}
+
 
           {!!record.objections?.length && (
             <Section title="Objections">
