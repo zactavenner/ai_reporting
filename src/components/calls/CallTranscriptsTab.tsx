@@ -262,6 +262,7 @@ export function CallTranscriptsTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Assigned user</TableHead>
@@ -275,12 +276,13 @@ export function CallTranscriptsTab() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">Loading calls…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-10 text-muted-foreground">Loading calls…</TableCell></TableRow>
               ) : !filtered.length ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
                     No calls yet. Point your call provider webhook at the URL above — completed calls with a
-                    recording are transcribed and analyzed automatically.
+                    recording are transcribed and analyzed automatically. Video meetings appear here once the
+                    notetaker returns a recording or transcript.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -289,6 +291,14 @@ export function CallTranscriptsTab() {
                     <TableCell className="whitespace-nowrap">
                       {c.started_at ? new Date(c.started_at).toLocaleString() : '—'}
                     </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={c.media_kind === 'video' ? 'default' : 'secondary'} className="gap-1 font-normal">
+                        {c.media_kind === 'video'
+                          ? <><Video className="h-3 w-3" /> Video</>
+                          : <><Phone className="h-3 w-3" /> Phone</>}
+                      </Badge>
+                    </TableCell>
+
                     <TableCell className="whitespace-nowrap">
                       {c.client_id ? clientNames[c.client_id] || 'Unknown client' : '—'}
                     </TableCell>
