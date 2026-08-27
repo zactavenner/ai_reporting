@@ -128,6 +128,9 @@ export function CallTranscriptsTab() {
     exportToCSV(
       filtered.map((c) => ({
         date: c.started_at,
+        type: c.media_kind === 'video' ? 'Video meeting' : 'Phone call',
+        source: c.source,
+
         client: c.client_id ? clientNames[c.client_id] || '' : '',
         contact: c.contact_name,
         phone: c.contact_phone,
