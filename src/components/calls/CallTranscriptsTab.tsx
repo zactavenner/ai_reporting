@@ -235,7 +235,7 @@ export function CallTranscriptsTab() {
                 { value: 'low', label: 'Low (0-49)' },
               ]} />
           </div>
-          <div className="w-full md:w-56">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:max-w-md gap-2">
             <FilterSelect value={minDuration} onChange={setMinDuration} placeholder="Min duration"
               options={[
                 { value: 'all', label: 'Any duration' },
@@ -244,7 +244,14 @@ export function CallTranscriptsTab() {
                 { value: '600', label: '10+ minutes' },
                 { value: '1200', label: '20+ minutes' },
               ]} />
+            <FilterSelect value={mediaKind} onChange={setMediaKind} placeholder="Source"
+              options={[
+                { value: 'all', label: 'All sources' },
+                { value: 'audio', label: 'Phone calls' },
+                { value: 'video', label: 'Video meetings' },
+              ]} />
           </div>
+
         </CardContent>
       </Card>
 
