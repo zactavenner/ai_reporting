@@ -2,7 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Play, RefreshCw, Sparkles, Quote } from 'lucide-react';
+import { Play, RefreshCw, Sparkles, Quote, Video, Phone } from 'lucide-react';
 import { CallTranscriptRecord, useReprocessCall } from '@/hooks/useCallTranscripts';
 import { intentLabel, sentimentTone, formatDuration } from './callTranscriptUtils';
 
