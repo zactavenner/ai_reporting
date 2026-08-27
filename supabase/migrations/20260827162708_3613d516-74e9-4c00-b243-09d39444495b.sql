@@ -1,0 +1,113 @@
+CREATE OR REPLACE VIEW public.v_unified_call_transcripts
+WITH (security_invoker = true) AS
+SELECT
+  p.id,
+  'phone'::text            AS source,
+  'audio'::text            AS media_kind,
+  p.client_id,
+  p.call_id,
+  p.provider,
+  p.appointment_id,
+  p.contact_id,
+  p.contact_name,
+  p.contact_phone,
+  p.contact_email,
+  p.assigned_user,
+  p.assigned_user_phone,
+  p.campaign,
+  p.direction,
+  p.call_status,
+  p.started_at,
+  p.answered_at,
+  p.ended_at,
+  p.duration_seconds,
+  p.connected,
+  p.recording_url,
+  NULL::text               AS source_url,
+  p.transcript,
+  p.speaker_segments,
+  p.transcription_status,
+  p.transcription_error,
+  p.summary,
+  '[]'::jsonb              AS action_items,
+  NULL::jsonb              AS participants,
+  NULL::text               AS title,
+  p.outcome,
+  p.sentiment,
+  p.intent_score,
+  p.next_step,
+  p.follow_up_date,
+  p.objections,
+  p.important_quotes,
+  p.investment_amount,
+  p.investment_range,
+  p.investment_timeline,
+  p.accredited,
+  p.commitment_level,
+  p.tags,
+  p.analyzed_at,
+  p.ghl_synced_at,
+  p.created_at
+FROM public.phone_call_records p
+UNION ALL
+SELECT
+  m.id,
+  COALESCE(m.provider, 'meeting')::text AS source,
+  'video'::text            AS media_kind,
+  m.client_id,
+  m.meeting_external_id    AS call_id,
+  m.provider,
+  m.ghl_appointment_id     AS appointment_id,
+  COALESCE(m.ghl_contact_id, lmc.ghl_contact_id) AS contact_id,
+  m.contact_name,
+  NULL::text               AS contact_phone,
+  COALESCE(m.contact_email, lmc.matched_email) AS contact_email,
+  m.sales_agent_name       AS assigned_user,
+  NULL::text               AS assigned_user_phone,
+  NULL::text               AS campaign,
+  'video'::text            AS direction,
+  m.status                 AS call_status,
+  m.started_at,
+  NULL::timestamptz        AS answered_at,
+  m.ended_at,
+  (COALESCE(m.duration_minutes, 0) * 60)::int AS duration_seconds,
+  (COALESCE(m.duration_minutes, 0) > 0)       AS connected,
+  COALESCE(m.recording_url, m.source_url)     AS recording_url,
+  m.source_url,
+  m.transcript_text        AS transcript,
+  '[]'::jsonb              AS speaker_segments,
+  CASE
+    WHEN m.transcript_text IS NOT NULL AND length(btrim(m.transcript_text)) > 0 THEN 'completed'
+    ELSE 'awaiting_recording'
+  END::text                AS transcription_status,
+  NULL::text               AS transcription_error,
+  m.summary,
+  COALESCE(m.action_items, '[]'::jsonb)  AS action_items,
+  m.participants,
+  m.title,
+  NULL::text               AS outcome,
+  NULL::text               AS sentiment,
+  NULL::int                AS intent_score,
+  NULL::text               AS next_step,
+  NULL::date               AS follow_up_date,
+  '[]'::jsonb              AS objections,
+  '[]'::jsonb              AS important_quotes,
+  NULL::numeric            AS investment_amount,
+  NULL::text               AS investment_range,
+  NULL::text               AS investment_timeline,
+  NULL::text               AS accredited,
+  NULL::text               AS commitment_level,
+  '[]'::jsonb              AS tags,
+  m.attributed_at          AS analyzed_at,
+  lmc.ghl_note_at          AS ghl_synced_at,
+  m.created_at
+FROM public.meeting_records m
+LEFT JOIN LATERAL (
+  SELECT c.ghl_contact_id, c.matched_email, c.ghl_note_at
+  FROM public.lead_meeting_context c
+  WHERE c.meeting_record_id = m.id
+  ORDER BY c.match_confidence DESC NULLS LAST, c.created_at ASC
+  LIMIT 1
+) lmc ON true;
+
+GRANT SELECT ON public.v_unified_call_transcripts TO anon, authenticated, service_role;
