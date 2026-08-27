@@ -32,6 +32,7 @@ export function CallTranscriptsTab() {
   const [sentiment, setSentiment] = useState('all');
   const [intentBand, setIntentBand] = useState('all');
   const [minDuration, setMinDuration] = useState('all');
+  const [mediaKind, setMediaKind] = useState('all');
   const [selected, setSelected] = useState<CallTranscriptRecord | null>(null);
 
   const { data: calls = [], isLoading, refetch, isFetching } = useCallTranscripts({
@@ -39,7 +40,9 @@ export function CallTranscriptsTab() {
     endDate: endDate || undefined,
     clientId: clientId === 'all' ? undefined : clientId,
     search: appliedSearch || undefined,
+    mediaKind: mediaKind === 'all' ? undefined : (mediaKind as 'audio' | 'video'),
   });
+
   const processPending = useProcessPendingCalls();
 
   const users = useMemo(
