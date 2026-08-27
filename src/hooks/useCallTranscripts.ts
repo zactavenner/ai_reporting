@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 
 export interface CallTranscriptRecord {
   id: string;
+  source: string;
+  media_kind: 'audio' | 'video';
   client_id: string | null;
   call_id: string;
   provider: string | null;
@@ -17,17 +19,21 @@ export interface CallTranscriptRecord {
   campaign: string | null;
   direction: string | null;
   call_status: string | null;
+  title: string | null;
   started_at: string | null;
   answered_at: string | null;
   ended_at: string | null;
   duration_seconds: number | null;
   connected: boolean | null;
   recording_url: string | null;
+  source_url: string | null;
   transcript: string | null;
   speaker_segments: { speaker: string; text: string }[] | null;
   transcription_status: string;
   transcription_error: string | null;
   summary: string | null;
+  action_items: unknown[] | null;
+  participants: unknown[] | null;
   outcome: string | null;
   sentiment: string | null;
   intent_score: number | null;
@@ -51,7 +57,9 @@ interface Filters {
   endDate?: string;
   clientId?: string;
   search?: string;
+  mediaKind?: 'audio' | 'video';
 }
+
 
 export function useCallTranscripts(filters: Filters = {}) {
   return useQuery({
