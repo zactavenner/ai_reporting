@@ -28,9 +28,20 @@ import {
   type MeetgeekClientConfig,
 } from '../_shared/meetgeekCalendarGate.ts';
 import { parseMeetgeekInsights } from '../_shared/meetgeekQuality.ts';
+import {
+  fingerprintApiKey,
+  getCachedRegion,
+  normalizeMeetgeekRegion,
+  regionBaseUrl,
+  resolveMeetgeekRegion,
+  setCachedRegion,
+  type MeetgeekProbeResult,
+  type MeetgeekRegion,
+} from '../_shared/meetgeekRegion.ts';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import { attributeMeetingRecord, attributeRecentMeetings } from '../_shared/meetingAttribution.ts';
 import { ghlAppointmentUrl } from '../_shared/ghlAttribution.ts';
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
