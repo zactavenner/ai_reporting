@@ -374,7 +374,7 @@ async function enrichFromProvider(
   let cursor: string | null = null;
   for (let page = 0; page < 20; page += 1) {
     const path = `/v1/meetings/${id}/transcript${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const attempt = await mgGetDiagnostic(api.apiKey, api.baseUrl, path);
+    const attempt = await mgGetDiagnostic(api.apiKey, baseUrl, path);
     if (!attempt.body) {
       diagnostics.push(attempt.diagnostic);
       break;
