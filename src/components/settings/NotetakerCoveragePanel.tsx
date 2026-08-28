@@ -248,6 +248,11 @@ export function NotetakerCoveragePanel({ clientId }: Props) {
           {replay.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
           Retry failed transcript ingests
         </Button>
+        <Button variant="ghost" onClick={() => rehydrate.mutate()} disabled={rehydrate.isPending}>
+          {rehydrate.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+          Re-hydrate provider failures
+        </Button>
+
       </div>
     </div>
   );
