@@ -527,21 +527,20 @@ function buildIngestDeps(supabase: any): IngestDeps {
       if (!api) {
         return { meeting: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: false }) };
       }
-      const attempt = await mgGetDiagnostic(
-        api.apiKey,
-        api.baseUrl,
-        `/v1/meetings/${encodeURIComponent(meeting.meetingExternalId)}`,
-      );
-      if (!attempt.body) {
-        return { meeting: null, diagnostic: attempt.diagnostic };
+      // The regional probe IS the meeting read, so a successful resolution
+      // already carries the authoritative provider body.
+      const resolved = await resolveMeetgeekBase(api, meeting.meetingExternalId);
+      if (!resolved.ok || !resolved.body) {
+        return { meeting: null, diagnostic: probeDiagnostic(resolved.failure) };
       }
-      const hydrated = hydrateMeetingFromProvider(meeting, attempt.body);
+      const hydrated = hydrateMeetingFromProvider(meeting, resolved.body as Record<string, any>);
       if (hydrated) return { meeting: hydrated };
       return {
         meeting: null,
         diagnostic: { code: 'incomplete_response' as const, detail: 'Provider meeting lacked authoritative start time' },
       };
     },
+
     // Production path: per-client calendar gating + client-scoped call activity.
     async calendarGate(meeting: NormalizedMeeting) {
       const lifecycle = buildLifecycleDeps(supabase);
