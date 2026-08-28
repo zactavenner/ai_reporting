@@ -10,6 +10,7 @@ import {
   hydrateMeetingFromProvider,
   extractTranscriptText,
   extractTranscriptCursor,
+  signMeetgeekBody,
 
   classifyHydrationFailure,
   type HydrationDiagnostic,
@@ -28,9 +29,21 @@ import {
   type MeetgeekClientConfig,
 } from '../_shared/meetgeekCalendarGate.ts';
 import { parseMeetgeekInsights } from '../_shared/meetgeekQuality.ts';
+import {
+  fingerprintApiKey,
+  getCachedRegion,
+  normalizeMeetgeekRegion,
+  regionBaseUrl,
+  resolveMeetgeekRegion,
+  setCachedRegion,
+  type MeetgeekProbeResult,
+  type MeetgeekRegion,
+} from '../_shared/meetgeekRegion.ts';
+import { replayHydrationFailures } from '../_shared/meetgeekReplay.ts';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import { attributeMeetingRecord, attributeRecentMeetings } from '../_shared/meetingAttribution.ts';
 import { ghlAppointmentUrl } from '../_shared/ghlAttribution.ts';
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,9 +66,79 @@ const GHL_HEADERS = (apiKey: string) => ({
   Accept: 'application/json',
 });
 
-function getBaseUrl(region: string): string {
-  return region === 'eu' ? 'https://api-eu.meetgeek.ai' : 'https://api-us.meetgeek.ai';
+/**
+ * Server-only regional resolution. MeetGeek keys are region-scoped and the
+ * documented default endpoint is Europe; prefix guessing is never used.
+ */
+interface MeetgeekCredential {
+  apiKey: string;
+  /** Explicit region when configured (env or per-client setting). */
+  region: MeetgeekRegion | null;
 }
+
+async function mgProbe(apiKey: string, baseUrl: string, path: string): Promise<MeetgeekProbeResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+  } catch {
+    return { ok: false, errorKind: 'network' };
+  }
+  if (!res.ok) {
+    // Body is intentionally drained and discarded — never logged or returned.
+    try { await res.text(); } catch { /* ignore */ }
+    return { ok: false, status: res.status };
+  }
+  try {
+    const body = await res.json();
+    if (!body || typeof body !== 'object') return { ok: false, status: res.status };
+    return { ok: true, status: res.status, body };
+  } catch {
+    return { ok: false, errorKind: 'parse' };
+  }
+}
+
+/**
+ * Resolves the base URL to use for every authenticated read of this meeting.
+ * Honors an explicit region; otherwise probes the meeting read against EU first
+ * and US only on an auth/not-found style regional mismatch (never on
+ * network/429/5xx). The successful probe body is returned so hydration does not
+ * need a second request.
+ */
+async function resolveMeetgeekBase(
+  cred: MeetgeekCredential,
+  meetingExternalId: string,
+): Promise<{ baseUrl: string; region: MeetgeekRegion; body?: unknown; ok: boolean; failure?: MeetgeekProbeResult | null }> {
+  const path = `/v1/meetings/${encodeURIComponent(meetingExternalId)}`;
+  const fingerprint = await fingerprintApiKey(cred.apiKey);
+  const cached = cred.region ?? getCachedRegion(fingerprint);
+  if (cached) {
+    const baseUrl = regionBaseUrl(cached);
+    const probe = await mgProbe(cred.apiKey, baseUrl, path);
+    return { baseUrl, region: cached, body: probe.body, ok: probe.ok, failure: probe.ok ? null : probe };
+  }
+  const resolution = await resolveMeetgeekRegion({
+    explicitRegion: null,
+    probe: (baseUrl) => mgProbe(cred.apiKey, baseUrl, path),
+  });
+  if (resolution.ok) setCachedRegion(fingerprint, resolution.region);
+  return {
+    baseUrl: resolution.baseUrl,
+    region: resolution.region,
+    body: resolution.body,
+    ok: resolution.ok,
+    failure: resolution.failure ?? null,
+  };
+}
+
+function probeDiagnostic(failure: MeetgeekProbeResult | null | undefined): HydrationDiagnostic {
+  if (!failure) return classifyHydrationFailure({ apiKeyPresent: true });
+  return classifyHydrationFailure({
+    apiKeyPresent: true,
+    httpStatus: failure.status ?? null,
+    errorKind: failure.errorKind ?? null,
+  });
+}
+
 
 /**
  * Internal (non-provider) actions require the service-role key (cron) or a
@@ -133,31 +216,25 @@ async function loadMeetgeekConfig(supabase: any, clientId: string): Promise<Meet
 // ---------------------------------------------------------------------------
 // Authenticated MeetGeek provider reads (only for calendar-validated meetings)
 // ---------------------------------------------------------------------------
-async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<{ apiKey: string; baseUrl: string } | null> {
+async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<MeetgeekCredential | null> {
   const { data: cs } = await supabase
     .from('client_settings')
     .select('meetgeek_api_key, meetgeek_region, meetgeek_enabled')
     .eq('client_id', clientId)
     .maybeSingle();
   if (cs?.meetgeek_enabled && cs?.meetgeek_api_key) {
-    return { apiKey: cs.meetgeek_api_key, baseUrl: getBaseUrl(cs.meetgeek_region || 'us') };
+    return { apiKey: cs.meetgeek_api_key, region: normalizeMeetgeekRegion(cs.meetgeek_region) };
   }
-  const { data: agency } = await supabase
-    .from('agency_settings')
-    .select('meetgeek_api_key')
-    .limit(1)
-    .maybeSingle();
-  const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
-  if (!apiKey) return null;
-  return { apiKey, baseUrl: getBaseUrl(apiKey.startsWith('eu-') ? 'eu' : 'us') };
+  return await resolveAgencyMeetgeekApi(supabase);
 }
 
 /**
  * Agency-level (private) MeetGeek credentials. Used for the pre-gate
  * `GET /v1/meetings/{id}` hydration, where no client is known yet — so no
- * client-scoped key may be consulted.
+ * client-scoped key may be consulted. The region is never guessed from the key
+ * shape: either MEETGEEK_REGION pins it or it is probed.
  */
-async function resolveAgencyMeetgeekApi(supabase: any): Promise<{ apiKey: string; baseUrl: string } | null> {
+async function resolveAgencyMeetgeekApi(supabase: any): Promise<MeetgeekCredential | null> {
   const { data: agency } = await supabase
     .from('agency_settings')
     .select('meetgeek_api_key')
@@ -165,19 +242,9 @@ async function resolveAgencyMeetgeekApi(supabase: any): Promise<{ apiKey: string
     .maybeSingle();
   const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
   if (!apiKey) return null;
-  const region = (Deno.env.get('MEETGEEK_REGION') || (apiKey.startsWith('eu-') ? 'eu' : 'us')).toLowerCase();
-  return { apiKey, baseUrl: getBaseUrl(region) };
+  return { apiKey, region: normalizeMeetgeekRegion(Deno.env.get('MEETGEEK_REGION')) };
 }
 
-async function mgGet(apiKey: string, baseUrl: string, path: string): Promise<any | null> {
-  try {
-    const res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Same as `mgGet` but returns a safe diagnostic (no keys, no PII, no body text)
@@ -280,11 +347,20 @@ async function enrichFromProvider(
     await recordEnrichmentDiagnostic(supabase, meeting, classifyHydrationFailure({ apiKeyPresent: false }));
     return meeting;
   }
+  // One regional resolution, reused for insights, summary and every transcript
+  // page. No per-endpoint region retries.
+  const resolved = await resolveMeetgeekBase(api, meeting.meetingExternalId);
+  if (!resolved.ok) {
+    await recordEnrichmentDiagnostic(supabase, meeting, probeDiagnostic(resolved.failure));
+    return meeting;
+  }
+  const baseUrl = resolved.baseUrl;
   const id = encodeURIComponent(meeting.meetingExternalId);
   const [insightsAttempt, summaryAttempt] = await Promise.all([
-    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/insights`),
-    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/summary`),
+    mgGetDiagnostic(api.apiKey, baseUrl, `/v1/meetings/${id}/insights`),
+    mgGetDiagnostic(api.apiKey, baseUrl, `/v1/meetings/${id}/summary`),
   ]);
+
   const insightsRaw = insightsAttempt.body;
   const summaryRaw = summaryAttempt.body;
   if (!insightsRaw) diagnostics.push(insightsAttempt.diagnostic);
@@ -300,7 +376,7 @@ async function enrichFromProvider(
   let cursor: string | null = null;
   for (let page = 0; page < 20; page += 1) {
     const path = `/v1/meetings/${id}/transcript${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const attempt = await mgGetDiagnostic(api.apiKey, api.baseUrl, path);
+    const attempt = await mgGetDiagnostic(api.apiKey, baseUrl, path);
     if (!attempt.body) {
       diagnostics.push(attempt.diagnostic);
       break;
@@ -453,21 +529,20 @@ function buildIngestDeps(supabase: any): IngestDeps {
       if (!api) {
         return { meeting: null, diagnostic: classifyHydrationFailure({ apiKeyPresent: false }) };
       }
-      const attempt = await mgGetDiagnostic(
-        api.apiKey,
-        api.baseUrl,
-        `/v1/meetings/${encodeURIComponent(meeting.meetingExternalId)}`,
-      );
-      if (!attempt.body) {
-        return { meeting: null, diagnostic: attempt.diagnostic };
+      // The regional probe IS the meeting read, so a successful resolution
+      // already carries the authoritative provider body.
+      const resolved = await resolveMeetgeekBase(api, meeting.meetingExternalId);
+      if (!resolved.ok || !resolved.body) {
+        return { meeting: null, diagnostic: probeDiagnostic(resolved.failure) };
       }
-      const hydrated = hydrateMeetingFromProvider(meeting, attempt.body);
+      const hydrated = hydrateMeetingFromProvider(meeting, resolved.body as Record<string, any>);
       if (hydrated) return { meeting: hydrated };
       return {
         meeting: null,
         diagnostic: { code: 'incomplete_response' as const, detail: 'Provider meeting lacked authoritative start time' },
       };
     },
+
     // Production path: per-client calendar gating + client-scoped call activity.
     async calendarGate(meeting: NormalizedMeeting) {
       const lifecycle = buildLifecycleDeps(supabase);
@@ -752,6 +827,57 @@ Deno.serve(async (req) => {
       const res = await attributeRecentMeetings(supabase, Number(body.limit) || 100);
       return jsonResponse({ ok: true, ...res });
     }
+
+    // -----------------------------------------------------------------
+    // Bounded recovery: actively reprocess signature-valid events whose
+    // authoritative hydration failed (regional 401 / missing key). Runs the
+    // SAME signature-verified, calendar-gated ingestion path, is idempotent via
+    // the dedupe key, is capped at 50 per request and never accepts a client
+    // identity from the caller. Returns counts and safe codes only.
+    // -----------------------------------------------------------------
+    if (body.action === 'mg_replay_hydration_failures') {
+      const secret = await resolveWebhookSecret(supabase);
+      if (!secret) {
+        return jsonResponse({ error: 'webhook_secret_not_configured' }, 500);
+      }
+      const deps = buildIngestDeps(supabase);
+      const summary = await replayHydrationFailures({
+        limit: body.limit,
+        async fetchCandidates(limit) {
+          const { data, error } = await supabase
+            .from('meeting_ingest_events')
+            .select('id, meeting_external_id, signature_valid, status, hydration_code, payload')
+            .eq('provider', 'meetgeek')
+            .eq('signature_valid', true)
+            .not('meeting_external_id', 'is', null)
+            .in('status', ['rejected', 'failed', 'received', 'processing'])
+            .order('created_at', { ascending: true })
+            .limit(limit);
+          if (error) throw error;
+          return (data || []) as any;
+        },
+        async replayOne(row) {
+          const payload = row.payload;
+          if (!payload || typeof payload !== 'object') {
+            return { ok: false, code: 'payload_unavailable' };
+          }
+          const rawBody = JSON.stringify(payload);
+          const result = await ingestMeetgeekWebhook({
+            rawBody,
+            signatureHeader: await signMeetgeekBody(rawBody, secret),
+            secret,
+            deps,
+          });
+          const code = result.ok
+            ? (result.duplicate ? 'duplicate' : 'processed')
+            : String(result.hydrationDiagnostic?.code || result.reason || 'failed');
+          return { ok: !!result.ok, code };
+        },
+      });
+      return jsonResponse({ ok: true, ...summary });
+    }
+
+
 
     // -----------------------------------------------------------------
     // Per-client MeetGeek configuration + health (server-derived only).

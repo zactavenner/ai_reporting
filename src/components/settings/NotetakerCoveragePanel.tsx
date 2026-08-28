@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
+import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
+
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -117,6 +119,21 @@ export function NotetakerCoveragePanel({ clientId }: Props) {
     onError: (e: any) => toast.error(e?.message || 'Replay failed'),
   });
 
+  // Bounded provider-hydration recovery (regional 401 / missing key). The server
+  // resolves tenancy and caps the batch; no client identity is sent.
+  const rehydrate = useMutation({
+    mutationFn: () => invokeMeetgeek({ action: 'mg_replay_hydration_failures', limit: 50 }),
+    onSuccess: (data: any) => {
+      toast.success(
+        `Re-hydrated ${data?.succeeded || 0} of ${data?.attempted || 0} meetings (${data?.still_failing || 0} still failing)`,
+      );
+      queryClient.invalidateQueries({ queryKey: ['notetaker-coverage'] });
+      queryClient.invalidateQueries({ queryKey: ['meetings'] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Re-hydration failed'),
+  });
+
+
   const s = coverage.data?.summary;
 
   return (
@@ -231,6 +248,11 @@ export function NotetakerCoveragePanel({ clientId }: Props) {
           {replay.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
           Retry failed transcript ingests
         </Button>
+        <Button variant="ghost" onClick={() => rehydrate.mutate()} disabled={rehydrate.isPending}>
+          {rehydrate.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+          Re-hydrate provider failures
+        </Button>
+
       </div>
     </div>
   );

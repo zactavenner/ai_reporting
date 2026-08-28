@@ -215,6 +215,25 @@ export async function verifyMeetgeekSignature(
   }
 }
 
+/**
+ * Signs a raw body with the SAME HMAC-SHA256 scheme the provider uses. Used only
+ * by the server-side operator replay so a stored, previously signature-verified
+ * payload can be re-driven through the one verified ingestion path instead of
+ * bypassing verification. Never exposed to any client.
+ */
+export async function signMeetgeekBody(rawBody: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  return toHex(await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody)));
+}
+
+
 function firstString(...vals: unknown[]): string | null {
   for (const v of vals) {
     if (typeof v === 'string' && v.trim()) return v.trim();
