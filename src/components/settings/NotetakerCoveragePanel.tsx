@@ -117,6 +117,21 @@ export function NotetakerCoveragePanel({ clientId }: Props) {
     onError: (e: any) => toast.error(e?.message || 'Replay failed'),
   });
 
+  // Bounded provider-hydration recovery (regional 401 / missing key). The server
+  // resolves tenancy and caps the batch; no client identity is sent.
+  const rehydrate = useMutation({
+    mutationFn: () => invokeMeetgeek({ action: 'mg_replay_hydration_failures', limit: 50 }),
+    onSuccess: (data: any) => {
+      toast.success(
+        `Re-hydrated ${data?.succeeded || 0} of ${data?.attempted || 0} meetings (${data?.still_failing || 0} still failing)`,
+      );
+      queryClient.invalidateQueries({ queryKey: ['notetaker-coverage'] });
+      queryClient.invalidateQueries({ queryKey: ['meetings'] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Re-hydration failed'),
+  });
+
+
   const s = coverage.data?.summary;
 
   return (
