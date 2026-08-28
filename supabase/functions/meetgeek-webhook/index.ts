@@ -827,6 +827,57 @@ Deno.serve(async (req) => {
     }
 
     // -----------------------------------------------------------------
+    // Bounded recovery: actively reprocess signature-valid events whose
+    // authoritative hydration failed (regional 401 / missing key). Runs the
+    // SAME signature-verified, calendar-gated ingestion path, is idempotent via
+    // the dedupe key, is capped at 50 per request and never accepts a client
+    // identity from the caller. Returns counts and safe codes only.
+    // -----------------------------------------------------------------
+    if (body.action === 'mg_replay_hydration_failures') {
+      const secret = await resolveWebhookSecret(supabase);
+      if (!secret) {
+        return jsonResponse({ error: 'webhook_secret_not_configured' }, 500);
+      }
+      const deps = buildIngestDeps(supabase);
+      const summary = await replayHydrationFailures({
+        limit: body.limit,
+        async fetchCandidates(limit) {
+          const { data, error } = await supabase
+            .from('meeting_ingest_events')
+            .select('id, meeting_external_id, signature_valid, status, hydration_code, payload')
+            .eq('provider', 'meetgeek')
+            .eq('signature_valid', true)
+            .not('meeting_external_id', 'is', null)
+            .in('status', ['rejected', 'failed', 'received', 'processing'])
+            .order('created_at', { ascending: true })
+            .limit(limit);
+          if (error) throw error;
+          return (data || []) as any;
+        },
+        async replayOne(row) {
+          const payload = row.payload;
+          if (!payload || typeof payload !== 'object') {
+            return { ok: false, code: 'payload_unavailable' };
+          }
+          const rawBody = JSON.stringify(payload);
+          const result = await ingestMeetgeekWebhook({
+            rawBody,
+            signatureHeader: await signMeetgeekBody(rawBody, secret),
+            secret,
+            deps,
+          });
+          const code = result.ok
+            ? (result.duplicate ? 'duplicate' : 'processed')
+            : String(result.hydrationDiagnostic?.code || result.reason || 'failed');
+          return { ok: !!result.ok, code };
+        },
+      });
+      return jsonResponse({ ok: true, ...summary });
+    }
+
+
+
+    // -----------------------------------------------------------------
     // Per-client MeetGeek configuration + health (server-derived only).
     // -----------------------------------------------------------------
     const configActions = ['mg_list_calendars', 'mg_get_config', 'mg_save_config', 'mg_test_event'];
