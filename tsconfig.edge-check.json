@@ -28,6 +28,8 @@
     "supabase/functions/_shared/jeremyExecutors.ts",
     "supabase/functions/_shared/meetgeekRegion.ts",
     "supabase/functions/_shared/meetgeekReplay.ts",
+    "supabase/functions/_shared/meetgeekReplayInvoke.ts",
+    "supabase/functions/meetgeek-guest-poll/index.ts",
     "supabase/functions/_shared/generationAuth.ts"
 
   ]
