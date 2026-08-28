@@ -214,31 +214,25 @@ async function loadMeetgeekConfig(supabase: any, clientId: string): Promise<Meet
 // ---------------------------------------------------------------------------
 // Authenticated MeetGeek provider reads (only for calendar-validated meetings)
 // ---------------------------------------------------------------------------
-async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<{ apiKey: string; baseUrl: string } | null> {
+async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<MeetgeekCredential | null> {
   const { data: cs } = await supabase
     .from('client_settings')
     .select('meetgeek_api_key, meetgeek_region, meetgeek_enabled')
     .eq('client_id', clientId)
     .maybeSingle();
   if (cs?.meetgeek_enabled && cs?.meetgeek_api_key) {
-    return { apiKey: cs.meetgeek_api_key, baseUrl: getBaseUrl(cs.meetgeek_region || 'us') };
+    return { apiKey: cs.meetgeek_api_key, region: normalizeMeetgeekRegion(cs.meetgeek_region) };
   }
-  const { data: agency } = await supabase
-    .from('agency_settings')
-    .select('meetgeek_api_key')
-    .limit(1)
-    .maybeSingle();
-  const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
-  if (!apiKey) return null;
-  return { apiKey, baseUrl: getBaseUrl(apiKey.startsWith('eu-') ? 'eu' : 'us') };
+  return await resolveAgencyMeetgeekApi(supabase);
 }
 
 /**
  * Agency-level (private) MeetGeek credentials. Used for the pre-gate
  * `GET /v1/meetings/{id}` hydration, where no client is known yet — so no
- * client-scoped key may be consulted.
+ * client-scoped key may be consulted. The region is never guessed from the key
+ * shape: either MEETGEEK_REGION pins it or it is probed.
  */
-async function resolveAgencyMeetgeekApi(supabase: any): Promise<{ apiKey: string; baseUrl: string } | null> {
+async function resolveAgencyMeetgeekApi(supabase: any): Promise<MeetgeekCredential | null> {
   const { data: agency } = await supabase
     .from('agency_settings')
     .select('meetgeek_api_key')
@@ -246,19 +240,9 @@ async function resolveAgencyMeetgeekApi(supabase: any): Promise<{ apiKey: string
     .maybeSingle();
   const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
   if (!apiKey) return null;
-  const region = (Deno.env.get('MEETGEEK_REGION') || (apiKey.startsWith('eu-') ? 'eu' : 'us')).toLowerCase();
-  return { apiKey, baseUrl: getBaseUrl(region) };
+  return { apiKey, region: normalizeMeetgeekRegion(Deno.env.get('MEETGEEK_REGION')) };
 }
 
-async function mgGet(apiKey: string, baseUrl: string, path: string): Promise<any | null> {
-  try {
-    const res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Same as `mgGet` but returns a safe diagnostic (no keys, no PII, no body text)
