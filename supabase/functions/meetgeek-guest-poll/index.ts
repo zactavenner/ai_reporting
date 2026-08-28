@@ -55,7 +55,20 @@ Deno.serve(async (req) => {
     } catch (e) {
       coverage = { error: String((e as Error).message).slice(0, 200) };
     }
-    return json({ ok: true, ...result, coverage });
+
+    // Automatic recovery: replay signature-valid events whose authoritative
+    // provider hydration failed. Authenticated with the server-held service-role
+    // key only (no shared password, no client identity), hard-capped at 50, and
+    // never allowed to fail the poll. The 10-minute cadence is the retry.
+    const replay = body?.replay === false
+      ? { ok: false, code: 'replay_skipped' }
+      : await invokeReplayHydrationFailures({
+          supabaseUrl: Deno.env.get('SUPABASE_URL'),
+          serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+          limit: body?.replay_limit,
+        });
+
+    return json({ ok: true, ...result, coverage, replay });
   } catch (e) {
     console.error('meetgeek-guest-poll failed', String((e as Error).message).slice(0, 300));
     return json({ error: 'poll_failed' }, 500);
