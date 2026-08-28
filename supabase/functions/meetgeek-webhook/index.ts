@@ -345,11 +345,20 @@ async function enrichFromProvider(
     await recordEnrichmentDiagnostic(supabase, meeting, classifyHydrationFailure({ apiKeyPresent: false }));
     return meeting;
   }
+  // One regional resolution, reused for insights, summary and every transcript
+  // page. No per-endpoint region retries.
+  const resolved = await resolveMeetgeekBase(api, meeting.meetingExternalId);
+  if (!resolved.ok) {
+    await recordEnrichmentDiagnostic(supabase, meeting, probeDiagnostic(resolved.failure));
+    return meeting;
+  }
+  const baseUrl = resolved.baseUrl;
   const id = encodeURIComponent(meeting.meetingExternalId);
   const [insightsAttempt, summaryAttempt] = await Promise.all([
-    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/insights`),
-    mgGetDiagnostic(api.apiKey, api.baseUrl, `/v1/meetings/${id}/summary`),
+    mgGetDiagnostic(api.apiKey, baseUrl, `/v1/meetings/${id}/insights`),
+    mgGetDiagnostic(api.apiKey, baseUrl, `/v1/meetings/${id}/summary`),
   ]);
+
   const insightsRaw = insightsAttempt.body;
   const summaryRaw = summaryAttempt.body;
   if (!insightsRaw) diagnostics.push(insightsAttempt.diagnostic);
