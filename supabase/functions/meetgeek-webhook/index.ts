@@ -53,9 +53,79 @@ const GHL_HEADERS = (apiKey: string) => ({
   Accept: 'application/json',
 });
 
-function getBaseUrl(region: string): string {
-  return region === 'eu' ? 'https://api-eu.meetgeek.ai' : 'https://api-us.meetgeek.ai';
+/**
+ * Server-only regional resolution. MeetGeek keys are region-scoped and the
+ * documented default endpoint is Europe; prefix guessing is never used.
+ */
+interface MeetgeekCredential {
+  apiKey: string;
+  /** Explicit region when configured (env or per-client setting). */
+  region: MeetgeekRegion | null;
 }
+
+async function mgProbe(apiKey: string, baseUrl: string, path: string): Promise<MeetgeekProbeResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+  } catch {
+    return { ok: false, errorKind: 'network' };
+  }
+  if (!res.ok) {
+    // Body is intentionally drained and discarded — never logged or returned.
+    try { await res.text(); } catch { /* ignore */ }
+    return { ok: false, status: res.status };
+  }
+  try {
+    const body = await res.json();
+    if (!body || typeof body !== 'object') return { ok: false, status: res.status };
+    return { ok: true, status: res.status, body };
+  } catch {
+    return { ok: false, errorKind: 'parse' };
+  }
+}
+
+/**
+ * Resolves the base URL to use for every authenticated read of this meeting.
+ * Honors an explicit region; otherwise probes the meeting read against EU first
+ * and US only on an auth/not-found style regional mismatch (never on
+ * network/429/5xx). The successful probe body is returned so hydration does not
+ * need a second request.
+ */
+async function resolveMeetgeekBase(
+  cred: MeetgeekCredential,
+  meetingExternalId: string,
+): Promise<{ baseUrl: string; region: MeetgeekRegion; body?: unknown; ok: boolean; failure?: MeetgeekProbeResult | null }> {
+  const path = `/v1/meetings/${encodeURIComponent(meetingExternalId)}`;
+  const fingerprint = await fingerprintApiKey(cred.apiKey);
+  const cached = cred.region ?? getCachedRegion(fingerprint);
+  if (cached) {
+    const baseUrl = regionBaseUrl(cached);
+    const probe = await mgProbe(cred.apiKey, baseUrl, path);
+    return { baseUrl, region: cached, body: probe.body, ok: probe.ok, failure: probe.ok ? null : probe };
+  }
+  const resolution = await resolveMeetgeekRegion({
+    explicitRegion: null,
+    probe: (baseUrl) => mgProbe(cred.apiKey, baseUrl, path),
+  });
+  if (resolution.ok) setCachedRegion(fingerprint, resolution.region);
+  return {
+    baseUrl: resolution.baseUrl,
+    region: resolution.region,
+    body: resolution.body,
+    ok: resolution.ok,
+    failure: resolution.failure ?? null,
+  };
+}
+
+function probeDiagnostic(failure: MeetgeekProbeResult | null | undefined): HydrationDiagnostic {
+  if (!failure) return classifyHydrationFailure({ apiKeyPresent: true });
+  return classifyHydrationFailure({
+    apiKeyPresent: true,
+    httpStatus: failure.status ?? null,
+    errorKind: failure.errorKind ?? null,
+  });
+}
+
 
 /**
  * Internal (non-provider) actions require the service-role key (cron) or a
