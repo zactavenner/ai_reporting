@@ -200,10 +200,10 @@ function smtpConfig() {
 export async function resolveInviteSender(supabase: any): Promise<SenderInfo> {
   const resendKey = Deno.env.get('RESEND_API_KEY');
   const resendFrom = Deno.env.get('SHADOW_INVITE_FROM');
-  if (resendKey && resendFrom) {
-    return { configured: true, provider: 'resend', from_email: resendFrom, detail: `Resend sender ${resendFrom}` };
-  }
 
+  // SMTP first: it is the only path that lets us emit the raw MIME message with
+  // an INLINE text/calendar; method=REQUEST part, which is what Gmail/Google
+  // Calendar (and therefore MeetGeek) require to auto-create the event.
   const smtp = smtpConfig();
   if (smtp) {
     return {
@@ -228,6 +228,10 @@ export async function resolveInviteSender(supabase: any): Promise<SenderInfo> {
       from_email: gmail.email,
       detail: `Connected Gmail account ${gmail.email} (OAuth — token may expire weekly in Testing mode)`,
     };
+  }
+
+  if (resendKey && resendFrom) {
+    return { configured: true, provider: 'resend', from_email: resendFrom, detail: `Resend sender ${resendFrom}` };
   }
 
   return {
@@ -376,31 +380,19 @@ export async function sendShadowInvite(args: SendInviteArgs): Promise<SendInvite
     }
   }
 
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: `${FALLBACK_FROM_NAME} <${sender.from_email}>`,
-        to: [args.to],
-        subject: args.subject,
-        text: args.bodyText,
-        attachments: [
-          {
-            filename: 'invite.ics',
-            content: b64(new TextEncoder().encode(args.ics)),
-            content_type: `text/calendar; charset=utf-8; method=${args.method}`,
-          },
-        ],
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`resend_${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
-    return { ok: true, provider: 'resend', message_id: data?.id || null, from_email: sender.from_email, configured: true };
-  } catch (e) {
-    return {
-      ok: false, provider: 'resend', message_id: null, from_email: sender.from_email, configured: true,
-      error: String((e as Error).message).slice(0, 300),
-    };
-  }
+  // Resend's JSON API can only carry the calendar as an ATTACHMENT, which Gmail
+  // renders as a downloadable .ics and never auto-creates the event. Rather than
+  // marking the job invited on a delivery that cannot work, fail closed with an
+  // actionable error.
+  return {
+    ok: false,
+    provider: 'resend',
+    message_id: null,
+    from_email: sender.from_email,
+    configured: true,
+    error:
+      'resend_inline_calendar_unsupported: Resend cannot send an inline text/calendar; method=REQUEST part, ' +
+      'so Google Calendar would never auto-create the notetaker event. Configure SMTP_HOST/SMTP_USER/SMTP_PASSWORD ' +
+      '(smtp.gmail.com:465 with an app password) or connect a Gmail account for the invite sender.',
+  };
 }
