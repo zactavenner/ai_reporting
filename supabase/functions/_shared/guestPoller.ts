@@ -26,13 +26,15 @@ import {
 } from './calendarGuest.ts';
 import { findEventCandidates, getAccessToken, getEvent, listEvents, patchAttendee } from './googleCalendarClient.ts';
 import {
+  buildCalendarDescription,
+  buildCalendarSummary,
   buildShadowInviteIcs,
   buildShadowInviteUid,
   scheduleSignature,
 } from './icsInvite.ts';
+
 import { resolveInviteSender, sendShadowInvite } from './shadowInviteSender.ts';
 import {
-  buildAttributedSummary,
   listLocationCalendars,
   newAttributionCache,
   resolveAppointmentAttribution,
@@ -161,6 +163,8 @@ function toConfig(row: any): GuestConfig {
 
 export type PolledAppointment = GhlAppointmentLite & {
   cancelled: boolean;
+  /** Original CRM appointment notes/description, shown verbatim in the invite. */
+  description?: string | null;
   calendarName?: string | null;
   /** Raw CRM appointment status (confirmed / showed / noshow / cancelled). */
   appointmentStatus?: string | null;
@@ -202,6 +206,10 @@ async function fetchUpcomingGhlAppointments(args: {
       calendarId: String(e.calendarId || args.calendarId),
       locationId: String(e.locationId || args.locationId),
       title: e.title ?? null,
+      description: typeof e.notes === 'string' && e.notes.trim()
+        ? e.notes
+        : (typeof e.description === 'string' ? e.description : null),
+
       startTime: e.startTime ?? null,
       endTime: e.endTime ?? null,
       externalGoogleEventId: e.googleEventId || e.externalId || null,
@@ -293,12 +301,12 @@ async function runShadowInvite(args: {
     return 'awaiting_sender';
   }
 
-  // Structured title so the MeetGeek meeting itself carries attribution.
-  const title = buildAttributedSummary({
-    clientName,
-    calendarName: appointment.calendarName || null,
+  // VISIBLE title: the original appointment title, untouched. Internal
+  // lineage lives in the DB and in the ICS UID only.
+  const title = buildCalendarSummary({
+    appointmentTitle: appointment.title,
     contactName: appointment.attribution?.contactName || null,
-    fallbackTitle: appointment.title || null,
+    calendarName: appointment.calendarName || null,
   });
   // Google Calendar silently ignores an invitation whose ORGANIZER is the same
   // mailbox as the ATTENDEE (a "self invite"). The SMTP envelope still uses the
@@ -313,31 +321,30 @@ async function runShadowInvite(args: {
     sequence,
     start: appointment.startTime,
     end: appointment.endTime,
-    summary: isCancel ? `CANCELLED — ${title}` : title,
-    description: [
-      'Auto-scheduled notetaker coverage (HPA Reporting).',
-      appointment.attribution?.contactName ? `Contact: ${appointment.attribution.contactName}` : '',
-      appointment.attribution?.assignedUserName ? `Sales agent: ${appointment.attribution.assignedUserName}` : '',
-      `Ref: ${uid}`,
-    ].filter(Boolean).join('\n'),
+    summary: title,
+    description: buildCalendarDescription({
+      appointmentDescription: appointment.description || null,
+      meetingUrl: link,
+    }),
     meetingUrl: link,
     organizerEmail,
-    organizerName: 'HPA Reporting',
+    organizerName: clientName || 'High Performance Ads',
     attendeeEmail: botGuestEmail,
   });
 
   const result = await sendShadowInvite({
     supabase,
     to: botGuestEmail,
-    subject: `${isCancel ? 'Cancelled' : alreadySent ? 'Updated' : 'Invitation'}: ${title}`,
+    subject: `${isCancel ? 'Cancelled' : alreadySent ? 'Updated invitation' : 'Invitation'}: ${title}`,
     bodyText: [
-      isCancel ? 'This meeting was cancelled — please drop it from the calendar.' : 'Notetaker coverage for an upcoming client meeting.',
-      link ? `Join link: ${link}` : '',
-      `Starts: ${new Date(appointment.startTime).toISOString()}`,
+      isCancel ? 'This meeting was cancelled.' : 'You are invited to this meeting.',
+      link ? `Join: ${link}` : '',
+      `When: ${new Date(appointment.startTime).toISOString()}`,
     ].filter(Boolean).join('\n\n'),
     ics,
     method,
   });
+
 
   if (!result.ok) {
     await finish({

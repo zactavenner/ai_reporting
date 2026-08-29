@@ -57,23 +57,69 @@ export function escapeIcsText(value: string): string {
     .replace(/\r?\n/g, '\\n');
 }
 
-/** RFC 5545 requires folding at 75 octets. */
+/**
+ * RFC 5545 folding is defined in OCTETS, not JS characters. Fold on the UTF-8
+ * byte length and never split a multi-byte sequence.
+ */
 export function foldIcsLine(line: string): string {
-  if (line.length <= 74) return line;
-  const parts: string[] = [];
-  let rest = line;
-  parts.push(rest.slice(0, 74));
-  rest = rest.slice(74);
-  while (rest.length) {
-    parts.push(` ${rest.slice(0, 73)}`);
-    rest = rest.slice(73);
+  const encoder = new TextEncoder();
+  if (encoder.encode(line).length <= 74) return line;
+  const chars = Array.from(line);
+  const out: string[] = [];
+  let current = '';
+  let currentBytes = 0;
+  let limit = 74;
+  for (const ch of chars) {
+    const size = encoder.encode(ch).length;
+    if (currentBytes + size > limit) {
+      out.push(current);
+      current = ch;
+      currentBytes = size;
+      limit = 73; // continuation lines start with a leading space
+    } else {
+      current += ch;
+      currentBytes += size;
+    }
   }
-  return parts.join('\r\n');
+  if (current) out.push(current);
+  return out.map((part, i) => (i === 0 ? part : ` ${part}`)).join('\r\n');
+}
+
+/**
+ * Visible title: the exact original appointment title when present. No internal
+ * prefixes, client codes, or attribution labels ever reach the calendar.
+ */
+export function buildCalendarSummary(args: {
+  appointmentTitle?: string | null;
+  contactName?: string | null;
+  calendarName?: string | null;
+}): string {
+  const title = (args.appointmentTitle || '').trim();
+  if (title) return title;
+  const contact = (args.contactName || '').trim();
+  const calendar = (args.calendarName || '').trim();
+  if (calendar && contact) return `${calendar} with ${contact}`;
+  if (contact) return `Meeting with ${contact}`;
+  if (calendar) return calendar;
+  return 'Meeting';
+}
+
+/** Visible description: ordinary invite prose plus the join link. Nothing internal. */
+export function buildCalendarDescription(args: {
+  appointmentDescription?: string | null;
+  meetingUrl?: string | null;
+}): string {
+  const body = (args.appointmentDescription || '').trim();
+  const link = (args.meetingUrl || '').trim();
+  return [body, link ? `Join: ${link}` : ''].filter(Boolean).join('\n\n');
 }
 
 export function buildShadowInviteIcs(input: ShadowInviteInput): string {
   const link = (input.meetingUrl || '').trim();
   const descriptionParts = [input.description || '', link ? `Join: ${link}` : ''].filter(Boolean);
+  const description = (input.description || '').includes(link) && link
+    ? input.description || ''
+    : descriptionParts.join('\n\n');
   const lines = [
     'BEGIN:VCALENDAR',
     'PRODID:-//High Performance Ads//Reporting Notetaker//EN',
@@ -87,7 +133,7 @@ export function buildShadowInviteIcs(input: ShadowInviteInput): string {
     `DTSTART:${toIcsUtc(input.start)}`,
     `DTEND:${toIcsUtc(input.end)}`,
     `SUMMARY:${escapeIcsText(input.summary)}`,
-    descriptionParts.length ? `DESCRIPTION:${escapeIcsText(descriptionParts.join('\n\n'))}` : '',
+    description ? `DESCRIPTION:${escapeIcsText(description)}` : '',
     link ? `LOCATION:${escapeIcsText(link)}` : '',
     link ? `URL;VALUE=URI:${link}` : '',
     `ORGANIZER;CN=${escapeIcsText(input.organizerName || 'High Performance Ads')}:mailto:${input.organizerEmail}`,
@@ -100,8 +146,16 @@ export function buildShadowInviteIcs(input: ShadowInviteInput): string {
   return lines.map(foldIcsLine).join('\r\n') + '\r\n';
 }
 
+/**
+ * Bumped whenever the VISIBLE calendar presentation changes, so every existing
+ * upcoming linked appointment receives exactly one update into the new format
+ * and then stays idempotent.
+ */
+export const CALENDAR_PRESENTATION_VERSION = 'v2-natural';
+
 /** Signature used to detect reschedules (time change ⇒ SEQUENCE bump). */
 export function scheduleSignature(start: string | null, end: string | null, link?: string | null): string {
   const iso = (v: string | null) => (v ? new Date(v).toISOString() : '');
-  return `${iso(start)}|${iso(end)}|${(link || '').trim()}`;
+  return `${iso(start)}|${iso(end)}|${(link || '').trim()}|${CALENDAR_PRESENTATION_VERSION}`;
 }
+
