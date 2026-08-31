@@ -3,6 +3,8 @@ import { ScrapingScheduleSection } from '@/components/ad-scraping/ScrapingSchedu
 import { ApifySettings } from '@/components/instagram/ApifySettings';
 import { VoiceManagementSection } from '@/components/settings/VoiceManagementSection';
 import { ClientReportsTab } from '@/components/settings/ClientReportsTab';
+import { AgencyPersonasTab } from '@/components/settings/AgencyPersonasTab';
+
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
