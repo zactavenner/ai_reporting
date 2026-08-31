@@ -4,6 +4,7 @@
 // agent's default_model. Returns a single assistant reply.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { buildJeremyOutbound } from "./jeremyContext.ts";
+import { askUtariPersona, UTARI_PERSONA_MCP_URL } from "../_shared/utariPersona.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
 
     // === Utari Persona MCP branch (Jeremy AI) ===
     const caps: any = agent.capabilities || {};
-    if (caps?.provider === "utari_persona" && caps?.mcp_url) {
+    if (caps?.provider === "utari_persona") {
       const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
 
       // Persistent conversation id per (agent, client) scope
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
       let reply = "";
       let newConvId: string | null = null;
       try {
-        const r = await callUtariPersona(caps.mcp_url, outbound, existingConv);
+        const r = await callUtariPersona(caps.mcp_url || UTARI_PERSONA_MCP_URL, outbound, existingConv);
         reply = r.reply;
         newConvId = r.conversation_id;
       } catch (e: any) {
