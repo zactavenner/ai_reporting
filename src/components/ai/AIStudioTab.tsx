@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target, Rocket } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target, Rocket, Layers } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,8 @@ import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { H3RunManager } from "@/components/h3/H3RunManager";
 import { OnboardingPromptEditor } from "@/components/onboarding/OnboardingPromptEditor";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
+import { AgentCanvasFeed } from "./AgentCanvasFeed";
+import { normalizeAgentKey, agentLabelForKey } from "./aiStudioAgents";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
 import { useAgencyAgents } from "@/hooks/useAgencyAgents";
@@ -1552,8 +1554,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [conversationId]);
 
   // Thread actions
-  const newThread = useCallback(async () => {
-    const res = await studioFetch({ action: "new_thread", clientId, threadTitle: "New chat", quality, chatModel });
+  const newThread = useCallback(async (agentKeyOverride?: string) => {
+    const agentKey = normalizeAgentKey(agentKeyOverride ?? selectedAgentId);
+    const res = await studioFetch({
+      action: "new_thread", clientId, threadTitle: `New ${agentLabelForKey(agentKey)} chat`, quality, chatModel, agentKey,
+    });
     if (!res.ok) { toast.error("Failed to create thread"); return; }
     const { conversation } = await res.json();
     setConversationId(conversation.id);
@@ -1562,13 +1567,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
     setFollowups([]);
     await loadThreads();
-  }, [clientId, quality, chatModel, studioFetch, loadThreads]);
+  }, [clientId, quality, chatModel, studioFetch, loadThreads, selectedAgentId]);
 
   const switchThread = useCallback(async (id: string) => {
     if (id === conversationId) return;
     setConversationId(id);
     await loadHistory(id);
   }, [conversationId, loadHistory]);
+
+  /**
+   * Grok-style agent rail: each agent owns its own chat threads. Picking an agent
+   * binds the composer to it and jumps to that agent's most recent thread (creating
+   * one when the agent has no history yet). The canvas Feed rolls all agents up.
+   */
+  const selectRailAgent = useCallback(async (key: string) => {
+    setSelectedAgentId(key);
+    const own = threads.filter(t => normalizeAgentKey(t.agent_key) === key);
+    if (own.length) {
+      const next = own.find(t => t.pinned) || own[0];
+      if (next.id !== conversationId) { setConversationId(next.id); await loadHistory(next.id); }
+      return;
+    }
+    await newThread(key);
+  }, [threads, conversationId, loadHistory, newThread]);
+
+
 
   const updateThread = useCallback(async (id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }) => {
     const res = await studioFetch({ action: "update_thread", clientId, conversationId: id, threadUpdate: patch });
@@ -2230,6 +2253,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             onRename={(id, title) => updateThread(id, { title })}
             onPin={(id, pinned) => updateThread(id, { pinned })}
             onArchive={(id) => updateThread(id, { archived: true })}
+            activeAgentKey={normalizeAgentKey(selectedAgentId)}
+            onAgentSelect={selectRailAgent}
           />
         </Card>
       )}
@@ -3150,6 +3175,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start flex-wrap h-auto">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
+              <TabsTrigger value="feed"><Layers className="h-4 w-4 mr-1" /> Feed</TabsTrigger>
               <TabsTrigger value="onboarding"><Rocket className="h-4 w-4 mr-1" /> Onboarding</TabsTrigger>
               <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
@@ -3263,6 +3289,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               )}
               <span className="ml-auto text-[10px] text-muted-foreground">Generations default to these</span>
             </div>
+          </TabsContent>
+
+          <TabsContent value="feed" className="flex-1 m-0 overflow-hidden p-3 data-[state=active]:flex data-[state=inactive]:hidden flex-col min-h-0">
+            <AgentCanvasFeed
+              studioFetch={studioFetch}
+              clientId={clientId}
+              onOpenThread={(cid, agentKey) => { setSelectedAgentId(agentKey); switchThread(cid); setStudioTab("canvas"); }}
+            />
           </TabsContent>
 
           <TabsContent value="offers" className="flex-1 m-0 overflow-auto p-4">

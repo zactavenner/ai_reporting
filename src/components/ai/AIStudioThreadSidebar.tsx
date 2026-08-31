@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Pin, PinOff, Plus, Trash2, MessageSquare, Pencil, Check, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { STUDIO_AGENT_RAIL, normalizeAgentKey } from "./aiStudioAgents";
 
 export type Thread = {
   id: string;
@@ -12,6 +13,7 @@ export type Thread = {
   last_active_at: string;
   chat_model?: string | null;
   last_actor_name?: string | null;
+  agent_key?: string | null;
 };
 
 interface Props {
@@ -22,19 +24,28 @@ interface Props {
   onRename: (id: string, title: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onArchive: (id: string) => void;
+  /** Active agent rail key ("master" | "slug:<slug>") */
+  activeAgentKey: string;
+  onAgentSelect: (key: string) => void;
 }
 
-export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRename, onPin, onArchive }: Props) {
+export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRename, onPin, onArchive, activeAgentKey, onAgentSelect }: Props) {
   const [filter, setFilter] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
-  const filtered = threads.filter(t =>
+  const agentThreads = threads.filter(t => normalizeAgentKey(t.agent_key) === normalizeAgentKey(activeAgentKey));
+  const counts = Object.fromEntries(
+    STUDIO_AGENT_RAIL.map(a => [a.key, threads.filter(t => normalizeAgentKey(t.agent_key) === a.key).length]),
+  ) as Record<string, number>;
+
+  const filtered = agentThreads.filter(t =>
     !filter.trim() ||
     (t.title || "").toLowerCase().includes(filter.trim().toLowerCase()),
   );
   const pinned = filtered.filter(t => t.pinned);
   const recent = filtered.filter(t => !t.pinned);
+
 
   function startEdit(t: Thread) {
     setEditingId(t.id);
@@ -98,7 +109,34 @@ export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRe
 
   return (
     <div className="flex flex-col h-full bg-muted/20 border-r border-border/60">
-      <div className="px-2 pt-2 pb-1.5 space-y-1.5">
+      <div className="px-1.5 pt-2 pb-1.5">
+        <div className="px-1 pb-1 text-[9px] uppercase tracking-wide text-muted-foreground/70">Agents</div>
+        <div className="space-y-0.5">
+          {STUDIO_AGENT_RAIL.map(a => {
+            const active = normalizeAgentKey(activeAgentKey) === a.key;
+            return (
+              <button
+                key={a.key}
+                type="button"
+                onClick={() => onAgentSelect(a.key)}
+                className={cn(
+                  "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition text-left",
+                  active
+                    ? "bg-primary/15 text-foreground font-medium ring-1 ring-primary/30"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <span className="text-sm leading-none">{a.icon}</span>
+                <span className="flex-1 truncate">{a.label}</span>
+                {counts[a.key] > 0 && (
+                  <span className="text-[9px] text-muted-foreground/70">{counts[a.key]}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="px-2 pt-1.5 pb-1.5 space-y-1.5 border-t border-border/60">
         <Button onClick={onNew} size="sm" className="w-full h-8 text-xs gap-1.5">
           <Plus className="h-3.5 w-3.5" /> New chat
         </Button>
@@ -109,6 +147,7 @@ export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRe
           className="h-7 text-xs"
         />
       </div>
+
       <ScrollArea className="flex-1 px-1.5">
         {pinned.length > 0 && (
           <div className="mb-2">
