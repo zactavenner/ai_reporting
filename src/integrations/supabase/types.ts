@@ -13585,6 +13585,115 @@ export type Database = {
           },
         ]
       }
+      hyperframes_render_jobs: {
+        Row: {
+          claim_token: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          creative_id: string | null
+          error: string | null
+          id: string
+          output_url: string | null
+          project_id: string
+          requested_by: string
+          spec: Json
+          started_at: string | null
+          status: string
+          title: string
+        }
+        Insert: {
+          claim_token?: string | null
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          creative_id?: string | null
+          error?: string | null
+          id: string
+          output_url?: string | null
+          project_id: string
+          requested_by: string
+          spec: Json
+          started_at?: string | null
+          status?: string
+          title: string
+        }
+        Update: {
+          claim_token?: string | null
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          creative_id?: string | null
+          error?: string | null
+          id?: string
+          output_url?: string | null
+          project_id?: string
+          requested_by?: string
+          spec?: Json
+          started_at?: string | null
+          status?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hyperframes_render_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_sync_health"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "hyperframes_render_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hyperframes_render_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_client_enrichment_coverage"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "hyperframes_render_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_daily_funnel_freshness"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "hyperframes_render_jobs_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "creatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hyperframes_render_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "video_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hyperframes_workers: {
+        Row: {
+          id: string
+          last_seen_at: string
+        }
+        Insert: {
+          id: string
+          last_seen_at?: string
+        }
+        Update: {
+          id?: string
+          last_seen_at?: string
+        }
+        Relationships: []
+      }
       instagram_creatives: {
         Row: {
           caption: string | null
@@ -23275,6 +23384,31 @@ export type Database = {
         Returns: boolean
       }
       call_is_showed: { Args: { p_status: string }; Returns: boolean }
+      claim_hyperframes_render: {
+        Args: never
+        Returns: {
+          claim_token: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          creative_id: string | null
+          error: string | null
+          id: string
+          output_url: string | null
+          project_id: string
+          requested_by: string
+          spec: Json
+          started_at: string | null
+          status: string
+          title: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "hyperframes_render_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_jeremy_external_job: {
         Args: { p_claimed_by: string; p_job_id: string }
         Returns: {
@@ -23316,6 +23450,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      complete_hyperframes_render: {
+        Args: { job_id: string; lease_token: string; media_url: string }
+        Returns: string
       }
       find_unenriched_leads: {
         Args: { p_client_id: string; p_limit?: number }
