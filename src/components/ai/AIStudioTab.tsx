@@ -1346,6 +1346,19 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         ? "static"
         : null;
 
+  // Jeremy AI talks to a persona endpoint from the registry (Settings → Personas).
+  // Each chat can pick a persona; switching starts a fresh persona conversation.
+  const isJeremyAgent = selectedAgentId === "slug:jeremy_ai";
+  const { data: personas = [] } = useAgencyPersonas();
+  const activePersonas = (personas as any[]).filter((p) => p.is_active);
+  const [personaSlug, setPersonaSlug] = useState<string | null>(null);
+  const effectivePersonaSlug =
+    personaSlug && activePersonas.some((p) => p.slug === personaSlug)
+      ? personaSlug
+      : (activePersonas.find((p) => p.is_default)?.slug ?? activePersonas[0]?.slug ?? null);
+
+
+
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
     if (selectedAgentId.startsWith("slug:")) {
