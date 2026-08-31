@@ -36,9 +36,10 @@ async function callUtariPersona(mcpUrl: string, message: string, conversationId?
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const { agent_id, client_id, messages } = await req.json() as {
-      agent_id: string; client_id?: string | null; messages: Msg[];
+    const { agent_id, client_id, messages, persona_slug } = await req.json() as {
+      agent_id: string; client_id?: string | null; messages: Msg[]; persona_slug?: string | null;
     };
+
     if (!agent_id || !Array.isArray(messages) || messages.length === 0) {
       return json({ error: "agent_id and messages[] required" }, 400);
     }
