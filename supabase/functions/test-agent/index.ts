@@ -4,7 +4,9 @@
 // agent's default_model. Returns a single assistant reply.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { buildJeremyOutbound } from "./jeremyContext.ts";
-import { askUtariPersona, UTARI_PERSONA_MCP_URL } from "../_shared/utariPersona.ts";
+import { askUtariPersona } from "../_shared/utariPersona.ts";
+import { resolvePersona } from "../_shared/personas.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
