@@ -4427,7 +4427,18 @@ Deno.serve(async (req) => {
             .select("id, capabilities")
             .eq("slug", "jeremy_ai")
             .maybeSingle();
-          const personaUrl = (jeremyAgent?.capabilities as any)?.mcp_url || UTARI_PERSONA_MCP_URL;
+
+          let persona: { id: string | null; slug: string; name: string; mcpUrl: string };
+          try {
+            persona = await resolvePersona(supa, personaSlug);
+          } catch (e: any) {
+            const msg = e?.message || String(e);
+            send({ type: "error", message: msg });
+            send({ type: "text", delta: msg });
+            send({ type: "done" });
+            return;
+          }
+
           let personaConvId: string | null = null;
           if (jeremyAgent?.id) {
             const { data: convRow } = await supa
@@ -4435,6 +4446,7 @@ Deno.serve(async (req) => {
               .select("conversation_id")
               .eq("agent_id", jeremyAgent.id)
               .eq("client_id", clientId ?? null)
+              .eq("persona_slug", persona.slug)
               .maybeSingle();
             personaConvId = (convRow as any)?.conversation_id || null;
           }
@@ -4456,18 +4468,32 @@ Deno.serve(async (req) => {
             const r = await askUtariPersona({
               message: outbound,
               conversationId: personaConvId,
-              mcpUrl: personaUrl,
-              onPoll: ({ attempt, status }) => send({ type: "step", step: attempt, label: `Waiting for Jeremy (${status})…` }),
+              mcpUrl: persona.mcpUrl,
+              onPoll: ({ attempt, status }) => send({ type: "step", step: attempt, label: `Waiting for ${persona.name} (${status})…` }),
             });
             finalAssistantText = r.reply;
             if (jeremyAgent?.id && r.conversation_id && r.conversation_id !== personaConvId) {
               await supa.from("agent_mcp_conversations").upsert({
                 agent_id: jeremyAgent.id,
                 client_id: clientId ?? null,
+                persona_slug: persona.slug,
                 conversation_id: r.conversation_id,
                 updated_at: new Date().toISOString(),
-              }, { onConflict: "agent_id,client_id" }).then(() => {}, () => {});
+              }, { onConflict: "agent_id,client_id,persona_slug" }).then(() => {}, () => {});
             }
+            finalToolEvents.push({ name: "utari_persona", args: { persona: persona.slug, conversation_id: r.conversation_id }, result: { polls: r.polls, ok: true } });
+            send({ type: "text", delta: finalAssistantText });
+          } catch (e: any) {
+            const msg = e?.message || String(e);
+            finalAssistantText = `${persona.name} did not reply: ${msg}`;
+            finalToolEvents.push({ name: "utari_persona", args: { persona: persona.slug }, result: { error: msg } });
+            send({ type: "error", message: msg });
+            send({ type: "text", delta: finalAssistantText });
+          }
+          send({ type: "done" });
+          return;
+        }
+
             finalToolEvents.push({ name: "utari_persona", args: { conversation_id: r.conversation_id }, result: { polls: r.polls, ok: true } });
             send({ type: "text", delta: finalAssistantText });
           } catch (e: any) {
