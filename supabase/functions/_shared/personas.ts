@@ -80,3 +80,33 @@ export function maskPersonaUrl(url: string): string {
     return "(invalid url)";
   }
 }
+
+/**
+ * Persist the persona-side conversation id for a (agent, client, persona) scope.
+ * The uniqueness index is an expression index (COALESCE on client_id), which
+ * PostgREST upsert can't target, so we update-then-insert instead.
+ */
+export async function savePersonaConversation(
+  supa: any,
+  opts: { agentId: string; clientId: string | null; personaSlug: string; conversationId: string },
+): Promise<void> {
+  const now = new Date().toISOString();
+  const match = supa
+    .from("agent_mcp_conversations")
+    .update({ conversation_id: opts.conversationId, updated_at: now })
+    .eq("agent_id", opts.agentId)
+    .eq("persona_slug", opts.personaSlug);
+  const { data } = await (opts.clientId
+    ? match.eq("client_id", opts.clientId)
+    : match.is("client_id", null)
+  ).select("id");
+  if (Array.isArray(data) && data.length > 0) return;
+  await supa.from("agent_mcp_conversations").insert({
+    agent_id: opts.agentId,
+    client_id: opts.clientId,
+    persona_slug: opts.personaSlug,
+    conversation_id: opts.conversationId,
+    updated_at: now,
+  });
+}
+
