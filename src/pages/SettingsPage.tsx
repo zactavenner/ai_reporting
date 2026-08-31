@@ -436,11 +436,16 @@ export default function SettingsPage() {
               <ListChecks className="h-4 w-4" />
               Onboarding Templates
             </TabsTrigger>
+            <TabsTrigger value="personas" className="gap-2">
+              <Bot className="h-4 w-4" />
+              Personas
+            </TabsTrigger>
             <TabsTrigger value="client-reports" className="gap-2">
               <Mail className="h-4 w-4" />
               Client Reports
             </TabsTrigger>
           </TabsList>
+
 
           <TabsContent value="api-keys" className="space-y-4">
             <ApiKeyPool
