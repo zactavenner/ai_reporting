@@ -1,7 +1,9 @@
 // AI Studio v2 — streaming SSE chat with Google Docs/Sheets tools, high-quality static ad
 // generation, server-side persistence, and Manus-style canvas events.
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { askUtariPersona, UTARI_PERSONA_MCP_URL } from "../_shared/utariPersona.ts";
+import { askUtariPersona } from "../_shared/utariPersona.ts";
+import { resolvePersona } from "../_shared/personas.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
