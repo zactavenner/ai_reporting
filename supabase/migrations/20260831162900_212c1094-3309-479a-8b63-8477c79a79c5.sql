@@ -1,0 +1,2 @@
+ALTER TABLE public.ai_studio_conversations ADD COLUMN IF NOT EXISTS agent_key text;
+CREATE INDEX IF NOT EXISTS ai_studio_conversations_agent_key_idx ON public.ai_studio_conversations (client_id, agent_key, last_active_at DESC);

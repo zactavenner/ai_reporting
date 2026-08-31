@@ -2788,6 +2788,7 @@ export type Database = {
         Row: {
           active_reference_ids: Json
           active_video_reference_ids: Json
+          agent_key: string | null
           archived_at: string | null
           canvas_pan_x: number
           canvas_pan_y: number
@@ -2813,6 +2814,7 @@ export type Database = {
         Insert: {
           active_reference_ids?: Json
           active_video_reference_ids?: Json
+          agent_key?: string | null
           archived_at?: string | null
           canvas_pan_x?: number
           canvas_pan_y?: number
@@ -2838,6 +2840,7 @@ export type Database = {
         Update: {
           active_reference_ids?: Json
           active_video_reference_ids?: Json
+          agent_key?: string | null
           archived_at?: string | null
           canvas_pan_x?: number
           canvas_pan_y?: number
