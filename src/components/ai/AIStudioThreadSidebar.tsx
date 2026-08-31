@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Pin, PinOff, Plus, Trash2, MessageSquare, Pencil, Check, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { STUDIO_AGENT_RAIL, normalizeAgentKey } from "./aiStudioAgents";
 
 export type Thread = {
   id: string;
@@ -12,6 +13,7 @@ export type Thread = {
   last_active_at: string;
   chat_model?: string | null;
   last_actor_name?: string | null;
+  agent_key?: string | null;
 };
 
 interface Props {
@@ -22,19 +24,28 @@ interface Props {
   onRename: (id: string, title: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onArchive: (id: string) => void;
+  /** Active agent rail key ("master" | "slug:<slug>") */
+  activeAgentKey: string;
+  onAgentSelect: (key: string) => void;
 }
 
-export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRename, onPin, onArchive }: Props) {
+export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRename, onPin, onArchive, activeAgentKey, onAgentSelect }: Props) {
   const [filter, setFilter] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
-  const filtered = threads.filter(t =>
+  const agentThreads = threads.filter(t => normalizeAgentKey(t.agent_key) === normalizeAgentKey(activeAgentKey));
+  const counts = Object.fromEntries(
+    STUDIO_AGENT_RAIL.map(a => [a.key, threads.filter(t => normalizeAgentKey(t.agent_key) === a.key).length]),
+  ) as Record<string, number>;
+
+  const filtered = agentThreads.filter(t =>
     !filter.trim() ||
     (t.title || "").toLowerCase().includes(filter.trim().toLowerCase()),
   );
   const pinned = filtered.filter(t => t.pinned);
   const recent = filtered.filter(t => !t.pinned);
+
 
   function startEdit(t: Thread) {
     setEditingId(t.id);
