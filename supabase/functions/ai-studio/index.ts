@@ -1,6 +1,7 @@
 // AI Studio v2 — streaming SSE chat with Google Docs/Sheets tools, high-quality static ad
 // generation, server-side persistence, and Manus-style canvas events.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { askUtariPersona, UTARI_PERSONA_MCP_URL } from "../_shared/utariPersona.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -4411,6 +4412,71 @@ Deno.serve(async (req) => {
           send({ type: "done" });
           return;
         }
+
+        // ===== Jeremy AI: the Utari Persona MCP is the ONLY request path =====
+        // No model calls, no tools. We send the turn to the persona server and
+        // poll until its reply lands, keeping one persistent persona
+        // conversation per (agent, client) scope.
+        if (String(agentSlug || "") === "jeremy_ai") {
+          const { data: jeremyAgent } = await supa
+            .from("agency_agents")
+            .select("id, capabilities")
+            .eq("slug", "jeremy_ai")
+            .maybeSingle();
+          const personaUrl = (jeremyAgent?.capabilities as any)?.mcp_url || UTARI_PERSONA_MCP_URL;
+          let personaConvId: string | null = null;
+          if (jeremyAgent?.id) {
+            const { data: convRow } = await supa
+              .from("agent_mcp_conversations")
+              .select("conversation_id")
+              .eq("agent_id", jeremyAgent.id)
+              .eq("client_id", clientId ?? null)
+              .maybeSingle();
+            personaConvId = (convRow as any)?.conversation_id || null;
+          }
+
+          const ctx: string[] = [];
+          if (clientId) {
+            const { data: cli } = await supa.from("clients").select("name").eq("id", clientId).maybeSingle();
+            if ((cli as any)?.name) ctx.push(`Client in scope: ${(cli as any).name}`);
+          }
+          if (typeof offerContext === "string" && offerContext.trim()) {
+            ctx.push(`Active offer context:\n${offerContext.trim()}`);
+          }
+          const outbound = ctx.length
+            ? `[CONTEXT — refreshed this turn]\n${ctx.join("\n")}\n\n[MESSAGE]\n${userText || ""}`
+            : String(userText || "");
+
+          send({ type: "step", step: 0 });
+          try {
+            const r = await askUtariPersona({
+              message: outbound,
+              conversationId: personaConvId,
+              mcpUrl: personaUrl,
+              onPoll: ({ attempt, status }) => send({ type: "step", step: attempt, label: `Waiting for Jeremy (${status})…` }),
+            });
+            finalAssistantText = r.reply;
+            if (jeremyAgent?.id && r.conversation_id && r.conversation_id !== personaConvId) {
+              await supa.from("agent_mcp_conversations").upsert({
+                agent_id: jeremyAgent.id,
+                client_id: clientId ?? null,
+                conversation_id: r.conversation_id,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: "agent_id,client_id" }).then(() => {}, () => {});
+            }
+            finalToolEvents.push({ name: "utari_persona", args: { conversation_id: r.conversation_id }, result: { polls: r.polls, ok: true } });
+            send({ type: "text", delta: finalAssistantText });
+          } catch (e: any) {
+            const msg = e?.message || String(e);
+            finalAssistantText = `Jeremy AI (Utari persona) did not reply: ${msg}`;
+            finalToolEvents.push({ name: "utari_persona", args: {}, result: { error: msg } });
+            send({ type: "error", message: msg });
+            send({ type: "text", delta: finalAssistantText });
+          }
+          send({ type: "done" });
+          return;
+        }
+
 
         for (let step = 0; step < 25; step++) {
           if (aborted.v) break;
