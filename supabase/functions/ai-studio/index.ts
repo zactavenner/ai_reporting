@@ -3327,6 +3327,8 @@ Deno.serve(async (req) => {
     canvasItemPayload?: any;
     offerContext?: string | null;
     agentSlug?: string | null;
+    personaSlug?: string | null;
+
     offerIds?: string[] | null;
     forceToolName?: string | null;
   };
