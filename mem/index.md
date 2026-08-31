@@ -14,3 +14,4 @@
 - [Meta Lead Forms Page Token](mem://integrations/meta/lead-forms-page-token) — leadgen_forms needs per-page tokens; Sheets mirror quota handling.
 - [Shadow Invite SMTP](mem://integrations/email/shadow-invite-smtp) — Gmail SMTP 465 implicit TLS; port 25 blocked; buffered SMTP reader required.
 - [Meeting Attendance](mem://features/meetings/attendance-tracking) — GHL-owned show/no-show on invite jobs + AI Meetings date filter.
+- [Jeremy AI Persona Endpoint](mem://features/agents/jeremy-ai-persona-endpoint) — Jeremy AI routes only through the Utari Persona MCP with send+poll.
