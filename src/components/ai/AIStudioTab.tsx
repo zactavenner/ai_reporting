@@ -21,6 +21,8 @@ import { AIStudioReferenceLibrary } from "./AIStudioReferenceLibrary";
 import { H3RunManager } from "@/components/h3/H3RunManager";
 import { OnboardingPromptEditor } from "@/components/onboarding/OnboardingPromptEditor";
 import { AIStudioThreadSidebar, type Thread } from "./AIStudioThreadSidebar";
+import { AgentCanvasFeed } from "./AgentCanvasFeed";
+import { normalizeAgentKey, agentLabelForKey } from "./aiStudioAgents";
 import ReactMarkdown from "react-markdown";
 import { useClientAgents, extractAgentMentions, buildAgentContextBlock } from "@/hooks/useClientAgents";
 import { useAgencyAgents } from "@/hooks/useAgencyAgents";
@@ -2251,6 +2253,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             onRename={(id, title) => updateThread(id, { title })}
             onPin={(id, pinned) => updateThread(id, { pinned })}
             onArchive={(id) => updateThread(id, { archived: true })}
+            activeAgentKey={normalizeAgentKey(selectedAgentId)}
+            onAgentSelect={selectRailAgent}
           />
         </Card>
       )}
@@ -3171,6 +3175,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           <div className="flex items-center justify-between px-2 pt-2 gap-2">
             <TabsList className="self-start flex-wrap h-auto">
               <TabsTrigger value="canvas"><Sparkles className="h-4 w-4 mr-1" /> Canvas</TabsTrigger>
+              <TabsTrigger value="feed"><Layers className="h-4 w-4 mr-1" /> Feed</TabsTrigger>
               <TabsTrigger value="onboarding"><Rocket className="h-4 w-4 mr-1" /> Onboarding</TabsTrigger>
               <TabsTrigger value="offers"><FileText className="h-4 w-4 mr-1" /> Offers</TabsTrigger>
               <TabsTrigger value="sheet"><TableIcon className="h-4 w-4 mr-1" /> Sheet</TabsTrigger>
@@ -3284,6 +3289,14 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               )}
               <span className="ml-auto text-[10px] text-muted-foreground">Generations default to these</span>
             </div>
+          </TabsContent>
+
+          <TabsContent value="feed" className="flex-1 m-0 overflow-hidden p-3 data-[state=active]:flex data-[state=inactive]:hidden flex-col min-h-0">
+            <AgentCanvasFeed
+              studioFetch={studioFetch}
+              clientId={clientId}
+              onOpenThread={(cid, agentKey) => { setSelectedAgentId(agentKey); switchThread(cid); setStudioTab("canvas"); }}
+            />
           </TabsContent>
 
           <TabsContent value="offers" className="flex-1 m-0 overflow-auto p-4">
