@@ -1336,11 +1336,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")
       ? (clientAgents as any[]).find((a) => a.id === selectedAgentId && a.enabled)
       : null;
-  const selectedAgentMode = selectedClientAgent
-    ? inferAgentMode(selectedClientAgent)
-    : pickedAgencyAgent
-      ? inferAgentMode(pickedAgencyAgent)
-      : null;
+  // One agent per goal: video generation controls exist ONLY in the Video Ads
+  // rail agent, image/static controls ONLY in Static Ads. Every other agent
+  // (Jarvis, Media Buyer, Reporting, Sales, Jeremy AI) is chat-only.
+  const selectedAgentMode: "static" | "video" | null =
+    selectedAgentId === "slug:video_ads"
+      ? "video"
+      : selectedAgentId === "slug:static_ads"
+        ? "static"
+        : null;
+
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
     if (selectedAgentId.startsWith("slug:")) {
@@ -1778,12 +1783,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               ].filter(Boolean).join("\n")
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
+          const videoAllowed = selectedAgentMode === "video";
+          const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
           // model / resolution / frames the user pre-selected in the composer.
           const lockLines: string[] = [];
-          if (videoModel) {
+          if (!videoAllowed) {
+            lockLines.push(
+              "🚫 VIDEO DISABLED for this agent. Never call any video generation tool here — video production happens only in the Video Ads agent. If the user asks for a video, tell them to switch to the Video Ads agent.",
+            );
+          }
+          if (videoAllowed && videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             const isSeedanceLock = videoModel === SEEDANCE_VIDEO_MODEL;
             const lockedModel = isSeedanceLock ? SEEDANCE_VIDEO_MODEL : ONLY_VIDEO_MODEL;
@@ -1859,7 +1870,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         })(),
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
-        ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
+        // Video params travel ONLY from the Video Ads agent — other agents never render video.
+        ...(selectedAgentMode === "video" && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
         avatarId: selectedAvatarId,
         adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
