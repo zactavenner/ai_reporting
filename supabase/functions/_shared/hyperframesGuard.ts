@@ -19,8 +19,10 @@ export const RENDERING_DISABLED_BODY = {
   code: 'rendering_disabled',
 } as const;
 
-export function isRenderingEnabled(
-  raw: string | undefined | null = Deno.env.get('HYPERFRAMES_RENDERING_ENABLED'),
-): boolean {
+export function renderingFlag(): string | undefined {
+  return typeof Deno === 'undefined' ? undefined : Deno.env.get('HYPERFRAMES_RENDERING_ENABLED');
+}
+
+export function isRenderingEnabled(raw: string | undefined | null = renderingFlag()): boolean {
   return raw === 'true';
 }
