@@ -1336,11 +1336,16 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     selectedAgentId !== "off" && selectedAgentId !== "master" && !selectedAgentId.startsWith("slug:")
       ? (clientAgents as any[]).find((a) => a.id === selectedAgentId && a.enabled)
       : null;
-  const selectedAgentMode = selectedClientAgent
-    ? inferAgentMode(selectedClientAgent)
-    : pickedAgencyAgent
-      ? inferAgentMode(pickedAgencyAgent)
-      : null;
+  // One agent per goal: video generation controls exist ONLY in the Video Ads
+  // rail agent, image/static controls ONLY in Static Ads. Every other agent
+  // (Jarvis, Media Buyer, Reporting, Sales, Jeremy AI) is chat-only.
+  const selectedAgentMode: "static" | "video" | null =
+    selectedAgentId === "slug:video_ads"
+      ? "video"
+      : selectedAgentId === "slug:static_ads"
+        ? "static"
+        : null;
+
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
     if (selectedAgentId.startsWith("slug:")) {
