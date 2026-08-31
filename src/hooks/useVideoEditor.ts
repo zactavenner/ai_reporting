@@ -353,6 +353,12 @@ export function useVideoEditor(initialAspectRatio: '16:9' | '9:16' | '1:1' = '16
   const pause = useCallback(() => setIsPlaying(false), []);
   const togglePlayPause = useCallback(() => setIsPlaying(prev => !prev), []);
 
+  // Records the storage URLs the HyperFrames panel persisted for each clip so
+  // reloads and server renders resolve real media instead of blob: URLs.
+  const setSourceUrls = useCallback((sources: Record<string, string>) => {
+    setClips(prev => prev.map(clip => (sources[clip.id] ? { ...clip, sourceUrl: sources[clip.id] } : clip)));
+  }, []);
+
   return {
     clips,
     currentTime,
@@ -388,6 +394,7 @@ export function useVideoEditor(initialAspectRatio: '16:9' | '9:16' | '1:1' = '16
     setCaptionBackground,
     setVoiceoverBlobUrl,
     setVoiceoverVolume,
+    setSourceUrls,
     setAspectRatio,
     setLoadError,
     setSnapEnabled,

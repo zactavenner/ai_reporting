@@ -17,6 +17,7 @@ export default function VideoEditorPage() {
   const srcUrl = searchParams.get('src') || '';
   const clipsParam = searchParams.get('clips') || '';
   const nameParam = searchParams.get('name') || '';
+  const clientParam = searchParams.get('client') || '';
   const arParam = (searchParams.get('ar') || '16:9') as '16:9' | '9:16' | '1:1';
 
   const editor = useVideoEditor(arParam);
@@ -27,6 +28,7 @@ export default function VideoEditorPage() {
   const [initialized, setInitialized] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('Untitled Project');
+  const [projectClientId, setProjectClientId] = useState<string | null>(clientParam || null);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>('');
@@ -35,7 +37,7 @@ export default function VideoEditorPage() {
   useEffect(() => {
     if (srcUrl && !initialized) {
       setInitialized(true);
-      projectManager.createProject(nameParam || 'Imported Video', arParam).then(proj => {
+      projectManager.createProject(nameParam || 'Imported Video', arParam, clientParam || null).then(proj => {
         if (proj) {
           setActiveProjectId(proj.id);
           setProjectName(proj.name);
@@ -52,7 +54,7 @@ export default function VideoEditorPage() {
       try {
         const urls: string[] = JSON.parse(decodeURIComponent(clipsParam));
         if (urls.length > 0) {
-          projectManager.createProjectFromUrls(nameParam || 'Flowboard Export', urls, arParam).then(async proj => {
+          projectManager.createProjectFromUrls(nameParam || 'Flowboard Export', urls, arParam, clientParam || null).then(async proj => {
             if (proj) {
               setActiveProjectId(proj.id);
               setProjectName(proj.name);
@@ -406,6 +408,14 @@ export default function VideoEditorPage() {
               onAddTextOverlay={editor.addTextOverlay}
               onUpdateTextOverlay={editor.updateTextOverlay}
               onRemoveTextOverlay={editor.removeTextOverlay}
+              projectId={activeProjectId || ''}
+              projectName={projectName}
+              clientId={projectClientId}
+              onClientChange={(id) => {
+                setProjectClientId(id);
+                if (activeProjectId) projectManager.saveProjectState(activeProjectId, { client_id: id } as any);
+              }}
+              onSourcesPersisted={editor.setSourceUrls}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
