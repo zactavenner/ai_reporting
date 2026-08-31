@@ -26,9 +26,10 @@ async function callUtariPersona(mcpUrl: string, message: string, conversationId?
   const r = await askUtariPersona({
     message,
     conversationId,
-    mcpUrl: mcpUrl || UTARI_PERSONA_MCP_URL,
+    mcpUrl,
   });
   return { reply: r.reply || "(no reply from persona)", conversation_id: r.conversation_id };
+
 }
 
 
