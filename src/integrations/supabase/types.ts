@@ -1330,6 +1330,42 @@ export type Database = {
           },
         ]
       }
+      agency_personas: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          mcp_url: string
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          mcp_url: string
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          mcp_url?: string
+          name?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agency_pods: {
         Row: {
           color: string | null
@@ -1944,6 +1980,7 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
+          persona_slug: string
           updated_at: string
         }
         Insert: {
@@ -1952,6 +1989,7 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          persona_slug?: string
           updated_at?: string
         }
         Update: {
@@ -1960,6 +1998,7 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          persona_slug?: string
           updated_at?: string
         }
         Relationships: [
@@ -22957,6 +22996,45 @@ export type Database = {
           cost_of_capital_pct: number | null
           funded_dollars: number | null
           week_start: string | null
+        }
+        Relationships: []
+      }
+      v_agency_personas: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          has_token: boolean | null
+          id: string | null
+          is_active: boolean | null
+          is_default: boolean | null
+          mcp_host: string | null
+          name: string | null
+          slug: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          has_token?: never
+          id?: string | null
+          is_active?: boolean | null
+          is_default?: boolean | null
+          mcp_host?: never
+          name?: string | null
+          slug?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          has_token?: never
+          id?: string | null
+          is_active?: boolean | null
+          is_default?: boolean | null
+          mcp_host?: never
+          name?: string | null
+          slug?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
