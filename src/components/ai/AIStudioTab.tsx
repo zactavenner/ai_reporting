@@ -2690,48 +2690,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
-                <div className="flex items-center gap-1 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedAgentId("off")}
-                    title="Plain chat — no agent"
-                    className={`h-7 px-2 rounded-full text-[10px] border transition inline-flex items-center gap-1 ${selectedAgentId === "off" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
-                  >
-                    <MessageSquare className="h-3 w-3" />
-                    Chat
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedAgentId("master")}
-                    title="Jarvis — auto-delegates to the best specialist"
-                    className={`h-7 px-2 rounded-full text-[10px] border transition inline-flex items-center gap-1 ${selectedAgentId === "master" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
-                  >
-                    <Bot className="h-3 w-3" />
-                    Jarvis
-                  </button>
-                  {(clientAgents as any[]).filter((a: any) => a.enabled).length === 0 && (
-                    <span className="text-[10px] text-muted-foreground px-1">No agents yet — create one in the Agents tab.</span>
-                  )}
-                  {(clientAgents as any[]).filter((a: any) => a.enabled).map((a: any) => {
-                    const mode = inferAgentMode(a);
-                    const active = selectedAgentId === a.id;
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => setSelectedAgentId(a.id)}
-                        title={`${a.name}${a.handle ? ` @${a.handle}` : ""} · ${mode === "static" ? "Image / static" : mode === "video" ? "Video" : "Chat"}`}
-                        className={`h-7 px-2 rounded-full text-[10px] border transition inline-flex items-center gap-1 ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
-                      >
-                        {mode === "static" ? <ImageIcon className="h-3 w-3" /> : mode === "video" ? <Film className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                        <span className="truncate max-w-[120px]">{a.name}</span>
-                        {a.model && !active && (
-                          <span className="text-[9px] opacity-70">{a.model.split("/").pop()}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -3084,15 +3042,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     )}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setGoalDialogOpen(true)}
-                  title="Set a goal — Jarvis keeps working it on the backend (video, copy, Jeremy AI) until every deliverable is finished, even if you close this page."
-                  className="h-7 px-2 rounded-lg text-[10px] inline-flex items-center gap-1 border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition"
-                >
-                  <Target className="h-3 w-3" />
-                  Set goal
-                </button>
                 {selectedAgentMode === "video" && (
                   <button
                     type="button"
