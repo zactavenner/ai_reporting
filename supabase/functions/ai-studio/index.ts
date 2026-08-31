@@ -1,7 +1,9 @@
 // AI Studio v2 — streaming SSE chat with Google Docs/Sheets tools, high-quality static ad
 // generation, server-side persistence, and Manus-style canvas events.
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { askUtariPersona, UTARI_PERSONA_MCP_URL } from "../_shared/utariPersona.ts";
+import { askUtariPersona } from "../_shared/utariPersona.ts";
+import { resolvePersona, savePersonaConversation } from "../_shared/personas.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3297,7 +3299,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentKey, agentMode, agentToolPolicy, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds, forceToolName } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentKey, agentMode, agentToolPolicy, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, personaSlug, offerIds, forceToolName } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -3325,6 +3327,8 @@ Deno.serve(async (req) => {
     canvasItemPayload?: any;
     offerContext?: string | null;
     agentSlug?: string | null;
+    personaSlug?: string | null;
+
     offerIds?: string[] | null;
     forceToolName?: string | null;
   };
@@ -4423,7 +4427,18 @@ Deno.serve(async (req) => {
             .select("id, capabilities")
             .eq("slug", "jeremy_ai")
             .maybeSingle();
-          const personaUrl = (jeremyAgent?.capabilities as any)?.mcp_url || UTARI_PERSONA_MCP_URL;
+
+          let persona: { id: string | null; slug: string; name: string; mcpUrl: string };
+          try {
+            persona = await resolvePersona(supa, personaSlug);
+          } catch (e: any) {
+            const msg = e?.message || String(e);
+            send({ type: "error", message: msg });
+            send({ type: "text", delta: msg });
+            send({ type: "done" });
+            return;
+          }
+
           let personaConvId: string | null = null;
           if (jeremyAgent?.id) {
             const { data: convRow } = await supa
@@ -4431,6 +4446,7 @@ Deno.serve(async (req) => {
               .select("conversation_id")
               .eq("agent_id", jeremyAgent.id)
               .eq("client_id", clientId ?? null)
+              .eq("persona_slug", persona.slug)
               .maybeSingle();
             personaConvId = (convRow as any)?.conversation_id || null;
           }
@@ -4452,30 +4468,32 @@ Deno.serve(async (req) => {
             const r = await askUtariPersona({
               message: outbound,
               conversationId: personaConvId,
-              mcpUrl: personaUrl,
-              onPoll: ({ attempt, status }) => send({ type: "step", step: attempt, label: `Waiting for Jeremy (${status})…` }),
+              mcpUrl: persona.mcpUrl,
+              onPoll: ({ attempt, status }) => send({ type: "step", step: attempt, label: `Waiting for ${persona.name} (${status})…` }),
             });
             finalAssistantText = r.reply;
             if (jeremyAgent?.id && r.conversation_id && r.conversation_id !== personaConvId) {
-              await supa.from("agent_mcp_conversations").upsert({
-                agent_id: jeremyAgent.id,
-                client_id: clientId ?? null,
-                conversation_id: r.conversation_id,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: "agent_id,client_id" }).then(() => {}, () => {});
+              await savePersonaConversation(supa, {
+                agentId: jeremyAgent.id,
+                clientId: clientId ?? null,
+                personaSlug: persona.slug,
+                conversationId: r.conversation_id,
+              }).catch(() => {});
             }
-            finalToolEvents.push({ name: "utari_persona", args: { conversation_id: r.conversation_id }, result: { polls: r.polls, ok: true } });
+            finalToolEvents.push({ name: "utari_persona", args: { persona: persona.slug, conversation_id: r.conversation_id }, result: { polls: r.polls, ok: true } });
             send({ type: "text", delta: finalAssistantText });
           } catch (e: any) {
             const msg = e?.message || String(e);
-            finalAssistantText = `Jeremy AI (Utari persona) did not reply: ${msg}`;
-            finalToolEvents.push({ name: "utari_persona", args: {}, result: { error: msg } });
+            finalAssistantText = `${persona.name} did not reply: ${msg}`;
+            finalToolEvents.push({ name: "utari_persona", args: { persona: persona.slug }, result: { error: msg } });
             send({ type: "error", message: msg });
             send({ type: "text", delta: finalAssistantText });
           }
           send({ type: "done" });
           return;
         }
+
+
 
 
         for (let step = 0; step < 25; step++) {

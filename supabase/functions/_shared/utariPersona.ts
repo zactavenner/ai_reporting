@@ -3,9 +3,11 @@
 // server, then poll get_response until the persona's reply lands. The persona
 // keeps running server-side even if a single HTTP hop times out, so we never
 // block on one long request — we hand off to run_id polling.
+//
+// The endpoint itself is NOT hardcoded here: callers resolve it from the
+// `agency_personas` registry via `_shared/personas.ts` (`resolvePersona`) so
+// personas can be added / switched / rotated from Settings → Personas.
 
-export const UTARI_PERSONA_MCP_URL =
-  "https://persona-mcp.utari.ai/mcp/?k=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ1dGFyaS1wZXJzb25hLW1jcCIsImlhdCI6MTc4ODE5NTkzNSwiZXhwIjoxNzk1OTcxOTM1LCJqdGkiOiI2Yjk0YTU2YS01ZTYyLTQxOGQtYjQ2ZC0xODcyYmI2ZGUzYWYiLCJpbnN0YW5jZV9pZCI6IjI4NThhYWM1LTJiYTYtNDEzOS1iM2M3LWI2MzZlMjk1MDcwMSIsInN1YmRvbWFpbiI6ImplcmVteSIsImNvbW11bml0eV9tZW1iZXJfaWQiOiJmZmIwY2JlNC00ZWY2LTQ3ZjMtYjg1Zi1lY2ViZTM3Zjg3NDMiLCJhdXRoX3VzZXJfaWQiOiI4NTgyYmNiYi0yNDRjLTRkMjctYjJhYy0xMGI3OWNiZTg0OGMifQ.dw2zNCBJkyfYbqP5rbrVuifAd98ZlemAx_AJ-nLlplc";
 
 export type PersonaReply = {
   reply: string;
@@ -67,14 +69,17 @@ function replyText(p: PersonaPayload): string {
 export async function askUtariPersona(opts: {
   message: string;
   conversationId?: string | null;
-  mcpUrl?: string;
+  /** Resolved persona endpoint (from `resolvePersona`) — required. */
+  mcpUrl: string;
   /** Total wall-clock budget for the reply (default 4 min). */
   timeoutMs?: number;
   /** Delay between polls (default 3s). */
   pollMs?: number;
   onPoll?: (info: { attempt: number; elapsedMs: number; status: string }) => void;
 }): Promise<PersonaReply> {
-  const url = opts.mcpUrl || UTARI_PERSONA_MCP_URL;
+  const url = (opts.mcpUrl || "").trim();
+  if (!url) throw new Error("No persona endpoint configured (Settings → Personas)");
+
   const timeoutMs = opts.timeoutMs ?? 240_000;
   const pollMs = opts.pollMs ?? 3_000;
   const started = Date.now();

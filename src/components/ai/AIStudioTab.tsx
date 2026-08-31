@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAgencyPersonas } from "@/hooks/useAgencyPersonas";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target, Rocket, Layers } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -1346,6 +1348,19 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         ? "static"
         : null;
 
+  // Jeremy AI talks to a persona endpoint from the registry (Settings → Personas).
+  // Each chat can pick a persona; switching starts a fresh persona conversation.
+  const isJeremyAgent = selectedAgentId === "slug:jeremy_ai";
+  const { data: personas = [] } = useAgencyPersonas();
+  const activePersonas = (personas as any[]).filter((p) => p.is_active);
+  const [personaSlug, setPersonaSlug] = useState<string | null>(null);
+  const effectivePersonaSlug =
+    personaSlug && activePersonas.some((p) => p.slug === personaSlug)
+      ? personaSlug
+      : (activePersonas.find((p) => p.is_default)?.slug ?? activePersonas[0]?.slug ?? null);
+
+
+
   useEffect(() => {
     if (selectedAgentId === "off" || selectedAgentId === "master") return;
     if (selectedAgentId.startsWith("slug:")) {
@@ -1877,6 +1892,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         agentSlug: selectedAgentId.startsWith("slug:")
           ? selectedAgentId.slice("slug:".length)
           : (selectedAgentId === "master" ? "account_manager" : undefined),
+        ...(isJeremyAgent && effectivePersonaSlug ? { personaSlug: effectivePersonaSlug } : {}),
+
         offerContext: (() => {
           const list = selectedOfferId === "all"
             ? clientOffers
@@ -2676,7 +2693,29 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               </div>
               <div className="flex flex-col md:flex-row md:items-end gap-2 px-2 pb-2 pt-1 border-t border-border/40">
                 <div className="order-2 md:order-1 flex-1 min-w-0 flex items-center gap-1.5 flex-wrap -mx-1 px-1 pb-1 md:pb-0">
+                {isJeremyAgent && (
+                  <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Persona:</span>
+                    <Select
+                      value={effectivePersonaSlug ?? ""}
+                      onValueChange={(v) => setPersonaSlug(v)}
+                      disabled={activePersonas.length === 0}
+                    >
+                      <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg max-w-[200px]">
+                        <SelectValue placeholder={activePersonas.length ? "Pick a persona" : "None configured"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activePersonas.map((p: any) => (
+                          <SelectItem key={p.slug} value={p.slug} className="text-xs">
+                            {p.name}{p.is_default ? " · default" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="flex items-center gap-1 pr-1.5 border-r border-border/60">
+
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Offer:</span>
                   <Select value={selectedOfferId} onValueChange={setSelectedOfferId}>
                     <SelectTrigger className="h-7 text-[10px] gap-1 border-border/60 bg-muted/40 hover:bg-muted w-auto px-2 rounded-lg max-w-[220px]">

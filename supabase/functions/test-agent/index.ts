@@ -4,7 +4,9 @@
 // agent's default_model. Returns a single assistant reply.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { buildJeremyOutbound } from "./jeremyContext.ts";
-import { askUtariPersona, UTARI_PERSONA_MCP_URL } from "../_shared/utariPersona.ts";
+import { askUtariPersona } from "../_shared/utariPersona.ts";
+import { resolvePersona, savePersonaConversation } from "../_shared/personas.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,18 +26,20 @@ async function callUtariPersona(mcpUrl: string, message: string, conversationId?
   const r = await askUtariPersona({
     message,
     conversationId,
-    mcpUrl: mcpUrl || UTARI_PERSONA_MCP_URL,
+    mcpUrl,
   });
   return { reply: r.reply || "(no reply from persona)", conversation_id: r.conversation_id };
+
 }
 
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const { agent_id, client_id, messages } = await req.json() as {
-      agent_id: string; client_id?: string | null; messages: Msg[];
+    const { agent_id, client_id, messages, persona_slug } = await req.json() as {
+      agent_id: string; client_id?: string | null; messages: Msg[]; persona_slug?: string | null;
     };
+
     if (!agent_id || !Array.isArray(messages) || messages.length === 0) {
       return json({ error: "agent_id and messages[] required" }, 400);
     }
@@ -73,13 +77,21 @@ Deno.serve(async (req) => {
     if (caps?.provider === "utari_persona") {
       const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
 
-      // Persistent conversation id per (agent, client) scope
-      const scopeClient = client_id ?? "00000000-0000-0000-0000-000000000000";
+      // Persona endpoint comes from the registry (Settings → Personas), never from source.
+      let persona: { slug: string; name: string; mcpUrl: string };
+      try {
+        persona = await resolvePersona(supa, persona_slug || caps.persona_slug || null);
+      } catch (e: any) {
+        return json({ error: e?.message || String(e) }, 400);
+      }
+
+      // Persistent conversation id per (agent, client, persona) scope
       const { data: convRow } = await supa
         .from("agent_mcp_conversations")
         .select("conversation_id")
         .eq("agent_id", agent_id)
         .eq("client_id", client_id ?? null)
+        .eq("persona_slug", persona.slug)
         .maybeSingle();
       const existingConv = convRow?.conversation_id || null;
 
@@ -95,18 +107,20 @@ Deno.serve(async (req) => {
       let reply = "";
       let newConvId: string | null = null;
       try {
-        const r = await callUtariPersona(caps.mcp_url || UTARI_PERSONA_MCP_URL, outbound, existingConv);
+        const r = await callUtariPersona(persona.mcpUrl, outbound, existingConv);
         reply = r.reply;
         newConvId = r.conversation_id;
       } catch (e: any) {
-        return json({ error: `Utari persona call failed: ${e?.message || e}` }, 502);
+        return json({ error: `Persona call failed (${persona.name}): ${e?.message || e}` }, 502);
       }
 
       if (newConvId && newConvId !== existingConv) {
-        await supa.from("agent_mcp_conversations").upsert({
-          agent_id, client_id: client_id ?? null, conversation_id: newConvId, updated_at: new Date().toISOString(),
-        }, { onConflict: "agent_id,client_id" }).then(() => {}, () => {});
-        // Fallback: unique index uses COALESCE(client_id, 0-uuid) — do a manual reconcile if upsert on null fails
+        await savePersonaConversation(supa, {
+          agentId: agent_id,
+          clientId: client_id ?? null,
+          personaSlug: persona.slug,
+          conversationId: newConvId,
+        }).catch(() => {});
       }
 
       if (client_id) {
@@ -116,7 +130,7 @@ Deno.serve(async (req) => {
           scope: "adhoc",
           title: `Jeremy AI · ${lastUser.split("\n")[0].slice(0, 80) || "chat"}`,
           body_md: `**You:**\n\n${lastUser}\n\n**Jeremy AI:**\n\n${reply}`,
-          metadata: { provider: "utari_persona", conversation_id: newConvId || existingConv },
+          metadata: { provider: "utari_persona", persona_slug: persona.slug, conversation_id: newConvId || existingConv },
         }).then(() => {}, () => {});
       }
 
