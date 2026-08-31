@@ -109,7 +109,34 @@ export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRe
 
   return (
     <div className="flex flex-col h-full bg-muted/20 border-r border-border/60">
-      <div className="px-2 pt-2 pb-1.5 space-y-1.5">
+      <div className="px-1.5 pt-2 pb-1.5">
+        <div className="px-1 pb-1 text-[9px] uppercase tracking-wide text-muted-foreground/70">Agents</div>
+        <div className="space-y-0.5">
+          {STUDIO_AGENT_RAIL.map(a => {
+            const active = normalizeAgentKey(activeAgentKey) === a.key;
+            return (
+              <button
+                key={a.key}
+                type="button"
+                onClick={() => onAgentSelect(a.key)}
+                className={cn(
+                  "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition text-left",
+                  active
+                    ? "bg-primary/15 text-foreground font-medium ring-1 ring-primary/30"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <span className="text-sm leading-none">{a.icon}</span>
+                <span className="flex-1 truncate">{a.label}</span>
+                {counts[a.key] > 0 && (
+                  <span className="text-[9px] text-muted-foreground/70">{counts[a.key]}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="px-2 pt-1.5 pb-1.5 space-y-1.5 border-t border-border/60">
         <Button onClick={onNew} size="sm" className="w-full h-8 text-xs gap-1.5">
           <Plus className="h-3.5 w-3.5" /> New chat
         </Button>
@@ -120,6 +147,7 @@ export function AIStudioThreadSidebar({ threads, activeId, onSelect, onNew, onRe
           className="h-7 text-xs"
         />
       </div>
+
       <ScrollArea className="flex-1 px-1.5">
         {pinned.length > 0 && (
           <div className="mb-2">
