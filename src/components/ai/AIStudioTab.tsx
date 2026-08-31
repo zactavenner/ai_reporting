@@ -3042,15 +3042,6 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     )}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setGoalDialogOpen(true)}
-                  title="Set a goal — Jarvis keeps working it on the backend (video, copy, Jeremy AI) until every deliverable is finished, even if you close this page."
-                  className="h-7 px-2 rounded-lg text-[10px] inline-flex items-center gap-1 border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition"
-                >
-                  <Target className="h-3 w-3" />
-                  Set goal
-                </button>
                 {selectedAgentMode === "video" && (
                   <button
                     type="button"
