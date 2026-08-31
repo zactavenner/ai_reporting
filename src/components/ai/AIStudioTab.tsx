@@ -1783,12 +1783,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               ].filter(Boolean).join("\n")
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoModels.length > 0);
+          const videoAllowed = selectedAgentMode === "video";
+          const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
           // model / resolution / frames the user pre-selected in the composer.
           const lockLines: string[] = [];
-          if (videoModel) {
+          if (!videoAllowed) {
+            lockLines.push(
+              "🚫 VIDEO DISABLED for this agent. Never call any video generation tool here — video production happens only in the Video Ads agent. If the user asks for a video, tell them to switch to the Video Ads agent.",
+            );
+          }
+          if (videoAllowed && videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
             const isSeedanceLock = videoModel === SEEDANCE_VIDEO_MODEL;
             const lockedModel = isSeedanceLock ? SEEDANCE_VIDEO_MODEL : ONLY_VIDEO_MODEL;
