@@ -27,6 +27,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return reply({ error: 'POST required' }, 405);
 
+  // Fail closed BEFORE any privileged processing: no body read, no session
+  // verification, no service-role client, no database or storage access.
+  if (!isRenderingEnabled()) return reply(RENDERING_DISABLED_BODY, 503);
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
