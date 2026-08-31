@@ -1864,7 +1864,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         })(),
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
-        ...(videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
+        // Video params travel ONLY from the Video Ads agent — other agents never render video.
+        ...(selectedAgentMode === "video" && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
         avatarId: selectedAvatarId,
         adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
