@@ -41,6 +41,7 @@ export function HyperframesExportPanel(props: HyperframesExportProps) {
   const [busy, setBusy] = useState(false);
   const [approved, setApproved] = useState(false);
   const [job, setJob] = useState<RenderJob | null>(null);
+  const [disabledByServer, setDisabledByServer] = useState(false);
   const prepared = useRef<{ fingerprint: string; body: Record<string, unknown> } | null>(null);
   const fingerprint = JSON.stringify([props.clientId, props.clips.map(c => ({ ...c, sourceUrl: undefined })), props.captions, props.textOverlays, props.aspectRatio, props.captionSettings, props.voiceoverBlobUrl, props.voiceoverVolume]);
   useEffect(() => { setApproved(false); }, [fingerprint]);
@@ -48,9 +49,16 @@ export function HyperframesExportPanel(props: HyperframesExportProps) {
   const refresh = useCallback(async () => {
     try {
       const health = await invoke({ action: 'health' });
+      setDisabledByServer(false);
       setOnline(health.online);
       setHealthMessage(health.online ? 'HyperFrames worker online' : 'No render worker online. Start the configured server worker first.');
-    } catch (error) { setOnline(false); setHealthMessage((error as Error).message); }
+    } catch (error) {
+      setOnline(false);
+      const message = (error as Error).message;
+      // Server-side rendering is fail-closed until a real render operator exists.
+      setDisabledByServer(message.includes('rendering_disabled'));
+      setHealthMessage(message);
+    }
   }, []);
   useEffect(() => {
     supabase.from('clients').select('id,name').order('name').then(({ data }) => setClients(data || []));
@@ -118,11 +126,13 @@ export function HyperframesExportPanel(props: HyperframesExportProps) {
       <SelectTrigger aria-label="Creative Assets client"><SelectValue placeholder="Select client" /></SelectTrigger>
       <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
     </Select>
-    <p className="text-xs text-muted-foreground">{healthMessage}</p>
+    {disabledByServer
+      ? <p className="text-xs text-destructive">Server rendering is disabled pending security activation: an independently authenticated render operator and protected membership/authorization are required. Browser export (WebM) still works.</p>
+      : <p className="text-xs text-muted-foreground">{healthMessage}</p>}
     <p className="text-xs text-muted-foreground">Supports trims, ordering, speed, source audio, voiceover, static text, and Classic/Minimal/Boxed captions. Unsupported FX are rejected, not dropped.</p>
     <label className="flex gap-2 text-xs"><input type="checkbox" checked={approved} onChange={e => setApproved(e.target.checked)} disabled={busy || !!running} />I reviewed this edit and approve a final MP4 render for this client. Save for review only; do not publish.</label>
     <Button className="w-full" onClick={enqueue} disabled={!online || !props.clientId || !approved || busy || !!running || !props.clips.length}>{busy ? 'Uploading / submitting…' : running ? `Render ${job.status}` : 'Render with HyperFrames'}</Button>
-    {!online && <Button size="sm" variant="outline" onClick={refresh}>Check connection</Button>}
+    {!online && !disabledByServer && <Button size="sm" variant="outline" onClick={refresh}>Check connection</Button>}
     {job?.error && <p className="text-xs text-destructive">{job.error}</p>}
     {job?.status === 'completed' && job.output_url && <div className="space-y-2">
       <video controls preload="metadata" src={job.output_url} className="w-full rounded" />

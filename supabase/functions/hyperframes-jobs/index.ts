@@ -1,5 +1,12 @@
 // HyperFrames render-job API.
 //
+// SERVER RENDERING IS FAIL-CLOSED. The legacy operator gate accepts a shared
+// fallback password plus a caller-selected member name, so a dashboard session +
+// role re-read is NOT sufficient authorization to render. Every request is
+// refused with 503 rendering_disabled unless HYPERFRAMES_RENDERING_ENABLED is
+// explicitly "true" (see _shared/hyperframesGuard.ts). Do not set that flag
+// until an independently authenticated render operator exists.
+//
 // verify_jwt = false is intentional: this app's agency operators authenticate
 // through the password+name gate (no auth.users rows), so the caller identity is
 // the HMAC-signed `dashboard_session_token` minted by `verify-password`. The
@@ -9,6 +16,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyDashboardToken, readDashboardToken } from '../_shared/dashboardToken.ts';
 import { canonicalSpec, validateRenderSpec } from '../_shared/hyperframes-spec.mjs';
+import { isRenderingEnabled, RENDERING_DISABLED_BODY } from '../_shared/hyperframesGuard.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +34,10 @@ const ADMIN_ROLES = new Set(['admin', 'owner']);
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return reply({ error: 'POST required' }, 405);
+
+  // Fail closed BEFORE any privileged processing: no body read, no session
+  // verification, no service-role client, no database or storage access.
+  if (!isRenderingEnabled()) return reply(RENDERING_DISABLED_BODY, 503);
 
   let body: Record<string, unknown>;
   try {
