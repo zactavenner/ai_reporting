@@ -69,14 +69,17 @@ function replyText(p: PersonaPayload): string {
 export async function askUtariPersona(opts: {
   message: string;
   conversationId?: string | null;
-  mcpUrl?: string;
+  /** Resolved persona endpoint (from `resolvePersona`) — required. */
+  mcpUrl: string;
   /** Total wall-clock budget for the reply (default 4 min). */
   timeoutMs?: number;
   /** Delay between polls (default 3s). */
   pollMs?: number;
   onPoll?: (info: { attempt: number; elapsedMs: number; status: string }) => void;
 }): Promise<PersonaReply> {
-  const url = opts.mcpUrl || UTARI_PERSONA_MCP_URL;
+  const url = (opts.mcpUrl || "").trim();
+  if (!url) throw new Error("No persona endpoint configured (Settings → Personas)");
+
   const timeoutMs = opts.timeoutMs ?? 240_000;
   const pollMs = opts.pollMs ?? 3_000;
   const started = Date.now();
