@@ -3,11 +3,18 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Download, Loader2 } from 'lucide-react';
-import type { VideoClip, Caption, CaptionStyleType, CaptionPosition } from '@/hooks/useVideoEditor';
+import type { VideoClip, Caption, CaptionStyleType, CaptionPosition, TextOverlay } from '@/hooks/useVideoEditor';
+import { HyperframesExportPanel } from './HyperframesExportPanel';
 import { renderCaptions } from './CaptionRenderer';
 import { toast } from 'sonner';
 
 interface ExportDialogProps {
+  projectId: string;
+  projectName: string;
+  clientId: string | null;
+  onClientChange: (clientId: string) => void;
+  onSourcesPersisted: (sources: Record<string, string>) => void;
+  textOverlays: TextOverlay[];
   clips: VideoClip[];
   captions: Caption[];
   captionStyle: CaptionStyleType;
@@ -42,6 +49,7 @@ const PLATFORM_PRESETS: Record<Platform, { label: string; ar: string; maxDuratio
 };
 
 export function ExportDialog({
+  projectId, projectName, clientId, onClientChange, onSourcesPersisted, textOverlays,
   clips,
   captions,
   captionStyle,
@@ -192,6 +200,13 @@ export function ExportDialog({
 
   return (
     <div className="p-4 space-y-4">
+      <HyperframesExportPanel
+        projectId={projectId} projectName={projectName} clientId={clientId} onClientChange={onClientChange}
+        onSourcesPersisted={onSourcesPersisted}
+        clips={clips} captions={captions} textOverlays={textOverlays} aspectRatio={aspectRatio}
+        captionSettings={{ style: captionStyle, fontSize: captionFontSize, color: captionColor, fontFamily: captionFontFamily, position: captionPosition, stroke: captionStroke, background: captionBackground }}
+        voiceoverBlobUrl={voiceoverBlobUrl} voiceoverVolume={voiceoverVolume}
+      />
       {/* Platform presets */}
       <div className="space-y-2">
         <label className="text-xs font-medium text-muted-foreground">Platform</label>
@@ -253,7 +268,7 @@ export function ExportDialog({
           disabled={isExporting || clips.length === 0}
         >
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          {isExporting ? 'Exporting...' : 'Export'}
+          {isExporting ? 'Exporting...' : 'Browser export (WebM)'}
         </Button>
       ) : (
         <Button className="w-full gap-2" asChild>

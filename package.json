@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "playwright test",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "hyperframes:worker": "node render-worker/worker.mjs",
+    "hyperframes:test": "node --test render-worker/*.test.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",

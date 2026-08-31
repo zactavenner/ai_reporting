@@ -42,10 +42,10 @@ export function useVideoProjects() {
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
-  const createProject = useCallback(async (name = 'Untitled Project', aspectRatio = '16:9') => {
+  const createProject = useCallback(async (name = 'Untitled Project', aspectRatio = '16:9', clientId?: string | null) => {
     const { data, error } = await supabase
       .from('video_projects')
-      .insert({ name, aspect_ratio: aspectRatio } as any)
+      .insert({ name, aspect_ratio: aspectRatio, client_id: clientId || null } as any)
       .select()
       .single();
     if (error) {
@@ -56,7 +56,7 @@ export function useVideoProjects() {
     return data as unknown as VideoProject;
   }, []);
 
-  const createProjectFromUrls = useCallback(async (name: string, videoUrls: string[], aspectRatio = '16:9') => {
+  const createProjectFromUrls = useCallback(async (name: string, videoUrls: string[], aspectRatio = '16:9', clientId?: string | null) => {
     const scenes = videoUrls.map((url, i) => ({
       sourceUrl: url,
       order: i,
@@ -64,7 +64,7 @@ export function useVideoProjects() {
     }));
     const { data, error } = await supabase
       .from('video_projects')
-      .insert({ name, aspect_ratio: aspectRatio, scenes } as any)
+      .insert({ name, aspect_ratio: aspectRatio, scenes, client_id: clientId || null } as any)
       .select()
       .single();
     if (error) {

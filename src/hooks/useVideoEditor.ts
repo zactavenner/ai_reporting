@@ -6,6 +6,7 @@ export type TransitionType = 'none' | 'crossfade' | 'wipe-left' | 'wipe-right' |
 export interface VideoClip {
   id: string;
   blobUrl: string;
+  sourceUrl?: string;
   startTime: number;
   endTime: number;
   trimStart: number;
@@ -116,11 +117,12 @@ export function useVideoEditor(initialAspectRatio: '16:9' | '9:16' | '1:1' = '16
     return sum + effectiveDuration;
   }, 0);
 
-  const addClipFromBlobUrl = useCallback(async (blobUrl: string) => {
+  const addClipFromBlobUrl = useCallback(async (blobUrl: string, sourceUrl?: string) => {
     const duration = await getVideoDuration(blobUrl);
     const newClip: VideoClip = {
       id: crypto.randomUUID(),
       blobUrl,
+      sourceUrl,
       startTime: totalDuration,
       endTime: totalDuration + duration,
       trimStart: 0,
@@ -142,7 +144,7 @@ export function useVideoEditor(initialAspectRatio: '16:9' | '9:16' | '1:1' = '16
     try {
       const blob = await fetchVideoAsBlob(url);
       const blobUrl = URL.createObjectURL(blob);
-      await addClipFromBlobUrl(blobUrl);
+      await addClipFromBlobUrl(blobUrl, url);
     } catch (err) {
       console.error('Failed to fetch video:', err);
       setLoadError(
