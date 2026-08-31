@@ -17,55 +17,17 @@ const OPENROUTER_API_KEY = (Deno.env.get("OPENROUTER_API_KEY") || "").trim().rep
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
 // ---------- Utari Persona MCP client (Streamable HTTP) ----------
-async function mcpCall(url: string, method: string, params: any, id: number): Promise<any> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json, text/event-stream",
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+// Single request path for Jeremy AI: send_message then poll get_response
+// until the persona replies (see _shared/utariPersona.ts).
+async function callUtariPersona(mcpUrl: string, message: string, conversationId?: string | null) {
+  const r = await askUtariPersona({
+    message,
+    conversationId,
+    mcpUrl: mcpUrl || UTARI_PERSONA_MCP_URL,
   });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`MCP ${method} ${res.status}: ${text.slice(0, 300)}`);
-  // Streamable HTTP returns SSE ("event: message\ndata: {json}") or plain JSON.
-  const dataLine = text.split("\n").find((l) => l.startsWith("data: "));
-  const payload = dataLine ? dataLine.slice(6).trim() : text.trim();
-  try {
-    const parsed = JSON.parse(payload);
-    if (parsed.error) throw new Error(`MCP error: ${parsed.error.message || JSON.stringify(parsed.error)}`);
-    return parsed.result;
-  } catch (e) {
-    throw new Error(`MCP parse failed: ${payload.slice(0, 300)}`);
-  }
+  return { reply: r.reply || "(no reply from persona)", conversation_id: r.conversation_id };
 }
 
-async function callUtariPersona(mcpUrl: string, message: string, conversationId?: string | null) {
-  const result = await mcpCall(
-    mcpUrl,
-    "tools/call",
-    {
-      name: "send_message",
-      arguments: {
-        message,
-        conversation_id: conversationId || "",
-        wait_for_reply: true,
-      },
-    },
-    Math.floor(Math.random() * 1_000_000),
-  );
-  const content = Array.isArray(result?.content) ? result.content : [];
-  const textNode = content.find((c: any) => c.type === "text");
-  let reply = textNode?.text || "";
-  let convId: string | null = null;
-  // The persona server returns a JSON string in the text node
-  try {
-    const j = JSON.parse(reply);
-    reply = j.reply || j.message || j.text || reply;
-    convId = j.conversation_id || null;
-  } catch { /* keep raw text */ }
-  return { reply: reply || "(no reply from persona)", conversation_id: convId };
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
