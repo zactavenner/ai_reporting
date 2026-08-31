@@ -3296,7 +3296,7 @@ Deno.serve(async (req) => {
   // via dashboard token. Used to attribute writes across the shared team.
   const actorMemberId: string | null = dashboardMemberId || null;
 
-  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentMode, agentToolPolicy, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds, forceToolName } = body as {
+  const { action, clientId, userText, docUrl, sheetUrl, quality = "pro", conversationId: requestedConversationId, chatModel, compareModels, imageModels, videoModel, videoModels, videoFrames, videoResolution: rawVideoResolution, avatarId, adFormat, hookFramework, burnCaptions, activeReferenceIds, activeVideoReferenceIds, canvasView, focusedCanvasItemId, threadTitle, threadUpdate, agentKey, agentMode, agentToolPolicy, attachments, canvasItemKind, canvasItemPayload, offerContext, agentSlug, offerIds, forceToolName } = body as {
     action?: "history" | "clear" | "settings" | "test_doc" | "list_threads" | "new_thread" | "update_thread" | "add_canvas_item" | "send_to_creatives";
     clientId: string; userText?: string; docUrl?: string | null; sheetUrl?: string | null; quality?: "pro" | "fast"; conversationId?: string;
     chatModel?: string | null;
@@ -3315,6 +3315,7 @@ Deno.serve(async (req) => {
     canvasView?: { zoom?: number; panX?: number; panY?: number } | null;
     focusedCanvasItemId?: string | null;
     threadTitle?: string | null;
+    agentKey?: string | null;
     threadUpdate?: { title?: string | null; pinned?: boolean; archived?: boolean } | null;
     agentMode?: boolean;
     agentToolPolicy?: "text_only" | "static_only" | "video_only" | "all";
@@ -3492,10 +3493,38 @@ Deno.serve(async (req) => {
     });
   }
 
+  if (action === "list_client_canvas") {
+    const { data: convos } = await supa
+      .from("ai_studio_conversations")
+      .select("id, title, agent_key")
+      .eq("client_id", clientId)
+      .is("archived_at", null)
+      .limit(300);
+    const ids = (convos || []).map((c: any) => c.id);
+    if (!ids.length) {
+      return new Response(JSON.stringify({ items: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { data: items } = await supa
+      .from("ai_studio_canvas_items")
+      .select("*")
+      .in("conversation_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(300);
+    const meta = Object.fromEntries((convos || []).map((c: any) => [c.id, { title: c.title, agent_key: c.agent_key }]));
+    const enriched = (items || []).map((it: any) => ({
+      ...it,
+      thread_title: meta[it.conversation_id]?.title || null,
+      agent_key: meta[it.conversation_id]?.agent_key || null,
+    }));
+    return new Response(JSON.stringify({ items: enriched }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (action === "list_threads") {
     const { data: clientThreads } = await supa
       .from("ai_studio_conversations")
-      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind, last_actor_member_id")
+      .select("id, title, pinned, archived_at, last_active_at, created_at, chat_model, is_shared, kind, agent_key, last_actor_member_id")
       .eq("client_id", clientId)
       .is("archived_at", null)
       .order("pinned", { ascending: false })
@@ -3530,6 +3559,7 @@ Deno.serve(async (req) => {
         title: (typeof threadTitle === "string" && threadTitle.trim()) ? threadTitle.trim().slice(0, 120) : "New chat",
         image_quality: quality,
         chat_model: typeof chatModel === "string" ? chatModel : null,
+        agent_key: typeof agentKey === "string" && agentKey.trim() ? agentKey.trim().slice(0, 64) : null,
         last_active_at: new Date().toISOString(),
         last_actor_member_id: actorMemberId,
       })
