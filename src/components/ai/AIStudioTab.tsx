@@ -1892,6 +1892,8 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         agentSlug: selectedAgentId.startsWith("slug:")
           ? selectedAgentId.slice("slug:".length)
           : (selectedAgentId === "master" ? "account_manager" : undefined),
+        ...(isJeremyAgent && effectivePersonaSlug ? { personaSlug: effectivePersonaSlug } : {}),
+
         offerContext: (() => {
           const list = selectedOfferId === "all"
             ? clientOffers
