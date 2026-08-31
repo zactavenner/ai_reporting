@@ -4494,18 +4494,7 @@ Deno.serve(async (req) => {
           return;
         }
 
-            finalToolEvents.push({ name: "utari_persona", args: { conversation_id: r.conversation_id }, result: { polls: r.polls, ok: true } });
-            send({ type: "text", delta: finalAssistantText });
-          } catch (e: any) {
-            const msg = e?.message || String(e);
-            finalAssistantText = `Jeremy AI (Utari persona) did not reply: ${msg}`;
-            finalToolEvents.push({ name: "utari_persona", args: {}, result: { error: msg } });
-            send({ type: "error", message: msg });
-            send({ type: "text", delta: finalAssistantText });
-          }
-          send({ type: "done" });
-          return;
-        }
+
 
 
         for (let step = 0; step < 25; step++) {
