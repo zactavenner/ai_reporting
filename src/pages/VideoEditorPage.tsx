@@ -164,6 +164,7 @@ export default function VideoEditorPage() {
     if (proj) {
       setActiveProjectId(proj.id);
       setProjectName(proj.name);
+      setProjectClientId((proj as any).client_id || null);
       lastSavedRef.current = '';
       setSaveStatus('saved');
     }
@@ -174,6 +175,7 @@ export default function VideoEditorPage() {
     if (!proj) return;
     setActiveProjectId(proj.id);
     setProjectName(proj.name);
+    setProjectClientId((proj as any).client_id || null);
 
     // Restore state
     const ar = (proj.aspect_ratio || '16:9') as '16:9' | '9:16' | '1:1';
