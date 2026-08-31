@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
           scope: "adhoc",
           title: `Jeremy AI · ${lastUser.split("\n")[0].slice(0, 80) || "chat"}`,
           body_md: `**You:**\n\n${lastUser}\n\n**Jeremy AI:**\n\n${reply}`,
-          metadata: { provider: "utari_persona", conversation_id: newConvId || existingConv },
+          metadata: { provider: "utari_persona", persona_slug: persona.slug, conversation_id: newConvId || existingConv },
         }).then(() => {}, () => {});
       }
 
