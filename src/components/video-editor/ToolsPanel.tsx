@@ -52,6 +52,11 @@ interface ToolsPanelProps {
   onAddTextOverlay: (overlay: Omit<TextOverlay, 'id'>) => void;
   onUpdateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
   onRemoveTextOverlay: (id: string) => void;
+  projectId: string;
+  projectName: string;
+  clientId: string | null;
+  onClientChange: (clientId: string) => void;
+  onSourcesPersisted: (sources: Record<string, string>) => void;
 }
 
 export function ToolsPanel(props: ToolsPanelProps) {
@@ -180,6 +185,12 @@ export function ToolsPanel(props: ToolsPanelProps) {
             aspectRatio={props.aspectRatio}
             voiceoverBlobUrl={props.voiceoverBlobUrl}
             voiceoverVolume={props.voiceoverVolume}
+            projectId={props.projectId}
+            projectName={props.projectName}
+            clientId={props.clientId}
+            onClientChange={props.onClientChange}
+            onSourcesPersisted={props.onSourcesPersisted}
+            textOverlays={props.textOverlays}
           />
         </TabsContent>
       </Tabs>

@@ -228,3 +228,8 @@ verify_jwt = false
 # Password-authenticated in code (INTERNAL_PASSWORD) like send-ghl-message.
 [functions.ghl-tag-contact]
 verify_jwt = false
+
+[functions.hyperframes-jobs]
+# Operator identity is the HMAC dashboard session verified in-handler, then
+# revalidated against agency_members (admin/owner). Queue tables stay service-role only.
+verify_jwt = false
