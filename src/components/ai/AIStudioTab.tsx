@@ -1552,8 +1552,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   }, [conversationId]);
 
   // Thread actions
-  const newThread = useCallback(async () => {
-    const res = await studioFetch({ action: "new_thread", clientId, threadTitle: "New chat", quality, chatModel });
+  const newThread = useCallback(async (agentKeyOverride?: string) => {
+    const agentKey = normalizeAgentKey(agentKeyOverride ?? selectedAgentId);
+    const res = await studioFetch({
+      action: "new_thread", clientId, threadTitle: `New ${agentLabelForKey(agentKey)} chat`, quality, chatModel, agentKey,
+    });
     if (!res.ok) { toast.error("Failed to create thread"); return; }
     const { conversation } = await res.json();
     setConversationId(conversation.id);
@@ -1562,13 +1565,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     setPendingAttachments(curr => curr.filter(a => a.fromOffer));
     setFollowups([]);
     await loadThreads();
-  }, [clientId, quality, chatModel, studioFetch, loadThreads]);
+  }, [clientId, quality, chatModel, studioFetch, loadThreads, selectedAgentId]);
 
   const switchThread = useCallback(async (id: string) => {
     if (id === conversationId) return;
     setConversationId(id);
     await loadHistory(id);
   }, [conversationId, loadHistory]);
+
+  /**
+   * Grok-style agent rail: each agent owns its own chat threads. Picking an agent
+   * binds the composer to it and jumps to that agent's most recent thread (creating
+   * one when the agent has no history yet). The canvas Feed rolls all agents up.
+   */
+  const selectRailAgent = useCallback(async (key: string) => {
+    setSelectedAgentId(key);
+    const own = threads.filter(t => normalizeAgentKey(t.agent_key) === key);
+    if (own.length) {
+      const next = own.find(t => t.pinned) || own[0];
+      if (next.id !== conversationId) { setConversationId(next.id); await loadHistory(next.id); }
+      return;
+    }
+    await newThread(key);
+  }, [threads, conversationId, loadHistory, newThread]);
+
+
 
   const updateThread = useCallback(async (id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }) => {
     const res = await studioFetch({ action: "update_thread", clientId, conversationId: id, threadUpdate: patch });
