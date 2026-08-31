@@ -5,7 +5,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { buildJeremyOutbound } from "./jeremyContext.ts";
 import { askUtariPersona } from "../_shared/utariPersona.ts";
-import { resolvePersona } from "../_shared/personas.ts";
+import { resolvePersona, savePersonaConversation } from "../_shared/personas.ts";
 
 
 const corsHeaders = {
@@ -115,11 +115,12 @@ Deno.serve(async (req) => {
       }
 
       if (newConvId && newConvId !== existingConv) {
-        await supa.from("agent_mcp_conversations").upsert({
-          agent_id, client_id: client_id ?? null, persona_slug: persona.slug, conversation_id: newConvId, updated_at: new Date().toISOString(),
-        }, { onConflict: "agent_id,client_id,persona_slug" }).then(() => {}, () => {});
-
-        // Fallback: unique index uses COALESCE(client_id, 0-uuid) — do a manual reconcile if upsert on null fails
+        await savePersonaConversation(supa, {
+          agentId: agent_id,
+          clientId: client_id ?? null,
+          personaSlug: persona.slug,
+          conversationId: newConvId,
+        }).catch(() => {});
       }
 
       if (client_id) {

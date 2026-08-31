@@ -2,7 +2,7 @@
 // generation, server-side persistence, and Manus-style canvas events.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { askUtariPersona } from "../_shared/utariPersona.ts";
-import { resolvePersona } from "../_shared/personas.ts";
+import { resolvePersona, savePersonaConversation } from "../_shared/personas.ts";
 
 
 const corsHeaders = {
@@ -4473,13 +4473,12 @@ Deno.serve(async (req) => {
             });
             finalAssistantText = r.reply;
             if (jeremyAgent?.id && r.conversation_id && r.conversation_id !== personaConvId) {
-              await supa.from("agent_mcp_conversations").upsert({
-                agent_id: jeremyAgent.id,
-                client_id: clientId ?? null,
-                persona_slug: persona.slug,
-                conversation_id: r.conversation_id,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: "agent_id,client_id,persona_slug" }).then(() => {}, () => {});
+              await savePersonaConversation(supa, {
+                agentId: jeremyAgent.id,
+                clientId: clientId ?? null,
+                personaSlug: persona.slug,
+                conversationId: r.conversation_id,
+              }).catch(() => {});
             }
             finalToolEvents.push({ name: "utari_persona", args: { persona: persona.slug, conversation_id: r.conversation_id }, result: { polls: r.polls, ok: true } });
             send({ type: "text", delta: finalAssistantText });
