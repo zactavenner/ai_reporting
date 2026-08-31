@@ -3,9 +3,11 @@
 // server, then poll get_response until the persona's reply lands. The persona
 // keeps running server-side even if a single HTTP hop times out, so we never
 // block on one long request — we hand off to run_id polling.
+//
+// The endpoint itself is NOT hardcoded here: callers resolve it from the
+// `agency_personas` registry via `_shared/personas.ts` (`resolvePersona`) so
+// personas can be added / switched / rotated from Settings → Personas.
 
-export const UTARI_PERSONA_MCP_URL =
-  "https://persona-mcp.utari.ai/mcp/?k=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ1dGFyaS1wZXJzb25hLW1jcCIsImlhdCI6MTc4ODE5NTkzNSwiZXhwIjoxNzk1OTcxOTM1LCJqdGkiOiI2Yjk0YTU2YS01ZTYyLTQxOGQtYjQ2ZC0xODcyYmI2ZGUzYWYiLCJpbnN0YW5jZV9pZCI6IjI4NThhYWM1LTJiYTYtNDEzOS1iM2M3LWI2MzZlMjk1MDcwMSIsInN1YmRvbWFpbiI6ImplcmVteSIsImNvbW11bml0eV9tZW1iZXJfaWQiOiJmZmIwY2JlNC00ZWY2LTQ3ZjMtYjg1Zi1lY2ViZTM3Zjg3NDMiLCJhdXRoX3VzZXJfaWQiOiI4NTgyYmNiYi0yNDRjLTRkMjctYjJhYy0xMGI3OWNiZTg0OGMifQ.dw2zNCBJkyfYbqP5rbrVuifAd98ZlemAx_AJ-nLlplc";
 
 export type PersonaReply = {
   reply: string;
