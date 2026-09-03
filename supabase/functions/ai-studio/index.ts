@@ -1718,7 +1718,42 @@ async function generateSeedanceVideo(opts: {
     aspect_ratio: opts.aspectRatio,
     duration: effectiveDuration,
   };
-  if (isSeedance) {
+  if (isWan) {
+    // Alibaba Wan 3.0 — OpenRouter /api/v1/videos contract:
+    //   { model: "alibaba/wan-3.0", prompt (optional when frame_images set),
+    //     duration 2–30, resolution "480p"|"720p"|"1080p",
+    //     aspect_ratio "16:9"|"4:3"|"1:1"|"3:4"|"9:16",
+    //     frame_images: [{ type:"image_url", image_url:{url}, frame_type:"first_frame" }],
+    //     input_references: [{ type:"image_url", image_url:{url} }, ...],
+    //     generate_audio, seed }
+    const allowedWanAspects = new Set(["16:9", "4:3", "1:1", "3:4", "9:16"]);
+    const requestedWanAspect = opts.aspectRatio || "9:16";
+    body.aspect_ratio = allowedWanAspects.has(requestedWanAspect) ? requestedWanAspect : "9:16";
+    body.duration = effectiveDuration;
+    body.resolution = effectiveResolution; // lowercase "480p" | "720p" | "1080p"
+    (body as any).generate_audio = opts.generateAudio === false ? false : true;
+    delete (body as any).size;
+    delete (body as any).seconds;
+    delete (body as any).first_frame;
+    delete (body as any).reference_images;
+    delete (body as any).image_url;
+
+    // Wan 3.0 only recognises a first frame; a last frame becomes a reference.
+    const wanRefs: string[] = [];
+    if (providerImageUrl) {
+      body.frame_images = [{ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" }];
+    }
+    for (const u of providerIngredientUrls) {
+      if (u && u !== providerImageUrl && !wanRefs.includes(u)) wanRefs.push(u);
+    }
+    if (providerLastFrameUrl && providerLastFrameUrl !== providerImageUrl && !wanRefs.includes(providerLastFrameUrl)) {
+      wanRefs.push(providerLastFrameUrl);
+    }
+    if (wanRefs.length) {
+      body.input_references = wanRefs.slice(0, 7).map((u) => ({ type: "image_url", image_url: { url: u } }));
+    }
+  } else if (isSeedance) {
+
     // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
     body.resolution = wireResolution;
     // Default generate_audio = true per spec; honor opts.generateAudio when caller sets it explicitly to false.
