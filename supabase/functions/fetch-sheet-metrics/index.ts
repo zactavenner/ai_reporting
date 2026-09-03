@@ -50,11 +50,20 @@ const parsedCache = new Map<string, { at: number; payload: any }>();
 const metaCache = new Map<string, { at: number; title: string }>();
 const inflight = new Map<string, Promise<any>>();
 
-async function fetchWithRetry(url: string, init: RequestInit, attempts = 4): Promise<Response> {
+// Hard wall-clock budget for upstream work. The platform kills the request at
+// 150s with IDLE_TIMEOUT, so we stop fetching tabs at 100s and return whatever
+// we already parsed (or the stale cache) instead of hanging.
+const UPSTREAM_BUDGET_MS = 100_000;
+const PER_FETCH_TIMEOUT_MS = 20_000;
+
+async function fetchWithRetry(url: string, init: RequestInit, attempts = 4, deadline?: number): Promise<Response> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
+    if (deadline && Date.now() > deadline) {
+      throw new Error('upstream time budget exceeded');
+    }
     try {
-      const res = await fetch(url, init);
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(PER_FETCH_TIMEOUT_MS) });
       if (res.status !== 429 && res.status < 500) return res;
       // Retry on 429 / 5xx
       const body = await res.text();
@@ -73,6 +82,7 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 4): Pro
   }
   throw lastErr instanceof Error ? lastErr : new Error('fetchWithRetry exhausted');
 }
+
 
 interface DailyMetric {
   date: string;
