@@ -558,6 +558,32 @@ export async function runGuestInvitePolling(args: {
       .update({ booking_calendars: targets as any })
       .eq('client_id', config.clientId);
 
+    // Close the ingest gap: a client we actively invite the notetaker to must
+    // also be allowed to INGEST the resulting meeting, otherwise every hydrated
+    // webhook is rejected as `not_configured` and the transcript is lost.
+    // Location id is server-derived from the client's own CRM mapping (never
+    // caller-supplied), and coverage is the whole mapped location — the same
+    // rule the calendar gate applies for `all_mapped_calendars`, so no single
+    // primary calendar has to be picked.
+    if (!settings?.enabled) {
+      const { error: ingestErr } = await supabase
+        .from('client_meetgeek_settings')
+        .upsert({
+          client_id: config.clientId,
+          enabled: true,
+          ghl_location_id: client.ghl_location_id,
+          ghl_calendar_id: null,
+          bot_join_policy: 'all_video_on_calendar',
+          ingest_mode: 'all_mapped_calendars',
+          mapping_valid: true,
+          mapping_error: null,
+        }, { onConflict: 'client_id' });
+      if (ingestErr) {
+        result.errors.push(`ingest config: ${String(ingestErr.message).slice(0, 160)}`);
+      }
+    }
+
+
     const cache = newAttributionCache();
     let appointments: PolledAppointment[] = [];
     for (const cal of targets) {

@@ -1,4 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveMeetgeekApiKey, meetgeekRegionEnv } from '../_shared/meetgeekApiKey.ts';
+import {
+  MEETGEEK_REGION_ORDER,
+  normalizeMeetgeekRegion,
+  regionBaseUrl,
+} from '../_shared/meetgeekRegion.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -304,9 +310,36 @@ Deno.serve(async (req) => {
         }
       }
     } else if (integration === 'meetgeek') {
-      const key = Deno.env.get('MEETGEEK_API_KEY');
-      success = !!key;
-      message = key ? 'MeetGeek API key configured' : 'No MeetGeek API key';
+      // Real authenticated read, not a presence check: a stale key must fail here.
+      const key = await resolveMeetgeekApiKey(supabase);
+      if (!key) {
+        success = false;
+        message = 'No MeetGeek API key';
+      } else {
+        const pinned = normalizeMeetgeekRegion(meetgeekRegionEnv());
+        const regions = pinned ? [pinned] : MEETGEEK_REGION_ORDER;
+        let lastStatus: number | null = null;
+        for (const region of regions) {
+          try {
+            const res = await fetch(`${regionBaseUrl(region)}/v1/meetings?limit=1`, {
+              headers: { Authorization: `Bearer ${key}` },
+            });
+            lastStatus = res.status;
+            if (res.ok) {
+              success = true;
+              message = `MeetGeek connected (${region.toUpperCase()} region)`;
+              break;
+            }
+          } catch {
+            lastStatus = null;
+          }
+        }
+        if (!success) {
+          message = lastStatus === 401 || lastStatus === 403
+            ? 'MeetGeek rejected the API key (unauthorized)'
+            : `MeetGeek returned ${lastStatus ?? 'a network error'}`;
+        }
+      }
     } else if (integration === 'hubspot') {
       if (client_id) {
         const { data: client } = await supabase

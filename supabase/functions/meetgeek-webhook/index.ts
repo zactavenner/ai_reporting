@@ -39,6 +39,7 @@ import {
   type MeetgeekProbeResult,
   type MeetgeekRegion,
 } from '../_shared/meetgeekRegion.ts';
+import { resolveMeetgeekApiKey, meetgeekRegionEnv } from '../_shared/meetgeekApiKey.ts';
 import { replayHydrationFailures } from '../_shared/meetgeekReplay.ts';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import { attributeMeetingRecord, attributeRecentMeetings } from '../_shared/meetingAttribution.ts';
@@ -235,14 +236,11 @@ async function resolveMeetgeekApi(supabase: any, clientId: string): Promise<Meet
  * shape: either MEETGEEK_REGION pins it or it is probed.
  */
 async function resolveAgencyMeetgeekApi(supabase: any): Promise<MeetgeekCredential | null> {
-  const { data: agency } = await supabase
-    .from('agency_settings')
-    .select('meetgeek_api_key')
-    .limit(1)
-    .maybeSingle();
-  const apiKey = agency?.meetgeek_api_key || Deno.env.get('MEETGEEK_API_KEY') || '';
+  // `agency_settings` is publicly readable, so the provider key is NEVER read
+  // from there. Env secret first, then the service-role-only secret store.
+  const apiKey = await resolveMeetgeekApiKey(supabase);
   if (!apiKey) return null;
-  return { apiKey, region: normalizeMeetgeekRegion(Deno.env.get('MEETGEEK_REGION')) };
+  return { apiKey, region: normalizeMeetgeekRegion(meetgeekRegionEnv()) };
 }
 
 
