@@ -442,6 +442,7 @@ Deno.serve(async (req) => {
       let pending = inflight.get(cacheKey);
       if (!pending) {
         pending = (async () => {
+          const deadline = Date.now() + UPSTREAM_BUDGET_MS;
           // 1. Resolve gid -> sheet title and collect ALL other data tabs.
           // We scan every tab in the spreadsheet (minus a denylist of obvious
           // rollup/instructional tabs) so the executive dashboard reflects 100%
@@ -458,7 +459,9 @@ Deno.serve(async (req) => {
           } else {
             const metaRes = await fetchWithRetry(
               `${GATEWAY_URL}/spreadsheets/${sheet_id}?fields=sheets(properties(sheetId,title))`,
-              { headers }
+              { headers },
+              4,
+              deadline,
             );
             const metaText = await metaRes.text();
             if (!metaRes.ok) throw new Error(`Sheet metadata fetch failed [${metaRes.status}]: ${metaText}`);
@@ -510,12 +513,21 @@ Deno.serve(async (req) => {
           const fetched: { title: string; rows: any[][] }[] = [];
           const CHUNK = 8;
           for (let i = 0; i < allTitles.length; i += CHUNK) {
+            if (Date.now() > deadline) {
+              // Out of time: keep what we have rather than letting the platform
+              // kill the request with IDLE_TIMEOUT and blank the dashboard.
+              for (const title of allTitles.slice(i)) tabsSkipped.push({ title, reason: 'time budget' });
+              console.warn(`[fetch-sheet-metrics] time budget reached, skipped ${allTitles.length - i} tab(s)`);
+              break;
+            }
             const batch = allTitles.slice(i, i + CHUNK);
             const results = await Promise.all(batch.map(async (title) => {
               try {
                 const vr = await fetchWithRetry(
                   `${GATEWAY_URL}/spreadsheets/${sheet_id}/values/${title}`,
-                  { headers }
+                  { headers },
+                  4,
+                  deadline,
                 );
                 const vt = await vr.text();
                 if (!vr.ok) {
