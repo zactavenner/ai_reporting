@@ -2948,7 +2948,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
                         <input
                           type="range"
-                          min={4}
+                          min={videoModel === WAN_VIDEO_MODEL ? 2 : 4}
                           max={30}
                           step={1}
                           value={videoTotalDuration}
