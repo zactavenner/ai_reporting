@@ -1340,8 +1340,13 @@ async function generateSeedanceVideo(opts: {
   const isHappyHorse = model.startsWith("alibaba/happyhorse");
   const isGrok = model.startsWith("x-ai/grok");
   const isHailuo = model.startsWith("minimax/hailuo");
-  const modelLabel = isHappyHorse
+  // Alibaba Wan 3.0 (OpenRouter): 2–30s, 480p/720p/1080p, first_frame + input_references.
+  const isWan = model === "alibaba/wan-3.0";
+  const modelLabel = isWan
+    ? "Wan 3.0"
+    : isHappyHorse
     ? "HappyHorse 1.1"
+
     : isGrok
       ? (model === "x-ai/grok-imagine-video-1.5" ? "Grok Imagine 1.5" : "Grok Imagine")
       : isHailuo
