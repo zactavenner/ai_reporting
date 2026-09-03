@@ -2922,7 +2922,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   })}
                 </div>
                 )}
-                {selectedAgentMode === "video" && (() => {
+                {selectedAgentMode === "video" && videoIntent === "produce" && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
                   const supportedSet = new Set<VideoRes>();
                   for (const id of videoModels) {
@@ -2956,7 +2956,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   );
                 })()}
-                {selectedAgentMode === "video" && (
+                {selectedAgentMode === "video" && videoIntent === "produce" && (
                   (() => {
                     const perClip = VIDEO_MODEL_MAX_SECONDS[videoModel] ?? 15;
                     const clips = Math.max(1, Math.ceil(videoTotalDuration / perClip));
@@ -2990,7 +2990,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     );
                   })()
                 )}
-                {selectedAgentMode === "video" && (
+                {selectedAgentMode === "video" && videoIntent === "produce" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Pace:</span>
                     {SPEECH_PACES.map((p) => {
