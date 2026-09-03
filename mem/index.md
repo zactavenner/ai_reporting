@@ -15,3 +15,4 @@
 - [Shadow Invite SMTP](mem://integrations/email/shadow-invite-smtp) — Gmail SMTP 465 implicit TLS; port 25 blocked; buffered SMTP reader required.
 - [Meeting Attendance](mem://features/meetings/attendance-tracking) — GHL-owned show/no-show on invite jobs + AI Meetings date filter.
 - [Jeremy AI Persona Endpoint](mem://features/agents/jeremy-ai-persona-endpoint) — Persona endpoints live in the `agency_personas` registry (Settings → Personas); Jeremy routes only through a resolved persona MCP with send+poll.
+- [Wan 3.0 Video Model](mem://ai-studio/wan-3-video-model) — Wan 3.0 renderer + Video Ads chat-script vs produce-video mode.
