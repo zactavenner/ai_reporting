@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
+import { dashboardAuthHeaders, normalizeDashboardError } from '@/lib/dashboardAuthHeaders';
 import { invokeMeetgeek } from '@/lib/meetgeekInvoke';
 
 import { toast } from 'sonner';
@@ -63,16 +63,7 @@ async function invokeAdmin<T = any>(body: Record<string, unknown>): Promise<T> {
     body,
     headers: dashboardAuthHeaders(),
   });
-  if (error) {
-    let message = error.message;
-    try {
-      const payload = await (error as any).context?.json?.();
-      if (payload?.error) message = String(payload.error);
-    } catch {
-      /* keep original */
-    }
-    throw new Error(message);
-  }
+  if (error) throw await normalizeDashboardError(error);
   if ((data as any)?.error) throw new Error(String((data as any).error));
   return data as T;
 }
