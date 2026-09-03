@@ -1239,13 +1239,26 @@ async function generateSeedanceVideo(opts: {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // Approved video models: MiniMax H3 (720p / native 2K) and Seedance 2.0 (720p only).
+  // Approved video models: MiniMax H3 (720p / native 2K), Seedance 2.0 (720p),
+  // Seedance 2.5 (480p/720p, 4–30s) and Alibaba Wan 3.0 (480p/720p/1080p, 2–30s).
   // Grok, HappyHorse, Kling and Veo are retired everywhere in AI Studio; any other
   // requested id is coerced to H3 instead of failing the render.
-  const ALLOWED = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"];
+  const ALLOWED = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
   const ALIASES: Record<string, string> = {
+    "wan": "alibaba/wan-3.0",
+    "wan3": "alibaba/wan-3.0",
+    "wan-3": "alibaba/wan-3.0",
+    "wan 3": "alibaba/wan-3.0",
+    "wan-3.0": "alibaba/wan-3.0",
+    "wan 3.0": "alibaba/wan-3.0",
+    "wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan3": "alibaba/wan-3.0",
+    "alibaba/wan-3": "alibaba/wan-3.0",
+    "alibaba/wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan-3.0-pro": "alibaba/wan-3.0",
+
     "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
     "bytedance/seedance-2.5-pro": "bytedance/seedance-2.5",
     "seedance-2.5": "bytedance/seedance-2.5",
