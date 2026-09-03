@@ -1,4 +1,4 @@
-# MeetGeek key activation + full invite coverage
+# MeetGeek key activation + ghost-invite coverage for every URL appointment
 
 ## What's true right now (verified)
 
@@ -30,6 +30,13 @@
 5. **Flush pending invites and confirm**
    - Run the guest poller (which also reconciles the coverage ledger) so the 54 future-dated pending jobs get their shadow invites sent to the notetaker inbox.
    - Re-read the coverage ledger and invite-job statuses, then confirm the AI Meetings tab shows hydrated summaries/quality scores.
+
+6. **Invite fidelity: real, joinable, client-mapped**
+   - Keep the existing URL gate: the poller already extracts a join URL from the CRM appointment (`address`, `meetingUrl`, calendar conferencing) and skips phone/in-person bookings with reason `no join URL`. Every appointment that has a URL gets a ghost invite; ones without stay skipped.
+   - Confirm each generated invite carries: the real appointment title, `LOCATION` + a clickable URL in the description (so MeetGeek's bot can join), correct start/end and timezone, `METHOD:REQUEST` with the notetaker as `ATTENDEE;RSVP=TRUE`, and a stable UID derived from the GHL appointment id so reschedules patch instead of duplicating.
+   - Confirm the client/contact mapping is present on every invite job row (`client_id`, contact id/name/email/phone, appointment id) so the transcript resolves back to the right client and lead with no cross-client leakage.
+   - Set the sender to your own mailbox so the invite reads as coming from you rather than the generic sender. Today `SHADOW_INVITE_FROM` drives the `From:` on the SMTP path; I'll point it at the address you confirm (and keep the display name matching it).
+   - Verify end to end with one upcoming real appointment: invite lands in `theainotetaker@gmail.com`, Google auto-creates the event with the join URL, MeetGeek joins, and the transcript lands on the correct client + contact.
 
 ## Security note
 
