@@ -1816,27 +1816,35 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               ].filter(Boolean).join("\n")
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          const videoAllowed = selectedAgentMode === "video";
+          const videoAllowed = selectedAgentMode === "video" && videoIntent === "produce";
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
           // model / resolution / frames the user pre-selected in the composer.
           const lockLines: string[] = [];
-          if (!videoAllowed) {
+          if (!videoAllowed && selectedAgentMode === "video") {
+            lockLines.push(
+              "💬 SCRIPT MODE (Chat) — the user has NOT switched on Produce. Never call any video generation tool in this turn. Work the creative with them instead: write/refine the script beat by beat, propose hooks, set the visual direction, note the shot list, and end by telling them to hit “Produce video” when the script is locked.",
+            );
+          } else if (!videoAllowed) {
             lockLines.push(
               "🚫 VIDEO DISABLED for this agent. Never call any video generation tool here — video production happens only in the Video Ads agent. If the user asks for a video, tell them to switch to the Video Ads agent.",
             );
           }
           if (videoAllowed && videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
-            const isSeedanceLock = videoModel === SEEDANCE_VIDEO_MODEL;
-            const lockedModel = isSeedanceLock ? SEEDANCE_VIDEO_MODEL : ONLY_VIDEO_MODEL;
-            // Respect the composer's resolution pick for H3 (720p or 2K);
-            // Seedance stays clamped to 720p.
-            const lockedRes = isSeedanceLock ? "720p" : (videoResolution === "2k" ? "2k" : "720p");
+            const lockedModel = videoModel;
+            const modelMeta = VIDEO_MODELS.find((m) => m.value === lockedModel);
+            // Respect the composer's resolution pick, clamped to what the
+            // selected renderer actually supports.
+            const supportedResList = VIDEO_MODEL_RES[lockedModel] || ["720p"];
+            const lockedRes = supportedResList.includes(videoResolution)
+              ? videoResolution
+              : supportedResList[supportedResList.length - 1];
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${lockedModel}" (only MiniMax H3 "${ONLY_VIDEO_MODEL}" and Seedance "${SEEDANCE_VIDEO_MODEL}" are approved — Grok, HappyHorse, Kling and Veo are retired and must never be requested), resolution="${lockedRes}" (H3 supports 720p or native 2K; Seedance is 720p only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${lockedModel}"${modelMeta ? ` (${modelMeta.label})` : ""} — only the approved renderers ${VIDEO_MODELS.map((m) => `"${m.value}"`).join(", ")} may be used; Grok, HappyHorse, Kling and Veo are retired and must never be requested. resolution="${lockedRes}" (supported: ${supportedResList.join(", ")}), duration=${videoTotalDuration}s, format="${lockedAspect}", audio=on. Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
+
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
