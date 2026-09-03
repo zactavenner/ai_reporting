@@ -1365,10 +1365,19 @@ async function generateSeedanceVideo(opts: {
   // or return a lower-res output when the user expects the 15s/1080p profile.
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
-  if (isHappyHorse) {
+  if (isWan) {
+    // Wan 3.0 supports 480p / 720p / 1080p (no 2K/4K).
+    effectiveResolution = effectiveResolution === "480p"
+      ? "480p"
+      : effectiveResolution === "720p"
+        ? "720p"
+        : "1080p";
+  }
+  else if (isHappyHorse) {
     // HappyHorse 1.1 supports 720p and 1080p only. Default to 720p per spec.
     effectiveResolution = effectiveResolution === "1080p" ? "1080p" : "720p";
   }
+
   else if (isGrok) {
     // OpenRouter /v1/videos: grok-imagine-video-1.5 supports 480p/720p/1080p,
     // the base grok-imagine-video caps at 720p.
