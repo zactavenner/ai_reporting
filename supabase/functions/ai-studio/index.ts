@@ -1239,13 +1239,26 @@ async function generateSeedanceVideo(opts: {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
   const supa = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // Approved video models: MiniMax H3 (720p / native 2K) and Seedance 2.0 (720p only).
+  // Approved video models: MiniMax H3 (720p / native 2K), Seedance 2.0 (720p),
+  // Seedance 2.5 (480p/720p, 4–30s) and Alibaba Wan 3.0 (480p/720p/1080p, 2–30s).
   // Grok, HappyHorse, Kling and Veo are retired everywhere in AI Studio; any other
   // requested id is coerced to H3 instead of failing the render.
-  const ALLOWED = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"];
+  const ALLOWED = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"];
   // Normalize common LLM hallucinations / legacy aliases to real OpenRouter ids.
   const rawModel = (opts.model || "").trim();
   const ALIASES: Record<string, string> = {
+    "wan": "alibaba/wan-3.0",
+    "wan3": "alibaba/wan-3.0",
+    "wan-3": "alibaba/wan-3.0",
+    "wan 3": "alibaba/wan-3.0",
+    "wan-3.0": "alibaba/wan-3.0",
+    "wan 3.0": "alibaba/wan-3.0",
+    "wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan3": "alibaba/wan-3.0",
+    "alibaba/wan-3": "alibaba/wan-3.0",
+    "alibaba/wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan-3.0-pro": "alibaba/wan-3.0",
+
     "bytedance/seedance-2.0-pro": "bytedance/seedance-2.0",
     "bytedance/seedance-2.5-pro": "bytedance/seedance-2.5",
     "seedance-2.5": "bytedance/seedance-2.5",
@@ -1327,8 +1340,13 @@ async function generateSeedanceVideo(opts: {
   const isHappyHorse = model.startsWith("alibaba/happyhorse");
   const isGrok = model.startsWith("x-ai/grok");
   const isHailuo = model.startsWith("minimax/hailuo");
-  const modelLabel = isHappyHorse
+  // Alibaba Wan 3.0 (OpenRouter): 2–30s, 480p/720p/1080p, first_frame + input_references.
+  const isWan = model === "alibaba/wan-3.0";
+  const modelLabel = isWan
+    ? "Wan 3.0"
+    : isHappyHorse
     ? "HappyHorse 1.1"
+
     : isGrok
       ? (model === "x-ai/grok-imagine-video-1.5" ? "Grok Imagine 1.5" : "Grok Imagine")
       : isHailuo
@@ -1347,10 +1365,19 @@ async function generateSeedanceVideo(opts: {
   // or return a lower-res output when the user expects the 15s/1080p profile.
   const isSeedancePro = model === "bytedance/seedance-2.0";
   let effectiveResolution = (opts.resolution || "1080p").toLowerCase();
-  if (isHappyHorse) {
+  if (isWan) {
+    // Wan 3.0 supports 480p / 720p / 1080p (no 2K/4K).
+    effectiveResolution = effectiveResolution === "480p"
+      ? "480p"
+      : effectiveResolution === "720p"
+        ? "720p"
+        : "1080p";
+  }
+  else if (isHappyHorse) {
     // HappyHorse 1.1 supports 720p and 1080p only. Default to 720p per spec.
     effectiveResolution = effectiveResolution === "1080p" ? "1080p" : "720p";
   }
+
   else if (isGrok) {
     // OpenRouter /v1/videos: grok-imagine-video-1.5 supports 480p/720p/1080p,
     // the base grok-imagine-video caps at 720p.
@@ -1383,8 +1410,13 @@ async function generateSeedanceVideo(opts: {
       ? "2K"
       : effectiveResolution;
   const veoMax = 8;
-  const effectiveDuration = isHappyHorse
+  const effectiveDuration = isWan
+    // Wan 3.0 accepts 2–30s in a single clip.
+    ? Math.max(2, Math.min(30, Math.round(opts.duration || 10)))
+    : isHappyHorse
     ? 15
+
+
     : isSeedance25
       // Seedance 2.5 accepts every integer duration from 4s to 30s.
       ? Math.max(4, Math.min(30, Math.round(opts.duration || 30)))
@@ -1686,7 +1718,42 @@ async function generateSeedanceVideo(opts: {
     aspect_ratio: opts.aspectRatio,
     duration: effectiveDuration,
   };
-  if (isSeedance) {
+  if (isWan) {
+    // Alibaba Wan 3.0 — OpenRouter /api/v1/videos contract:
+    //   { model: "alibaba/wan-3.0", prompt (optional when frame_images set),
+    //     duration 2–30, resolution "480p"|"720p"|"1080p",
+    //     aspect_ratio "16:9"|"4:3"|"1:1"|"3:4"|"9:16",
+    //     frame_images: [{ type:"image_url", image_url:{url}, frame_type:"first_frame" }],
+    //     input_references: [{ type:"image_url", image_url:{url} }, ...],
+    //     generate_audio, seed }
+    const allowedWanAspects = new Set(["16:9", "4:3", "1:1", "3:4", "9:16"]);
+    const requestedWanAspect = opts.aspectRatio || "9:16";
+    body.aspect_ratio = allowedWanAspects.has(requestedWanAspect) ? requestedWanAspect : "9:16";
+    body.duration = effectiveDuration;
+    body.resolution = effectiveResolution; // lowercase "480p" | "720p" | "1080p"
+    (body as any).generate_audio = opts.generateAudio === false ? false : true;
+    delete (body as any).size;
+    delete (body as any).seconds;
+    delete (body as any).first_frame;
+    delete (body as any).reference_images;
+    delete (body as any).image_url;
+
+    // Wan 3.0 only recognises a first frame; a last frame becomes a reference.
+    const wanRefs: string[] = [];
+    if (providerImageUrl) {
+      body.frame_images = [{ type: "image_url", image_url: { url: providerImageUrl }, frame_type: "first_frame" }];
+    }
+    for (const u of providerIngredientUrls) {
+      if (u && u !== providerImageUrl && !wanRefs.includes(u)) wanRefs.push(u);
+    }
+    if (providerLastFrameUrl && providerLastFrameUrl !== providerImageUrl && !wanRefs.includes(providerLastFrameUrl)) {
+      wanRefs.push(providerLastFrameUrl);
+    }
+    if (wanRefs.length) {
+      body.input_references = wanRefs.slice(0, 7).map((u) => ({ type: "image_url", image_url: { url: u } }));
+    }
+  } else if (isSeedance) {
+
     // Seedance-specific: resolution + first/last frame keyframing + subject reference image.
     body.resolution = wireResolution;
     // Default generate_audio = true per spec; honor opts.generateAudio when caller sets it explicitly to false.
@@ -2743,7 +2810,7 @@ const tools = [
     type: "function",
     function: {
       name: "generate_seedance_video",
-      description: "Generate a single high-quality video clip with MiniMax H3 (minimax/hailuo-3), Seedance 2.0 (bytedance/seedance-2.0) or Seedance 2.5 (bytedance/seedance-2.5) — the only approved video models. Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration: H3 and Seedance 2.0 cap at 15s per clip; Seedance 2.5 renders 4–30s in ONE clip (use it for 20s/30s ads instead of stitching two clips). Always pass the model, duration AND resolution locked in the composer: H3 supports '720p' or '2k'; Seedance 2.0 is '720p' only; Seedance 2.5 supports '480p' or '720p'.",
+      description: "Generate a single high-quality video clip with MiniMax H3 (minimax/hailuo-3), Seedance 2.0 (bytedance/seedance-2.0) or Seedance 2.5 (bytedance/seedance-2.5) — the only approved video models. Grok Imagine, HappyHorse, Kling and Veo are retired; never request them. Use this for STANDALONE one-shot videos: short product clips, hero loops, reels, single-cut ads, or animating an existing image. Three modes: (1) text-to-video — leave image_url empty; (2) image-to-video — pass image_url as the first frame (optionally last_frame_url for an endpoint); (3) identity-consistent video — pass ingredient_url with the subject/avatar reference. Duration: H3 and Seedance 2.0 cap at 15s per clip; Seedance 2.5 renders 4–30s in ONE clip and Wan 3.0 (alibaba/wan-3.0) renders 2–30s in ONE clip (use either for 20s/30s ads instead of stitching two clips). Always pass the model, duration AND resolution locked in the composer: H3 supports '720p' or '2k'; Seedance 2.0 is '720p' only; Seedance 2.5 supports '480p' or '720p'; Wan 3.0 supports '480p', '720p' or '1080p'.",
       parameters: {
         type: "object",
         properties: {
@@ -2754,7 +2821,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME. H3 supports first+last frame control for precise motion endpoints." },
           ingredient_url: { type: "string", description: "Optional URL of an INGREDIENT / PRODUCT / SUBJECT / AVATAR reference image. H3 preserves this identity across the clip. Pass whenever the user pinned an ingredient in the video frame slots." },
-          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"], description: "The renderer locked in the composer. All other video models are retired." },
+          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"], description: "The renderer locked in the composer. All other video models are retired." },
           force_model: { type: "boolean", description: "Deprecated. Leave unset." },
         },
         required: ["prompt"],
@@ -2846,7 +2913,7 @@ const tools = [
               required: ["voiceover"],
             },
           },
-          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"], description: "The renderer locked in the composer." },
+          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"], description: "The renderer locked in the composer." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
           resolution: { type: "string", enum: ["480p", "720p", "2k"], description: "Use the composer's locked resolution. H3: 720p or 2K. Seedance 2.0: 720p only. Seedance 2.5: 480p or 720p." },
         },
@@ -2924,16 +2991,17 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 };
 
 // Resolutions the approved renderers offer (H3: 720p/2K, Seedance 2.5: 480p/720p).
-type VideoResChoice = "480p" | "720p" | "2k";
+type VideoResChoice = "480p" | "720p" | "1080p" | "2k";
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
   "bytedance/seedance-2.0": { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, 720p only)" },
   "bytedance/seedance-2.5": { maxDuration: 30, label: "Seedance 2.5 (4–30s in ONE clip, 480p or 720p, native audio)" },
+  "alibaba/wan-3.0": { maxDuration: 30, label: "Wan 3.0 (2–30s in ONE clip, 480p/720p/1080p, native audio)" },
 };
 
 // MiniMax H3 is the only video model and it handles synthetic avatars via
 // reference identity, so there is nothing left to reroute to.
-const AVATAR_SAFE_MODELS = new Set<string>(["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"]);
+const AVATAR_SAFE_MODELS = new Set<string>(["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"]);
 const AVATAR_FALLBACK_MODEL = "minimax/hailuo-3";
 
 export function resolveModelForAvatar(
@@ -3123,10 +3191,10 @@ const SYSTEM = (ctx: { docUrl?: string; docId?: string | null; sheetUrl?: string
         ? `VIDEO MODEL PREFERENCE: The user selected video model "${ctx.videoModel}". ALWAYS pass model: "${ctx.videoModel}" to generate_seedance_video for any single-clip video request. This routes through OpenRouter (Seedance, Kling, or Veo depending on the chosen model id).`
         : null),
   ctx.videoResolution
-    ? `VIDEO RESOLUTION HARD-LOCK: resolution="${ctx.videoResolution}" for the selected renderer${ctx.videoModel ? ` ("${ctx.videoModel}")` : ""}. Pass resolution: "${ctx.videoResolution}" on EVERY generate_seedance_video tool_call. MiniMax H3 supports "720p" and "2k"; Seedance 2.0 (bytedance/seedance-2.0) supports "720p" only; Seedance 2.5 (bytedance/seedance-2.5) supports "480p" and "720p". Never upgrade or downgrade this value, and never switch the model to change the resolution.`
+    ? `VIDEO RESOLUTION HARD-LOCK: resolution="${ctx.videoResolution}" for the selected renderer${ctx.videoModel ? ` ("${ctx.videoModel}")` : ""}. Pass resolution: "${ctx.videoResolution}" on EVERY generate_seedance_video tool_call. MiniMax H3 supports "720p" and "2k"; Seedance 2.0 (bytedance/seedance-2.0) supports "720p" only; Seedance 2.5 (bytedance/seedance-2.5) supports "480p" and "720p"; Wan 3.0 (alibaba/wan-3.0) supports "480p", "720p" and "1080p". Never upgrade or downgrade this value, and never switch the model to change the resolution.`
     : null,
   ctx.videoDuration
-    ? `VIDEO DURATION HARD-LOCK: the user set total length = ${ctx.videoDuration}s in the composer.${ctx.videoModel === "bytedance/seedance-2.5" ? ` Seedance 2.5 renders this in ONE clip — pass duration: ${ctx.videoDuration} on a SINGLE generate_seedance_video call. Never split it into multiple clips.` : ` Split it across clips that respect the renderer's per-clip cap and make the clip durations sum to ${ctx.videoDuration}s.`}`
+    ? `VIDEO DURATION HARD-LOCK: the user set total length = ${ctx.videoDuration}s in the composer.${ctx.videoModel === "bytedance/seedance-2.5" || ctx.videoModel === "alibaba/wan-3.0" ? ` This renderer renders this in ONE clip — pass duration: ${ctx.videoDuration} on a SINGLE generate_seedance_video call. Never split it into multiple clips.` : ` Split it across clips that respect the renderer's per-clip cap and make the clip durations sum to ${ctx.videoDuration}s.`}`
     : null,
   ctx.speechPace
     ? `SPEECH PACE HARD-LOCK: "${ctx.speechPace}". ${
@@ -3340,7 +3408,7 @@ Deno.serve(async (req) => {
 
   // Approved video models: MiniMax H3 (720p / 2K, ≤15s), Seedance 2.0 (720p, ≤15s)
   // and Seedance 2.5 (480p / 720p, 4–30s — the long-form pick for 30s ads).
-  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"];
+  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"];
   const VIDEO_MODEL_ALIASES: Record<string, string> = {
     "h3": "minimax/hailuo-3",
     "minimax/h3": "minimax/hailuo-3",
@@ -3360,6 +3428,17 @@ Deno.serve(async (req) => {
     "seedance 2.5": "bytedance/seedance-2.5",
     "seedance2.5": "bytedance/seedance-2.5",
     "bytedance/seedance-2.5-pro": "bytedance/seedance-2.5",
+    "wan": "alibaba/wan-3.0",
+    "wan3": "alibaba/wan-3.0",
+    "wan-3": "alibaba/wan-3.0",
+    "wan 3": "alibaba/wan-3.0",
+    "wan-3.0": "alibaba/wan-3.0",
+    "wan 3.0": "alibaba/wan-3.0",
+    "wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan3": "alibaba/wan-3.0",
+    "alibaba/wan-3": "alibaba/wan-3.0",
+    "alibaba/wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan-3.0-pro": "alibaba/wan-3.0",
   };
   const normalizeVideoModel = (m: unknown): string | null => {
     if (typeof m !== "string") return null;
@@ -3384,12 +3463,19 @@ Deno.serve(async (req) => {
     "minimax/hailuo-3": "2k",
     "bytedance/seedance-2.0": "720p",
     "bytedance/seedance-2.5": "720p",
+    "alibaba/wan-3.0": "1080p",
   };
   const RES_RANK: Record<string, number> = { "480p": 0, "720p": 1, "1080p": 2, "2k": 3, "4k": 4 };
   // Honour the resolution the user picked in the composer; only clamp it to the
   // selected renderer's ceiling (so Seedance never gets asked for 2K).
   const rawRes = String(rawVideoResolution || "").toLowerCase();
-  const requestedRes: VideoResChoice = rawRes === "480p" ? "480p" : rawRes === "720p" ? "720p" : "2k";
+  const requestedRes: VideoResChoice = rawRes === "480p"
+    ? "480p"
+    : rawRes === "720p"
+      ? "720p"
+      : rawRes === "1080p"
+        ? "1080p"
+        : "2k";
   function clampResForModel(model: string): VideoResChoice {
     const cap = MODEL_MAX_RES[model] || "2k";
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;

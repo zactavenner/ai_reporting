@@ -104,7 +104,9 @@ const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: nu
   { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p (fastest) or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
   { value: "bytedance/seedance-2.0",      label: "Seedance",        hint: "Seedance 2.0 — 720p only, up to 15s, text-to-video + first/last frame keyframing + reference images, native audio", maxSeconds: 15, pricePerSecond: 0.0938 },
   { value: "bytedance/seedance-2.5",      label: "Seedance 2.5",    hint: "Seedance 2.5 — long-form: 4–30s in ONE clip, 480p or 720p, first/last frame control, native audio. Best pick for full 20–30s ads (no clip stitching).", maxSeconds: 30, pricePerSecond: 0.2311 },
+  { value: "alibaba/wan-3.0",             label: "Wan 3.0",         hint: "Alibaba Wan 3.0 — 2–30s in ONE clip, 480p / 720p / 1080p, first frame + reference images, native audio. Cheapest long-form renderer.", maxSeconds: 30, pricePerSecond: 0.034 },
 ];
+export const WAN_VIDEO_MODEL = "alibaba/wan-3.0";
 export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
 export const SEEDANCE_VIDEO_MODEL = "bytedance/seedance-2.0";
 export const SEEDANCE_25_VIDEO_MODEL = "bytedance/seedance-2.5";
@@ -117,6 +119,8 @@ const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   "bytedance/seedance-2.0":      ["720p"],
   // Seedance 2.5 offers 480p (cheapest) and 720p per OpenRouter /videos/models.
   "bytedance/seedance-2.5":      ["480p", "720p"],
+  // Wan 3.0 on OpenRouter accepts 480p / 720p / 1080p.
+  "alibaba/wan-3.0":             ["480p", "720p", "1080p"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
@@ -126,12 +130,14 @@ const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
   // Seedance 2.5 bills video tokens (w × h × 24fps ÷ 1024 × $0.0000107/token),
   // which works out to a flat per-second rate at each resolution.
   "bytedance/seedance-2.5": { "480p": 0.1028, "720p": 0.2311 },
+  "alibaba/wan-3.0": { "480p": 0.017, "720p": 0.034, "1080p": 0.068 },
 };
 // Longest single clip each model supports — drives the duration slider ceiling.
 const VIDEO_MODEL_MAX_SECONDS: Record<string, number> = {
   "minimax/hailuo-3": 15,
   "bytedance/seedance-2.0": 15,
   "bytedance/seedance-2.5": 30,
+  "alibaba/wan-3.0": 30,
 };
 // Talk-speed presets. No video provider exposes a "speech rate" parameter, so the
 // pace is enforced as a words-per-minute directive on the script + render prompt.
@@ -1124,6 +1130,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     try { localStorage.setItem("ai-studio:speech-pace", speechPace); } catch {}
   }, [speechPace]);
+  // Video Ads agent has two intents: "chat" (script/strategy only — no renders,
+  // no spend) and "produce" (renders with the locked composer settings).
+  const [videoIntent, setVideoIntent] = useState<"chat" | "produce">(() => {
+    try {
+      const v = localStorage.getItem("ai-studio:video-intent");
+      return v === "produce" ? "produce" : "chat";
+    } catch { return "chat"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-intent", videoIntent); } catch {}
+  }, [videoIntent]);
+
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
@@ -1798,27 +1816,35 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               ].filter(Boolean).join("\n")
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          const videoAllowed = selectedAgentMode === "video";
+          const videoAllowed = selectedAgentMode === "video" && videoIntent === "produce";
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
           // model / resolution / frames the user pre-selected in the composer.
           const lockLines: string[] = [];
-          if (!videoAllowed) {
+          if (!videoAllowed && selectedAgentMode === "video") {
+            lockLines.push(
+              "💬 SCRIPT MODE (Chat) — the user has NOT switched on Produce. Never call any video generation tool in this turn. Work the creative with them instead: write/refine the script beat by beat, propose hooks, set the visual direction, note the shot list, and end by telling them to hit “Produce video” when the script is locked.",
+            );
+          } else if (!videoAllowed) {
             lockLines.push(
               "🚫 VIDEO DISABLED for this agent. Never call any video generation tool here — video production happens only in the Video Ads agent. If the user asks for a video, tell them to switch to the Video Ads agent.",
             );
           }
           if (videoAllowed && videoModel) {
             const lockedAspect = videoAspectForAdFormat(effectiveAdFormat);
-            const isSeedanceLock = videoModel === SEEDANCE_VIDEO_MODEL;
-            const lockedModel = isSeedanceLock ? SEEDANCE_VIDEO_MODEL : ONLY_VIDEO_MODEL;
-            // Respect the composer's resolution pick for H3 (720p or 2K);
-            // Seedance stays clamped to 720p.
-            const lockedRes = isSeedanceLock ? "720p" : (videoResolution === "2k" ? "2k" : "720p");
+            const lockedModel = videoModel;
+            const modelMeta = VIDEO_MODELS.find((m) => m.value === lockedModel);
+            // Respect the composer's resolution pick, clamped to what the
+            // selected renderer actually supports.
+            const supportedResList = VIDEO_MODEL_RES[lockedModel] || ["720p"];
+            const lockedRes = supportedResList.includes(videoResolution)
+              ? videoResolution
+              : supportedResList[supportedResList.length - 1];
             lockLines.push(
-              `🔒 VIDEO HARD-LOCK: model="${lockedModel}" (only MiniMax H3 "${ONLY_VIDEO_MODEL}" and Seedance "${SEEDANCE_VIDEO_MODEL}" are approved — Grok, HappyHorse, Kling and Veo are retired and must never be requested), resolution="${lockedRes}" (H3 supports 720p or native 2K; Seedance is 720p only), duration=15s, format="${lockedAspect}". Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
+              `🔒 VIDEO HARD-LOCK: model="${lockedModel}"${modelMeta ? ` (${modelMeta.label})` : ""} — only the approved renderers ${VIDEO_MODELS.map((m) => `"${m.value}"`).join(", ")} may be used; Grok, HappyHorse, Kling and Veo are retired and must never be requested. resolution="${lockedRes}" (supported: ${supportedResList.join(", ")}), duration=${videoTotalDuration}s, format="${lockedAspect}", audio=on. Pass model/resolution/duration/aspect_ratio="${lockedAspect}" EXACTLY to generate_seedance_video. Do NOT substitute models, resolutions, durations, or formats.`,
             );
+
             if (videoFrames?.firstFrameUrl) lockLines.push(`🔒 first_frame_url="${videoFrames.firstFrameUrl}"`);
             if (videoFrames?.lastFrameUrl) lockLines.push(`🔒 last_frame_url="${videoFrames.lastFrameUrl}"`);
             if (videoFrames?.ingredientUrl) lockLines.push(`🔒 ingredient_url="${videoFrames.ingredientUrl}"`);
@@ -1886,7 +1912,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
         // Video params travel ONLY from the Video Ads agent — other agents never render video.
-        ...(selectedAgentMode === "video" && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
+        ...(selectedAgentMode === "video" && videoIntent === "produce" && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
         avatarId: selectedAvatarId,
         adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
@@ -2840,8 +2866,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 )}
                 {selectedAgentMode === "video" && (
+                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Mode:</span>
+                  {([
+                    { value: "chat" as const, label: "Chat script", hint: "Talk through the script, hooks and shot list — no renders, no spend." },
+                    { value: "produce" as const, label: "Produce video", hint: "Render with the locked model, resolution, length, format and frames below." },
+                  ]).map((m) => {
+                    const active = videoIntent === m.value;
+                    return (
+                      <button
+                        key={m.value}
+                        type="button"
+                        onClick={() => setVideoIntent(m.value)}
+                        title={m.hint}
+                        className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                )}
+                {selectedAgentMode === "video" && videoIntent === "produce" && (
                 <div className="flex flex-wrap items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
+
                   {VIDEO_MODELS.map((m) => {
                     const active = videoModels.includes(m.value);
                     // Reflect resolution-based pricing (Seedance Pro 4K ≈ 2.5×, 720p ≈ 0.7×).
@@ -2873,7 +2922,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   })}
                 </div>
                 )}
-                {selectedAgentMode === "video" && (() => {
+                {selectedAgentMode === "video" && videoIntent === "produce" && (() => {
                   // Union of supported resolutions across selected models (Pro = 4K capable).
                   const supportedSet = new Set<VideoRes>();
                   for (const id of videoModels) {
@@ -2907,7 +2956,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     </div>
                   );
                 })()}
-                {selectedAgentMode === "video" && (
+                {selectedAgentMode === "video" && videoIntent === "produce" && (
                   (() => {
                     const perClip = VIDEO_MODEL_MAX_SECONDS[videoModel] ?? 15;
                     const clips = Math.max(1, Math.ceil(videoTotalDuration / perClip));
@@ -2922,7 +2971,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                         <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Length:</span>
                         <input
                           type="range"
-                          min={4}
+                          min={videoModel === WAN_VIDEO_MODEL ? 2 : 4}
                           max={30}
                           step={1}
                           value={videoTotalDuration}
@@ -2941,7 +2990,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     );
                   })()
                 )}
-                {selectedAgentMode === "video" && (
+                {selectedAgentMode === "video" && videoIntent === "produce" && (
                   <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
                     <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Pace:</span>
                     {SPEECH_PACES.map((p) => {
