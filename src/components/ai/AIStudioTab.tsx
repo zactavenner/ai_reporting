@@ -1130,6 +1130,18 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   useEffect(() => {
     try { localStorage.setItem("ai-studio:speech-pace", speechPace); } catch {}
   }, [speechPace]);
+  // Video Ads agent has two intents: "chat" (script/strategy only — no renders,
+  // no spend) and "produce" (renders with the locked composer settings).
+  const [videoIntent, setVideoIntent] = useState<"chat" | "produce">(() => {
+    try {
+      const v = localStorage.getItem("ai-studio:video-intent");
+      return v === "produce" ? "produce" : "chat";
+    } catch { return "chat"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-intent", videoIntent); } catch {}
+  }, [videoIntent]);
+
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
