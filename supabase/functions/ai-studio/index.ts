@@ -2991,7 +2991,7 @@ const HOOK_FRAMEWORK_RULES: Record<string, string> = {
 };
 
 // Resolutions the approved renderers offer (H3: 720p/2K, Seedance 2.5: 480p/720p).
-type VideoResChoice = "480p" | "720p" | "2k";
+type VideoResChoice = "480p" | "720p" | "1080p" | "2k";
 const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> = {
   "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
   "bytedance/seedance-2.0": { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, 720p only)" },
