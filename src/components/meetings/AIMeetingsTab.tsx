@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { dashboardAuthHeaders } from '@/lib/dashboardAuthHeaders';
+import { dashboardAuthHeaders, normalizeDashboardError } from '@/lib/dashboardAuthHeaders';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -183,7 +183,7 @@ export function AIMeetingsTab() {
         },
         headers: dashboardAuthHeaders(),
       });
-      if (error) throw error;
+      if (error) throw await normalizeDashboardError(error);
       if ((data as any)?.error) throw new Error(String((data as any).error));
       return data as Overview;
     },
@@ -205,7 +205,7 @@ export function AIMeetingsTab() {
         },
         headers: dashboardAuthHeaders(),
       });
-      if (err) throw err;
+      if (err) throw await normalizeDashboardError(err);
       if ((res as any)?.error) throw new Error(String((res as any).error));
       const totals = (res as any)?.totals || {};
       toast.success(`Attendance synced — ${totals.jobs_updated ?? 0} appointments updated`);
