@@ -424,11 +424,45 @@ function buildLifecycleDeps(supabase: any): LifecycleDeps {
           .limit(50);
         for (const row of data || []) candidateIds.add(row.client_id as string);
       }
+
+      // Second authority — our OWN ghost-invite ledger. The notetaker only ever
+      // attends a meeting because this system sent it an invite for a specific
+      // client appointment, so an invited job whose attendee email is on the
+      // meeting (or whose scheduled window contains it) identifies the tenant
+      // just as strictly as a lead match. Server-owned rows only; nothing here
+      // reads caller-supplied identity or meeting text.
+      if (!candidateIds.size) {
+        if (emails.length) {
+          const { data } = await supabase
+            .from('meetgeek_guest_invite_jobs')
+            .select('client_id')
+            .eq('status', 'invited')
+            .in('contact_email', emails)
+            .limit(50);
+          for (const row of data || []) if (row.client_id) candidateIds.add(row.client_id as string);
+        }
+        if (!candidateIds.size && meeting.startedAt) {
+          const anchor = new Date(meeting.startedAt).getTime();
+          if (Number.isFinite(anchor)) {
+            const windowMs = 30 * 60 * 1000;
+            const { data } = await supabase
+              .from('meetgeek_guest_invite_jobs')
+              .select('client_id')
+              .eq('status', 'invited')
+              .gte('scheduled_start', new Date(anchor - windowMs).toISOString())
+              .lte('scheduled_start', new Date(anchor + windowMs).toISOString())
+              .limit(50);
+            for (const row of data || []) if (row.client_id) candidateIds.add(row.client_id as string);
+          }
+        }
+      }
+
       const configs: MeetgeekClientConfig[] = [];
       for (const id of candidateIds) {
         const cfg = await loadMeetgeekConfig(supabase, id);
         if (cfg?.enabled) configs.push(cfg);
       }
+      // Ambiguity is still fail-closed: never guess between two tenants.
       if (configs.length !== 1) return null;
       return configs[0];
     },
