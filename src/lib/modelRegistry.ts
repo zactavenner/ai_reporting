@@ -25,6 +25,7 @@ export const MODEL_REGISTRY: Record<string, ModelInfo> = {
   "minimax/hailuo-3": { id: "minimax/hailuo-3", label: "MiniMax H3", provider: "MiniMax", contextTokens: 0, capability: "video" },
   "bytedance/seedance-2.0": { id: "bytedance/seedance-2.0", label: "Seedance", provider: "ByteDance", contextTokens: 0, capability: "video" },
   "bytedance/seedance-2.5": { id: "bytedance/seedance-2.5", label: "Seedance 2.5", provider: "ByteDance", contextTokens: 0, capability: "video" },
+  "alibaba/wan-3.0": { id: "alibaba/wan-3.0", label: "Wan 3.0", provider: "Alibaba", contextTokens: 0, capability: "video" },
 };
 
 export const CONNECTOR_REGISTRY: Record<string, { label: string; emoji: string }> = {
@@ -63,6 +64,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
   { value: "minimax/hailuo-3", id: "minimax/hailuo-3", label: "MiniMax H3", hint: "720p or native 2K • first/last frame + reference identity", maxSeconds: 15, pricePerSecond: 0.13, supportsResolutions: ["720p", "2k"], defaultDuration: 15, durations: [5, 10, 15], maxRes: "2k" },
   { value: "bytedance/seedance-2.0", id: "bytedance/seedance-2.0", label: "Seedance", hint: "720p only • first/last frame keyframing + reference images", maxSeconds: 15, pricePerSecond: 0.0538, supportsResolutions: ["720p"], defaultDuration: 15, durations: [5, 10, 15], maxRes: "720p" },
   { value: "bytedance/seedance-2.5", id: "bytedance/seedance-2.5", label: "Seedance 2.5", hint: "480p or 720p • 4–30s in ONE clip • first/last frame • best for 30s ads", maxSeconds: 30, pricePerSecond: 0.2311, supportsResolutions: ["480p", "720p"], defaultDuration: 15, durations: [5, 10, 15, 20, 25, 30], maxRes: "720p" },
+  { value: "alibaba/wan-3.0", id: "alibaba/wan-3.0", label: "Wan 3.0", hint: "480p / 720p / 1080p • 2–30s in ONE clip • first frame + reference images • native audio", maxSeconds: 30, pricePerSecond: 0.034, supportsResolutions: ["480p", "720p", "1080p"], defaultDuration: 10, durations: [5, 10, 15, 20, 25, 30], maxRes: "1080p" },
 ];
 
 export const OFFER_IMAGE_ROLES = [

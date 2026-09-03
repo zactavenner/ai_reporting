@@ -104,7 +104,9 @@ const VIDEO_MODELS: { value: string; label: string; hint: string; maxSeconds: nu
   { value: "minimax/hailuo-3",            label: "MiniMax H3",      hint: "MiniMax H3 — 720p (fastest) or native 2K, 5–15s, text-to-video + first/last frame + reference identity, native audio", maxSeconds: 15, pricePerSecond: 0.13 },
   { value: "bytedance/seedance-2.0",      label: "Seedance",        hint: "Seedance 2.0 — 720p only, up to 15s, text-to-video + first/last frame keyframing + reference images, native audio", maxSeconds: 15, pricePerSecond: 0.0938 },
   { value: "bytedance/seedance-2.5",      label: "Seedance 2.5",    hint: "Seedance 2.5 — long-form: 4–30s in ONE clip, 480p or 720p, first/last frame control, native audio. Best pick for full 20–30s ads (no clip stitching).", maxSeconds: 30, pricePerSecond: 0.2311 },
+  { value: "alibaba/wan-3.0",             label: "Wan 3.0",         hint: "Alibaba Wan 3.0 — 2–30s in ONE clip, 480p / 720p / 1080p, first frame + reference images, native audio. Cheapest long-form renderer.", maxSeconds: 30, pricePerSecond: 0.034 },
 ];
+export const WAN_VIDEO_MODEL = "alibaba/wan-3.0";
 export const ONLY_VIDEO_MODEL = "minimax/hailuo-3";
 export const SEEDANCE_VIDEO_MODEL = "bytedance/seedance-2.0";
 export const SEEDANCE_25_VIDEO_MODEL = "bytedance/seedance-2.5";
@@ -117,6 +119,8 @@ const VIDEO_MODEL_RES: Record<string, VideoRes[]> = {
   "bytedance/seedance-2.0":      ["720p"],
   // Seedance 2.5 offers 480p (cheapest) and 720p per OpenRouter /videos/models.
   "bytedance/seedance-2.5":      ["480p", "720p"],
+  // Wan 3.0 on OpenRouter accepts 480p / 720p / 1080p.
+  "alibaba/wan-3.0":             ["480p", "720p", "1080p"],
 };
 // Per-model, per-resolution USD pricing per second (OpenRouter list rates).
 // Falls back to model.pricePerSecond * generic multiplier when not specified.
@@ -126,12 +130,14 @@ const VIDEO_MODEL_PRICE: Record<string, Partial<Record<VideoRes, number>>> = {
   // Seedance 2.5 bills video tokens (w × h × 24fps ÷ 1024 × $0.0000107/token),
   // which works out to a flat per-second rate at each resolution.
   "bytedance/seedance-2.5": { "480p": 0.1028, "720p": 0.2311 },
+  "alibaba/wan-3.0": { "480p": 0.017, "720p": 0.034, "1080p": 0.068 },
 };
 // Longest single clip each model supports — drives the duration slider ceiling.
 const VIDEO_MODEL_MAX_SECONDS: Record<string, number> = {
   "minimax/hailuo-3": 15,
   "bytedance/seedance-2.0": 15,
   "bytedance/seedance-2.5": 30,
+  "alibaba/wan-3.0": 30,
 };
 // Talk-speed presets. No video provider exposes a "speech rate" parameter, so the
 // pace is enforced as a words-per-minute directive on the script + render prompt.
