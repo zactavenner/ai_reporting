@@ -2866,8 +2866,31 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 </div>
                 )}
                 {selectedAgentMode === "video" && (
+                <div className="flex items-center gap-1 pl-1.5 border-l border-border/60">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Mode:</span>
+                  {([
+                    { value: "chat" as const, label: "Chat script", hint: "Talk through the script, hooks and shot list — no renders, no spend." },
+                    { value: "produce" as const, label: "Produce video", hint: "Render with the locked model, resolution, length, format and frames below." },
+                  ]).map((m) => {
+                    const active = videoIntent === m.value;
+                    return (
+                      <button
+                        key={m.value}
+                        type="button"
+                        onClick={() => setVideoIntent(m.value)}
+                        title={m.hint}
+                        className={`px-2 py-1 rounded-lg text-[10px] border transition leading-tight ${active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"}`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                )}
+                {selectedAgentMode === "video" && videoIntent === "produce" && (
                 <div className="flex flex-wrap items-center gap-1 pl-1.5 border-l border-border/60">
                   <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Video:</span>
+
                   {VIDEO_MODELS.map((m) => {
                     const active = videoModels.includes(m.value);
                     // Reflect resolution-based pricing (Seedance Pro 4K ≈ 2.5×, 720p ≈ 0.7×).
