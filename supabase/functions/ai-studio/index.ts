@@ -1410,8 +1410,12 @@ async function generateSeedanceVideo(opts: {
       ? "2K"
       : effectiveResolution;
   const veoMax = 8;
-  const effectiveDuration = isHappyHorse
+  const effectiveDuration = isWan
+    // Wan 3.0 accepts 2–30s in a single clip.
+    ? Math.max(2, Math.min(30, Math.round(opts.duration || 10)))
+    : isHappyHorse
     ? 15
+
     : isSeedance25
       // Seedance 2.5 accepts every integer duration from 4s to 30s.
       ? Math.max(4, Math.min(30, Math.round(opts.duration || 30)))
