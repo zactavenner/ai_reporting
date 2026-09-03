@@ -2821,7 +2821,7 @@ const tools = [
           image_url: { type: "string", description: "Optional URL of the FIRST FRAME for image-to-video. Pass a canvas image URL to animate an existing keyframe / static ad." },
           last_frame_url: { type: "string", description: "Optional URL of the LAST FRAME. H3 supports first+last frame control for precise motion endpoints." },
           ingredient_url: { type: "string", description: "Optional URL of an INGREDIENT / PRODUCT / SUBJECT / AVATAR reference image. H3 preserves this identity across the clip. Pass whenever the user pinned an ingredient in the video frame slots." },
-          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"], description: "The renderer locked in the composer. All other video models are retired." },
+          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"], description: "The renderer locked in the composer. All other video models are retired." },
           force_model: { type: "boolean", description: "Deprecated. Leave unset." },
         },
         required: ["prompt"],
@@ -2913,7 +2913,7 @@ const tools = [
               required: ["voiceover"],
             },
           },
-          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"], description: "The renderer locked in the composer." },
+          model: { type: "string", enum: ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"], description: "The renderer locked in the composer." },
           aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Video format only: 9:16 Reel or 16:9 Video." },
           resolution: { type: "string", enum: ["480p", "720p", "2k"], description: "Use the composer's locked resolution. H3: 720p or 2K. Seedance 2.0: 720p only. Seedance 2.5: 480p or 720p." },
         },
@@ -2996,11 +2996,12 @@ const VIDEO_MODEL_CAPS: Record<string, { maxDuration: number; label: string }> =
   "minimax/hailuo-3": { maxDuration: 15, label: "MiniMax H3 (≤15s per clip, 720p or native 2K)" },
   "bytedance/seedance-2.0": { maxDuration: 15, label: "Seedance 2.0 (≤15s per clip, 720p only)" },
   "bytedance/seedance-2.5": { maxDuration: 30, label: "Seedance 2.5 (4–30s in ONE clip, 480p or 720p, native audio)" },
+  "alibaba/wan-3.0": { maxDuration: 30, label: "Wan 3.0 (2–30s in ONE clip, 480p/720p/1080p, native audio)" },
 };
 
 // MiniMax H3 is the only video model and it handles synthetic avatars via
 // reference identity, so there is nothing left to reroute to.
-const AVATAR_SAFE_MODELS = new Set<string>(["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"]);
+const AVATAR_SAFE_MODELS = new Set<string>(["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"]);
 const AVATAR_FALLBACK_MODEL = "minimax/hailuo-3";
 
 export function resolveModelForAvatar(
@@ -3407,7 +3408,7 @@ Deno.serve(async (req) => {
 
   // Approved video models: MiniMax H3 (720p / 2K, ≤15s), Seedance 2.0 (720p, ≤15s)
   // and Seedance 2.5 (480p / 720p, 4–30s — the long-form pick for 30s ads).
-  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5"];
+  const ALLOWED_VIDEO_MODELS = ["minimax/hailuo-3", "bytedance/seedance-2.0", "bytedance/seedance-2.5", "alibaba/wan-3.0"];
   const VIDEO_MODEL_ALIASES: Record<string, string> = {
     "h3": "minimax/hailuo-3",
     "minimax/h3": "minimax/hailuo-3",
@@ -3427,6 +3428,17 @@ Deno.serve(async (req) => {
     "seedance 2.5": "bytedance/seedance-2.5",
     "seedance2.5": "bytedance/seedance-2.5",
     "bytedance/seedance-2.5-pro": "bytedance/seedance-2.5",
+    "wan": "alibaba/wan-3.0",
+    "wan3": "alibaba/wan-3.0",
+    "wan-3": "alibaba/wan-3.0",
+    "wan 3": "alibaba/wan-3.0",
+    "wan-3.0": "alibaba/wan-3.0",
+    "wan 3.0": "alibaba/wan-3.0",
+    "wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan3": "alibaba/wan-3.0",
+    "alibaba/wan-3": "alibaba/wan-3.0",
+    "alibaba/wan3.0": "alibaba/wan-3.0",
+    "alibaba/wan-3.0-pro": "alibaba/wan-3.0",
   };
   const normalizeVideoModel = (m: unknown): string | null => {
     if (typeof m !== "string") return null;
@@ -3451,12 +3463,19 @@ Deno.serve(async (req) => {
     "minimax/hailuo-3": "2k",
     "bytedance/seedance-2.0": "720p",
     "bytedance/seedance-2.5": "720p",
+    "alibaba/wan-3.0": "1080p",
   };
   const RES_RANK: Record<string, number> = { "480p": 0, "720p": 1, "1080p": 2, "2k": 3, "4k": 4 };
   // Honour the resolution the user picked in the composer; only clamp it to the
   // selected renderer's ceiling (so Seedance never gets asked for 2K).
   const rawRes = String(rawVideoResolution || "").toLowerCase();
-  const requestedRes: VideoResChoice = rawRes === "480p" ? "480p" : rawRes === "720p" ? "720p" : "2k";
+  const requestedRes: VideoResChoice = rawRes === "480p"
+    ? "480p"
+    : rawRes === "720p"
+      ? "720p"
+      : rawRes === "1080p"
+        ? "1080p"
+        : "2k";
   function clampResForModel(model: string): VideoResChoice {
     const cap = MODEL_MAX_RES[model] || "2k";
     return RES_RANK[requestedRes] <= RES_RANK[cap] ? requestedRes : cap;
