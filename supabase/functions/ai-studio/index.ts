@@ -1416,6 +1416,7 @@ async function generateSeedanceVideo(opts: {
     : isHappyHorse
     ? 15
 
+
     : isSeedance25
       // Seedance 2.5 accepts every integer duration from 4s to 30s.
       ? Math.max(4, Math.min(30, Math.round(opts.duration || 30)))
