@@ -1913,7 +1913,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             lockLines.push(`🔒 IMAGE HARD-LOCK: compare models [${imageModels.map(m => `"${m}"`).join(", ")}] via compare_image_models.`);
           }
           const lockBlock = lockLines.length ? lockLines.join("\n") + "\n\n" : "";
-          return masterBlock + masterAgentBlock + agencyContextBlock + agentBlock + iStyleBlock + vStyleBlock + lockBlock + text;
+          return masterBlock + masterAgentBlock + agencyContextBlock + agentBlock + iStyleBlock + vStyleBlock + presetBlock + lockBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
