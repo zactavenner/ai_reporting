@@ -1819,7 +1819,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               ].filter(Boolean).join("\n")
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          const videoAllowed = selectedAgentMode === "video" && videoIntent === "produce";
+          const videoAllowed = selectedAgentMode === "video" && produceNow;
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
@@ -1915,7 +1915,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
         // Video params travel ONLY from the Video Ads agent — other agents never render video.
-        ...(selectedAgentMode === "video" && videoIntent === "produce" && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
+        ...(selectedAgentMode === "video" && produceNow && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
         avatarId: selectedAvatarId,
         adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
