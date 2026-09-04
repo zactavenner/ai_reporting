@@ -2515,13 +2515,37 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 selectedAgentMode === "video" &&
                 m.role === "assistant" &&
                 !m.streaming &&
-                !!(m.content && m.content.trim().length > 40) &&
-                !!videoModel;
+                !!(m.content && m.content.trim().length > 40);
               const modelLabel = VIDEO_MODELS.find((vm) => vm.value === videoModel)?.label || videoModel;
               const capSeconds = VIDEO_MODEL_MAX_SECONDS[videoModel] ?? 15;
               const minSeconds = videoModel === WAN_VIDEO_MODEL ? 2 : 4;
               const durationChoices = [5, 8, 10, 15, 20, 25, 30].filter((s) => s >= minSeconds && s <= capSeconds);
               const lockedAspectLabel = videoAspectForAdFormat(adFormat);
+              const activeRes = VIDEO_MODEL_RES[videoModel || ""]?.includes(videoResolution)
+                ? videoResolution
+                : (VIDEO_MODEL_RES[videoModel || ""] || ["720p"]).slice(-1)[0];
+              // Auto length: read the spoken words out of the script and turn them
+              // into seconds at the selected pace, snapped to a supported choice.
+              const scriptWords = (m.content || "")
+                .replace(/```[\s\S]*?```/g, " ")
+                .replace(/^\s*(?:[-*#>]+|\d+[.)])\s*/gm, " ")
+                .replace(/\*\*/g, "")
+                .split(/\s+/)
+                .filter((w) => /[a-z0-9']/i.test(w)).length;
+              const wpm = SPEECH_PACES.find((p) => p.value === speechPace)?.wpm ?? 158;
+              const rawAuto = Math.round((scriptWords / wpm) * 60);
+              const autoSeconds = durationChoices.length
+                ? durationChoices.reduce((best, s) => (Math.abs(s - rawAuto) < Math.abs(best - rawAuto) ? s : best), durationChoices[0])
+                : Math.min(capSeconds, Math.max(minSeconds, rawAuto));
+              const pickModel = (value: string) => {
+                setVideoModels([value]);
+                const res = VIDEO_MODEL_RES[value] || ["720p"];
+                if (!res.includes(videoResolution)) setVideoResolution(res[res.length - 1]);
+                const cap = VIDEO_MODEL_MAX_SECONDS[value] ?? 15;
+                const min = value === WAN_VIDEO_MODEL ? 2 : 4;
+                if (videoTotalDuration > cap) setVideoTotalDuration(cap);
+                if (videoTotalDuration < min) setVideoTotalDuration(min);
+              };
               return (
                 <div key={m.id || i} className="space-y-1.5">
                 <ChatMessage
