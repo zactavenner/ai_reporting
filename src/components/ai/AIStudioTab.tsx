@@ -46,6 +46,8 @@ import { VideoStylesPopover, useVideoStyles, buildVideoStyleBlock } from "./Vide
 import { ImageStylesPopover, useImageStyles, buildImageStyleBlock } from "./ImageStylesManager";
 import { BatchScriptsDialog } from "./BatchScriptsDialog";
 import { StudioGoalDialog } from "./StudioGoalDialog";
+import { VideoProductionLine, buildPresetStyleBlock } from "./VideoProductionLine";
+import { VIDEO_STYLE_PRESETS } from "@/lib/videoStylePresets";
 
 interface Props {
   clientId: string;
