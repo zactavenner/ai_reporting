@@ -46,6 +46,8 @@ import { VideoStylesPopover, useVideoStyles, buildVideoStyleBlock } from "./Vide
 import { ImageStylesPopover, useImageStyles, buildImageStyleBlock } from "./ImageStylesManager";
 import { BatchScriptsDialog } from "./BatchScriptsDialog";
 import { StudioGoalDialog } from "./StudioGoalDialog";
+import { VideoProductionLine, buildPresetStyleBlock } from "./VideoProductionLine";
+import { VIDEO_STYLE_PRESETS } from "@/lib/videoStylePresets";
 
 interface Props {
   clientId: string;
@@ -1145,6 +1147,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
+  // Reference style presets picked in the production line (step 1).
+  const [presetStyleIds, setPresetStyleIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("ai-studio:video-preset-styles");
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter((v: unknown) => typeof v === "string") : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-preset-styles", JSON.stringify(presetStyleIds)); } catch { /* ignore */ }
+  }, [presetStyleIds]);
   const imageStyles = useImageStyles();
   const [adFormat, setAdFormat] = useState<string>(() => {
     try {
@@ -1821,6 +1834,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
           const videoAllowed = selectedAgentMode === "video" && produceNow;
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
+          // Reference styles picked in the production line — used for both script
+          // writing (chat) and rendering (produce).
+          const presetBlock =
+            selectedAgentMode === "video" && presetStyleIds.length
+              ? buildPresetStyleBlock(presetStyleIds) + "\n\n"
+              : "";
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
           // model / resolution / frames the user pre-selected in the composer.
@@ -1894,7 +1913,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             lockLines.push(`🔒 IMAGE HARD-LOCK: compare models [${imageModels.map(m => `"${m}"`).join(", ")}] via compare_image_models.`);
           }
           const lockBlock = lockLines.length ? lockLines.join("\n") + "\n\n" : "";
-          return masterBlock + masterAgentBlock + agencyContextBlock + agentBlock + iStyleBlock + vStyleBlock + lockBlock + text;
+          return masterBlock + masterAgentBlock + agencyContextBlock + agentBlock + iStyleBlock + vStyleBlock + presetBlock + lockBlock + text;
         })(),
         docUrl: docUrl || undefined,
         sheetUrl: sheetUrl || undefined,
@@ -2419,6 +2438,51 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         {aiStudioTab === "chat" && (
         <>
         {/* Video Styles bar moved to the composer — only renders when a video model is selected. */}
+        {selectedAgentMode === "video" && (
+          <VideoProductionLine
+            aspect={videoAspectForAdFormat(adFormat)}
+            selectedPresetIds={presetStyleIds}
+            onTogglePreset={(id) =>
+              setPresetStyleIds((curr) => (curr.includes(id) ? curr.filter((v) => v !== id) : [...curr, id]))
+            }
+            generating={loading > 0}
+            onGenerateScripts={() => {
+              const picks = VIDEO_STYLE_PRESETS.filter((p) => presetStyleIds.includes(p.id));
+              if (!picks.length) return;
+              const seconds = videoTotalDuration;
+              const aspect = videoAspectForAdFormat(adFormat);
+              void send(
+                [
+                  `Write ${picks.length} video ad script${picks.length === 1 ? "" : "s"} for ${clientName} — one per reference style below, in this order: ${picks.map((p) => p.name).join(", ")}.`,
+                  `Each script targets ${seconds}s at ${aspect}, ~${paceWordBudget(seconds, speechPace)} words of voiceover at a ${speechPace} pace.`,
+                  "For each: a title line with the style name, the hook (0–2s), the beats with timecodes, the verbatim VO, and the visual direction drawn from that style's transcribed reference.",
+                  "Do not render anything yet — this is script work only.",
+                ].join("\n"),
+              );
+            }}
+            avatarName={selectedAvatar?.name || null}
+            onOpenAvatars={() => setAiStudioTab("avatars")}
+            produce={videoIntent === "produce"}
+            onSetProduce={(p) => setVideoIntent(p ? "produce" : "chat")}
+            summary={{
+              model: VIDEO_MODELS.find((m) => m.value === videoModel)?.label || videoModel || "—",
+              resolution: videoResolution,
+              seconds: videoTotalDuration,
+              cost: videoModel
+                ? `$${(
+                    modelPricePerSecond(
+                      videoModel,
+                      videoResolution as VideoRes,
+                      VIDEO_MODELS.find((m) => m.value === videoModel)?.pricePerSecond ?? 0.1,
+                    ) * videoTotalDuration
+                  ).toFixed(2)}`
+                : null,
+            }}
+            hasFirstFrame={!!videoFrames?.firstFrameUrl}
+            referenceCount={(videoFrames?.ingredientUrls || []).length}
+          />
+        )}
+
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
           <div className={`px-4 sm:px-6 py-6 space-y-5 mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
