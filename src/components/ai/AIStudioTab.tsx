@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAgencyPersonas } from "@/hooks/useAgencyPersonas";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target, Rocket, Layers } from "lucide-react";
+import { Sparkles, FileText, Table as TableIcon, Image as ImageIcon, Send, Loader2, ExternalLink, Wand2, Square, Trash2, Film, Settings2, ChevronDown, Library, BookOpenCheck, ShieldAlert, DollarSign, Mic, Copy, Check, PanelRightClose, PanelRightOpen, Globe, Search, Pencil, Paperclip, Bot, History, X, Code2, Eye, Maximize2, Minimize2, MessageSquare, Target, Rocket, Layers, Clapperboard } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -1732,8 +1732,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     return { inTok, outTok, cost, model: chatModel };
   })();
 
-  async function send(text: string, opts?: { videoApproved?: boolean }) {
+  async function send(text: string, opts?: { videoApproved?: boolean; forceProduce?: boolean }) {
     if (!text.trim()) return;
+    // A "Generate video with this script" click in chat renders this turn even
+    // while the composer is still in Chat-script intent.
+    const produceNow = !!opts?.forceProduce || videoIntent === "produce";
     if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
     // Auto-detect intended aspect from the prompt so the user doesn't need to
@@ -1816,7 +1819,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
               ].filter(Boolean).join("\n")
             : "";
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
-          const videoAllowed = selectedAgentMode === "video" && videoIntent === "produce";
+          const videoAllowed = selectedAgentMode === "video" && produceNow;
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
@@ -1912,7 +1915,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         compareModels: compareModels.length ? compareModels : undefined,
         imageModels,
         // Video params travel ONLY from the Video Ads agent — other agents never render video.
-        ...(selectedAgentMode === "video" && videoIntent === "produce" && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
+        ...(selectedAgentMode === "video" && produceNow && videoModel ? { videoModel, videoModels, videoFrames, videoResolution, videoDuration: videoTotalDuration, speechPace } : {}),
         avatarId: selectedAvatarId,
         adFormat: effectiveAdFormat || undefined,
         agentSlug: selectedAgentId.startsWith("slug:")
@@ -2444,9 +2447,20 @@ export function AIStudioTab({ clientId, clientName }: Props) {
             {messages.map((m, i) => {
               const isEmptyAssistant = m.role === "assistant" && !m.content && (!m.tools || m.tools.length === 0);
               if (isEmptyAssistant && !m.streaming) return null;
+              const scriptReady =
+                selectedAgentMode === "video" &&
+                m.role === "assistant" &&
+                !m.streaming &&
+                !!(m.content && m.content.trim().length > 40) &&
+                !!videoModel;
+              const modelLabel = VIDEO_MODELS.find((vm) => vm.value === videoModel)?.label || videoModel;
+              const capSeconds = VIDEO_MODEL_MAX_SECONDS[videoModel] ?? 15;
+              const minSeconds = videoModel === WAN_VIDEO_MODEL ? 2 : 4;
+              const durationChoices = [5, 8, 10, 15, 20, 25, 30].filter((s) => s >= minSeconds && s <= capSeconds);
+              const lockedAspectLabel = videoAspectForAdFormat(adFormat);
               return (
+                <div key={m.id || i} className="space-y-1.5">
                 <ChatMessage
-                  key={m.id || i}
                   message={m}
                   isStreaming={!!m.streaming && m.role === "assistant"}
                   clientId={clientId}
@@ -2469,6 +2483,56 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     );
                   }}
                 />
+                {scriptReady && (
+                  <div className="flex flex-wrap items-center gap-1.5 pl-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVideoIntent("produce");
+                        send(
+                          [
+                            "Produce the video from the script in your previous message.",
+                            "Turn that script into ONE optimized render prompt: subject + wardrobe, setting, camera move, lighting, on-screen action beat by beat, and the spoken VO lines verbatim.",
+                            "Then call generate_seedance_video with the locked composer settings below. Do not rewrite the script's message or ask follow-up questions first.",
+                          ].join(" "),
+                          { forceProduce: true, videoApproved: true },
+                        );
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-[11px] font-medium transition"
+                    >
+                      <Clapperboard className="h-3.5 w-3.5" />
+                      Generate video with this script
+                    </button>
+                    <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-1 py-0.5">
+                      {(["9:16", "16:9"] as const).map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          onClick={() => setAdFormat(a === "9:16" ? "reel_9x16" : "video_16x9")}
+                          className={`px-2 py-0.5 rounded-full text-[10px] transition ${lockedAspectLabel === a ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-1 py-0.5">
+                      {durationChoices.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setVideoTotalDuration(s)}
+                          className={`px-2 py-0.5 rounded-full text-[10px] tabular-nums transition ${videoTotalDuration === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                        >
+                          {s}s
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {modelLabel} · {VIDEO_MODEL_RES[videoModel]?.includes(videoResolution) ? videoResolution : (VIDEO_MODEL_RES[videoModel] || ["720p"]).slice(-1)[0]}
+                    </span>
+                  </div>
+                )}
+                </div>
               );
             })}
           </div>
