@@ -1834,6 +1834,12 @@ export function AIStudioTab({ clientId, clientName }: Props) {
           const masterBlock = buildMasterReferenceBlock(agencyRefs, clientRefs);
           const videoAllowed = selectedAgentMode === "video" && produceNow;
           const vStyleBlock = buildVideoStyleBlock(videoStyles.selected, videoAllowed && videoModels.length > 0);
+          // Reference styles picked in the production line — used for both script
+          // writing (chat) and rendering (produce).
+          const presetBlock =
+            selectedAgentMode === "video" && presetStyleIds.length
+              ? buildPresetStyleBlock(presetStyleIds) + "\n\n"
+              : "";
           const iStyleBlock = buildImageStyleBlock(imageStyles.selected, imageModels.length > 0);
           // Hard-lock block — forces the LLM to call generators with the exact
           // model / resolution / frames the user pre-selected in the composer.
