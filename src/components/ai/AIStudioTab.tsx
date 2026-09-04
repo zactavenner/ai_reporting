@@ -2515,13 +2515,37 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                 selectedAgentMode === "video" &&
                 m.role === "assistant" &&
                 !m.streaming &&
-                !!(m.content && m.content.trim().length > 40) &&
-                !!videoModel;
+                !!(m.content && m.content.trim().length > 40);
               const modelLabel = VIDEO_MODELS.find((vm) => vm.value === videoModel)?.label || videoModel;
               const capSeconds = VIDEO_MODEL_MAX_SECONDS[videoModel] ?? 15;
               const minSeconds = videoModel === WAN_VIDEO_MODEL ? 2 : 4;
               const durationChoices = [5, 8, 10, 15, 20, 25, 30].filter((s) => s >= minSeconds && s <= capSeconds);
               const lockedAspectLabel = videoAspectForAdFormat(adFormat);
+              const activeRes = VIDEO_MODEL_RES[videoModel || ""]?.includes(videoResolution)
+                ? videoResolution
+                : (VIDEO_MODEL_RES[videoModel || ""] || ["720p"]).slice(-1)[0];
+              // Auto length: read the spoken words out of the script and turn them
+              // into seconds at the selected pace, snapped to a supported choice.
+              const scriptWords = (m.content || "")
+                .replace(/```[\s\S]*?```/g, " ")
+                .replace(/^\s*(?:[-*#>]+|\d+[.)])\s*/gm, " ")
+                .replace(/\*\*/g, "")
+                .split(/\s+/)
+                .filter((w) => /[a-z0-9']/i.test(w)).length;
+              const wpm = SPEECH_PACES.find((p) => p.value === speechPace)?.wpm ?? 158;
+              const rawAuto = Math.round((scriptWords / wpm) * 60);
+              const autoSeconds = durationChoices.length
+                ? durationChoices.reduce((best, s) => (Math.abs(s - rawAuto) < Math.abs(best - rawAuto) ? s : best), durationChoices[0])
+                : Math.min(capSeconds, Math.max(minSeconds, rawAuto));
+              const pickModel = (value: string) => {
+                setVideoModels([value]);
+                const res = VIDEO_MODEL_RES[value] || ["720p"];
+                if (!res.includes(videoResolution)) setVideoResolution(res[res.length - 1]);
+                const cap = VIDEO_MODEL_MAX_SECONDS[value] ?? 15;
+                const min = value === WAN_VIDEO_MODEL ? 2 : 4;
+                if (videoTotalDuration > cap) setVideoTotalDuration(cap);
+                if (videoTotalDuration < min) setVideoTotalDuration(min);
+              };
               return (
                 <div key={m.id || i} className="space-y-1.5">
                 <ChatMessage
@@ -2548,52 +2572,97 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                   }}
                 />
                 {scriptReady && (
-                  <div className="flex flex-wrap items-center gap-1.5 pl-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVideoIntent("produce");
-                        send(
-                          [
-                            "Produce the video from the script in your previous message.",
-                            "Turn that script into ONE optimized render prompt: subject + wardrobe, setting, camera move, lighting, on-screen action beat by beat, and the spoken VO lines verbatim.",
-                            "Then call generate_seedance_video with the locked composer settings below. Do not rewrite the script's message or ask follow-up questions first.",
-                          ].join(" "),
-                          { forceProduce: true, videoApproved: true },
-                        );
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-[11px] font-medium transition"
-                    >
-                      <Clapperboard className="h-3.5 w-3.5" />
-                      Generate video with this script
-                    </button>
-                    <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-1 py-0.5">
+                  <div className="ml-1 rounded-2xl border border-border/60 bg-muted/20 p-2.5 space-y-2">
+                    {/* Model */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground w-14">Model</span>
+                      {VIDEO_MODELS.map((vm) => (
+                        <button
+                          key={vm.value}
+                          type="button"
+                          title={vm.hint}
+                          onClick={() => pickModel(vm.value)}
+                          className={`px-2.5 py-1 rounded-full border text-[10px] transition ${videoModel === vm.value ? "border-primary bg-primary text-primary-foreground" : "border-border/60 text-muted-foreground hover:bg-muted"}`}
+                        >
+                          {vm.label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Aspect + resolution */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground w-14">Format</span>
                       {(["9:16", "16:9"] as const).map((a) => (
                         <button
                           key={a}
                           type="button"
                           onClick={() => setAdFormat(a === "9:16" ? "reel_9x16" : "video_16x9")}
-                          className={`px-2 py-0.5 rounded-full text-[10px] transition ${lockedAspectLabel === a ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                          className={`px-2.5 py-1 rounded-full border text-[10px] transition ${lockedAspectLabel === a ? "border-primary bg-primary text-primary-foreground" : "border-border/60 text-muted-foreground hover:bg-muted"}`}
                         >
                           {a}
                         </button>
                       ))}
+                      <span className="mx-1 h-3 w-px bg-border/70" />
+                      {(VIDEO_MODEL_RES[videoModel || ""] || ["720p"]).map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setVideoResolution(r)}
+                          className={`px-2.5 py-1 rounded-full border text-[10px] uppercase transition ${activeRes === r ? "border-primary bg-primary text-primary-foreground" : "border-border/60 text-muted-foreground hover:bg-muted"}`}
+                        >
+                          {r}
+                        </button>
+                      ))}
                     </div>
-                    <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-1 py-0.5">
+                    {/* Length — auto from script */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground w-14">Length</span>
+                      <button
+                        type="button"
+                        onClick={() => setVideoTotalDuration(autoSeconds)}
+                        title={`${scriptWords} spoken words at ${speechPace} pace ≈ ${rawAuto}s`}
+                        className={`px-2.5 py-1 rounded-full border text-[10px] tabular-nums transition ${videoTotalDuration === autoSeconds ? "border-primary bg-primary text-primary-foreground" : "border-border/60 text-muted-foreground hover:bg-muted"}`}
+                      >
+                        Auto {autoSeconds}s
+                      </button>
+                      <span className="mx-1 h-3 w-px bg-border/70" />
                       {durationChoices.map((s) => (
                         <button
                           key={s}
                           type="button"
                           onClick={() => setVideoTotalDuration(s)}
-                          className={`px-2 py-0.5 rounded-full text-[10px] tabular-nums transition ${videoTotalDuration === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                          className={`px-2.5 py-1 rounded-full border text-[10px] tabular-nums transition ${videoTotalDuration === s ? "border-primary bg-primary text-primary-foreground" : "border-border/60 text-muted-foreground hover:bg-muted"}`}
                         >
                           {s}s
                         </button>
                       ))}
                     </div>
-                    <span className="text-[10px] text-muted-foreground">
-                      {modelLabel} · {VIDEO_MODEL_RES[videoModel]?.includes(videoResolution) ? videoResolution : (VIDEO_MODEL_RES[videoModel] || ["720p"]).slice(-1)[0]}
-                    </span>
+                    {/* Generate */}
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        disabled={!videoModel || loading > 0}
+                        onClick={() => {
+                          setVideoIntent("produce");
+                          send(
+                            [
+                              "Produce the video from the script in your previous message.",
+                              "Turn that script into ONE optimized render prompt: subject + wardrobe, setting, camera move, lighting, on-screen action beat by beat, and the spoken VO lines verbatim.",
+                              "Then call generate_seedance_video with the locked composer settings below. Do not rewrite the script's message or ask follow-up questions first.",
+                            ].join(" "),
+                            { forceProduce: true, videoApproved: true },
+                          );
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 hover:bg-primary/20 disabled:opacity-40 disabled:cursor-not-allowed text-primary px-3 py-1.5 text-[11px] font-medium transition"
+                      >
+                        <Clapperboard className="h-3.5 w-3.5" />
+                        Generate video with this script
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">
+                        {videoModel
+                          ? `${modelLabel} · ${activeRes} · ${videoTotalDuration}s · ${lockedAspectLabel} → chat + canvas`
+                          : "Pick a video model to render"}
+                      </span>
+                    </div>
                   </div>
                 )}
                 </div>
