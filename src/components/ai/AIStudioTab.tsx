@@ -2640,7 +2640,7 @@ export function AIStudioTab({ clientId, clientName }: Props) {
                     <div className="flex flex-wrap items-center gap-2 pt-0.5">
                       <button
                         type="button"
-                        disabled={!videoModel || busy}
+                        disabled={!videoModel || loading > 0}
                         onClick={() => {
                           setVideoIntent("produce");
                           send(
