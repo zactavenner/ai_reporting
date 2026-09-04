@@ -2440,17 +2440,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         {/* Video Styles bar moved to the composer — only renders when a video model is selected. */}
         {selectedAgentMode === "video" && (
           <VideoProductionLine
-            aspect={videoAspectForAdFormat(effectiveAdFormat)}
+            aspect={videoAspectForAdFormat(adFormat)}
             selectedPresetIds={presetStyleIds}
             onTogglePreset={(id) =>
               setPresetStyleIds((curr) => (curr.includes(id) ? curr.filter((v) => v !== id) : [...curr, id]))
             }
-            generating={sending}
+            generating={loading > 0}
             onGenerateScripts={() => {
               const picks = VIDEO_STYLE_PRESETS.filter((p) => presetStyleIds.includes(p.id));
               if (!picks.length) return;
               const seconds = videoTotalDuration;
-              const aspect = videoAspectForAdFormat(effectiveAdFormat);
+              const aspect = videoAspectForAdFormat(adFormat);
               void send(
                 [
                   `Write ${picks.length} video ad script${picks.length === 1 ? "" : "s"} for ${clientName} — one per reference style below, in this order: ${picks.map((p) => p.name).join(", ")}.`,
