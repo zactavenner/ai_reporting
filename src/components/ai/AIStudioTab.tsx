@@ -1147,6 +1147,17 @@ export function AIStudioTab({ clientId, clientName }: Props) {
   // Video Styles (UGC, Podcast, B-roll VO, Animated Cartoon, plus user-defined).
   // Selected style's prompt block is prepended to the user's text before sending.
   const videoStyles = useVideoStyles();
+  // Reference style presets picked in the production line (step 1).
+  const [presetStyleIds, setPresetStyleIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("ai-studio:video-preset-styles");
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter((v: unknown) => typeof v === "string") : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("ai-studio:video-preset-styles", JSON.stringify(presetStyleIds)); } catch { /* ignore */ }
+  }, [presetStyleIds]);
   const imageStyles = useImageStyles();
   const [adFormat, setAdFormat] = useState<string>(() => {
     try {
