@@ -1732,8 +1732,11 @@ export function AIStudioTab({ clientId, clientName }: Props) {
     return { inTok, outTok, cost, model: chatModel };
   })();
 
-  async function send(text: string, opts?: { videoApproved?: boolean }) {
+  async function send(text: string, opts?: { videoApproved?: boolean; forceProduce?: boolean }) {
     if (!text.trim()) return;
+    // A "Generate video with this script" click in chat renders this turn even
+    // while the composer is still in Chat-script intent.
+    const produceNow = !!opts?.forceProduce || videoIntent === "produce";
     if (pendingAttachments.some(a => a.uploading)) { toast.error("Attachments still uploading"); return; }
     setFollowups([]);
     // Auto-detect intended aspect from the prompt so the user doesn't need to
