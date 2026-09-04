@@ -2438,6 +2438,51 @@ export function AIStudioTab({ clientId, clientName }: Props) {
         {aiStudioTab === "chat" && (
         <>
         {/* Video Styles bar moved to the composer — only renders when a video model is selected. */}
+        {selectedAgentMode === "video" && (
+          <VideoProductionLine
+            aspect={videoAspectForAdFormat(effectiveAdFormat)}
+            selectedPresetIds={presetStyleIds}
+            onTogglePreset={(id) =>
+              setPresetStyleIds((curr) => (curr.includes(id) ? curr.filter((v) => v !== id) : [...curr, id]))
+            }
+            generating={sending}
+            onGenerateScripts={() => {
+              const picks = VIDEO_STYLE_PRESETS.filter((p) => presetStyleIds.includes(p.id));
+              if (!picks.length) return;
+              const seconds = videoTotalDuration;
+              const aspect = videoAspectForAdFormat(effectiveAdFormat);
+              void send(
+                [
+                  `Write ${picks.length} video ad script${picks.length === 1 ? "" : "s"} for ${clientName} — one per reference style below, in this order: ${picks.map((p) => p.name).join(", ")}.`,
+                  `Each script targets ${seconds}s at ${aspect}, ~${paceWordBudget(seconds, speechPace)} words of voiceover at a ${speechPace} pace.`,
+                  "For each: a title line with the style name, the hook (0–2s), the beats with timecodes, the verbatim VO, and the visual direction drawn from that style's transcribed reference.",
+                  "Do not render anything yet — this is script work only.",
+                ].join("\n"),
+              );
+            }}
+            avatarName={selectedAvatar?.name || null}
+            onOpenAvatars={() => setAiStudioTab("avatars")}
+            produce={videoIntent === "produce"}
+            onSetProduce={(p) => setVideoIntent(p ? "produce" : "chat")}
+            summary={{
+              model: VIDEO_MODELS.find((m) => m.value === videoModel)?.label || videoModel || "—",
+              resolution: videoResolution,
+              seconds: videoTotalDuration,
+              cost: videoModel
+                ? `$${(
+                    modelPricePerSecond(
+                      videoModel,
+                      videoResolution as VideoRes,
+                      VIDEO_MODELS.find((m) => m.value === videoModel)?.pricePerSecond ?? 0.1,
+                    ) * videoTotalDuration
+                  ).toFixed(2)}`
+                : null,
+            }}
+            hasFirstFrame={!!videoFrames?.firstFrameUrl}
+            referenceCount={(videoFrames?.ingredientUrls || []).length}
+          />
+        )}
+
 
         <ScrollArea className="flex-1" ref={scrollRef as any}>
           <div className={`px-4 sm:px-6 py-6 space-y-5 mx-auto w-full transition-[max-width] ${wideChat ? "max-w-6xl" : "max-w-3xl"}`}>
