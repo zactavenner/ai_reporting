@@ -233,3 +233,8 @@ verify_jwt = false
 # Operator identity is the HMAC dashboard session verified in-handler, then
 # revalidated against agency_members (admin/owner). Queue tables stay service-role only.
 verify_jwt = false
+
+[functions.grok-booking]
+# The xAI voice agent authenticates with GROK_BOOKING_TOKEN in-handler and
+# fails closed when that secret is absent, so platform JWT verification is off.
+verify_jwt = false
