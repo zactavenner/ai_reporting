@@ -503,7 +503,7 @@ const Index = () => {
                           isAdmin={currentMember?.role === 'admin'}
                         />
                         <DraggableClientTable
-                          clients={clients}
+                          clients={visibleClients}
                           metrics={tableMetrics}
                           thresholds={clientThresholds}
                           fullSettings={clientFullSettings}
