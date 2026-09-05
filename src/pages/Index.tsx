@@ -46,7 +46,7 @@ import { EnrichmentTab } from '@/components/enrichment/EnrichmentTab';
 import { IntegrationStatusCards } from '@/components/dashboard/IntegrationStatusCards';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sliders, CheckCircle, RefreshCw, Wifi, Smartphone } from 'lucide-react';
+import { Sliders, CheckCircle, RefreshCw, Wifi, Smartphone, Eye, EyeOff } from 'lucide-react';
 import { MasterMetaTokenCard } from '@/components/dashboard/MasterMetaTokenCard';
 import { OutreachTab } from '@/components/outreach/OutreachTab';
 import { OnboardingTab } from '@/components/dashboard/OnboardingTab';
@@ -466,12 +466,21 @@ const Index = () => {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => setShowPaused(v => !v)}
+                        >
+                          {showPaused ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                          {showPaused ? `Hide Paused (${pausedCount})` : `Show Paused (${pausedCount})`}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => testAllClients(clientIds)}
                           disabled={isTesting || clients.length === 0}
                         >
                           <Wifi className={`h-4 w-4 mr-2 ${isTesting ? 'animate-pulse' : ''}`} />
                           {isTesting ? 'Testing...' : 'Test Connections'}
                         </Button>
+
                       </div>
                     </div>
                     <div className="mb-3">
