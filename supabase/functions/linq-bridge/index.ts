@@ -1,3 +1,4 @@
+/* linq-bridge */
 /**
  * linq-bridge — receives signed Linq iMessage webhooks and appends the group
  * conversation to each matched HPA GHL contact as an InternalComment note.
