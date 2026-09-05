@@ -46,7 +46,7 @@ import { EnrichmentTab } from '@/components/enrichment/EnrichmentTab';
 import { IntegrationStatusCards } from '@/components/dashboard/IntegrationStatusCards';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sliders, CheckCircle, RefreshCw, Wifi, Smartphone } from 'lucide-react';
+import { Sliders, CheckCircle, RefreshCw, Wifi, Smartphone, Eye, EyeOff } from 'lucide-react';
 import { MasterMetaTokenCard } from '@/components/dashboard/MasterMetaTokenCard';
 import { OutreachTab } from '@/components/outreach/OutreachTab';
 import { OnboardingTab } from '@/components/dashboard/OnboardingTab';
@@ -140,6 +140,20 @@ const Index = () => {
   const { startDate, endDate, sourceFilter } = useDateFilter();
   const { data: allClients = [], isLoading: clientsLoading } = useClients();
   const clients = useMemo(() => allClients.filter(c => c.status === 'active' || c.status === 'onboarding' || c.status === 'paused' || c.status === 'cc_error' || c.status === 'billing_error'), [allClients]);
+  const [showPaused, setShowPaused] = useState<boolean>(() => {
+    try { return localStorage.getItem('dashboard.showPausedClients') !== 'false'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('dashboard.showPausedClients', String(showPaused)); } catch {}
+  }, [showPaused]);
+  const pausedCount = useMemo(
+    () => clients.filter(c => c.status === 'paused' || c.status === 'on_hold').length,
+    [clients],
+  );
+  const visibleClients = useMemo(
+    () => (showPaused ? clients : clients.filter(c => c.status !== 'paused' && c.status !== 'on_hold')),
+    [clients, showPaused],
+  );
   const { data: dailyMetrics = [], isLoading: metricsLoading } = useAllDailyMetrics(startDate, endDate);
   const { data: rpcMetrics = [], isLoading: sourceMetricsLoading } = useClientSourceMetrics(startDate, endDate);
   
@@ -452,12 +466,21 @@ const Index = () => {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => setShowPaused(v => !v)}
+                        >
+                          {showPaused ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                          {showPaused ? `Hide Paused (${pausedCount})` : `Show Paused (${pausedCount})`}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => testAllClients(clientIds)}
                           disabled={isTesting || clients.length === 0}
                         >
                           <Wifi className={`h-4 w-4 mr-2 ${isTesting ? 'animate-pulse' : ''}`} />
                           {isTesting ? 'Testing...' : 'Test Connections'}
                         </Button>
+
                       </div>
                     </div>
                     <div className="mb-3">
@@ -480,7 +503,7 @@ const Index = () => {
                           isAdmin={currentMember?.role === 'admin'}
                         />
                         <DraggableClientTable
-                          clients={clients}
+                          clients={visibleClients}
                           metrics={tableMetrics}
                           thresholds={clientThresholds}
                           fullSettings={clientFullSettings}
