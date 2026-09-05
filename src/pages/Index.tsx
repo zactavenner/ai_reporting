@@ -140,6 +140,20 @@ const Index = () => {
   const { startDate, endDate, sourceFilter } = useDateFilter();
   const { data: allClients = [], isLoading: clientsLoading } = useClients();
   const clients = useMemo(() => allClients.filter(c => c.status === 'active' || c.status === 'onboarding' || c.status === 'paused' || c.status === 'cc_error' || c.status === 'billing_error'), [allClients]);
+  const [showPaused, setShowPaused] = useState<boolean>(() => {
+    try { return localStorage.getItem('dashboard.showPausedClients') !== 'false'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('dashboard.showPausedClients', String(showPaused)); } catch {}
+  }, [showPaused]);
+  const pausedCount = useMemo(
+    () => clients.filter(c => c.status === 'paused' || c.status === 'on_hold').length,
+    [clients],
+  );
+  const visibleClients = useMemo(
+    () => (showPaused ? clients : clients.filter(c => c.status !== 'paused' && c.status !== 'on_hold')),
+    [clients, showPaused],
+  );
   const { data: dailyMetrics = [], isLoading: metricsLoading } = useAllDailyMetrics(startDate, endDate);
   const { data: rpcMetrics = [], isLoading: sourceMetricsLoading } = useClientSourceMetrics(startDate, endDate);
   
