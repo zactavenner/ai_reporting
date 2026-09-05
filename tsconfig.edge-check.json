@@ -30,7 +30,7 @@
     "supabase/functions/_shared/meetgeekReplay.ts",
     "supabase/functions/_shared/meetgeekReplayInvoke.ts",
     "supabase/functions/_shared/generationAuth.ts",
-    "supabase/functions/_shared/linqBridge.ts"
-
+    "supabase/functions/_shared/linqBridge.ts",
+    "supabase/functions/_shared/linqDelivery.ts"
   ]
 }

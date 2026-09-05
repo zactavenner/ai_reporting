@@ -15960,12 +15960,16 @@ export type Database = {
       linq_comment_deliveries: {
         Row: {
           attempts: number
+          comment_marker: string | null
           created_at: string
           ghl_contact_id: string
           ghl_conversation_id: string | null
           ghl_location_id: string
+          ghl_message_id: string | null
           id: string
           last_error: string | null
+          lease_expires_at: string | null
+          lease_owner: string | null
           linq_chat_id: string | null
           linq_message_id: string
           posted_at: string | null
@@ -15974,12 +15978,16 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          comment_marker?: string | null
           created_at?: string
           ghl_contact_id: string
           ghl_conversation_id?: string | null
           ghl_location_id: string
+          ghl_message_id?: string | null
           id?: string
           last_error?: string | null
+          lease_expires_at?: string | null
+          lease_owner?: string | null
           linq_chat_id?: string | null
           linq_message_id: string
           posted_at?: string | null
@@ -15988,12 +15996,16 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          comment_marker?: string | null
           created_at?: string
           ghl_contact_id?: string
           ghl_conversation_id?: string | null
           ghl_location_id?: string
+          ghl_message_id?: string | null
           id?: string
           last_error?: string | null
+          lease_expires_at?: string | null
+          lease_owner?: string | null
           linq_chat_id?: string | null
           linq_message_id?: string
           posted_at?: string | null
@@ -23821,6 +23833,51 @@ export type Database = {
           p_status: string
         }
         Returns: string
+      }
+      linq_claim_delivery: {
+        Args: {
+          p_chat_id: string
+          p_contact_id: string
+          p_lease_seconds?: number
+          p_location_id: string
+          p_marker: string
+          p_message_id: string
+          p_owner: string
+        }
+        Returns: {
+          attempts: number
+          claimed: boolean
+          delivery_id: string
+          delivery_status: string
+          ghl_message_id: string
+        }[]
+      }
+      linq_claim_pending_deliveries: {
+        Args: { p_lease_seconds?: number; p_limit?: number; p_owner: string }
+        Returns: {
+          attempts: number
+          comment_marker: string | null
+          created_at: string
+          ghl_contact_id: string
+          ghl_conversation_id: string | null
+          ghl_location_id: string
+          ghl_message_id: string | null
+          id: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_owner: string | null
+          linq_chat_id: string | null
+          linq_message_id: string
+          posted_at: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "linq_comment_deliveries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       log_cron_run: {
         Args: {
