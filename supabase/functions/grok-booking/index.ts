@@ -178,7 +178,11 @@ serve(async (req) => {
       console.error(`grok-booking: free-slots read failed status=${r.status}`);
       return err('availability_unavailable', 'Availability could not be read right now', 502);
     }
-    const slots = parseFreeSlots(r.body).sort();
+    const parsedSlots = parseFreeSlots(r.body);
+    const slots = filterSlotsToRange(parsedSlots, startDate, endDate, timezone).sort();
+    if (slots.length !== parsedSlots.length) {
+      console.log(`grok-booking: dropped ${parsedSlots.length - slots.length} out-of-range slot(s)`);
+    }
     console.log(`grok-booking: availability ok slots=${slots.length} range=${startDate}..${endDate}`);
     return json({
       ok: true,
