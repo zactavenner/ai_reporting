@@ -15924,6 +15924,132 @@ export type Database = {
           },
         ]
       }
+      linq_bridge_config: {
+        Row: {
+          created_at: string
+          ghl_location_id: string
+          id: string
+          ingestion_enabled: boolean
+          last_event_at: string | null
+          linq_org_id: string
+          owned_lines: string[]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          ghl_location_id: string
+          id?: string
+          ingestion_enabled?: boolean
+          last_event_at?: string | null
+          linq_org_id: string
+          owned_lines?: string[]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          ghl_location_id?: string
+          id?: string
+          ingestion_enabled?: boolean
+          last_event_at?: string | null
+          linq_org_id?: string
+          owned_lines?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      linq_comment_deliveries: {
+        Row: {
+          attempts: number
+          created_at: string
+          ghl_contact_id: string
+          ghl_conversation_id: string | null
+          ghl_location_id: string
+          id: string
+          last_error: string | null
+          linq_chat_id: string | null
+          linq_message_id: string
+          posted_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          ghl_contact_id: string
+          ghl_conversation_id?: string | null
+          ghl_location_id: string
+          id?: string
+          last_error?: string | null
+          linq_chat_id?: string | null
+          linq_message_id: string
+          posted_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          ghl_contact_id?: string
+          ghl_conversation_id?: string | null
+          ghl_location_id?: string
+          id?: string
+          last_error?: string | null
+          linq_chat_id?: string | null
+          linq_message_id?: string
+          posted_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      linq_webhook_events: {
+        Row: {
+          error: string | null
+          event_type: string
+          id: string
+          is_group: boolean | null
+          linq_chat_id: string | null
+          linq_event_id: string
+          linq_message_id: string | null
+          participants_matched: number
+          participants_total: number
+          processed_at: string | null
+          received_at: string
+          skipped_reason: string | null
+          status: string
+        }
+        Insert: {
+          error?: string | null
+          event_type: string
+          id?: string
+          is_group?: boolean | null
+          linq_chat_id?: string | null
+          linq_event_id: string
+          linq_message_id?: string | null
+          participants_matched?: number
+          participants_total?: number
+          processed_at?: string | null
+          received_at?: string
+          skipped_reason?: string | null
+          status?: string
+        }
+        Update: {
+          error?: string | null
+          event_type?: string
+          id?: string
+          is_group?: boolean | null
+          linq_chat_id?: string | null
+          linq_event_id?: string
+          linq_message_id?: string | null
+          participants_matched?: number
+          participants_total?: number
+          processed_at?: string | null
+          received_at?: string
+          skipped_reason?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       media_buyer_runs: {
         Row: {
           client_id: string | null

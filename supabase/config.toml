@@ -238,3 +238,6 @@ verify_jwt = false
 # The xAI voice agent authenticates with GROK_BOOKING_TOKEN in-handler and
 # fails closed when that secret is absent, so platform JWT verification is off.
 verify_jwt = false
+
+[functions.linq-bridge]
+verify_jwt = false
