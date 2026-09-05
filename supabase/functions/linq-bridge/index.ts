@@ -29,8 +29,8 @@
  *   { action: 'reconcile', limit?: number }        -> replays leased deliveries
  *                                                     AND failed/partial events
  */
-import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
-import { corsHeaders as sdkCors } from 'npm:@supabase/supabase-js@2.58.0/cors';
+import { createClient } from 'npm:@supabase/supabase-js@2.115.0';
+import { corsHeaders as sdkCors } from 'npm:@supabase/supabase-js@2.115.0/cors';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import {
   HPA_GHL_LOCATION_ID,
