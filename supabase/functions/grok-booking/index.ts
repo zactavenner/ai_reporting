@@ -28,6 +28,7 @@ import {
   validateSlotsInput,
   validateBookingInput,
   parseFreeSlots,
+  filterSlotsToRange,
   slotIsAvailable,
   endTimeFor,
   bookingIdempotencyKey,
