@@ -291,6 +291,7 @@ interface HarnessOptions {
   linqMessage?: any;
   linqChat?: any;
   recordFails?: boolean;
+  threadUnavailable?: boolean;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -321,6 +322,7 @@ function harness(options: HarnessOptions = {}) {
       return jsonRes({ conversationId: 'conv-1', messageId: `ghl-msg-${posts.length}` });
     }
     if (target.includes('/conversations/search')) {
+      if (options.threadUnavailable) return jsonRes({}, 500);
       return jsonRes({ conversations: options.threadMessages ? [{ id: 'conv-1' }] : [] });
     }
     if (/\/conversations\/[^/]+\/messages/.test(target)) {
@@ -465,18 +467,28 @@ describe('delivery behaviour (mocked GHL + database)', () => {
   });
 
   it('refuses to post when the thread state cannot be determined after a prior attempt', async () => {
-    const h = harness({ contacts: [hpaContact], contactDetails: { c1: hpaContact }, searchStatus: 0 });
+    const h = harness({ contacts: [hpaContact], contactDetails: { c1: hpaContact }, threadUnavailable: true });
     const event = testEvent();
-    // No conversations endpoint data -> conversations/search returns empty, so a
-    // definite "absent" answer; force the indeterminate branch by removing the
-    // conversation list entirely via a failing thread read.
     const marker = commentMarker(event.messageId, 'c1');
     await h.deps.claimDelivery({ messageId: event.messageId, contactId: 'c1', chatId: event.chatId, marker, owner: 'seed', leaseSeconds: 0 });
     const row = [...h.rows.values()][0];
     row.attempts = 2;
     row.lease_owner = null;
     const out = await deliverToParticipants(h.deps, { event, groupName: 'g', participants: ['+12025559876'], owner: 'w2' });
-    // conversations/search answered "no conversations" => definitely absent => it posts once.
+    expect(h.posts).toHaveLength(0);
+    expect(out).toMatchObject({ matched: 0, failed: 1, retriable: 1 });
+    expect(h.updates.at(-1)?.patch).toMatchObject({ status: 'failed', last_error: 'marker_check_unavailable' });
+  });
+
+  it('posts exactly once when a prior attempt is proven absent from the thread', async () => {
+    const h = harness({ contacts: [hpaContact], contactDetails: { c1: hpaContact } });
+    const event = testEvent();
+    const marker = commentMarker(event.messageId, 'c1');
+    await h.deps.claimDelivery({ messageId: event.messageId, contactId: 'c1', chatId: event.chatId, marker, owner: 'seed', leaseSeconds: 0 });
+    const row = [...h.rows.values()][0];
+    row.attempts = 2;
+    row.lease_owner = null;
+    const out = await deliverToParticipants(h.deps, { event, groupName: 'g', participants: ['+12025559876'], owner: 'w2' });
     expect(h.posts).toHaveLength(1);
     expect(out.matched).toBe(1);
   });
