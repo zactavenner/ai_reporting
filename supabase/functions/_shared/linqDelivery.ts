@@ -117,9 +117,9 @@ export async function reconstructEvent(
   if (!chatId) return { ok: false as const, code: 'linq_message_chat_unknown' };
   const chat = await fetchLinqChat(deps, chatId);
   if (!chat.ok) return { ok: false as const, code: `linq_chat_${chat.status}` };
-  const built = buildEventFromResources({ message: message.message, chat: chat.chat, eventId, eventType });
-  if (!built.ok) return { ok: false as const, code: built.code };
-  return { ok: true as const, event: built.event };
+  const built: any = buildEventFromResources({ message: message.message, chat: chat.chat, eventId, eventType });
+  if (!built.ok) return { ok: false as const, code: String(built.code) };
+  return { ok: true as const, event: built.event as LinqGroupMessage };
 }
 
 /* -------------------------------------------------------------------- GHL */
@@ -133,7 +133,7 @@ export async function ghlContactsByPhone(deps: LinqDeps, handle: string) {
   const collected: any[] = [];
   let mode: 'filters' | 'query' = 'filters';
 
-  const runPages = async (): Promise<{ ok: true } | { ok: false; status: number }> => {
+  const runPages = async (): Promise<{ ok: boolean; status: number }> => {
     for (let page = 1; page <= CONTACT_SEARCH_MAX_PAGES; page++) {
       const body = mode === 'filters'
         ? buildContactSearchBody({ handle, locationId: HPA_GHL_LOCATION_ID, page })
@@ -149,7 +149,7 @@ export async function ghlContactsByPhone(deps: LinqDeps, handle: string) {
       collected.push(...contacts);
       if (contacts.length < CONTACT_SEARCH_PAGE_LIMIT) break;
     }
-    return { ok: true };
+    return { ok: true, status: 200 };
   };
 
   let attempt = await runPages();
