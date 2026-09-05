@@ -10,6 +10,8 @@ import {
   bookingIdempotencyKey,
   offsetMatchesTimezone,
   maskForLog,
+  filterSlotsToRange,
+  localDateInTz,
 } from '../../supabase/functions/_shared/grokBooking.ts';
 
 const TOKEN = 'a'.repeat(40);
@@ -186,5 +188,42 @@ describe('mocked successful booking flow', () => {
   it('does not book when the pre-write availability read comes back empty', async () => {
     const slots = parseFreeSlots({ '2026-09-07': { slots: [] } });
     expect(slotIsAvailable(slots, '2026-09-07T13:30:00-04:00')).toBe(false);
+  });
+});
+
+describe('inclusive requested-range filter', () => {
+  const TZ = 'America/Los_Angeles';
+  const slots = [
+    '2026-09-06T20:00:00-07:00', // Sep 6 PT -> before range
+    '2026-09-07T09:00:00-07:00',
+    '2026-09-14T16:30:00-07:00', // last day, inclusive
+    '2026-09-15T10:00:00-07:00', // the reported bug
+  ];
+
+  it('keeps only slots whose local date is within start_date..end_date', () => {
+    expect(filterSlotsToRange(slots, '2026-09-07', '2026-09-14', TZ)).toEqual([
+      '2026-09-07T09:00:00-07:00',
+      '2026-09-14T16:30:00-07:00',
+    ]);
+  });
+
+  it('includes both boundary days', () => {
+    expect(filterSlotsToRange(slots, '2026-09-06', '2026-09-15', TZ)).toEqual(slots);
+    expect(filterSlotsToRange(slots, '2026-09-07', '2026-09-07', TZ)).toEqual(['2026-09-07T09:00:00-07:00']);
+  });
+
+  it('uses the supplied timezone, not UTC, to decide the day', () => {
+    // 2026-09-15T00:30:00Z is still Sep 14 in Los Angeles.
+    expect(filterSlotsToRange(['2026-09-15T00:30:00Z'], '2026-09-07', '2026-09-14', TZ))
+      .toEqual(['2026-09-15T00:30:00Z']);
+    expect(filterSlotsToRange(['2026-09-15T00:30:00Z'], '2026-09-07', '2026-09-14', 'UTC')).toEqual([]);
+    expect(localDateInTz('2026-09-15T00:30:00Z', TZ)).toBe('2026-09-14');
+  });
+
+  it('fails closed on malformed range, bad zone or unparsable slots', () => {
+    expect(filterSlotsToRange(slots, '09/07/2026', '2026-09-14', TZ)).toEqual([]);
+    expect(filterSlotsToRange(slots, '2026-09-07', '2026-09-14', 'Mars/Olympus')).toEqual([]);
+    expect(filterSlotsToRange(['nope'], '2026-09-07', '2026-09-14', TZ)).toEqual([]);
+    expect(localDateInTz('nope', TZ)).toBeNull();
   });
 });

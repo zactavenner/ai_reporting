@@ -184,3 +184,31 @@ export function maskForLog(value: string | null | undefined): string {
   if (!v) return '(none)';
   return `${v.length}chars:${v.slice(0, 1)}***`;
 }
+
+/** Calendar date (YYYY-MM-DD) of an instant, as seen in `tz`. */
+export function localDateInTz(iso: string, tz: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d).reduce<Record<string, string>>((a, x) => (a[x.type] = x.value, a), {});
+  if (!p.year || !p.month || !p.day) return null;
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+/**
+ * Keep only slots whose local calendar date in `tz` falls inside the inclusive
+ * requested range. GHL sometimes returns a trailing day beyond end_date.
+ */
+export function filterSlotsToRange(
+  slots: string[],
+  startDate: string,
+  endDate: string,
+  tz: string,
+): string[] {
+  if (!DATE_RE.test(startDate) || !DATE_RE.test(endDate) || !isValidTimezone(tz)) return [];
+  return slots.filter((s) => {
+    const day = localDateInTz(s, tz);
+    return !!day && day >= startDate && day <= endDate;
+  });
+}
