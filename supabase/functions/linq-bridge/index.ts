@@ -6,16 +6,16 @@
  * Hard guarantees:
  *  - Fails closed when LINQ_WEBHOOK_SECRET or LINQ_API_TOKEN is absent.
  *  - Ingestion is additionally gated by linq_bridge_config.ingestion_enabled,
- *    which ships DISABLED (webhook and reconcile alike).
+ *    which ships DISABLED — webhook and reconcile alike.
  *  - Writes only to GHL location ZcPPQTHBxBWlnM1WyjvU, using that client's
  *    existing server-side credential, and only after verifying that the target
  *    contact's own locationId is that location.
  *  - Only `InternalComment` is ever posted. No SMS, no email, no contact create.
  *  - Group chats only; 1:1 chats are skipped with an operational status.
- *  - Per (message, contact) claims are leased atomically in Postgres, so two
- *    concurrent deliveries can never both post the same note; stale leases are
- *    recovered automatically.
- *  - Every note carries a stable marker. Before re-posting after an uncertain
+ *  - Per (message, contact) claims are leased atomically in Postgres
+ *    (linq_claim_delivery), so concurrent deliveries can never both post the
+ *    same note; stale leases are recovered automatically.
+ *  - Every note carries a stable marker; before re-posting after an uncertain
  *    outcome the contact's thread is read for that marker, so a POST that
  *    succeeded but failed to record is reconciled instead of duplicated.
  *  - Transient failures return a retriable status; a dropped message is never
@@ -24,50 +24,37 @@
  *
  * Operator surface (existing agency auth via authorizeOperator):
  *   { action: 'status' }
- *   { action: 'verify_ghl_read' }            -> read-only GHL access probe
+ *   { action: 'verify_ghl_read', phone?: string }  -> read-only GHL access probe
  *   { action: 'set_ingestion', enabled: boolean }
- *   { action: 'reconcile', limit?: number }  -> replays deliveries AND partially
- *                                               failed events from the ledger
+ *   { action: 'reconcile', limit?: number }        -> replays leased deliveries
+ *                                                     AND failed/partial events
  */
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
 import { corsHeaders as sdkCors } from 'npm:@supabase/supabase-js@2.58.0/cors';
 import { authorizeOperator } from '../_shared/operatorAuth.ts';
 import {
-  CONTACT_SEARCH_MAX_PAGES,
-  CONTACT_SEARCH_PAGE_LIMIT,
-  DELIVERY_LEASE_SECONDS,
   HPA_GHL_LOCATION_ID,
-  LINQ_API_BASE,
   LINQ_API_TOKEN_HEADER_NOTE,
-  LINQ_ORG_ID,
   LINQ_TOKEN_ENV,
   LINQ_WEBHOOK_SECRET_ENV,
+  OWNED_LINES,
   RECONCILE_LEASE_SECONDS,
-  buildContactQueryBody,
-  buildContactSearchBody,
-  buildEventFromResources,
-  buildInternalComment,
-  classifyContactMatch,
-  commentMarker,
-  contactLocationStatus,
-  findMarkedMessageId,
-  isOwnedLine,
-  maskHandle,
   parseLinqEvent,
-  selectExternalParticipants,
-  toE164,
   verifyLinqSignature,
-  type LinqGroupMessage,
 } from '../_shared/linqBridge.ts';
+import {
+  ghlReadProbe,
+  reconstructEvent,
+  runPipeline,
+  type DeliveryClaim,
+  type LinqDeps,
+} from '../_shared/linqDelivery.ts';
 
 const corsHeaders = {
   ...sdkCors,
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, webhook-id, webhook-timestamp, webhook-signature',
 };
-
-const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
-const GHL_VERSION = '2021-07-28';
 
 const admin = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -111,382 +98,43 @@ async function resolveHpaClient() {
   return { client: rows[0] };
 }
 
-/* ------------------------------------------------------------------- Linq */
-
-function linqHeaders(token: string) {
-  return { Authorization: `Bearer ${token}`, Accept: 'application/json' };
-}
-
-async function fetchLinqChat(chatId: string, token: string) {
-  const res = await fetch(`${LINQ_API_BASE}/chats/${encodeURIComponent(chatId)}`, {
-    headers: linqHeaders(token),
-  });
-  if (!res.ok) return { ok: false as const, status: res.status };
-  const body = await res.json().catch(() => null);
-  const chat = body?.chat ?? body?.data ?? body;
+/** Wire the pure delivery core to the real database and network. */
+function buildDeps(ghlApiKey: string, linqToken: string): LinqDeps {
   return {
-    ok: true as const,
-    chat,
-    displayName: chat?.display_name ? String(chat.display_name) : null,
-    handles: Array.isArray(chat?.handles) ? chat.handles : [],
-    isGroup: chat?.is_group,
-    organizationId: chat?.organization_id ? String(chat.organization_id) : null,
-  };
-}
-
-/** Documented single-message read: GET /v3/messages/{messageId}. */
-async function fetchLinqMessage(messageId: string, token: string) {
-  const res = await fetch(`${LINQ_API_BASE}/messages/${encodeURIComponent(messageId)}`, {
-    headers: linqHeaders(token),
-  });
-  if (!res.ok) return { ok: false as const, status: res.status };
-  const body = await res.json().catch(() => null);
-  return { ok: true as const, message: body?.message ?? body?.data ?? body };
-}
-
-/* -------------------------------------------------------------------- GHL */
-
-function ghlHeaders(apiKey: string) {
-  return {
-    Authorization: `Bearer ${apiKey}`,
-    Version: GHL_VERSION,
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
-}
-
-/**
- * Read-only contact lookup using the documented advanced-search contract:
- * a `phone` filter with `eq`, paginated with page/pageLimit (bounded), with the
- * documented free-text `query` form as a fallback for locations where the
- * filter form is rejected or returns nothing.
- */
-async function ghlContactsByPhone(apiKey: string, handle: string) {
-  const collected: any[] = [];
-  let mode: 'filters' | 'query' = 'filters';
-  let usedQueryFallback = false;
-
-  const runPages = async (): Promise<{ ok: true } | { ok: false; status: number }> => {
-    for (let page = 1; page <= CONTACT_SEARCH_MAX_PAGES; page++) {
-      const body = mode === 'filters'
-        ? buildContactSearchBody({ handle, locationId: HPA_GHL_LOCATION_ID, page })
-        : buildContactQueryBody({ handle, locationId: HPA_GHL_LOCATION_ID, page });
-      const res = await fetch(`${GHL_BASE_URL}/contacts/search`, {
-        method: 'POST',
-        headers: ghlHeaders(apiKey),
-        body: JSON.stringify(body),
+    fetch: (...args) => fetch(...(args as Parameters<typeof fetch>)),
+    ghlApiKey,
+    linqToken,
+    async claimDelivery(input) {
+      const { data, error } = await admin.rpc('linq_claim_delivery', {
+        p_message_id: input.messageId,
+        p_contact_id: input.contactId,
+        p_location_id: HPA_GHL_LOCATION_ID,
+        p_chat_id: input.chatId,
+        p_marker: input.marker,
+        p_owner: input.owner,
+        p_lease_seconds: input.leaseSeconds,
       });
-      if (!res.ok) return { ok: false, status: res.status };
-      const parsed = await res.json().catch(() => ({}));
-      const contacts = Array.isArray(parsed?.contacts) ? parsed.contacts : [];
-      collected.push(...contacts);
-      if (contacts.length < CONTACT_SEARCH_PAGE_LIMIT) break;
-    }
-    return { ok: true };
-  };
-
-  let attempt = await runPages();
-  if (!attempt.ok && (attempt.status === 400 || attempt.status === 422) && !usedQueryFallback) {
-    usedQueryFallback = true;
-    mode = 'query';
-    attempt = await runPages();
-  }
-  if (!attempt.ok) return { ok: false as const, status: attempt.status };
-
-  if (collected.length === 0 && !usedQueryFallback) {
-    mode = 'query';
-    const second = await runPages();
-    if (!second.ok) return { ok: false as const, status: second.status };
-  }
-
-  return { ok: true as const, contacts: collected, mode };
-}
-
-/** Authoritative per-contact location check before any write. */
-async function ghlContactLocation(apiKey: string, contactId: string) {
-  const res = await fetch(`${GHL_BASE_URL}/contacts/${encodeURIComponent(contactId)}`, {
-    headers: ghlHeaders(apiKey),
-  });
-  if (!res.ok) return { ok: false as const, status: res.status };
-  const body = await res.json().catch(() => ({}));
-  const contact = body?.contact ?? body;
-  return {
-    ok: true as const,
-    contact,
-    status: contactLocationStatus(contact, HPA_GHL_LOCATION_ID),
+      if (error) return null;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return null;
+      const claim: DeliveryClaim = {
+        claimed: row.claimed === true,
+        deliveryId: row.delivery_id ?? null,
+        status: row.delivery_status ?? null,
+        attempts: Number(row.attempts ?? 0),
+        ghlMessageId: row.ghl_message_id ?? null,
+      };
+      return claim;
+    },
+    async updateDelivery(deliveryId, patch) {
+      const { error } = await admin.from('linq_comment_deliveries').update(patch).eq('id', deliveryId);
+      return { ok: !error };
+    },
+    log: (line) => console.log(line),
   };
 }
 
-type ResolvedContact =
-  | { status: 'matched'; contactId: string }
-  | { status: 'unmatched' | 'ambiguous' | 'location_mismatch' | 'location_unverified' | 'lookup_failed' };
-
-async function resolveContactForHandle(apiKey: string, handle: string): Promise<ResolvedContact> {
-  const lookup = await ghlContactsByPhone(apiKey, handle);
-  if (!lookup.ok) return { status: 'lookup_failed' };
-  const classified = classifyContactMatch(lookup.contacts, handle, HPA_GHL_LOCATION_ID);
-  if (classified.status === 'matched') {
-    // Second, authoritative confirmation straight from the contact record.
-    const verified = await ghlContactLocation(apiKey, classified.contactId);
-    if (!verified.ok) return { status: 'lookup_failed' };
-    if (verified.status !== 'match') return { status: 'location_mismatch' };
-    return { status: 'matched', contactId: classified.contactId };
-  }
-  if (classified.status !== 'location_unverified') return { status: classified.status };
-
-  const confirmed: string[] = [];
-  for (const id of classified.contactIds) {
-    const verified = await ghlContactLocation(apiKey, id);
-    if (!verified.ok) return { status: 'lookup_failed' };
-    if (verified.status === 'match') confirmed.push(id);
-  }
-  if (confirmed.length === 1) return { status: 'matched', contactId: confirmed[0] };
-  if (confirmed.length > 1) return { status: 'ambiguous' };
-  return { status: 'location_mismatch' };
-}
-
-async function postInternalComment(apiKey: string, contactId: string, message: string) {
-  const res = await fetch(`${GHL_BASE_URL}/conversations/messages`, {
-    method: 'POST',
-    headers: ghlHeaders(apiKey),
-    // InternalComment only — never a deliverable channel.
-    body: JSON.stringify({ type: 'InternalComment', contactId, message, mentions: [] }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    return { ok: false as const, status: res.status, error: `ghl_${res.status}` };
-  }
-  return {
-    ok: true as const,
-    conversationId: body?.conversationId ?? body?.conversation?.id ?? null,
-    messageId: body?.messageId ?? body?.msg?.id ?? body?.message?.id ?? null,
-  };
-}
-
-/**
- * Look for an already-posted note carrying our marker. Returns the GHL message
- * id when found, `null` when definitely absent, `undefined` when we could not
- * determine it (in which case we must NOT blindly re-post).
- */
-async function findPostedMarker(
-  apiKey: string,
-  contactId: string,
-  marker: string,
-): Promise<string | null | undefined> {
-  const search = await fetch(
-    `${GHL_BASE_URL}/conversations/search?locationId=${encodeURIComponent(HPA_GHL_LOCATION_ID)}&contactId=${encodeURIComponent(contactId)}&limit=20`,
-    { headers: ghlHeaders(apiKey) },
-  );
-  if (!search.ok) return undefined;
-  const body = await search.json().catch(() => ({}));
-  const conversations = Array.isArray(body?.conversations) ? body.conversations : [];
-  if (conversations.length === 0) return null;
-  for (const conversation of conversations) {
-    const id = conversation?.id;
-    if (!id) continue;
-    const res = await fetch(
-      `${GHL_BASE_URL}/conversations/${encodeURIComponent(String(id))}/messages?limit=100`,
-      { headers: ghlHeaders(apiKey) },
-    );
-    if (!res.ok) return undefined;
-    const parsed = await res.json().catch(() => ({}));
-    const messages = Array.isArray(parsed?.messages?.messages)
-      ? parsed.messages.messages
-      : Array.isArray(parsed?.messages)
-        ? parsed.messages
-        : [];
-    const found = findMarkedMessageId(messages, marker);
-    if (found) return found;
-  }
-  return null;
-}
-
-/* ------------------------------------------------------------- processing */
-
-interface DeliveryOutcome {
-  matched: number;
-  skipped: number;
-  failed: number;
-  retriable: number;
-  deferred: number;
-}
-
-async function deliverToParticipants(
-  event: LinqGroupMessage,
-  groupName: string | null,
-  participants: string[],
-  apiKey: string,
-  owner: string,
-  opts: { reconciled?: boolean } = {},
-): Promise<DeliveryOutcome> {
-  const out: DeliveryOutcome = { matched: 0, skipped: 0, failed: 0, retriable: 0, deferred: 0 };
-
-  for (const handle of participants) {
-    const resolved = await resolveContactForHandle(apiKey, handle);
-    if (resolved.status === 'lookup_failed') {
-      out.failed++;
-      out.retriable++;
-      console.warn(`[linq-bridge] contact lookup failed handle=${maskHandle(handle)}`);
-      continue;
-    }
-    if (resolved.status !== 'matched') {
-      out.skipped++;
-      console.log(`[linq-bridge] participant ${resolved.status} handle=${maskHandle(handle)}`);
-      continue;
-    }
-
-    const contactId = resolved.contactId;
-    const marker = commentMarker(event.messageId, contactId);
-
-    // Atomic claim: exactly one worker may hold a (message, contact) delivery.
-    const { data: claimRows, error: claimError } = await admin.rpc('linq_claim_delivery', {
-      p_message_id: event.messageId,
-      p_contact_id: contactId,
-      p_location_id: HPA_GHL_LOCATION_ID,
-      p_chat_id: event.chatId,
-      p_marker: marker,
-      p_owner: owner,
-      p_lease_seconds: DELIVERY_LEASE_SECONDS,
-    });
-    if (claimError) {
-      out.failed++;
-      out.retriable++;
-      console.warn('[linq-bridge] claim failed');
-      continue;
-    }
-    const claim = Array.isArray(claimRows) ? claimRows[0] : claimRows;
-    if (!claim?.claimed) {
-      if (String(claim?.delivery_status) === 'posted') {
-        out.matched++; // already logged — idempotent no-op
-      } else {
-        out.deferred++; // another worker holds a live lease
-        out.retriable++;
-      }
-      continue;
-    }
-    const rowId = claim.delivery_id as string;
-    const priorAttempts = Number(claim.attempts ?? 0);
-
-    // A previous attempt of unknown outcome must be reconciled, not repeated.
-    if (priorAttempts > 0 || claim.ghl_message_id) {
-      const existing = await findPostedMarker(apiKey, contactId, marker);
-      if (existing === undefined) {
-        out.failed++;
-        out.retriable++;
-        await admin
-          .from('linq_comment_deliveries')
-          .update({ status: 'failed', last_error: 'marker_check_unavailable', lease_owner: null, lease_expires_at: null })
-          .eq('id', rowId);
-        continue;
-      }
-      if (existing) {
-        out.matched++;
-        await admin
-          .from('linq_comment_deliveries')
-          .update({
-            status: 'posted',
-            ghl_message_id: existing,
-            posted_at: new Date().toISOString(),
-            last_error: null,
-            lease_owner: null,
-            lease_expires_at: null,
-          })
-          .eq('id', rowId);
-        continue;
-      }
-    }
-
-    const comment = buildInternalComment({
-      event,
-      groupName,
-      participants,
-      contactId,
-      reconciled: opts.reconciled,
-    });
-    const posted = await postInternalComment(apiKey, contactId, comment);
-    if (posted.ok) {
-      out.matched++;
-      const { error: recordError } = await admin
-        .from('linq_comment_deliveries')
-        .update({
-          status: 'posted',
-          ghl_conversation_id: posted.conversationId,
-          ghl_message_id: posted.messageId,
-          posted_at: new Date().toISOString(),
-          last_error: null,
-          lease_owner: null,
-          lease_expires_at: null,
-        })
-        .eq('id', rowId);
-      if (recordError) {
-        // The note exists in GHL; the marker lookup on the next pass will find
-        // it and settle the row rather than posting it twice.
-        console.warn('[linq-bridge] posted but failed to record delivery');
-      }
-    } else {
-      out.failed++;
-      if (posted.status >= 500 || posted.status === 429) out.retriable++;
-      await admin
-        .from('linq_comment_deliveries')
-        .update({
-          status: 'failed',
-          attempts: priorAttempts + 1,
-          last_error: posted.error,
-          lease_owner: null,
-          lease_expires_at: null,
-        })
-        .eq('id', rowId);
-    }
-  }
-
-  return out;
-}
-
-type PipelineResult =
-  | { kind: 'skipped'; reason: string; isGroup?: boolean }
-  | { kind: 'failed'; code: string; httpStatus: number }
-  | { kind: 'delivered'; outcome: DeliveryOutcome; participants: number };
-
-/**
- * Shared gate + delivery pipeline used by the webhook and by reconciliation, so
- * both enforce group-only, org scope, owned-line presence, membership-at-time
- * and per-contact location identically.
- */
-async function runPipeline(input: {
-  event: LinqGroupMessage;
-  config: any;
-  token: string;
-  apiKey: string;
-  owner: string;
-  reconciled?: boolean;
-}): Promise<PipelineResult> {
-  const { event, config, token, apiKey, owner } = input;
-
-  const chat = await fetchLinqChat(event.chatId, token);
-  if (!chat.ok) return { kind: 'failed', code: `linq_chat_${chat.status}`, httpStatus: 502 };
-  if (chat.isGroup !== true) return { kind: 'skipped', reason: 'not_group', isGroup: false };
-  if (chat.organizationId && chat.organizationId !== String(config?.linq_org_id || LINQ_ORG_ID)) {
-    return { kind: 'skipped', reason: 'organization_out_of_scope' };
-  }
-
-  const handles = chat.handles.length ? chat.handles : event.handles;
-  const ownedPresent =
-    handles.some((h: any) => isOwnedLine(h?.handle)) || isOwnedLine(event.senderHandle);
-  if (!ownedPresent) return { kind: 'skipped', reason: 'no_owned_line_in_chat' };
-
-  const participants = selectExternalParticipants(handles, event.sentAt);
-  if (participants.length === 0) return { kind: 'skipped', reason: 'no_external_participants' };
-
-  const outcome = await deliverToParticipants(
-    event,
-    chat.displayName,
-    participants,
-    apiKey,
-    owner,
-    { reconciled: input.reconciled },
-  );
-  return { kind: 'delivered', outcome, participants: participants.length };
-}
+/* ------------------------------------------------------------------ webhook */
 
 async function handleWebhook(req: Request, rawBody: string) {
   const { signing, token } = secrets();
@@ -574,14 +222,8 @@ async function handleWebhook(req: Request, rawBody: string) {
     return json({ ok: false, code: target.code, retriable: true }, 503);
   }
 
-  const owner = `wh:${crypto.randomUUID()}`;
-  const result = await runPipeline({
-    event,
-    config,
-    token,
-    apiKey: target.client.ghl_api_key,
-    owner,
-  });
+  const deps = buildDeps(target.client.ghl_api_key, token);
+  const result = await runPipeline(deps, { event, config, owner: `wh:${crypto.randomUUID()}` });
 
   if (result.kind === 'skipped') {
     await admin.from('linq_webhook_events').upsert(
@@ -606,14 +248,15 @@ async function handleWebhook(req: Request, rawBody: string) {
   }
 
   const outcome = result.outcome;
+  const outstanding = outcome.failed > 0 || outcome.deferred > 0;
   await admin.from('linq_webhook_events').upsert(
     {
       ...baseRow,
-      status: outcome.failed > 0 || outcome.deferred > 0 ? 'partial' : 'processed',
+      status: outstanding ? 'partial' : 'processed',
       participants_total: result.participants,
       participants_matched: outcome.matched,
       error: outcome.failed > 0 ? `${outcome.failed}_delivery_failures` : null,
-      processed_at: outcome.failed > 0 || outcome.deferred > 0 ? null : new Date().toISOString(),
+      processed_at: outstanding ? null : new Date().toISOString(),
     },
     { onConflict: 'linq_event_id' },
   );
@@ -628,25 +271,15 @@ async function handleWebhook(req: Request, rawBody: string) {
 
   // Never silently 200 a dropped delivery: ask Linq to retry the whole event.
   if (outcome.retriable > 0) {
-    return json({ ok: false, code: 'delivery_retriable', retriable: true, ...outcome, participants: result.participants }, 503);
+    return json(
+      { ok: false, code: 'delivery_retriable', retriable: true, ...outcome, participants: result.participants },
+      503,
+    );
   }
   return json({ ok: true, ...outcome, participants: result.participants });
 }
 
 /* ------------------------------------------------------------- operator ops */
-
-/** Rebuild the full original note context from the authenticated Linq APIs. */
-async function reconstructEvent(messageId: string, token: string, eventId: string, eventType?: string) {
-  const message = await fetchLinqMessage(messageId, token);
-  if (!message.ok) return { ok: false as const, code: `linq_message_${message.status}` };
-  const chatId = String(message.message?.chat_id ?? '').trim();
-  if (!chatId) return { ok: false as const, code: 'linq_message_chat_unknown' };
-  const chat = await fetchLinqChat(chatId, token);
-  if (!chat.ok) return { ok: false as const, code: `linq_chat_${chat.status}` };
-  const built = buildEventFromResources({ message: message.message, chat: chat.chat, eventId, eventType });
-  if (!built.ok) return { ok: false as const, code: built.code };
-  return { ok: true as const, event: built.event };
-}
 
 async function handleOperator(req: Request, body: any) {
   const auth = await authorizeOperator(req, admin, createClient, body);
@@ -680,32 +313,15 @@ async function handleOperator(req: Request, body: any) {
     });
   }
 
-  // Read-only probe: proves the stored HPA credential can search contacts in
-  // the target location. Returns counts and flags only — never contact PII.
+  // Read-only probe: proves the stored HPA credential can search contacts in the
+  // target location. Returns counts and flags only — never contact PII.
   if (action === 'verify_ghl_read') {
     const target = await resolveHpaClient();
     if (!('client' in target)) return json({ ok: false, code: target.code }, 503);
-    const probe = String(body?.phone || OWNED_LINES_PROBE);
-    const handle = toE164(probe) || OWNED_LINES_PROBE;
-    const lookup = await ghlContactsByPhone(target.client.ghl_api_key, handle);
-    if (!lookup.ok) {
-      return json({ ok: false, code: 'ghl_read_failed', http_status: lookup.status }, 502);
-    }
-    const phoneMatches = lookup.contacts.filter((c: any) =>
-      classifyContactMatch([c], handle, HPA_GHL_LOCATION_ID).status !== 'unmatched');
-    const locations = new Set(
-      lookup.contacts.map((c: any) => contactLocationStatus(c, HPA_GHL_LOCATION_ID)),
-    );
-    return json({
-      ok: true,
-      read_only: true,
-      search_mode: lookup.mode,
-      location_id: HPA_GHL_LOCATION_ID,
-      contacts_returned: lookup.contacts.length,
-      exact_e164_matches: phoneMatches.length,
-      location_field_states: [...locations],
-      client_name: target.client.name,
-    });
+    const deps = buildDeps(target.client.ghl_api_key, token);
+    const probe = await ghlReadProbe(deps, String(body?.phone || OWNED_LINES[0]));
+    if (!probe.ok) return json({ ...probe, client_name: target.client.name }, 502);
+    return json({ ...probe, client_name: target.client.name });
   }
 
   if (action === 'set_ingestion') {
@@ -735,7 +351,7 @@ async function handleOperator(req: Request, body: any) {
     }
     const target = await resolveHpaClient();
     if (!('client' in target)) return json({ ok: false, code: target.code }, 503);
-    const apiKey = target.client.ghl_api_key;
+    const deps = buildDeps(target.client.ghl_api_key, token);
     const limit = Math.min(Math.max(Number(body?.limit) || 20, 1), 100);
     const owner = `rc:${crypto.randomUUID()}`;
 
@@ -744,7 +360,7 @@ async function handleOperator(req: Request, body: any) {
     let unrecoverable = 0;
 
     // 1. Retryable delivery rows, leased atomically so two reconcilers cannot
-    //    post the same note. The note is rebuilt in full from the Linq APIs.
+    //    post the same note. Notes are rebuilt in full from the Linq APIs.
     const { data: rows, error: leaseError } = await admin.rpc('linq_claim_pending_deliveries', {
       p_owner: owner,
       p_limit: limit,
@@ -759,57 +375,37 @@ async function handleOperator(req: Request, body: any) {
       byMessage.set(row.linq_message_id, list);
     }
 
+    const closeRows = async (group: any[], status: string, error: string) => {
+      for (const row of group) {
+        await admin
+          .from('linq_comment_deliveries')
+          .update({ status, last_error: error, lease_owner: null, lease_expires_at: null })
+          .eq('id', row.id);
+      }
+    };
+
     for (const [messageId, group] of byMessage) {
-      const rebuilt = await reconstructEvent(messageId, token, `reconcile:${messageId}`);
+      const rebuilt = await reconstructEvent(deps, messageId, `reconcile:${messageId}`);
       if (!rebuilt.ok) {
         const terminal = rebuilt.code.endsWith('_404') || rebuilt.code === 'not_group';
-        for (const row of group) {
-          await admin
-            .from('linq_comment_deliveries')
-            .update({
-              status: terminal ? 'unrecoverable' : 'failed',
-              last_error: rebuilt.code,
-              lease_owner: null,
-              lease_expires_at: null,
-            })
-            .eq('id', row.id);
-        }
+        await closeRows(group, terminal ? 'unrecoverable' : 'failed', rebuilt.code);
         if (terminal) unrecoverable += group.length;
         else stillFailing += group.length;
         continue;
       }
 
-      const before = { repaired, stillFailing };
-      const result = await runPipeline({
-        event: rebuilt.event,
-        config,
-        token,
-        apiKey,
-        owner,
-        reconciled: true,
-      });
+      const result = await runPipeline(deps, { event: rebuilt.event, config, owner, reconciled: true });
       if (result.kind === 'delivered') {
         repaired += result.outcome.matched;
         stillFailing += result.outcome.failed + result.outcome.deferred;
       } else if (result.kind === 'skipped') {
         // A gate now refuses the note: close the rows instead of writing.
-        for (const row of group) {
-          await admin
-            .from('linq_comment_deliveries')
-            .update({ status: 'unrecoverable', last_error: result.reason, lease_owner: null, lease_expires_at: null })
-            .eq('id', row.id);
-        }
+        await closeRows(group, 'unrecoverable', result.reason);
         unrecoverable += group.length;
       } else {
-        for (const row of group) {
-          await admin
-            .from('linq_comment_deliveries')
-            .update({ status: 'failed', last_error: result.code, lease_owner: null, lease_expires_at: null })
-            .eq('id', row.id);
-        }
+        await closeRows(group, 'failed', result.code);
         stillFailing += group.length;
       }
-      void before;
     }
 
     // 2. Events whose contact lookup failed before any delivery row existed.
@@ -825,8 +421,8 @@ async function handleOperator(req: Request, body: any) {
     let eventsStillFailing = 0;
     for (const evt of brokenEvents || []) {
       const rebuilt = await reconstructEvent(
+        deps,
         String(evt.linq_message_id),
-        token,
         String(evt.linq_event_id),
         String(evt.event_type),
       );
@@ -835,7 +431,7 @@ async function handleOperator(req: Request, body: any) {
         await admin.from('linq_webhook_events').update({ error: rebuilt.code }).eq('id', evt.id);
         continue;
       }
-      const result = await runPipeline({ event: rebuilt.event, config, token, apiKey, owner, reconciled: true });
+      const result = await runPipeline(deps, { event: rebuilt.event, config, owner, reconciled: true });
       if (result.kind === 'delivered' && result.outcome.failed === 0 && result.outcome.deferred === 0) {
         eventsReplayed++;
         await admin
@@ -881,9 +477,6 @@ async function handleOperator(req: Request, body: any) {
 
   return json({ ok: false, code: 'unknown_action' }, 400);
 }
-
-/** Probe handle for the read-only access check: one of our own lines. */
-const OWNED_LINES_PROBE = '+14154980385';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
